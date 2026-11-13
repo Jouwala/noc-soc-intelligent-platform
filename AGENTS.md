@@ -282,8 +282,8 @@ Claude Code 侧已接 **Stop 钩子**：本轮改过文件但自检未通过时�
 > | session 启动于 | 钩子文件 |
 > | --- | --- |
 > | `D:\02_olbr_portal` | `.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/ops/deploy/agent-done-check.mjs` |
-> | `apps\my_app` | `apps\my_app\.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/../../scripts/...` |
-> | `apps\portal` | 门户 `.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/../scripts/...` |
+> | `apps\my_app` | `apps\my_app\.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/../../ops/deploy/agent-done-check.mjs` |
+> | `apps\portal` | 门户 `.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/../../ops/deploy/agent-done-check.mjs` |
 >
 > 脚本本身一份，装在 `ops\deploy\`；三份 settings 只是三根接线。**新增常用启动目录时照着加一份。**
 > 另外：`apps\my_app\.claude\settings.local.json` 是既有的本机权限配置（已被全局 gitignore 排除），
