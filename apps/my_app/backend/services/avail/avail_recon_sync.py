@@ -62,6 +62,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.config.remote_host import get_api_base_url
+from backend.database import get_sqlite_connection
 
 logger = logging.getLogger("avail_recon_sync")
 
@@ -277,7 +278,7 @@ def build(target: Path = OUT_DB, progress=None) -> Dict[str, Any]:
     if tmp.exists():
         tmp.unlink()
 
-    out = sqlite3.connect(str(tmp), timeout=60)
+    out = get_sqlite_connection(str(tmp), timeout=60)
     try:
         out.execute(DDL)
         total = 0
