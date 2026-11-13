@@ -77,7 +77,7 @@ LOCAL_APP_DB = "__local_app_db__"
 # `?page=finebi_daily_availability` 静默停更了两周才被人肉发现。
 #
 # 现在由 my_app 自己的定时任务 `avail_recon_sync`
-# （backend/services/avail_recon_sync.py）重建到本机 `data/avail_recon.sqlite3`，
+# （backend/services/avail/avail_recon_sync.py）重建到本机 `data/avail_recon.sqlite3`，
 # 因此这些组件改读本机逻辑库 `__local_avail_recon__`
 # （见 dashboard_service.LOCAL_SQLITE_FILES）。
 WIDGET_DB_OVERRIDES: Dict[int, Dict[str, str]] = {

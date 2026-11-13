@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """FLM 可用率（avail_flm）API。
 
-数据源与口径见 `backend/services/avail_flm_service.py` 顶部说明 —— 它读 my_app 自持派生库
+数据源与口径见 `backend/services/avail/avail_flm_service.py` 顶部说明 —— 它读 my_app 自持派生库
 `data/avail_recon.sqlite3`（任务 avail_recon_sync 每天重建），TT 读主库 `eflow_tt`，
 复用 `avail_ms_service` 的聚合，不查远端。
 
@@ -35,8 +35,8 @@ import logging
 
 from fastapi import APIRouter, Query
 
-from backend.services import avail_flm_service as svc
-from backend.services import avail_ms_service as ms
+from backend.services.avail import avail_flm_service as svc
+from backend.services.avail import avail_ms_service as ms
 
 logger = logging.getLogger("avail_flm")
 

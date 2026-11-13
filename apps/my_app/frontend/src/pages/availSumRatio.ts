@@ -2,7 +2,7 @@
  * availSumRatio.ts —— avail_ms 与 avail_flm **共用**的数字悬浮口径说明
  * ----------------------------------------------------------------------------
  * 为什么共用一个文件：两页读同一个派生库、同一套单元格口径
- * `SUM(Numerator)/SUM(Denominator)`（`backend/services/avail_ms_service.py` 顶部
+ * `SUM(Numerator)/SUM(Denominator)`（`backend/services/avail/avail_ms_service.py` 顶部
  * 「口径（勿改）」；`avail_flm_service.py` 明确写「实现全部复用 avail_ms_service，
  * 本模块不重写任何聚合」）。同一口径若在两页各写一份文案，日后必然各改各的，
  * 变成两个真相源 —— 这里只写一份，两页都从这里取。

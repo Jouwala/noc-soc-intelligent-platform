@@ -4,7 +4,7 @@
  * 需求：按 `eflow_site.province_county`（**县**）看本月的可用率，
  *       行 = 县、列 = 2G / 3G / 4G 可用率，日 / 周用**页签**切粒度，能下钻尽下钻。
  *
- * 数据源与口径（后端 backend/services/avail_county_data.py 顶部有完整说明）：
+ * 数据源与口径（后端 backend/services/avail/avail_county_data.py 顶部有完整说明）：
  *   - 站点主数据：主库 `eflow_site`（830 行，按 province_county 分县）
  *   - 可用率：本地 PG 的 UME MS SLA **站点级日表**三张
  *       2G = ..._GSM1day_SITE  「TCH in service rate(%)」

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """县（Province/County）维度可用率看板 API。
 
-数据源与统计口径见 `backend/services/avail_county_service.py` 顶部说明。
+数据源与统计口径见 `backend/services/avail/avail_county_service.py` 顶部说明。
 
     GET /api/avail-county/options
         -> {months, current_month, counties[], techs, threshold, data_through, warnings}
@@ -31,7 +31,7 @@ import re
 
 from fastapi import APIRouter, Query
 
-from backend.services import avail_county_service as svc
+from backend.services.avail import avail_county_service as svc
 
 logger = logging.getLogger("avail_county")
 

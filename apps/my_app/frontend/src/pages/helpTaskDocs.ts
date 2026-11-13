@@ -445,18 +445,18 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'avail_recon_sync', group: 'u', cron: '10 6 * * *',
-    script: 'services/avail_recon_sync.py → run_avail_recon_sync',
+    script: 'services/avail/avail_recon_sync.py → run_avail_recon_sync',
     zh: {
       name: '可用率核对宽表重建',
       desc: '重建 avail_recon 可用率核对宽表（远端 Site_Daily × Master_Site_Database Region 近似聚合），写本机 data/avail_recon.sqlite3，供 Daily Availability KPI / Availability(TT) 看板',
       flow: ['读远端 olbr_ms_master_database 的站点主数据（Site_Name → Region）', '按 Region 把站点名单内联进 SQL，在远端聚合 2G/3G/4G_Main_Kpi_Site_Daily 的 AVG(可用率)', '原子替换本机 data/avail_recon.sqlite3（表 availability_daily）'],
-      maintain: ['口径在 services/avail_recon_sync.py 顶部：Cell_Availability=AVG(rate)，不是「达标站点占比」（v1 曾算错，值域 40~100%）', '看板侧经 dashboard_service.DB_ALIASES 把 avail_recon.sqlite3 解析到本机库；新增派生库照此登记', '本任务 2026-09-21 上线前，该表由已退役的 my-finebi 手工 ETL 维护，无人调度导致冻结在 2026-09-13、看板静默停更'],
+      maintain: ['口径在 services/avail/avail_recon_sync.py 顶部：Cell_Availability=AVG(rate)，不是「达标站点占比」（v1 曾算错，值域 40~100%）', '看板侧经 dashboard_service.DB_ALIASES 把 avail_recon.sqlite3 解析到本机库；新增派生库照此登记', '本任务 2026-09-21 上线前，该表由已退役的 my-finebi 手工 ETL 维护，无人调度导致冻结在 2026-09-13、看板静默停更'],
     },
     en: {
       name: 'Availability Recon Rebuild',
       desc: 'Rebuild the avail_recon availability reconciliation table (approx. aggregate of remote Site_Daily x Master_Site_Database region) into local data/avail_recon.sqlite3 for the Daily Availability KPI / Availability(TT) boards',
       flow: ['Read site master data from remote olbr_ms_master_database (Site_Name -> Region)', 'Inline each region\'s site list into SQL and aggregate AVG(availability) of 2G/3G/4G_Main_Kpi_Site_Daily remotely', 'Atomically replace local data/avail_recon.sqlite3 (table availability_daily)'],
-      maintain: ['Definitions live at the top of services/avail_recon_sync.py: Cell_Availability=AVG(rate), NOT the share of sites meeting the target (v1 got this wrong, range 40-100%)', 'The board resolves avail_recon.sqlite3 to the local file via dashboard_service.DB_ALIASES; register new derived DBs the same way', 'Before 2026-09-21 this table was maintained by a manual ETL in the retired my-finebi project; with no scheduler it froze at 2026-09-13 and the board went silently stale'],
+      maintain: ['Definitions live at the top of services/avail/avail_recon_sync.py: Cell_Availability=AVG(rate), NOT the share of sites meeting the target (v1 got this wrong, range 40-100%)', 'The board resolves avail_recon.sqlite3 to the local file via dashboard_service.DB_ALIASES; register new derived DBs the same way', 'Before 2026-09-21 this table was maintained by a manual ETL in the retired my-finebi project; with no scheduler it froze at 2026-09-13 and the board went silently stale'],
     },
   },
   {

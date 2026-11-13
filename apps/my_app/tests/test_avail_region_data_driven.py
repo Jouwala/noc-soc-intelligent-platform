@@ -21,9 +21,9 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.services import avail_flm_service as flm  # noqa: E402
-from backend.services import avail_ms_service as ms  # noqa: E402
-from backend.services import avail_recon_sync as ars  # noqa: E402
+from backend.services.avail import avail_flm_service as flm  # noqa: E402
+from backend.services.avail import avail_ms_service as ms  # noqa: E402
+from backend.services.avail import avail_recon_sync as ars  # noqa: E402
 
 Row = namedtuple("Row", "day tech region cell_group numerator denominator wk month")
 

@@ -90,7 +90,7 @@
      | 卡片标题 / 表格列头 / 下钻弹窗列头 | `ExplainIcon`（ⓘ 气泡） | **这一列 / 这一张卡**的算法：数据源表、指标项原名、粒度、加权方式、旁边那个灰字或箭头是什么含义 |
      | 数字本身（表格单元格、汇总值） | `ExplainPopover`（包住节点，不加图标） | **这一格**的构成：参与平均的样本数、其中几个未达标、样本站点-日/记录数、区间、上一期与环比、点击去哪 |
    - **参考实现**：`pages\AvailCounty.tsx`（列头 ⓘ + 每个可用率数字的气泡）与 `pages\availCounty\availCountyHelpers.tsx::cellExplainText()`（把接口 `cell_payload` 的字段拼成气泡文本）。文案键见 `i18n.tsx` 的 `availCounty.explainCol / explainKpi / explainSiteAvail / explainSiteDays / explainDaily / tip.*`。
-   - **气泡内容一律取接口既有字段，禁止在前端重算口径**：后端聚合层（如 `backend\services\avail_county_aggregate.py`）已经算好的分子分母/样本数/区间，前端只负责排版。重算会造出「气泡说的和表里的数对不上」这种新 bug。
+   - **气泡内容一律取接口既有字段，禁止在前端重算口径**：后端聚合层（如 `backend\services\avail\avail_county_aggregate.py`）已经算好的分子分母/样本数/区间，前端只负责排版。重算会造出「气泡说的和表里的数对不上」这种新 bug。
    - **口径文字必须从代码核实后再写**，不得照抄手册：本次就抓到手册与 `summary_by_tech()` 相反（手册写「全网汇总不是县等权平均」，实测 `/api/avail-county/matrix` 的 2G 值与 15 个县值的算术平均逐位相等）。写错口径比不写更糟 —— 用户会带着错的解释去汇报。
    - **禁止**用 `title=` 原生提示（不可复制、样式不受主题管、移动端读不到）；`ExplainIcon` 已自带 `stopPropagation`，挂在可下钻的卡片上时点 ⓘ **不会**顺带打开下钻弹窗。
    - **不适用**：`LegacyToolFrame` 的 iframe 页（FineBI/外部工具，数字不在我们 DOM 里）；纯列表页没有「算出来的数字」的不硬凑。
