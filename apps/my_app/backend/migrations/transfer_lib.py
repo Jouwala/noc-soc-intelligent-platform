@@ -89,7 +89,11 @@ def pg_sql_quote(ident):
 
 
 def open_sqlite(path):
-    """只读打开 SQLite（URI mode=ro），不产生写锁、不修改源文件。"""
+    """只读打开 SQLite（URI mode=ro），不产生写锁、不修改源文件。
+
+    §11-2 数据访问收口评估后保留本实现：本库是自包含迁移工具，URI 需
+    `quote()` 转义特殊字符路径，统一入口未复刻该语义，故不迁。
+    """
     p = Path(path)
     if not p.exists() or p.stat().st_size == 0:
         raise FileNotFoundError(f"SQLite 源不存在或为空: {p}")

@@ -25,7 +25,7 @@ from typing import Callable, Optional
 _SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from backend.database import get_raw_connection
+from backend.database import get_raw_connection, get_sqlite_connection
 # DB_MODE 必须**动态**读模块属性而不是 `from ... import DB_MODE`：后者在导入期冻结一份副本，
 # 测试 patch 的是 backend.database.DB_MODE（见 tests/test_task_runner.py:37-44）。
 from backend import database as _database
@@ -409,7 +409,7 @@ def _init_schedule_table():
         logger.warning(f"初始化调度配置表失败（get_raw_connection 侧）: {e}")
     if _database.DB_MODE == "pg":
         try:
-            with sqlite3.connect(str(DB_PATH), timeout=30) as conn:
+            with get_sqlite_connection(str(DB_PATH), timeout=30) as conn:
                 _ensure_schedule_table(conn)
                 conn.commit()
         except Exception as e:
@@ -432,7 +432,7 @@ def load_schedule_config_rows() -> Optional[dict]:
     读失败返回 **None** —— 调用方要保留原有兜底，不能把 None 当成「全部启用」。
     """
     try:
-        with sqlite3.connect(str(DB_PATH), timeout=30) as conn:
+        with get_sqlite_connection(str(DB_PATH), timeout=30) as conn:
             conn.execute("PRAGMA busy_timeout=30000")
             rows = conn.execute(
                 "SELECT task_id, cron, enabled, manually_stopped, updated_at "
@@ -490,9 +490,8 @@ def _load_schedule_config(task_id: str) -> tuple:
     调用方负责回落。manually_stopped 区分「用户手动关过」与「被主开关关掉」，
     只有前者才该在主开关重新启用时被跳过（见 toggle_all_tasks）。
     """
-    import sqlite3 as _sqlite3
     try:
-        with _sqlite3.connect(str(DB_PATH), timeout=30) as conn:
+        with get_sqlite_connection(str(DB_PATH), timeout=30) as conn:
             row = conn.execute(
                 "SELECT cron, enabled, manually_stopped FROM task_schedule_config WHERE task_id = ?",
                 (task_id,)
@@ -558,7 +557,7 @@ def _save_schedule_config(task_id: str, cron: str, enabled: bool = None,
     #    app.db 这种 1.5G 大库在 Windows 上 commit 后 mtime 可能滞后甚至不可见
     #    （2026-10-20 排查日记）。
     try:
-        with sqlite3.connect(str(DB_PATH), timeout=30) as conn:
+        with get_sqlite_connection(str(DB_PATH), timeout=30) as conn:
             conn.execute("PRAGMA busy_timeout=30000")
             conn.execute("PRAGMA synchronous=NORMAL")
             _upsert_schedule_row(conn, task_id, cron, enabled, manually_stopped, now)

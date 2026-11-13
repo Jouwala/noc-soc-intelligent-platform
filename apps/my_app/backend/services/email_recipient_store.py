@@ -27,6 +27,8 @@ import logging
 import threading
 from datetime import datetime
 from pathlib import Path
+
+from backend.database import get_sqlite_connection
 from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -331,17 +333,16 @@ _GROUP_INDEX = {g["key"]: g for g in EMAIL_RECIPIENT_GROUPS}
 def _get_conn() -> sqlite3.Connection:
     """获取连接（与 credential_store 同库，故意不走 get_raw_connection）。
 
-    ⚠️ 与 `credential_store._get_conn()` 同理：**故意**保留裸 sqlite3.connect。
+    ⚠️ 与 `credential_store._get_conn()` 同理：走 `get_sqlite_connection`
+    本地入口（永不走 PG 路由）。
     收件人表与凭据表同属 `db/app.db` 的"本地配置类"数据，按 R8 的原始意图
     应始终留在 SQLite。注意 R8 当前是空转的（`register_hard_excluded`
     从未被调用，见 credential_store.py 同位置的长注释），所以**这里是唯一
     的保证**，勿改成 get_raw_connection。
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), timeout=30)
-    conn.row_factory = sqlite3.Row
+    conn = get_sqlite_connection(str(DB_PATH), timeout=30)
     try:
-        conn.execute("PRAGMA busy_timeout=30000")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS email_recipients (

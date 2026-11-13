@@ -40,6 +40,9 @@ def get_eflow_tt_data(limit: int = 1000) -> pd.DataFrame:
     # database.py 的 DB_MODE 熔断，只读本地 db/app.db 做离线核对。
     # 因此这里与 routers/ 的约束不同：它本来就不参与 PG 模式。
     # 注意 APP_DB_PATH 指向的是**真库** db/app.db（不是 backend/app.db 那个空占位）。
+    # §11-2 数据访问收口评估后保留：import backend.database 会触发其模块级引擎
+    # 构建（DB_MODE=pg 且 DATABASE_URL 缺失时直接抛错），与本工具「不经过
+    # DB_MODE 熔断」的独立契约冲突，故不迁 get_sqlite_connection。
     conn = sqlite3.connect(str(APP_DB_PATH))
     query = """
         SELECT

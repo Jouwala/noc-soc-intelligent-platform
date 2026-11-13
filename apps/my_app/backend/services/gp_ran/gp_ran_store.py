@@ -9,8 +9,8 @@
 3. 同 `olib_soc_kpi_store.py` / `avail_recon` / `bp_report` 的既有做法：
    旁路库放 `backend/data/<模块>/`，整目录不入库。
 
-⚠ 这里的 `sqlite3.connect` 打开的是**本模块独占的旁路库**，不是 `db/app.db`。
-禁止照此写法去连主库（主库一律走 `backend.database.get_raw_connection`）。
+⚠ 这里经 `get_sqlite_connection`（本地入口）打开的是**本模块独占的旁路库**，
+不是 `db/app.db`。禁止照此写法去连主库（主库一律走 `backend.database.get_raw_connection`）。
 """
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from backend.database import get_sqlite_connection
 
 logger = logging.getLogger("gp_ran.store")
 
@@ -49,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_user_runs_kind_time ON user_runs(kind, run_at);
 
 def _connect() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(SQLITE_PATH), timeout=15)
+    conn = get_sqlite_connection(str(SQLITE_PATH), timeout=15)
     conn.row_factory = sqlite3.Row
     return conn
 

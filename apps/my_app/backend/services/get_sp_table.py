@@ -28,7 +28,7 @@ from pathlib import Path
 
 import paramiko
 import pandas as pd
-from backend.database import get_raw_connection
+from backend.database import get_raw_connection, get_sqlite_connection
 from backend.dialect_helpers import list_table_names, table_columns, write_df
 from backend.services.sp_material_name import normalize_dataframe
 import sqlite3
@@ -571,7 +571,7 @@ def _connect_mirror(db_path: str):
     SQLite-WAL-over-SMB 的架构限制，不是锁竞争，调大超时没有意义。
     真正修复需要在远端侧改（见 docs/manual/04-task-system.md 的 sp_data_sync 小节）。
     """
-    con = sqlite3.connect(str(db_path), timeout=MIRROR_CONNECT_TIMEOUT)
+    con = get_sqlite_connection(str(db_path), timeout=MIRROR_CONNECT_TIMEOUT)
     con.execute(f"PRAGMA busy_timeout = {MIRROR_BUSY_TIMEOUT_MS}")
     return con
 

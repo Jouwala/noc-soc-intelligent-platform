@@ -73,6 +73,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 if __package__ in (None, ""):                                            # 直接 python 跑本文件时
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from backend.database import get_sqlite_connection
 from backend.services.vmax_gbase import vmax_gbase_client as vgc
 from backend.services.olib_soc_report import olib_soc_app_detail as app_detail
 from backend.services.olib_soc_report import olib_soc_ne_detail as ne_detail
@@ -1025,7 +1026,7 @@ def write_excel(results: Dict[str, Dict[str, Any]], path: Path,
 
 def _sqlite() -> sqlite3.Connection:
     _ensure_dirs()
-    conn = sqlite3.connect(str(SQLITE_PATH), timeout=10)
+    conn = get_sqlite_connection(str(SQLITE_PATH), timeout=10)
     conn.execute("""CREATE TABLE IF NOT EXISTS report_runs (
         run_id TEXT PRIMARY KEY, mode TEXT, window_begin TEXT, window_end TEXT, days INTEGER,
         missing_days TEXT, status TEXT, blocks_ok INTEGER, blocks_failed INTEGER, rows INTEGER,
@@ -1101,7 +1102,7 @@ def recent_runs_for_task(task_id: str = "olib_soc_vmax_report") -> List[Dict[str
     try:
         if not SQLITE_PATH.exists():
             return []
-        conn = sqlite3.connect(str(SQLITE_PATH), timeout=5)
+        conn = get_sqlite_connection(str(SQLITE_PATH), timeout=5)
         try:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(report_runs)")}
             has_invoked = "invoked_by" in cols

@@ -58,7 +58,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend.database import get_raw_connection, DB_MODE
+from backend.database import get_raw_connection, get_sqlite_readonly_connection, DB_MODE
 from backend.services.remote_db_reader import get_remote_reader
 
 logger = logging.getLogger("site_availability")
@@ -321,10 +321,10 @@ def _load_local_tdd(month: str) -> Dict[Tuple[str, str], float]:
     '''
     out: Dict[Tuple[str, str], float] = {}
     # 该库是独立的本地 sqlite 文件：PG 模式下 get_raw_connection 会把它解析成
-    # PG schema（不存在），因此这里必须直连 sqlite，不走项目双模封装。
+    # PG schema（不存在），因此走 get_sqlite_readonly_connection 本地只读入口，
+    # 不走项目双模封装。
     try:
-        conn = sqlite3.connect(
-            "file:%s?mode=ro" % LOCAL_AVAIL_DB.as_posix(), uri=True, timeout=30)
+        conn = get_sqlite_readonly_connection(LOCAL_AVAIL_DB, timeout=30)
         try:
             for r in conn.execute(sql, (start, end)).fetchall():
                 nm = norm_name(r[0])

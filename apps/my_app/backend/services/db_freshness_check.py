@@ -415,7 +415,8 @@ def _api_window_max(db: str, table: str, since: str):
 # 本地 SQLite 访问
 # ============================================================
 def _local_tables(path: str) -> list:
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30) as conn:
+    from backend.database import get_sqlite_readonly_connection
+    with get_sqlite_readonly_connection(path, timeout=30) as conn:
         rows = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' "
             "AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_temp_%'").fetchall()
@@ -429,7 +430,8 @@ def _local_max_begin_time(path: str, table: str):
 def _local_max_col(path: str, table: str, column: str):
     """任意日期/时间列的 MAX（派生表用；回退库固定用 Begin Time）。"""
     q = lambda c: '"' + c.replace('"', '""') + '"'
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=60) as conn:
+    from backend.database import get_sqlite_readonly_connection
+    with get_sqlite_readonly_connection(path, timeout=60) as conn:
         cols = [r[1] for r in conn.execute(f'PRAGMA table_info({q(table)})').fetchall()]
         if column not in cols:
             return None, f"no_{column}_col"

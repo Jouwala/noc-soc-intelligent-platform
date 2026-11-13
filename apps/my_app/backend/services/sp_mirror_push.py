@@ -62,6 +62,12 @@ import tempfile
 import time
 from pathlib import Path
 
+try:
+    from backend.database import get_sqlite_connection
+except ImportError:  # 作为顶层模块独立加载时（见 get_sp_table 的双路 import）回退裸连
+    def get_sqlite_connection(db_path, timeout=30):  # noqa: F811
+        return sqlite3.connect(str(db_path), timeout=timeout)
+
 logger = logging.getLogger(__name__)
 
 # 镜像库需要写出的表（与 app.db 侧保持一致；顺序即建表顺序）
@@ -121,7 +127,7 @@ def build_local_mirror_db(tables_data: dict, db_path: str,
             pass
 
     result: dict = {}
-    con = sqlite3.connect(db_path)
+    con = get_sqlite_connection(db_path)
     try:
         # 显式用 delete 模式：WAL 会在关闭后留下边车文件，而我们要推送的是单文件；
         # 且远端库一旦是 WAL，本机就再也打不开（见模块 docstring）。

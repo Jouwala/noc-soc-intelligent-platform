@@ -372,8 +372,9 @@ def fetch_availability_via_api(window_days=2):
 # 写库（按主键覆盖写入，重跑幂等）
 # ============================================================
 def _write_tasks_to_db(tasks):
+    from backend.database import get_sqlite_connection
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_sqlite_connection(DB_PATH)
     try:
         conn.execute("PRAGMA synchronous=OFF")
         conn.execute("PRAGMA cache_size=-64000")
@@ -459,15 +460,16 @@ def upload_to_ftp(local_path, remote_dir, filename, max_retries=2):
 
 def _vacuum_db():
     """回收 INSERT OR REPLACE 产生的空闲页，避免文件无限膨胀。"""
+    from backend.database import get_sqlite_connection
     try:
-        c = sqlite3.connect(DB_PATH)
+        c = get_sqlite_connection(DB_PATH)
         cur = c.cursor()
         cur.execute("PRAGMA page_count"); pc = cur.fetchone()[0]
         cur.execute("PRAGMA freelist_count"); fl = cur.fetchone()[0]
         c.close()
         if pc and fl > max(50000, int(pc * 0.25)):
             logger.info(f"[AVAIL][vacuum] 空闲页 {fl}/{pc}，执行 VACUUM 压缩...")
-            v = sqlite3.connect(DB_PATH)
+            v = get_sqlite_connection(DB_PATH)
             v.execute("VACUUM")
             v.close()
         else:

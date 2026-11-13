@@ -36,6 +36,8 @@ except Exception:
 import psycopg2
 import psycopg2.extras
 
+from backend.database import get_sqlite_connection  # noqa: E402
+
 # ── 配置 ──────────────────────────────────────────────────────
 PG_URL = os.environ.get("DATABASE_URL", "")
 SQLITE_PATH = ROOT / "db" / "app.db"
@@ -59,8 +61,8 @@ BATCH_SIZE = 5000  # 每批写入行数
 #    实例：用户 14:48:47 保存密码 → 15:45 那次同步（15:50:30 落盘）后消失。
 #
 # 判定标准：看这张表的**写入方**是否与 DB 模式无关地固定写 SQLite。
-#   - credentials      → backend/services/credential_store.py 硬编码 sqlite3.connect
-#   - email_recipients → backend/services/email_recipient_store.py 同样硬编码
+#   - credentials      → backend/services/credential_store.py 经 get_sqlite_connection 本地入口
+#   - email_recipients → backend/services/email_recipient_store.py 同样走本地入口
 #   - task_schedule_config → backend/services/task_runner.py::_save_schedule_config
 #       无条件写 SQLite（`load_schedule_config_rows` / `_load_schedule_config` /
 #       `schedule_all_tasks` / 执行前的 `_refresh_task_schedule_from_db` 都读它）。
@@ -352,7 +354,7 @@ def main():
         pg_conn.set_session(readonly=True)
 
         # 连接 SQLite（isolation_level=None：显式 BEGIN/COMMIT，配合 sync_table 的原子表替换）
-        sqlite_conn = sqlite3.connect(str(SQLITE_PATH), timeout=120, isolation_level=None)
+        sqlite_conn = get_sqlite_connection(str(SQLITE_PATH), timeout=120, isolation_level=None)
         sqlite_conn.execute("PRAGMA busy_timeout=120000")
         sqlite_conn.execute("PRAGMA synchronous=NORMAL")
 

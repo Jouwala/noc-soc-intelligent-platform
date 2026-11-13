@@ -72,6 +72,10 @@ warnings.filterwarnings("ignore", message="Workbook contains no default style")
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _APP_ROOT = _SCRIPT_DIR.parent.parent.parent
 
+# 需把 my_app 根塞进 sys.path 才能 import backend.* —— 同 generate_sp_online_report.py 的写法。
+sys.path.insert(0, str(_APP_ROOT))
+from backend.database import get_sqlite_readonly_connection  # noqa: E402
+
 DATA_DIR = _APP_ROOT / "data" / "sp_email" / "data"
 DEFAULT_OUT_DIR = _APP_ROOT / "data" / "sp_weekly"
 DB_PATH = _APP_ROOT / "db" / "app.db"
@@ -240,7 +244,7 @@ def _site_map() -> Dict[str, str]:
     if not DB_PATH.is_file():
         return {}
     try:
-        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=10)
+        conn = get_sqlite_readonly_connection(DB_PATH, timeout=10)
         try:
             rows = conn.execute('SELECT "Site ID", "Site Name" FROM eflow_site').fetchall()
         finally:

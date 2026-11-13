@@ -1901,9 +1901,9 @@ def _write_app_db(merged_df, summary_df):
 
 def _write_local_sqlite(merged_df, summary_df):
     """远程写入失败时的本地回退：全量替换写入本地 SQLite（DROP+CREATE，快照语义）"""
-    import sqlite3
+    from backend.database import get_sqlite_connection
     os.makedirs(DATA_DIR, exist_ok=True)
-    conn = sqlite3.connect(LOCAL_DB_PATH, timeout=60)
+    conn = get_sqlite_connection(LOCAL_DB_PATH, timeout=60)
     try:
         merged_df.to_sql(CELL_TABLE, conn, if_exists="replace", index=False)
         summary_df.to_sql(SUMMARY_TABLE, conn, if_exists="replace", index=False)
