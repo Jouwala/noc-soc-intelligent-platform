@@ -828,6 +828,11 @@ def save_to_sqlite(sheets_data):
     """
     将数据保存到 SQLite 数据库（`data/eflow/eflow.sqlite3`，报告中间库）。
 
+    双库归属（2026-11-13 固化）：本函数写的是**报告中间库**，其中的 `eflow_tt` 等
+    同名表只是报告生成时的快照，**不是同步结果**；`eflow_tt` 的唯一活写源是
+    `sync_from_eflow_api` → 主库，读这些表一律读主库（手册
+    `docs/manual/03-data-layer.md`「eflow 双库归属」一节）。
+
     ⚠️ PG 模式下**明确跳过**（返回 None），原因有两条：
       1. 该库映射到 PG 的 `eflow` schema，而 PG 迁移后主库已是 `app` schema，
          `eflow` schema 自 2026-08-06 起无任何写入方（本次审计实测）——它是

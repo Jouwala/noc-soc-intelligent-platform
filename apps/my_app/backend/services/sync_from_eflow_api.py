@@ -10,6 +10,14 @@ eFlow API 数据同步服务
   - `eflow_site` 走**单次全量导出**（`eflow_data_mapper._fetch_site_pipeline` 无时间窗），
     表语义 = 上游当前快照 → `_sync_site` 会做全量重建删除（上游已无的站点）。
     删除只放在 `_sync_site` 内，**不要**挪进共用的 `_upsert_df`（那会毁掉 delta 表历史）。
+
+双库归属（2026-11-13 固化，手册 `docs/manual/03-data-layer.md`「eflow 双库归属」一节）：
+本同步是 `eflow_tt` / `eflow_wo` / `eflow_cr` / `eflow_pm` / `eflow_site` / `person`
+的**唯一活写源**，且只写主库（`DB_PATH`，`sync_from_eflow_api()` 经
+`get_raw_connection(str(DB_PATH))` 落库）。`data/eflow/eflow.sqlite3` 里的同名表是
+遗留快照与报告中间产物，**不是**同步结果，禁止以它为数据源读这些表——读到的是
+过期快照且不会报错。告警两表（`realtime_alarm` / `history_alarm`）的双写归属是
+例外，见 `eflow_alarm_service.py` 与手册同一节。
 """
 import os
 import re
