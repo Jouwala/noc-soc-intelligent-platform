@@ -79,6 +79,89 @@
 
 同目录下还有 `data/ran_ume/ran_kpi_daily.sqlite3`、`data/ipran_ume/ipran_ume_kpi.sqlite3`、`data/cnn_ume/`、`data/eflow/eflow.sqlite3`、`data/ran_kpi_avalability_1day.sqlite3` 等，命名沿用历史习惯（含 `avalability` 这类既有拼写错误），**不要顺手改名**——多处 SQL 与任务按字符串引用它们。
 
+## 裸 `sqlite3.connect` 点位清单（治理登记）
+
+`get_raw_connection`（`backend/database.py:145`）提供三样东西：双模路由（PG 模式按路径映射 schema）、`busy_timeout` / `synchronous` PRAGMA、以及 `with` 退出时提交**并关闭**的连接语义。裸 `sqlite3.connect` 这三样都没有（且 `with sqlite3.connect(...)` 只管事务、不关连接，见 `database.py:107` 的注释）。
+
+但全量核查（2026-11-13）表明：现有裸连绝大多数打开的是**独立数据文件**——这类路径在 PG 模式下走 `get_raw_connection` 会被误映射成 PG schema，对它们而言裸连目前是唯一正确写法。治理动作因此是**冻结清单**：新增裸连必须先在本节登记分类与理由；未登记的新点位视为待治理项。
+
+复核命令（在 `apps\my_app` 下）：`grep -rn "sqlite3\.connect" --include="*.py" backend tools`。2026-11-13 实测 71 处命中 = 17 处注释 / docstring 提及 + 1 处本体（`backend/database.py:163`，即 `get_raw_connection` 自身实现）+ **53 处实际调用**，分类如下：
+
+### 收口状态（2026-11-13，PR #13）
+
+§11-2 数据访问收口已落地：`backend/database.py` 在 `get_raw_connection` 之外新增本地专用入口 `get_sqlite_connection` / `get_sqlite_readonly_connection`——**永不走 PG 路由**，其余语义（`_ClosingConnection`、Row 工厂、`busy_timeout` / `synchronous` PRAGMA）与 `get_raw_connection` 的 sqlite 分支一致。本地权威表、本地专属文件、临时产物与离线工具一律走新入口；主库与已迁 PG 的数据文件仍走双模入口 `get_raw_connection`。
+
+本清单 53 处中 **49 处已迁移**（A 6 / C 10 / D 18 / E 5 / F 1 / G 9，各小节标题已标注本类状态），**保留 4 处**并在代码内注明理由：B 类 `eflow_rules_matcher` 2 处（独立脚本契约：import `backend.database` 会触发其模块级引擎构建，与「不经过 DB_MODE 熔断」的定位冲突）、D 类 `battery_kpi_service` 1 处（无 backend 包时的兜底分支，主路径早已走 `get_raw_connection`）、G 类 `transfer_lib` 1 处（URI 需 `quote()` 转义特殊字符路径，入口未复刻该语义）。`sp_mirror_push` 因双路 import 以同名本地函数兜底，调用点本身已收口。登记时列出的未设 timeout 点位，除 B 类 2 处随保留维持原状外，其余均已随迁移统一走入口默认 30 秒。
+
+收口后复核口径：全树 `sqlite3.connect` 实际调用只剩 `database.py` 的三个入口本体与上述保留点，其余命中皆为注释 / docstring 提及；新增裸连仍须先在本节登记。
+
+### A. 本地权威表 · 故意直连 `app.db`（6 处，已全部迁移至 `get_sqlite_connection`）
+
+与 DB 模式无关地固定写 SQLite，判据见上文 `SKIP_TABLES` 一节：
+
+| 点位 | 说明 |
+| --- | --- |
+| `backend/services/credential_store.py:696` | 凭据表，故意裸连（理由写在 `:683` 注释） |
+| `backend/services/email_recipient_store.py:341` | 收件人表，同上（理由写在 `:334` 注释） |
+| `backend/services/task_runner.py:412` / `435` / `495` / `561` | `task_schedule_config` 读写；判定只读本地这一份，PG 侧只是双写镜像 |
+
+### B. 独立工具直读 `app.db`（2 处，§11-2 评估后保留裸连，理由见代码注释）
+
+| 点位 | 说明 |
+| --- | --- |
+| `backend/services/eflow_rules/eflow_rules_matcher.py:43` / `194` | 独立可运行的 eFlow 规则匹配工具（理由写在 `:38` 注释）⚠️ 未设 timeout |
+
+### C. 独立数据文件 · 只读打开（10 处，已全部迁移至只读入口）
+
+| 点位 | 说明 |
+| --- | --- |
+| `backend/services/avail_ms_service.py:189` | 可用率库 `AVAIL_DB`，`mode=ro` |
+| `backend/services/bp_report_store.py:184` | `connect(read_only=True)` 分支，`mode=ro` |
+| `backend/services/dashboard_service.py:282` | 传入的本机库路径，`mode=ro` + `query_only` |
+| `backend/services/db_freshness_check.py:418` / `432` | 新鲜度巡检任意库文件，`mode=ro` |
+| `backend/services/mttr_tt_sync.py:143` | 读源库，`mode=ro` |
+| `backend/services/ran_cells_kpi_service.py:60` | `_connect_ro`：不用 `file:` URI（避 UNC 路径坑），改用 `PRAGMA query_only=ON` |
+| `backend/services/site_availability_service.py:326` | 本地可用率库 `mode=ro`；注释已说明 PG 模式走封装会被误映射 schema |
+| `backend/services/soc_trend/soc_trend_store.py:51` | `connect(readonly=True)` 分支，`mode=ro` |
+| `backend/services/sp_report_gen/generate_sp_weekly_report.py:243` | `mode=ro`，timeout=10 |
+
+### D. 独立数据文件 · 读写（19 处，各任务专用库；18 处已迁移，`battery_kpi_service` 兜底 1 处保留）
+
+| 点位 | 目标库 / 说明 |
+| --- | --- |
+| `backend/services/battary_kpi_fetch/battery_kpi_service.py:300` | `battery_kpi.sqlite3` |
+| `backend/services/bp_report_store.py:187` | `connect(read_only=False)` 分支 |
+| `backend/services/cm_data/cm_data_export.py:1906` | `cm_cell_data.sqlite3` |
+| `backend/services/fw_kpi/fw_kpi_services.py:520` | 候选路径循环打开 FW 库（TODO 原文点名点位，行号已由 488 漂移至此） |
+| `backend/services/get_sp_table.py:574` | 镜像同步路径，带 `MIRROR_CONNECT_TIMEOUT` |
+| `backend/services/gp_ran/gp_ran_store.py:52` | 本模块独占旁路库（理由写在文件头 `:12`） |
+| `backend/services/native_board_mirror_sync.py:147` | 本机镜像库 `_open_local`，自设 PRAGMA |
+| `backend/services/olib_soc_report/olib_soc_kpi_store.py:167` / `171` | olib 专用 store 库 |
+| `backend/services/olib_soc_report/olib_soc_report_service.py:1028` / `1104` | `olib_soc_report.sqlite3` |
+| `backend/services/ran_cell_availability_sync.py:376` / `463` / `470` | `ran_kpi_avalability_1day.sqlite3` ⚠️ 未设 timeout |
+| `backend/services/ran_cells_kpi_service.py:570` | 物化库 `ran_cells_kpi.sqlite3` ⚠️ 未设 timeout |
+| `backend/services/soc_trend/soc_trend_store.py:54` | 写分支，自设 WAL + `busy_timeout` |
+| `backend/services/sp_mirror_push.py:124` | 推送用单文件镜像，自设 `journal_mode=delete` ⚠️ 未设 timeout |
+| `backend/services/vmax_multi_data/vmax_multi_data_service.py:230` / `278` | `vmax_multi_data.sqlite3` |
+
+### E. 临时 / 产物文件（5 处，已全部迁移）
+
+写临时文件后原子替换、或一次性产物，对象不是共享库：`backend/services/avail_recon_sync.py:280`、`mttr_tt_sync.py:179`、`progress_sync.py:376`、`ran_ume_service.py:1075`、`tt_alarm_render.py:271`（未设 timeout，但对象是临时文件，风险低）。
+
+### F. PG → SQLite 快照重建（1 处，已迁移）
+
+`backend/scripts/sync_pg_to_sqlite.py:355` —— 下一节「PG → SQLite 快照」的实现本体。
+
+### G. 迁移与离线工具（10 处，人工执行、不在运行期；9 处已迁移，`transfer_lib` 1 处保留）
+
+`backend/migrations/fix_tt_alert_log_columns.py:210`、`reconcile.py:161`（`mode=ro`）、`transfer_lib.py:97`；`backend/services/backfill_new_group_history.py:79`、`backfill_old_group_history.py:86`（均 `mode=ro`）；`tools/backfill_manual_stop_flag.py:81`、`fix_task_schedule_dupes.py:77`、`reconcile_task_schedule_state.py:163` / `209`、`sync_manual_stop_to_pg.py:32`。
+
+### 核查结论（2026-11-13）
+
+1. TODO 原文点名的 `ipran_chart_service.py:233` 已不存在：该文件已改走 `get_raw_connection`（现 `ipran_chart_service.py:239-240`），此例已消。
+2. 运行期真正直连 `app.db` 的只有 A、B 两类，全部有既有注释或手册依据；**不存在未登记的服务绕过连接管理读写主库**。此前担心的「图表数据源绕过」实际是打开各自的独立数据文件（C / D 类）。
+3. 后续治理候选（本清单只登记，不动代码）：7 处未设 timeout 的点位（D 类 5 处 + B 类 2 处）用的是 sqlite3 默认 5 秒，与其余点位 10~60 秒的口径不一致；它们多是图表数据源，改造会静默坏图，按 TODO 约定另行排期、逐个验证。
+
 ## PG → SQLite 快照
 
 `pg_to_sqlite_sync` 把远程 PG 全库同步到本地 `db/app.db`，作为离线备份与回退快照（`task_registry.py:723`）。这意味着 `app.db` 里的业务表是**上一次同步之前的镜像**，别在它上面做"实时"假设。
