@@ -64,6 +64,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+          cache-dependency-path: apps/portal/package-lock.json
       - name: 安装依赖
         run: npm ci
       - name: lint（tsc --noEmit）
