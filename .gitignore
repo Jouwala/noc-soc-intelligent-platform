@@ -547,7 +547,7 @@ apps/my_app/backup/
 # 它是门户 51 条看板的**免密链接清单**（含单个稳定的 t= 参数），
 # 不是浏览器抓包样本、不含会话 cookie（实测 password/token/cookie 关键词 0 命中）。
 # 主仓库已跟踪它（PUBLIC 仓库里已公开），此处保持一致，避免副本与主仓库脱节。
-!liberia-noc_soc-数据看板统一门户/MsPortal/all_urls.txt
+!apps/portal/MsPortal/all_urls.txt
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 桌面快捷方式（.lnk）

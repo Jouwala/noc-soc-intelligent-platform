@@ -40,7 +40,7 @@
  * 零第三方依赖（只用 node:fs / node:path），Windows 与 CI 的 Linux 都能跑。
  *
  * 用法：
- *   cd liberia-noc_soc-数据看板统一门户 && node scripts/check-i18n.mjs
+ *   cd apps/portal && node scripts/check-i18n.mjs
  *   或 npm run check:i18n
  */
 

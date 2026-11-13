@@ -166,9 +166,9 @@ if (!/function paintHandles\(/.test(layoutClean) || !/paintHandles\(\)/.test(lay
 }
 
 // -------------------------------- [6] 可选：my_app 报告源译文 + 语言契约
-const backend = path.join(ROOT, '..', 'Task', 'my_app', 'backend', 'routers', 'email_reports.py')
+const backend = path.join(ROOT, '..', 'my_app', 'backend', 'routers', 'email_reports.py')
 if (!fs.existsSync(backend)) {
-  note('未找到 ../Task/my_app/backend/routers/email_reports.py，跳过后端报告源译文对账（门户仓库不硬依赖 my_app）')
+  note('未找到 ../my_app/backend/routers/email_reports.py，跳过后端报告源译文对账（门户仓库不硬依赖 my_app）')
 } else {
   const py = fs.readFileSync(backend, 'utf8')
   if (!/accept\.startswith\(["']en["']\)/.test(py)) {

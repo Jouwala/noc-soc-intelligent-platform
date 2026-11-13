@@ -12,7 +12,7 @@
  *   纯 assert + __main__ 计数器，不依赖 pytest（本机 venv 没装 pytest）。
  *
  * 运行（必须用 PATH 上的 node）：
- *   cd D:/01_RPA/liberia-noc_soc-数据看板统一门户
+ *   cd <仓库根>/apps/portal
  *   node scripts/check-doc-consistency.mjs
  */
 import { readFileSync, existsSync } from 'node:fs'
@@ -56,7 +56,7 @@ function componentCount() {
  *  **静默跳过**，守卫显示 PASS 但实际什么都没查。教训：守卫取不到真相源时
  *  必须显式失败，不能当成「不适用」。 */
 function myAppTaskCount() {
-  const p = join(ROOT, '..', 'apps', 'my_app', 'backend', 'task_registry.py')
+  const p = join(ROOT, '..', 'my_app', 'backend', 'task_registry.py')
   if (!existsSync(p)) return null
   const src = readFileSync(p, 'utf8')
   const start = src.indexOf('TASK_SPECS')
@@ -128,7 +128,7 @@ check('看板描述里的定时任务数与 my_app 一致', () => {
 check('根 component-api.md 的门户组件数与 src/components 一致', () => {
   const n = componentCount()
   // 根目录的 component-api.md 是**工作区级**文档（两个子系统共用一份索引）
-  const rootDoc = join(ROOT, '..', 'component-api.md')
+  const rootDoc = join(ROOT, '..', '..', 'component-api.md')
   if (!existsSync(rootDoc)) return
   const doc = readFileSync(rootDoc, 'utf8')
   const m = doc.match(/统一门户[^\n]*?\|\s*(\d+)\s*个\s*`\.tsx`/)

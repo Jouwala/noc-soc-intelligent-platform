@@ -2,12 +2,12 @@
 #  my_portal_ctl.ps1 - single entry point behind every desktop shortcut
 #
 #  WHY THIS FILE EXISTS (do not delete, do not rename):
-#  The portal directory name contains Chinese characters
-#  ("liberia-noc_soc-数据看板统一门户"). This machine's ANSI codepage is
+#  The portal directory used to have a Chinese name (since renamed to apps\portal).
+#  This machine's ANSI codepage is
 #  Windows-1252, which cannot round-trip those characters into a .lnk, so a
 #  shortcut pointing straight at the portal's start.bat would be corrupted.
 #  Every shortcut therefore points HERE - this filename is pure ASCII - and
-#  the portal directory is resolved at run time by wildcard matching.
+#  the portal directory (now apps\portal, pure ASCII) is resolved at run time.
 #
 #  USER-VISIBLE CONTRACT (what the shortcuts promise):
 #    * Double-click runs it; a console window shows what is happening.
@@ -89,21 +89,11 @@ $NginxDir  = Join-Path $Root 'nginx-1.28.0'
 $NginxExe  = Join-Path $NginxDir 'nginx.exe'
 $BotDir    = Join-Path $Root 'apps\whatsapp-kb-bot'
 
-# Portal directory: name is non-ASCII, so match it by wildcard. The distinctive
-# ASCII prefix/suffix avoids hardcoding Chinese text in this file at all.
+# Portal directory: fixed at apps\portal (pure ASCII since refactor round-1,
+# batch B). No wildcard matching needed any more.
 function Resolve-PortalDir {
-    # Preferred: the known prefix, wildcarded.
-    $hit = Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
-           Where-Object { $_.Name -like 'liberia-noc_soc-*' } |
-           Select-Object -First 1
-    if ($hit) { return $hit.FullName }
-
-    # Fallback: any directory holding the portal's own start.bat.
-    $hit = Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
-           Where-Object { Test-Path (Join-Path $_.FullName 'start_hidden.ps1') } |
-           Select-Object -First 1
-    if ($hit) { return $hit.FullName }
-
+    $dir = Join-Path $Root 'apps\portal'
+    if (Test-Path -LiteralPath $dir) { return $dir }
     return $null
 }
 
@@ -522,7 +512,7 @@ function Invoke-StopMyApp {
 function Invoke-StartPortal {
     Write-Head 'Start portal'
     if (-not $PortalDir) {
-        Write-Err 'Could not locate the portal directory (expected liberia-noc_soc-* under:'
+        Write-Err 'Could not locate the portal directory (expected apps\portal under:'
         Write-Err "  $Root)"
         Write-Err 'Nothing started.'
         return
@@ -537,7 +527,7 @@ function Invoke-StartPortal {
 function Invoke-StopPortal {
     Write-Head 'Stop portal'
     if (-not $PortalDir) {
-        Write-Err 'Could not locate the portal directory (expected liberia-noc_soc-* under:'
+        Write-Err 'Could not locate the portal directory (expected apps\portal under:'
         Write-Err "  $Root)"
         Write-Err 'Nothing stopped.'
         return

@@ -161,22 +161,22 @@ http {
         # v3/olbrportal/index.html 用 ../../MsPortal/assets/ 引资产，olbr.js 用
         # /MsPortal/viewer.html 开查看器 —— 所以 MsPortal 必须一起保留。
         location /MsPortal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/MsPortal/";
+            alias              "{{ROOT}}/apps/portal/MsPortal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
         }
         location /olbrportal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/olbrportal/";
+            alias              "{{ROOT}}/apps/portal/olbrportal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
         }
         location /v1/olbrportal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v1/olbrportal/";
+            alias              "{{ROOT}}/apps/portal/v1/olbrportal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
         }
         location /v2/olbrportal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v2/olbrportal/";
+            alias              "{{ROOT}}/apps/portal/v2/olbrportal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
         }
@@ -184,7 +184,7 @@ http {
         # ---- v3：门户问答助手挂件所在页 ----
         # 目录深度必须保持「前缀目录 /olbrportal/」，olbr.js 里的 ../MsPortal/ 相对路径才成立。
         location /v3/olbrportal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/olbrportal/";
+            alias              "{{ROOT}}/apps/portal/v3/olbrportal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
 
@@ -205,7 +205,7 @@ http {
 
         # 公开静态脚本，**不加** auth_request（未登录时也要能取到，否则闸门页无法引导登录）
         location = /v3/team-gate.js {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/team-gate.js";
+            alias              "{{ROOT}}/apps/portal/v3/team-gate.js";
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
         }
 
@@ -223,7 +223,7 @@ http {
         # ⚠ 若删掉这五个 location，上面那条 sub_filter 也必须一起删 ——
         #   否则 team-gate.js 会把用户跳到不存在的 /v3/fo_portal/。
         location /v3/fo_portal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/team_portal/";
+            alias              "{{ROOT}}/apps/portal/v3/team_portal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
             auth_request      /uniplam/api/auth/team-gate/fo;
@@ -231,7 +231,7 @@ http {
             error_page        403 = @team_forbidden;
         }
         location /v3/bo_portal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/team_portal/";
+            alias              "{{ROOT}}/apps/portal/v3/team_portal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
             auth_request      /uniplam/api/auth/team-gate/bo;
@@ -239,7 +239,7 @@ http {
             error_page        403 = @team_forbidden;
         }
         location /v3/flm_portal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/team_portal/";
+            alias              "{{ROOT}}/apps/portal/v3/team_portal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
             auth_request      /uniplam/api/auth/team-gate/flm;
@@ -247,7 +247,7 @@ http {
             error_page        403 = @team_forbidden;
         }
         location /v3/smc_portal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/team_portal/";
+            alias              "{{ROOT}}/apps/portal/v3/team_portal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
             auth_request      /uniplam/api/auth/team-gate/smc;
@@ -255,7 +255,7 @@ http {
             error_page        403 = @team_forbidden;
         }
         location /v3/cxo_portal/ {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/team_portal/";
+            alias              "{{ROOT}}/apps/portal/v3/team_portal/";
             index              index.html index.htm;
             add_header         Cache-Control "no-cache, no-store, must-revalidate";
             auth_request      /uniplam/api/auth/team-gate/cxo;
@@ -268,12 +268,12 @@ http {
         #   401 用内部重定向（error_page 指向 URI）而不是 named location + return：
         #   地址栏保持 /v3/<team>_portal/ 不变，页面上直接是登录表单。
         location = /v3/team-login.html {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/team-login.html";
+            alias              "{{ROOT}}/apps/portal/v3/team-login.html";
             default_type      text/html;
             add_header         Cache-Control "no-store" always;
         }
         location = /v3/team-login.js {
-            alias              "{{ROOT}}/liberia-noc_soc-数据看板统一门户/v3/team-login.js";
+            alias              "{{ROOT}}/apps/portal/v3/team-login.js";
             default_type      application/javascript;
             add_header         Cache-Control "no-store" always;
         }

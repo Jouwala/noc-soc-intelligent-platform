@@ -52,9 +52,8 @@ $NginxExe = Join-Path $NginxDir 'nginx.exe'
 $MyAppDir = Join-Path $Root 'apps\my_app'
 $FeDir = Join-Path $MyAppDir 'frontend'
 $BotDir = Join-Path $Root 'apps\whatsapp-kb-bot'
-$PortalDir = Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like 'liberia-noc_soc-*' } | Select-Object -First 1
-$PortalRoot = if ($PortalDir) { $PortalDir.FullName } else { $null }
+$PortalRoot = Join-Path $Root 'apps\portal'
+if (-not (Test-Path -LiteralPath $PortalRoot)) { $PortalRoot = $null }
 
 # 防误跑：本脚本只应在 build 出来的副本里执行。主仓库同样有 apps\my_app，
 # 但没有 runtime\node\node.exe —— 少了这道检查，误在主仓库跑会往源码树写 .env。
@@ -420,11 +419,11 @@ if ($PortalRoot) {
         -ArgList @($tsxCli, 'server/index.ts') -WorkDir $PortalRoot -Port $PortalPort -WaitSeconds 30
     if (-not $ok) { throw '统一门户启动失败（见 TMP\portable-portal.err / .out）' }
 } else {
-    Write-Warn2 '未找到门户目录（liberia-noc_soc-*），门户步骤跳过'
+    Write-Warn2 '未找到门户目录（apps\portal），门户步骤跳过'
 }
 
 if ((Get-Cfg 'START_WA_ANALYSIS' '0') -eq '1') {
-    $waDir = Join-Path $Root 'liberia-noc_soc-数据看板统一门户\scripts\whatsapp_analysis'
+    $waDir = Join-Path $Root 'apps\portal\scripts\whatsapp_analysis'
     $waCli = Join-Path $waDir 'node_modules\tsx\dist\cli.mjs'
     if (Test-Path -LiteralPath $waCli) {
         # 分析服务读 PORT；临时改成自己的端口，避免继承门户 PORT 而撞端口。

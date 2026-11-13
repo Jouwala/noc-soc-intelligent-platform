@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-export const PORTAL = 'liberia-noc_soc-数据看板统一门户';
+export const PORTAL = 'apps/portal';
 export const APP = 'apps/my_app';
 export const EMS = `${APP}/backend/services/cn_ems`;
 export const STATE = 'TMP/_sync_state.json';
