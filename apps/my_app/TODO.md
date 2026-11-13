@@ -2,7 +2,7 @@
 
 > 基准日期：2026-09-22　|　项目根：`D:\01_RPA\Task\my_app`
 > 上级总纲：`D:\01_RPA\TODO.md`
-> **本文只留在办项。** 历史规划与复盘看 `PROJECT_DOCS.md`（历史档案）。
+> **本文只留在办项。** 历史规划与复盘看 `../../docs/archive/PROJECT_DOCS.md`（历史档案）。
 
 ## 一、进度快照
 
@@ -224,7 +224,7 @@ my_app 处于**稳定运行**阶段（后端 7038 + 多组 worker + 双看门狗
 
 | 内容 | 去哪里 |
 | --- | --- |
-| my_app 历史规划与复盘 | `PROJECT_DOCS.md`（§2 迁移计划、§3 架构评估、§5 i18n 审计、§10 失败复盘） |
+| my_app 历史规划与复盘 | `../../docs/archive/PROJECT_DOCS.md`（§2 迁移计划、§3 架构评估、§5 i18n 审计、§10 失败复盘） |
 | 待清理残留清单 | `docs\manual\90-appendix.md` |
 | 安全现状与已知风险 | `docs\manual\05-security-and-credentials.md` |
 | 第三方许可与归属声明 | `docs\THIRD-PARTY-NOTICES.md` |

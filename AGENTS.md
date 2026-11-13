@@ -125,7 +125,7 @@
    - 门户 `.gitignore`：`node_modules/`、`dist/`、`*.log`、`.env*`、`portal-default.json`（运行时写入）、`auth-data/`（含加盐密码哈希，**严禁入库**）、**`_*` / `.tmp_*` / `tmp_*` / `seg*.txt` / `listing.txt` / `out.txt`（一次性转储）、`*.bak` / `*.bak_*` / `*_bak_*`（手工快照）、`log/`、`tsconfig.tsbuildinfo`**。`MsPortal\`、`OlrPortal\`、`olbrportal\` 是**手写静态壳**（`nginx.conf:102/108` 直接 alias 发它们），是源码，上面这些规则刻意没有整目录忽略它们。
    - **门户的 `.gitignore` 与 `vite.config.ts` 的 `server.watch.ignored`（约 :242-267）是同一套判断的两个副本。** 那份 watch 清单早就把「什么不是源码、什么会触发无意义整页刷新」逐条写了理由，只是从没同步给 git，于是同一个文件在 dev 里被当垃圾、在版本库里却被当源码跟踪。**改一个必须改另一个**，否则两边立刻重新分叉。
    - 提交前用 `git status --porcelain` 复查有没有被忽略规则漏掉的运行时文件混进来。
-5. **不要新增第二个真相源。** 现状文档以各子系统的 `docs/manual/` 与 `README.md` 为准；`apps\my_app\PROJECT_DOCS.md`（151KB）是**历史档案**（迁移计划、架构评估、i18n 审计、失败复盘），其自身 README 已声明「现状以 `docs/manual/` 为准」。**不要**把现状写回 `PROJECT_DOCS.md`。
+5. **不要新增第二个真相源。** 现状文档以各子系统的 `docs/manual/` 与 `README.md` 为准；`docs\archive\PROJECT_DOCS.md`（151KB）是**历史档案**（迁移计划、架构评估、i18n 审计、失败复盘），其自身 README 已声明「现状以 `docs/manual/` 为准」。**不要**把现状写回 `PROJECT_DOCS.md`。
 6. **破坏性操作先确认。** 删除目录、批量移动、改数据库、动 nginx 配置、重启生产服务（7038/7090/9267）前，先说明影响面并取得确认。工作区里有多个 `start.bat` / `stop.bat` / `*_ensure.bat`，误跑会打断在看板上看数据的人。
 6b. **本机（MSNOC1 / .20）nginx 的生效目录是 `D:\01_RPA\nginx-1.28.0\`（本地盘）。2026-10-01 起如此。** 这条经历过两次事故，务必按现状操作：
    - **生效位置**：`D:\01_RPA\nginx-1.28.0\`，nginx 进程的 `ExecutablePath` 就来自这里。**改本机配置只改 `D:\01_RPA\nginx-1.28.0\conf\nginx.conf`。**

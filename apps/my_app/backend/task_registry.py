@@ -213,7 +213,7 @@ TASK_SPECS = [
          default_cron="0 3 * * *", category="whatsapp"),
 
     # 5b. WhatsApp 发送（扩展版）：投递作业并等待浏览器扩展在已登录的 WhatsApp Web 标签页中发送。
-    #     与上面的 Playwright 版并存，互不影响；扩展见 Task/my_app/whatsapp_sender_extension。
+    #     与上面的 Playwright 版并存，互不影响；扩展见 extensions/whatsapp_sender_extension。
     dict(task_id="whatsapp_send_ext", name="WhatsApp 消息发送（扩展）", name_en="WhatsApp Message Send (Extension)",
          loader=("backend.services.whatsapp_ext_service", "run_whatsapp_send_ext"),
          description="投递发送作业，由浏览器扩展在已登录的 WhatsApp Web 中发送 Site Outage 截图",

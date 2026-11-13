@@ -2,7 +2,7 @@
 
 > 基准日期：2026-09-22　|　适用：`D:\02_olbr_portal` 工作区根目录
 > **本文只放"当前在办"的少数几项。** 历史清单与已完成规划**不进本文**——那些看 `git log`、
-> `apps\my_app\PROJECT_DOCS.md`（历史档案）以及各子系统手册。
+> `docs\archive\PROJECT_DOCS.md`（历史档案）以及各子系统手册。
 
 ## 一、进度快照
 
@@ -396,7 +396,7 @@
 | 内容 | 去哪里 |
 | --- | --- |
 | 完整提交历史 | `git log --oneline` |
-| my_app 历史规划与复盘 | `apps\my_app\PROJECT_DOCS.md` |
+| my_app 历史规划与复盘 | `docs\archive\PROJECT_DOCS.md` |
 | my_app 待清理残留清单 | `apps\my_app\docs\manual\90-appendix.md` |
 | 商用就绪度整改 | `apps\portal\MsPortal 商用就绪度检测 —— 结论与整改方案.md` |
 | 迁移专项 | `apps\my_app\docs\FINEBI_MIGRATION.md` |

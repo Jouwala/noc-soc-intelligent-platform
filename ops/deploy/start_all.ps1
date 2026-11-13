@@ -386,7 +386,7 @@ if (-not (Test-Path -LiteralPath $pgCtl)) {
 # ------------------------------------------------- 2) nginx 配置（含 -t 校验）
 Write-Step '--- 2/6 nginx 配置展开 ---'
 $startNginx = (Get-Cfg 'START_NGINX' '1') -eq '1'
-$confScript = Join-Path $Root 'write_nginx_conf.ps1'
+$confScript = Join-Path $Root 'ops\deploy\write_nginx_conf.ps1'
 if ($startNginx -and -not $SkipNginxConf) {
     if (-not $DryRun) {
         if (-not (Test-Path -LiteralPath $confScript)) { throw "缺 $confScript（请先跑 -Stage config）" }

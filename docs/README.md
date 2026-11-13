@@ -6,11 +6,12 @@
 | `docs/architecture/` | 架构现状：模块地图、数据源登记表 |
 | `docs/adr/` | 架构决策记录（ADR） |
 | `docs/operations/` | 运维记录（如回滚演练记录，见方案第 9 节） |
+| `docs/archive/` | 历史档案（`PROJECT_DOCS.md`、`PROJECT_DOCS_ARCHIVE.md`；只存档，现状不写回） |
 
 ## 约定
 
 - 现状以各子系统的 `docs/manual/` 与 `README.md` 为准；不要把现状写回
-  `apps/my_app/PROJECT_DOCS.md`（151KB 历史档案，其自身 README 已声明现状以
+  `docs/archive/PROJECT_DOCS.md`（151KB 历史档案，其自身 README 已声明现状以
   `docs/manual/` 为准）。不要新增第二个真相源。
 - 中文优先；文档里只出现配置项名称、环境变量键名、分组 key，**不得**出现口令、
   Token、授权码、账号、密码哈希。

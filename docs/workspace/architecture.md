@@ -58,7 +58,7 @@ my_app 后端服务层 (backend\services\)
 SQLite (db\app.db、eflow.sqlite3、lbr_ms_sla_kpi.sqlite3 ...) 或 PostgreSQL
 ```
 
-**重要事实**（源自 `apps\my_app\PROJECT_DOCS.md` 的全量稽核，做数据相关改动前必读）：
+**重要事实**（源自 `docs\archive\PROJECT_DOCS.md` 的全量稽核，做数据相关改动前必读）：
 
 - 运行期存在**绕过 `get_raw_connection` 的裸 `sqlite3.connect`**（已知如 `ipran_chart_service.py:233`、`fw_kpi_services.py:488`），它们是**图表数据源**——任何"统一改数据访问层"的改动都会静默坏图。
 - `get_raw_connection` 调用点密集（实测 76 处），不要假设可以一次性替换。
@@ -66,7 +66,7 @@ SQLite (db\app.db、eflow.sqlite3、lbr_ms_sla_kpi.sqlite3 ...) 或 PostgreSQL
 - `db_ps_cs_cn` 的**真数据在远端**（`LBR_Tools\KPI\`，经 HTTP `8765` 读），项目内同名本地文件是 0 字节占位。
 - 告警表 `realtime_alarm` / `history_alarm` 被**同时写入** `app.db` 与 `eflow.sqlite3`，但**页面只读 `app.db`**。
 
-> 上述内容的完整版与逐条出处见 `apps\my_app\PROJECT_DOCS.md` §2 及其引用的稽核小节。**这些是"规划中的迁移"的前提事实，不是已完成的现状**——目前仍是 SQLite 为主。
+> 上述内容的完整版与逐条出处见 `docs\archive\PROJECT_DOCS.md` §2 及其引用的稽核小节。**这些是"规划中的迁移"的前提事实，不是已完成的现状**——目前仍是 SQLite 为主。
 
 ### 流 2：my_app → 门户（聚合呈现）
 
@@ -276,7 +276,7 @@ uvicorn 后端 (:7038)
 | 后端文本作业文件 | `backend/services/tt_alarm_job.py` | **已写好**（2026-09 之前是 P1 推送主通道，Baileys 化后无人调用） |
 | 后端等回报（最长 600s） | `tt_alarm_job.wait_for_job_result` | 同上 |
 | 统一认领口（按 kind 分流） | `backend/services/whatsapp_job_claim.py:39-65` | 2026-10-01 写好 |
-| 扩展发纯文本主路径 | `whatsapp_sender_extension/background.js:1277-1373`（`simpleSendTextViaDebugger`） | 2026-09 已写好 |
+| 扩展发纯文本主路径 | `extensions/whatsapp_sender_extension/background.js:1277-1373`（`simpleSendTextViaDebugger`） | 2026-09 已写好 |
 | 扩展按 kind 分发 | `background.js:1417-1445`（`claimAndRunJob`） | 同上 |
 
 也就是说：扩展端"能发纯文本"早已支持，**唯一缺的是 P1 任务侧没人调它**。
@@ -432,7 +432,7 @@ revert `tt-analyze.py:707-727`、把 `re.search(r'[一-龥]', out)` 那条检查
 | my_app 任务系统 | `apps\my_app\docs\manual\04-task-system.md` |
 | my_app 集成清单 | `apps\my_app\docs\manual\14-integrations.md` |
 | 门户部署（nginx 配置片段） | `apps\portal\README.md` |
-| 迁移历史与复盘 | `apps\my_app\PROJECT_DOCS.md`（历史档案） |
+| 迁移历史与复盘 | `docs\archive\PROJECT_DOCS.md`（历史档案） |
 | 商用就绪度整改 | `apps\portal\MsPortal 商用就绪度检测 —— 结论与整改方案.md` |
 
 > **工具负责整理，人与 AI 负责协作执行。**
