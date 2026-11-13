@@ -122,7 +122,16 @@ apps\eflow_Q&A
 - `liberia-noc_soc-数据看板统一门户\src\components\DynamicIcon.tsx`
 - `liberia-noc_soc-数据看板统一门户\vite.config.ts`
 
-搬迁提交不得包含这三份文件的内容变化。批 B 之前把它们单独留出（stash，或先另交一个提交）。搬完再放回来。hash 用来确认搬家本身没有改内容。
+这三份是主仓库 PR #30 的性能改动（门户弹窗与次要视图懒加载、依赖分包、DynamicIcon 的 lucide 图标从全量 import 改为 46 个显式按需映射）。新仓库的历史里没有这些改动（门户 `App.tsx` 里 `lazy(` 计数为 0），它们只存在于 D:\02 的工作区。
+
+搬迁提交不得包含这三份文件的内容变化。**恢复步骤（批 B 之前做，批 B 之后贴回，不要用 `git stash pop`——目录改名后路径变了，stash 贴不回去）：**
+
+1. 批 B 之前，把这三份单独提交到一个临时分支（或 `git diff > TMP\portal-perf.patch` 导出 patch，不要把 patch 提交入库）。
+2. 批 B 搬完门户目录后，用 sed 把 patch/临时分支里的旧路径 `liberia-noc_soc-数据看板统一门户/` 批量改成 `apps/portal/` 再贴回。
+3. 贴回作为**单独一个提交**（主题如 `perf(portal): 恢复 PR #30 的门户首屏瘦身（与搬家提交分离）`），不和搬家提交混在一起。
+4. 贴回后跑 `cd apps\portal && npm run lint` 确认通过；hash 用来确认搬家本身没有改内容。
+
+批 B 验收加一项：门户构建后确认懒加载 chunk 存在（首屏 gzip 应在 145KB 上下，否则性能改动丢了）。
 
 ### 3.9 测试还没有 `live` 标记
 
@@ -226,7 +235,7 @@ git remote -v
 - 当前目录是 02。
 - 当前分支是 `refactor/round-1`。
 - tag 存在。不存在才创建，已存在不重复打。
-- 现有 origin 仍是旧仓库 `Jouwala/MS-Intelligent-O-M-Platform`。这一步不要改 remote。
+- 现有 remote 以 D:\02 实际为准：先 `git remote -v` 核对，不要假设。**不要**在核对前改 remote。
 - 未提交改动已登记。三份门户文件按第 3.8 节处理。
 
 ### 6.2 旧路径扫描
@@ -311,6 +320,7 @@ Task\eflow_Q&A         -> apps\eflow_Q&A
 - 门户 `scripts\check-doc-consistency.mjs`：此时门户还在根上，改为 `../apps/my_app/...`。批 B 还要再改一次
 - 根 `.gitignore` 的 `Task/_fe_dist`、`Task/_fe_dist_tmp`、`Task/_fe_dist_bak_*`、`Task/_fe_cloud`
 - `scripts\sync-policy.mjs` 里的 `Task/my_app`、`Task/whatsapp-kb-bot`、`Task/eflow_Q&A`。这个文件即将停用，但路径不改会让干跑直接报错
+- 根 `AGENTS.md` 里的路径表（`Task\my_app`、`Task\whatsapp-kb-bot`、`Task\eflow_Q&A`、`Task\_fe_dist` 等）更新到新目录。根 AGENTS.md 还是 D:\01_RPA 旧版，整份重写放到批 D，但路径表先在批 A 改掉，避免批 A–C 期间总纲与新目录脱节
 
 不改：
 
@@ -330,6 +340,12 @@ python -c "from pathlib import Path; import backend.routers.eflow_qa as q; r=Pat
 ```
 
 再断言这三个目录存在，且 `apps\whatsapp-kb-bot\scripts\tt-analyze.py` 存在。不在这里跑全量 pytest。
+
+> **验收稳健性**：下面 `import backend.routers.eflow_qa` 的检查会拉起 FastAPI 依赖，环境不全时会误报失败。先做纯路径断言（不 import 业务模块），import 只当复核：
+
+```powershell
+python -c "from pathlib import Path; p=Path('apps/my_app/backend/routers/eflow_qa.py').read_text(encoding='utf-8'); assert 'parents[3]' in p and 'eflow_Q&A' in p; r=Path('apps/eflow_Q&A'); assert (r/'tools'/'inspect_tt.py').is_file(); print('eflow ok', r)"
+```
 
 提交：`refactor: 将 my_app、bot 与 eflow 知识库移入 apps`
 
@@ -383,6 +399,7 @@ my_portal -> ops\shortcuts
 - `my_portal_ctl.ps1`（若仍在根上）
 - `.githooks\post-checkout`、`.githooks\post-merge`
 - 快捷方式 bat 里的相对路径
+- `scripts\local_authority_tools.py` 的 docstring/示例路径（`D:\01_RPA` / `D:\01_olbr_portal` / `Task\my_app\db\app.db`）改成 02 路径。工具本身走 `--source/--target` 参数，行为不变，只改示例，避免 §8.2 用时抄错
 
 `sync-now.bat`：改成打印「本仓库不再从 D:\01_RPA 同步」并 `exit /b 1`，然后从根目录移除。不要把它指到 `ops\deploy` 后继续调用 RPA 的 `deploy_to_copy.ps1`。
 
@@ -479,6 +496,8 @@ docs: 记录目录边界与数据源现状
 ci: 增加离线质量检查
 ```
 
+第一轮合并后，给 `main` 加上分支保护（PR + 必过检查，与主仓库做法一致），否则 §12 的“经 PR 合并”没有强制力。保护在 GitHub 网页上操作，不在提交里。
+
 ---
 
 ## 8. 隔离冒烟
@@ -571,13 +590,19 @@ WhatsApp bot     9279，保持关闭
 
 ## 10. 推到新仓库
 
-本地这一轮在 `refactor/round-1` 上完成后，再换远程。顺序不能反。
+本地这一轮在 `refactor/round-1` 上完成后，再推到新仓库。顺序不能反。
 
-### 10.1 先确认新仓库
+### 10.1 先确认远程
 
-新仓库应为空，或者只有你确认可以保留的初始化提交。不要在没看过远程内容时覆盖它。
+新仓库**不是空的**：`main` 已有完整历史 + 方案提交 94fd9ed，`refactor/round-1` 也已推到远程。**不要**再执行“把基线推成 `main`”（会 non-fast-forward 失败），也不要先 `git remote remove origin`。
 
-不要先 `git remote remove origin`。旧远程还是回退通道。
+```powershell
+git remote -v
+git ls-remote origin
+```
+
+- 若 origin 已是 `Jouwala/noc-soc-intelligent-platform`，直接用它。
+- 若 origin 仍是旧仓库 `Jouwala/MS-Intelligent-O-M-Platform`，加一个远程再推，不要删旧 origin（旧远程还是回退通道）：
 
 ```powershell
 git remote add platform https://github.com/Jouwala/noc-soc-intelligent-platform.git
@@ -586,18 +611,13 @@ git ls-remote platform
 
 `ls-remote` 失败就停。此时旧 origin 还在。
 
-### 10.2 先推基线，再推重构分支
-
-当前稳定分支叫 `master`，不是 `main`。新仓库用 `main`。
+### 10.2 推重构分支
 
 ```powershell
-git push platform refactor-baseline-2026-11-13^{commit}:refs/heads/main
-git push -u platform refactor/round-1
+git push -u origin refactor/round-1
 ```
 
-第一句把基线 commit 推成远程 `main`，这样 PR 有对比基线。不要把重构分支直接当成远程上唯一的分支。
-
-若 `ls-remote` 看到远程 `main` 已有别人的提交，停下来看差异，不要强推。
+（若用的是 `platform` 远程，把 `origin` 换成 `platform`。）不要把重构分支直接推成 `main`，`main` 只接受 PR 合并。
 
 ### 10.3 拉取请求
 
@@ -610,7 +630,7 @@ compare: refactor/round-1
 
 CI 通过并且你看过差异之后，再合并到 `main`。合并后打 tag `refactor-round-1-complete`。
 
-确认 `platform` 可用之后，再把 `origin` 改为这个新地址。在那之前保留旧 origin。
+origin 已是新仓库地址，合并后无需再改 remote。
 
 ---
 
@@ -656,7 +676,7 @@ CI 通过并且你看过差异之后，再合并到 `main`。合并后打 tag `r
 
 仓库：
 
-- 远程 `platform` 指向 `Jouwala/noc-soc-intelligent-platform`。
+- 远程 `origin`（若 origin 仍是旧仓库，则为 `platform`）指向 `Jouwala/noc-soc-intelligent-platform`。
 - `main` 是基线，重构经 PR 合并。
 - README 使用新产品名。
 - 推送的历史里没有凭据、session、数据库和构建产物。
