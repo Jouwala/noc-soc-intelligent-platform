@@ -1,0 +1,8 @@
+blank_issues: false
+contact_links:
+  - name: Agent 协作协议
+    url: https://github.com/Jouwala/noc-soc-intelligent-platform/blob/main/docs/workspace/agent-protocol.md
+    about: 跨 VM 多 Agent 如何认领、汇报、测试、返工，先读协议再开任务
+  - name: 任务分派规则
+    url: https://github.com/Jouwala/noc-soc-intelligent-platform/blob/main/docs/workspace/dispatch-rules.md
+    about: Muse 1 拆分与分派任务的规则（文件范围查重、串行化）
