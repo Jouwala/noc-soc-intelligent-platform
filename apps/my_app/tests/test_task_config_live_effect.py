@@ -59,6 +59,15 @@ sys.path.insert(0, str(ROOT))
 from backend.services import task_config_files as tcf  # noqa: E402
 import backend.services.task_configs_registry  # noqa: F401,E402
 
+# live 标记（重构方案 §11.1）：本文件走真实写入口改真实任务配置（每卡 <1s 后还原，
+# 见文件头注释），CI 离线集 `pytest -m "not live"` 不跑它；跑法见文件头注释。
+# try/except 是因为本脚本也要能在没装 pytest 的 python 下直接跑。
+try:
+    import pytest
+    pytestmark = pytest.mark.live
+except ImportError:  # noqa: BLE001
+    pass
+
 CHILD_FILE = Path(__file__).resolve().parent / "task_config_child_probe.py"
 STR_SENT = "ZZSENTINEL"
 SKIP = object()
@@ -107,7 +116,7 @@ def _norm(v):
 
 
 def _get_path(obj, path):
-    """按 "a.b[0].c" 取值，取不到返回 _MISS。"""
+    """按 "a.b[0].c" 取值，取不到返回 _MISSING。"""
     cur = obj
     for part in path.replace("]", "").replace("[", ".").split("."):
         if isinstance(cur, dict):
@@ -115,7 +124,7 @@ def _get_path(obj, path):
         elif isinstance(cur, list) and part.isdigit():
             cur = cur[int(part)] if int(part) < len(cur) else None
         else:
-            return _MISS
+            return _MISSING
     return cur
 
 

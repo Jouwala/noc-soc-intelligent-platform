@@ -8,6 +8,16 @@ tests/ 目录里混着两类文件：
 所以这里显式忽略第 2 类，保证 `pytest tests/` 始终安全可跑。
 需要跑那些脚本时按文件头注释单独 `python tests/xxx.py` 执行。
 
+live 标记（重构方案 §11.1，2026-11-13）：第 2 类里**真正会访问外部系统或
+改动真实配置**的文件另有模块级 `pytestmark = pytest.mark.live`（marker 注册在
+`pyproject.toml`）；`tests/test_vmax_cca.py::test_live` 是函数级标记（真实 VMAX
+查询）。CI 只跑离线集 `pytest -m "not live"`。注意两点：
+  - 标记 ≠ 排除：模块级 `sys.exit()` 的文件仍靠下面的 collect_ignore 排除，
+    标记只在显式指定文件时起保护作用；
+  - 离线文件即使被排除也**不**打 live 标记（如 `test_olib_soc_report.py`、
+    `test_vmax_multi_data.py`、`test_task_health_alert.py`，默认都是离线自测，
+    只是因为模块级 `sys.exit()` 才被排除）。
+
 ⚠️ 2026-09-27 补充：以下文件同样是"手动脚本"形态，但它们**模块级就调用
 `sys.exit()`**，一旦被收集会直接把 pytest 打成 INTERNALERROR（不是普通
 失败，整个 session 崩掉、连其他文件的用例都跑不了）。这是"跑不起来"而不是

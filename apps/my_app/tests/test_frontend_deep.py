@@ -26,6 +26,15 @@ if PROJECT_ROOT not in sys.path:
 from report_utils import make_record, finalize_record  # noqa: E402
 from backend.database import DB_PATH  # noqa: E402
 
+# live 标记（重构方案 §11.1）：本文件用 Playwright 跑真实用户流程（含经 UI 上传
+# CSV、直连真实 db/app.db 清理上传表），CI 离线集 `pytest -m "not live"` 不跑它；
+# 跑法见文件头注释。try/except 是因为本脚本也要能在没装 pytest 的 python 下直接跑。
+try:
+    import pytest
+    pytestmark = pytest.mark.live
+except ImportError:  # noqa: BLE001
+    pass
+
 PROJECT = "数据洞察 SaaS MVP"
 
 

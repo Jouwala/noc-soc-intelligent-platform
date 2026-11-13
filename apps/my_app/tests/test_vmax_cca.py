@@ -22,6 +22,8 @@ import sys
 import urllib.parse
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -140,19 +142,38 @@ def _make_client(monkey_credentials=("user", "pwd"), responses=()):
     client = vcc.VmaxCcaClient()
     client.session = FakeSession(responses)
     client._logged_in = False
-    import backend.services.vmax_cca.vmax_cca_client as mod
-    orig_store = mod.credential_store if hasattr(mod, "credential_store") else None
-    # _login 内部延迟 import credential_store —— 用 sys.modules 打桩
+    # _login 内部延迟 import credential_store —— 用 sys.modules 打桩。
+    # 注意：只换 sys.modules 不够 —— 若之前已有测试真实 import 过
+    # credential_store，父包 backend.services 上已绑定真实模块属性，
+    # `from backend.services import credential_store` 会直接取该属性而不查
+    # sys.modules（全量跑时 7 例因此报 VmaxCcaNotConfigured，单文件跑时却全绿）。
+    # 所以父包属性也要一并打桩；收尾时两处一起还原（原本没 import 过的要删掉，
+    # 不能把桩留在 sys.modules 里污染后面的测试）。
     import types
+    import backend.services as _pkg
+    orig_modules = sys.modules.get("backend.services.credential_store")
+    orig_pkg_attr = getattr(_pkg, "credential_store", None)
     stub = types.ModuleType("backend.services.credential_store")
     stub.get_credential = lambda *a, **k: monkey_credentials
     sys.modules["backend.services.credential_store"] = stub
-    return client, orig_store
+    _pkg.credential_store = stub
+    return client, (orig_modules, orig_pkg_attr)
 
 
 def _restore_credential_store(orig):
-    if orig is not None:
-        sys.modules["backend.services.credential_store"] = orig
+    import backend.services as _pkg
+    orig_modules, orig_pkg_attr = orig
+    if orig_modules is not None:
+        sys.modules["backend.services.credential_store"] = orig_modules
+    else:
+        sys.modules.pop("backend.services.credential_store", None)
+    if orig_pkg_attr is not None:
+        _pkg.credential_store = orig_pkg_attr
+    else:
+        try:
+            delattr(_pkg, "credential_store")
+        except AttributeError:  # noqa: BLE001
+            pass
 
 
 # ---------------------------------------------------------------- 3/4. 响应解析
@@ -297,6 +318,11 @@ def test_not_configured():
 
 
 # ---------------------------------------------------------------- --live
+# live：用真实 vmax_cca 凭据查真实 VMAX（见文件头 --live 跑法）。
+# 只在 `python tests/test_vmax_cca.py --live <msisdn>` 时跑；pytest 下它需要手工
+# 给 msisdn 参数，所以离线集（-m "not live"）必须把它排除，否则会报
+# "fixture 'msisdn' not found"。
+@pytest.mark.live
 def test_live(msisdn: str):
     section("LIVE 真实查询（vmax_cca 凭据，查完不 logout，会话留给后续查询复用）")
     client = vcc.get_client()

@@ -16,6 +16,15 @@ sys.path.insert(0, BACKEND_SERVICES)
 
 import eflow_api_client as api  # noqa: E402
 
+# live 标记（重构方案 §11.1）：本文件登录真实 eFlow、逐端点发最小请求取数，
+# CI 离线集 `pytest -m "not live"` 不跑它；跑法见文件头注释。
+# try/except 是因为本脚本也要能在没装 pytest 的 python 下直接跑。
+try:
+    import pytest
+    pytestmark = pytest.mark.live
+except ImportError:  # noqa: BLE001
+    pass
+
 results = []
 
 
