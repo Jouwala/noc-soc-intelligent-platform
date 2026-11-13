@@ -15,9 +15,47 @@
 
 故此处把这个契约用测试钉死。
 """
+import sqlite3
+
 import pytest
 
 from backend.services import nl2sql_service as nl2sql
+
+
+@pytest.fixture(autouse=True)
+def _seeded_eflow_db(tmp_path, monkeypatch):
+    """离线集用临时库：真实 eflow_tt 只在开发机 db/app.db 里有，新检出没有，
+    不搭这个桩 7 条用例会在 sql_guard 的表存在校验上全灭（2026-11-13 基线）。
+    临时库只给本文件用，不碰真实库；行数 300 是因为
+    test_default_cap_is_generous 要求 `row_count > 200`。"""
+    db_path = tmp_path / "manual_sql.db"
+    con = sqlite3.connect(db_path)
+    con.execute(
+        "CREATE TABLE eflow_tt (tt_no TEXT, status TEXT,"
+        " alarm_clear_time TEXT, created_time TEXT)"
+    )
+    con.executemany(
+        "INSERT INTO eflow_tt VALUES (?,?,?,?)",
+        [("TT%05d" % i, "WaitFOAccept",
+          "2026-10-01 00:00:00", "2026-10-02 00:00:00") for i in range(300)],
+    )
+    con.commit()
+    con.close()
+
+    def _fake_conn(*a, **k):
+        # 必须用 _ClosingConnection：execute_readonly 的 finally 会先 close() 再出
+        # with，裸 sqlite3 连接的 __exit__ 会在已关闭的连接上再操作而抛
+        # "Cannot operate on a closed database"；生产 get_raw_connection
+        # 用的正是这个 factory（backend/database.py）。
+        from backend.database import _ClosingConnection
+        return sqlite3.connect(db_path, factory=_ClosingConnection)
+
+    # ask() 的执行路径只经 nl2sql_service 模块内的这两个名字
+    #（_visible_tables() → list_tables()；execute_readonly() → get_raw_connection()），
+    # 打这两个桩就够了，sql_guard 本身是纯函数不用动。
+    monkeypatch.setattr(nl2sql, "get_raw_connection", _fake_conn)
+    monkeypatch.setattr(nl2sql, "list_tables", lambda *a, **k: ["eflow_tt"])
+    return db_path
 
 
 class TestManualSqlNeedsNoAiCredentials:

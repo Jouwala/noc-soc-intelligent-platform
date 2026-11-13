@@ -60,6 +60,13 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# live：访问外部系统（UME / eFlow / VMAX / 真实后端 / 浏览器）或改动真实配置的
+# 测试。标记的判定见 tests/conftest.py；CI 只跑离线集 `pytest -m "not live"`。
+# live 测试的跑法是直接 `python tests/xxx.py`（见各文件头注释），不是 pytest -m live
+# —— 它们大多被 conftest.py 的 collect_ignore 排除，或需要手工给参数（如 msisdn）。
+markers = [
+    "live: 访问外部系统或改动真实配置的测试；CI 离线集不跑",
+]
 # conftest.py 的 collect_ignore 负责排除"手动运行脚本"（含模块级 sys.exit 的），
 # 这里只加最小选项，避免与既有 collect_ignore 语义冲突。
 addopts = "-q"

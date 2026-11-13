@@ -87,8 +87,11 @@ class TestUmeInLoadRowsDistinguishesFailure:
         finally:
             svc.TABLE_NAME = orig
 
+    @pytest.mark.live
     def test_table_exists_probe_works_on_live_db(self):
-        """探测函数本身要能在当前库上跑通（sqlite / PG 双模）。"""
+        """探测函数本身要能在当前库上跑通（sqlite / PG 双模）。
+        live：它故意连**当前真实库**（不是临时库），新检出没有 db/app.db
+        就跑不通；CI 离线集不跑它。"""
         from backend.services.ume_in import ume_in_kpi_service as svc
         with svc.get_raw_connection(timeout=30.0) as conn:
             assert svc._table_exists(conn) is True
