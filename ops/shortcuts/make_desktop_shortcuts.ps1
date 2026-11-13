@@ -17,7 +17,7 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $Desktop = [Environment]::GetFolderPath('Desktop')
 if (-not (Test-Path -LiteralPath $Desktop)) { throw "Desktop folder not found: $Desktop" }
 $OutDir = Join-Path $Desktop $FolderName
@@ -25,7 +25,7 @@ $OutDir = Join-Path $Desktop $FolderName
 if ($Root -match '[^\x00-\x7F]') {
     Write-Warning "The copy path contains non-ASCII characters: $Root"
     Write-Warning 'On a Windows-1252 ANSI codepage a .lnk may store them incorrectly.'
-    Write-Warning 'If a shortcut fails, double-click the .bat inside my_portal\ instead.'
+    Write-Warning 'If a shortcut fails, double-click the .bat inside ops\shortcuts\ instead.'
 }
 
 if (Test-Path -LiteralPath $OutDir) {

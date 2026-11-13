@@ -2,7 +2,7 @@
 #
 # Single source of truth: D:\01_RPA\scripts\portable\post_sync_fix_paths.ps1
 # The copy receives it via the `config` stage of build_olbr_portable.ps1.
-# Do not edit D:\01_olbr_portal\scripts\post_sync_fix_paths.ps1 by hand --
+# Do not edit D:\02_olbr_portal\ops\deploy\post_sync_fix_paths.ps1 by hand --
 # it is overwritten on every config stage. Edit the one in the main repo.
 #
 # Why: `build_olbr_portable.ps1 -Stage source` copies apps/my_app and the portal
@@ -46,8 +46,8 @@
 # Idempotent: safe to run any number of times.
 #
 # Usage:
-#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\post_sync_fix_paths.ps1
-#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\post_sync_fix_paths.ps1 -Force
+#   powershell -NoProfile -ExecutionPolicy Bypass -File ops\deploy\post_sync_fix_paths.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File ops\deploy\post_sync_fix_paths.ps1 -Force
 #
 # ASCII-only body on purpose: PS 5.1 reads a .ps1 without a BOM as ANSI, and this
 # script runs on machines where the code page is not UTF-8. No Chinese literals.

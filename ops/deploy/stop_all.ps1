@@ -1,5 +1,5 @@
 ﻿<#
-  stop_all.ps1 —— 只停「本副本」启动的服务（铺在 <副本根>\scripts\）
+  stop_all.ps1 —— 只停「本副本」启动的服务（铺在 <副本根>\ops\deploy\）
   =============================================================================
   入口：副本根目录的 stop.bat（薄壳，只调本脚本）。
 
@@ -21,7 +21,7 @@ param([switch]$DryRun)
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $TmpDir = Join-Path $Root 'TMP'
 $NginxDir = Join-Path $Root 'nginx-1.28.0'
 $NginxExe = Join-Path $NginxDir 'nginx.exe'

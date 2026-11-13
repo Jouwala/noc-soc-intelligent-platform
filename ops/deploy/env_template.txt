@@ -40,7 +40,7 @@ MY_APP_BACKEND_PORT=7039
 #     并可能重复投递 WhatsApp/邮件告警（这是分发副本最大的副作用风险）。
 MY_APP_DISABLE_SCHEDULER=1
 # 前端构建产物目录（vite.config.ts:84 读它）。留空则由 start_all.ps1 填成
-# <副本根>\Task\_fe_dist —— 不填会写死到 D:/01_RPA/Task/_fe_dist，换机即白屏。
+# <副本根>\apps\_fe_dist —— 不填会写死到 D:/02_olbr_portal/apps/_fe_dist，换机即白屏。
 FE_DIST_OUT=
 
 # ---- 便携 PostgreSQL --------------------------------------------------------
@@ -90,7 +90,7 @@ PORTAL_QA_PORT=9279
 # node 解释器绝对路径。留空则由 start_all.ps1 填成 <副本根>\runtime\node\node.exe
 PORTAL_QA_NODE=
 # bot 目录由 portal_qa_ctl.py:39 推导为 my_app 的同级目录 whatsapp-kb-bot，
-# 无环境变量可覆盖 —— 所以副本必须保持 Task\my_app 与 Task\whatsapp-kb-bot 同级。
+# 无环境变量可覆盖 —— 所以副本必须保持 apps\my_app 与 apps\whatsapp-kb-bot 同级。
 MY_APP_API_BASE=http://127.0.0.1:7039
 
 # ---- WhatsApp 发图服务（my_app 任务用，副本默认不跑）------------------------
@@ -98,7 +98,7 @@ MY_APP_API_BASE=http://127.0.0.1:7039
 # 副本不带 Chrome（779MB），需要发图时自行指向目标机器上的 Chrome。
 CHROME_PATH=
 WHATSAPP_HEADLESS=true
-# 会话目录留空则用相对路径 Task\whatsapp_session（副本不带打包时的登录态）
+# 会话目录留空则用相对路径 apps\whatsapp_session（副本不带打包时的登录态）
 WHATSAPP_SESSION=
 
 # ---- 启动开关 ---------------------------------------------------------------

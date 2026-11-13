@@ -1,8 +1,8 @@
 ﻿<#
-  start_all.ps1 —— 离线副本一键启动（由 build_olbr_portable.ps1 -Stage config 铺到 <副本根>\scripts\）
+  start_all.ps1 —— 离线副本一键启动（由 build_olbr_portable.ps1 -Stage config 铺到 <副本根>\ops\deploy\）
   =============================================================================
   入口：副本根目录的 start.bat（薄壳，只调本脚本）。
-  真相源：副本根 .env（模板 scripts\env_template.txt）；端口与盘符都不写死。
+  真相源：副本根 .env（模板 ops\deploy\env_template.txt）；端口与盘符都不写死。
 
   与生产启动脚本的区别（重要，别照抄 my_portal_ctl.ps1）：
     · 生产用 start_hidden.ps1 拉 backend_watchdog + worker 组 + 开机自启任务；
@@ -14,8 +14,8 @@
 
   PowerShell 5.1 兼容：不用 ::new()、三元、-Parallel、$IsWindows。
   用法：
-    powershell -NoProfile -File scripts\start_all.ps1
-    powershell -NoProfile -File scripts\start_all.ps1 -DryRun
+    powershell -NoProfile -File ops\deploy\start_all.ps1
+    powershell -NoProfile -File ops\deploy\start_all.ps1 -DryRun
   =============================================================================
 #>
 [CmdletBinding()]
@@ -40,8 +40,8 @@ foreach ($k in @($dupEnv.Keys)) {
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-# 本脚本位于 <Root>\scripts\，故根 = 上一级
-$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+# 本脚本位于 <Root>\ops\deploy\，故根 = 上两级
+$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $TmpDir = Join-Path $Root 'TMP'
 $RuntimeDir = Join-Path $Root 'runtime'
 $PyExe = Join-Path $RuntimeDir 'python312\python.exe'
@@ -378,7 +378,7 @@ if (-not (Test-Path -LiteralPath $pgCtl)) {
         }
     } finally { $ErrorActionPreference = $prevEap }
     Write-Ok "便携 PG 就绪 127.0.0.1:$PgPort / $PgDb"
-    Write-Step '若数据库为空，请另跑 scripts\bundle_data.ps1 灌入快照'
+    Write-Step '若数据库为空，请另跑 ops\deploy\bundle_data.ps1 灌入快照'
 } else {
     Write-Step "<干跑> 跳过 initdb / pg_ctl start（$PgData）"
 }

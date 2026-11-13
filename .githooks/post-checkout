@@ -4,7 +4,7 @@
 #
 # 为什么需要这个钩子（2026-11-10）：
 #   本仓库跟踪着两个**含本机绝对路径**的脚本：
-#       Task/my_app/monitor_fixes/nginx_monitor.ps1  (NginxExe/NginxDir/Port/Log/State)
+#       apps/my_app/monitor_fixes/nginx_monitor.ps1  (NginxExe/NginxDir/Port/Log/State)
 #       <门户>\rotate_nginx_logs.ps1                   ($Prefix)
 #   它们必须指向「副本所在的那台机器」，而不是入库时那台机器的路径。
 #
@@ -21,7 +21,7 @@
 # 配套：
 #   · 本仓库 .gitattributes 把这两个文件的行尾固定住（crlf / lf），
 #     保证字节级改写的不变量成立。
-#   · scripts\post_sync_fix_paths.ps1 是真正的执行者，本钩子只负责调用。
+#   · ops\deploy\post_sync_fix_paths.ps1 是真正的执行者，本钩子只负责调用。
 #
 # 用法：clone 后跑一次
 #   git config core.hooksPath .githooks
@@ -29,7 +29,7 @@
 # ---------------------------------------------------------------------------
 
 repo_root="$(git rev-parse --show-toplevel)"
-fixer="$repo_root/scripts/post_sync_fix_paths.ps1"
+fixer="$repo_root/ops/deploy/post_sync_fix_paths.ps1"
 
 [ -f "$fixer" ] || exit 0
 

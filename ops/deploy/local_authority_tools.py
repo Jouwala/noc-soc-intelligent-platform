@@ -3,9 +3,9 @@
 =====================================================================
 
 为什么需要它（2026-11-11 实测事故）：
-    运行副本 ``D:\\01_olbr_portal`` 从编辑区 ``D:\\01_RPA`` 迁移过来后，
+    运行副本 ``D:\\02_olbr_portal`` 从编辑区 ``D:\\01_RPA`` 迁移过来后，
     16 个任务同时报「拒绝以空密码登录」。根因不是网络、不是上游，而是副本
-    ``Task\\my_app\\db\\app.db`` 里的三张表**一行都没有**：
+    ``apps\\my_app\\db\\app.db`` 里的三张表**一行都没有**：
 
         credentials            → 设置页填的口令（20 组全空 → 所有任务拿空密码）
         task_schedule_config   → 任务启停 / cron（74 行全空 → 任务管理页的禁用全丢，
@@ -33,10 +33,10 @@
 用法（在编辑区运行，路径按实际调整）：
 
     python scripts\\local_authority_tools.py check ^
-        --source Task\\my_app\\db\\app.db --target D:\\01_olbr_portal\\Task\\my_app\\db\\app.db
+        --source apps\\my_app\\db\\app.db --target D:\\02_olbr_portal\\apps\\my_app\\db\\app.db
 
     python scripts\\local_authority_tools.py migrate ^
-        --source Task\\my_app\\db\\app.db --target D:\\01_olbr_portal\\Task\\my_app\\db\\app.db
+        --source apps\\my_app\\db\\app.db --target D:\\02_olbr_portal\\apps\\my_app\\db\\app.db
 
 退出码：0 正常；2 需要迁移（check 专用）；3 参数/文件错误；4 执行失败。
 """

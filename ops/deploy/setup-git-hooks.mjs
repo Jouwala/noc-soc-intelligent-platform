@@ -15,9 +15,9 @@
  *   它本身是**本地配置**（写在 .git/config，不入库），所以每台机器跑一次本脚本。
  *
  * 用法：
- *   node scripts/setup-git-hooks.mjs           # 安装
- *   node scripts/setup-git-hooks.mjs --check   # 只检查，不改配置
- *   node scripts/setup-git-hooks.mjs --uninstall
+ *   node ops/deploy/setup-git-hooks.mjs           # 安装
+ *   node ops/deploy/setup-git-hooks.mjs --check   # 只检查，不改配置
+ *   node ops/deploy/setup-git-hooks.mjs --uninstall
  *
  * 无第三方依赖（只用 Node 内置模块 + git CLI）。
  */
@@ -27,7 +27,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const HOOKS_DIR = '.githooks'
 
 /** git 一律在调用者当前目录执行 —— worktree 里当前工作树根才是 Git 找钩子的地方 */
@@ -80,7 +80,7 @@ function main() {
     } else {
       console.log(`✗ core.hooksPath = ${HOOKS_DIR}，但工作树里没有 ${HOOKS_DIR}\\`)
     }
-    console.log('  修复：node scripts/setup-git-hooks.mjs')
+    console.log('  修复：node ops/deploy/setup-git-hooks.mjs')
     return 1
   }
 
@@ -118,7 +118,7 @@ function main() {
   console.log('')
   console.log('  作用：checkout / merge 之后自动把两个脚本里的本机绝对路径')
   console.log('        改成本机副本根目录（逐字节改写，保持 BOM 与行尾不变）。')
-  console.log('        手动执行：powershell -NoProfile -File scripts\\post_sync_fix_paths.ps1 -Force')
+  console.log('        手动执行：powershell -NoProfile -File ops\\deploy\\post_sync_fix_paths.ps1 -Force')
   return 0
 }
 

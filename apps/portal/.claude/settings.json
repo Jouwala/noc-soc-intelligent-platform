@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PROJECT_DIR}/../scripts/agent-done-check.mjs", "--hook"],
+            "args": ["${CLAUDE_PROJECT_DIR}/../../ops/deploy/agent-done-check.mjs", "--hook"],
             "timeout": 180
           }
         ]

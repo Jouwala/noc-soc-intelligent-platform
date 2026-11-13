@@ -10,7 +10,7 @@ param()
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $envFile = Join-Path $Root '.env'
 $cfg = @{}
 if (Test-Path -LiteralPath $envFile) {

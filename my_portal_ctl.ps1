@@ -79,7 +79,7 @@ if (-not (Test-Path (Join-Path $Root 'apps\my_app'))) {
 # Only the read-only status command is allowed. Delete the flag to promote.
 if ((Test-Path -LiteralPath (Join-Path $Root 'ISOLATED_COPY.flag')) -and $Command -ne '0-status') {
     Write-Host '[BLOCKED] ISOLATED COPY: start/stop commands are disabled here.' -ForegroundColor Red
-    Write-Host 'This copy uses its own ports (8080/8443/...). Use .\start.bat or .\my_portal\1-start-all.bat instead.' -ForegroundColor Yellow
+    Write-Host 'This copy uses its own ports (8080/8443/...). Use .\start.bat or .\ops\shortcuts\1-start-all.bat instead.' -ForegroundColor Yellow
     Write-Host 'To promote: restore production ports in .env, then delete ISOLATED_COPY.flag.' -ForegroundColor Yellow
     exit 1
 }

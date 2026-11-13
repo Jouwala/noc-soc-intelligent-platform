@@ -8,7 +8,7 @@
 #
 # 为什么要修：
 #   本仓库跟踪着两个**含本机绝对路径**的脚本：
-#       Task/my_app/monitor_fixes/nginx_monitor.ps1  (NginxExe/NginxDir/Port/Log/State)
+#       apps/my_app/monitor_fixes/nginx_monitor.ps1  (NginxExe/NginxDir/Port/Log/State)
 #       <门户>\rotate_nginx_logs.ps1                   ($Prefix)
 #   合并进来的版本可能带着「入库那台机器」的路径（例如从主仓库同步过来的
 #   D:\01_RPA\...），必须立刻改回本机副本根目录，否则 nginx watchdog 会去
@@ -23,7 +23,7 @@
 # ---------------------------------------------------------------------------
 
 repo_root="$(git rev-parse --show-toplevel)"
-fixer="$repo_root/scripts/post_sync_fix_paths.ps1"
+fixer="$repo_root/ops/deploy/post_sync_fix_paths.ps1"
 
 [ -f "$fixer" ] || exit 0
 

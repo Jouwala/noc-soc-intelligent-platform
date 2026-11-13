@@ -15,9 +15,9 @@
     不落盘、不写进副本的 .env（副本用 trust 认证的回环连接，见 env_template.txt）。
 
   用法（在**能连到生产库的机器**上跑）：
-    powershell -NoProfile -File scripts\portable\bundle_data.ps1 -DryRun
-    powershell -NoProfile -File scripts\portable\bundle_data.ps1 -Stage all
-    powershell -NoProfile -File scripts\portable\bundle_data.ps1 -Stage restore
+    powershell -NoProfile -File ops\deploy\bundle_data.ps1 -DryRun
+    powershell -NoProfile -File ops\deploy\bundle_data.ps1 -Stage all
+    powershell -NoProfile -File ops\deploy\bundle_data.ps1 -Stage restore
   =============================================================================
 #>
 [CmdletBinding()]
@@ -46,7 +46,7 @@ foreach ($k in @($dupEnv.Keys)) {
 }
 
 # 副本根默认按脚本位置推导（盘符无关）；PG 工具默认用副本自带的便携实例。
-if (-not $CopyRoot) { $CopyRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path }
+if (-not $CopyRoot) { $CopyRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path }
 $CopyRoot = (Resolve-Path -LiteralPath $CopyRoot).Path
 if (-not $PgBin) { $PgBin = Join-Path $CopyRoot 'runtime\postgresql16\bin' }
 # 隔离边界：只允许对带隔离标志的副本灌库，且源/副本路径不得重叠。

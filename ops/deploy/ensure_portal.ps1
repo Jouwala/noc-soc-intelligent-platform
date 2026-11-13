@@ -2,7 +2,7 @@
 # D:\01_RPA 里的 start_ensure.bat。那个 bat 转到本脚本。
 # 门户已固定在 apps\portal（纯 ASCII），直接定位，不再按前缀查找。
 $ErrorActionPreference = 'Continue'
-$root = Split-Path -Parent $PSScriptRoot
+$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $root 'apps\my_app'))) {
     $root = 'D:\01_olbr_portal'
 }

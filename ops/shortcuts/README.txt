@@ -1,4 +1,4 @@
-OLBR portable copy - launcher folder  (my_portal\)
+OLBR portable copy - launcher folder  (ops\shortcuts\)
 ====================================================
 
 This folder is the portable equivalent of the desktop "my_portal" folder,

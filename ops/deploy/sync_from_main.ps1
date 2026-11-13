@@ -9,8 +9,8 @@
   (dist is rebuilt locally), and ALWAYS re-derives the two monitor script paths.
 
   Usage:
-    powershell -NoProfile -File scripts\sync_from_main.ps1 -DryRun
-    powershell -NoProfile -File scripts\sync_from_main.ps1 -AcceptSource
+    powershell -NoProfile -File ops\deploy\sync_from_main.ps1 -DryRun
+    powershell -NoProfile -File ops\deploy\sync_from_main.ps1 -AcceptSource
 #>
 [CmdletBinding()]
 param(
@@ -26,7 +26,7 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $Node = Join-Path $Root 'runtime\node\node.exe'
 $Engine = Join-Path $PSScriptRoot 'sync-engine.mjs'
 
