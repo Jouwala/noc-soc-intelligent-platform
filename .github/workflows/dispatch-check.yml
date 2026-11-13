@@ -1,0 +1,233 @@
+# 分派检查：对新开的 agent-task Issue 做自动检查——缺字段提醒、依赖阻塞打标签。
+#
+# 只做提醒与标签，不自动合并、不自动关闭 Issue。
+# 依据：docs/workspace/dispatch-rules.md 第五节、docs/workspace/agent-protocol.md。
+# 标签只用 .github/labels.yml 里已定义的（state:blocked 等），不自造新标签。
+#
+# 触发：
+#   - Issue 新建 / 编辑 / 关闭 / 标签变化时即时检查；
+#   - 每小时一次定时巡检兜底（覆盖“依赖任务关闭时没触发”的情况）。
+#
+# 行为：
+#   1. 缺必填字段（任务说明 / 负责人 / 优先级 / 文件修改范围 / 依赖任务 /
+#      验收标准 / 所属分支）→ 在 Issue 下发提醒评论，同一 Issue 只提醒一次。
+#   2. depends on #N 所指任务未完成 → 打 state:blocked 标签并评论说明。
+#   3. 依赖全部完成后 → 自动摘掉 state:blocked 标签并评论说明可以认领。
+
+name: dispatch-check
+
+on:
+  issues:
+    types: [opened, edited, closed, labeled, unlabeled]
+  schedule:
+    - cron: "0 * * *"
+
+permissions:
+  issues: write
+
+jobs:
+  dispatch-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查必填字段与依赖
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          EVENT_ACTION: ${{ github.event.action }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+
+          REPO = os.environ["REPO"]
+          EVENT_NUMBER = os.environ.get("ISSUE_NUMBER") or ""
+          EVENT_ACTION = os.environ.get("EVENT_ACTION") or ""
+
+          # 必填字段：与 .github/ISSUE_TEMPLATE/agent-task.md 的小节一一对应。
+          REQUIRED_SECTIONS = [
+              "任务说明", "负责人", "优先级",
+              "文件修改范围", "依赖任务", "验收标准", "所属分支",
+          ]
+
+          MISSING_MARKER = "<!-- dispatch-check: missing-fields -->"
+          BLOCKED_MARKER = "<!-- dispatch-check: blocked -->"
+          UNBLOCKED_MARKER = "<!-- dispatch-check: unblocked -->"
+
+
+          def gh(*args, input_text=None):
+              """跑 gh CLI，返回解析后的 JSON（--jq 已在调用方处理时返回原文本）。"""
+              cmd = ["gh", "api"] + list(args)
+              r = subprocess.run(cmd, input=input_text, capture_output=True, text=True)
+              if r.returncode != 0:
+                  raise RuntimeError(f"gh {' '.join(args)} 失败：{r.stderr.strip()}")
+              return r.stdout
+
+
+          def gh_json(*args):
+              return json.loads(gh(*args))
+
+
+          def get_issue(number):
+              return gh_json(f"repos/{REPO}/issues/{number}")
+
+
+          def list_comments(number):
+              return gh_json(f"repos/{REPO}/issues/{number}/comments?per_page=100")
+
+
+          def has_marker(number, marker):
+              try:
+                  comments = list_comments(number)
+              except RuntimeError:
+                  return False
+              return any(marker in (c.get("body") or "") for c in comments)
+
+
+          def post_comment(number, body):
+              gh(f"repos/{REPO}/issues/{number}/comments", "-f", f"body={body}")
+              print(f"Issue #{number}：已发评论")
+
+
+          def add_label(number, label):
+              gh(f"repos/{REPO}/issues/{number}/labels", "-f", f"labels[]={label}")
+              print(f"Issue #{number}：已打标签 {label}")
+
+
+          def remove_label(number, label):
+              r = subprocess.run(
+                  ["gh", "api", "-X", "DELETE", f"repos/{REPO}/issues/{number}/labels/{label}"],
+                  capture_output=True, text=True,
+              )
+              if r.returncode != 0:
+                  print(f"Issue #{number}：摘标签 {label} 失败：{r.stderr.strip()}")
+              else:
+                  print(f"Issue #{number}：已摘标签 {label}")
+
+
+          def strip_html_comments(text):
+              return re.sub(r"<!--.*?-->", "", text or "", flags=re.S)
+
+
+          def missing_sections(body):
+              """返回缺失的必填小节（小节存在但内容为空也算缺失）。"""
+              plain = strip_html_comments(body)
+              missing = []
+              for name in REQUIRED_SECTIONS:
+                  m = re.search(rf"^## {re.escape(name)}\s*$", plain, flags=re.M)
+                  if not m:
+                      missing.append(name)
+                      continue
+                  rest = plain[m.end():]
+                  nxt = re.search(r"^## ", rest, flags=re.M)
+                  content = (rest[:nxt.start()] if nxt else rest).strip()
+                  if not content:
+                      missing.append(name)
+              # 负责人一栏必须写明是哪个 Agent（模板里的注释不算数）。
+              if "负责人" not in missing:
+                  if not re.search(r"agent:(muse-1|muse-2|muse-3|grok)", plain):
+                      missing.append("负责人（未写明 agent:muse-2/3/grok）")
+              return missing
+
+
+          def parse_dependencies(body):
+              plain = strip_html_comments(body)
+              return sorted({int(n) for n in re.findall(r"depends on #(\d+)", plain, flags=re.I)})
+
+
+          def check_issue(number):
+              issue = get_issue(number)
+              if "pull_request" in issue:
+                  print(f"#{number} 是 PR，跳过")
+                  return
+              if issue.get("state") != "open":
+                  print(f"#{number} 已关闭，跳过")
+                  return
+              body = issue.get("body") or ""
+              labels = [lb["name"] for lb in issue.get("labels", [])]
+              is_agent_task = ("## 任务说明" in body
+                               or any(lb.startswith(("state:", "agent:", "phase:"))
+                                      for lb in labels))
+              if not is_agent_task:
+                  print(f"#{number} 不是 agent-task Issue，跳过")
+                  return
+
+              # 1. 缺字段提醒（只对 state:todo 的新任务检查，避免给进行中的任务刷屏）。
+              if "state:todo" in labels or not any(lb.startswith("state:") for lb in labels):
+                  missing = missing_sections(body)
+                  if missing and not has_marker(number, MISSING_MARKER):
+                      items = "\n".join(f"- {m}" for m in missing)
+                      post_comment(number,
+                          f"{MISSING_MARKER}\n"
+                          f"## 缺必填字段提醒\n\n"
+                          f"本 Issue 缺以下必填字段（见 `docs/workspace/dispatch-rules.md` 第一节），"
+                          f"请补齐后再认领：\n\n{items}\n\n"
+                          f"模板：`.github/ISSUE_TEMPLATE/agent-task.md`。")
+
+              # 2/3. 依赖阻塞与解除。
+              deps = parse_dependencies(body)
+              if not deps:
+                  return
+              open_deps = []
+              for dep in deps:
+                  try:
+                      dep_issue = get_issue(dep)
+                      if dep_issue.get("state") != "closed":
+                          open_deps.append(dep)
+                  except RuntimeError as e:
+                      print(f"#{number}：依赖 #{dep} 查询失败：{e}")
+              if open_deps:
+                  if "state:blocked" not in labels:
+                      add_label(number, "state:blocked")
+                      if not has_marker(number, BLOCKED_MARKER):
+                          deps_text = "、".join(f"#{d}" for d in open_deps)
+                          post_comment(number,
+                              f"{BLOCKED_MARKER}\n"
+                              f"依赖未满足：{deps_text} 尚未完成（未关闭），"
+                              f"本任务暂不能认领，已打 `state:blocked` 标签。\n"
+                              f"依赖全部完成后会自动摘掉标签。")
+                  else:
+                      print(f"#{number}：依赖 {open_deps} 未满足，已是 state:blocked")
+              else:
+                  if "state:blocked" in labels:
+                      remove_label(number, "state:blocked")
+                      post_comment(number,
+                          f"{UNBLOCKED_MARKER}\n"
+                          f"依赖已全部完成（{', '.join(f'#{d}' for d in deps)}），"
+                          f"已摘掉 `state:blocked` 标签，可以认领了。")
+
+
+          def find_dependents(closed_number):
+              """找出 body 里写了 depends on #N 的 open Issue（N 刚关闭时用）。"""
+              q = f"repo:{REPO} \"depends on #{closed_number}\" type:issue state:open"
+              result = gh_json("search/issues", "-f", f"q={q}")
+              return [item["number"] for item in result.get("items", [])]
+
+
+          def main():
+              numbers = []
+              if EVENT_NUMBER:
+                  numbers.append(int(EVENT_NUMBER))
+                  # 刚关闭的是某个任务时，依赖它的 Issue 也要重新检查。
+                  if EVENT_ACTION == "closed":
+                      try:
+                          numbers.extend(find_dependents(int(EVENT_NUMBER)))
+                      except RuntimeError as e:
+                          print(f"查找依赖方失败：{e}")
+              else:
+                  # 定时巡检：检查所有待认领 / 被阻塞的 open Issue。
+                  listed = gh_json(
+                      f"repos/{REPO}/issues?state=open&labels=state:todo,state:blocked&per_page=100"
+                  )
+                  numbers.extend(item["number"] for item in listed)
+              for number in sorted(set(numbers)):
+                  try:
+                      check_issue(number)
+                  except RuntimeError as e:
+                      print(f"#{number} 检查失败：{e}")
+
+
+          main()
+          PY
