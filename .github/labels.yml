@@ -1,0 +1,86 @@
+# 多 Agent 协作标签定义（第一阶段，2026-11-13）
+#
+# 用途：本文件是标签的“定义源”，GitHub 上的标签以此为准。
+# 新标签先写进本文件再创建，保持两边一致；颜色改了也要同步改这里。
+# 同步方法（任选其一）：
+#   gh label create <name> --color <hex> --description "<描述>" --force
+#   或在 GitHub 网页端 Labels 页按本文件逐条核对。
+#
+# 已存在于仓库的标签（不在本文件里重复定义，见 auto-merge.yml 与 agent-orchestrator.yml）：
+#   smoke-passed   绿色 #0e8a16：Grok D:\02 冒烟通过，自动合并的门禁之一
+#   merge-squash   蓝色 #1d76db：合并时用 squash，否则用 merge 提交
+#   do-not-merge   红色 #b60205：一票否决，有它在 auto-merge 绝不合并
+#   state:qa-ready            触发 agent-orchestrator.yml，POST webhook 请 Grok 冒烟
+#
+# 配色约定：
+#   agent:  绿色/紫色系（谁负责）
+#   phase:  蓝色系（属于第几阶段）
+#   state:  黄色/灰色系（任务走到哪一步）
+#   risk:   红色系（重大风险）
+#   其他：  按语义就近取色
+
+labels:
+  # --- 负责人（agent:，绿色/紫色系）---
+  - name: agent:muse-1
+    color: "0e8a16"
+    description: "总指挥 Muse 1：拆解、分配、协调、审核、决策（不写业务代码）"
+  - name: agent:muse-2
+    color: "1d76db"
+    description: "Coding Worker Muse 2：独立 VM，负责分配给它的开发任务"
+  - name: agent:muse-3
+    color: "5319e7"
+    description: "Coding Worker Muse 3：独立 VM，负责分配给它的开发任务"
+  - name: agent:grok
+    color: "006b75"
+    description: "QA Worker Grok Bot：只负责测试、验证、反馈、回归，不写代码"
+
+  # --- 所属阶段（phase:，蓝色系）---
+  - name: phase:1
+    color: "1d76db"
+    description: "第一阶段：跨 VM 通信与 Worker 注册"
+  - name: phase:2
+    color: "0e8a16"
+    description: "第二阶段：Muse 1 自动分派任务"
+  - name: phase:3
+    color: "5319e7"
+    description: "第三阶段：Muse 2/3 自动编码与提交 PR"
+  - name: phase:4
+    color: "006b75"
+    description: "第四阶段：Grok 自动测试与结果回传"
+  - name: phase:5
+    color: "b60205"
+    description: "第五阶段：失败自动修复、自动合并与完整闭环"
+
+  # --- 任务状态（state:，黄色/灰色系）---
+  - name: state:todo
+    color: "fbca04"
+    description: "待认领：Issue 已建，等 Worker 认领"
+  - name: state:claimed
+    color: "fef2c0"
+    description: "已认领：有 Worker 发了认领评论，租约计时开始"
+  - name: state:in-review
+    color: "d4c5f9"
+    description: "开发完成待评审：PR 已开，等 Muse 1 评审"
+  - name: state:qa-ready
+    color: "fbca04"
+    description: "待测试：触发 Grok 冒烟（agent-orchestrator.yml）"
+  - name: state:qa-passed
+    color: "0e8a16"
+    description: "测试通过：Grok 已打 smoke-passed，可自动合并"
+  - name: state:qa-failed
+    color: "b60205"
+    description: "测试失败：Grok 已发结构化失败报告，等修复任务"
+  - name: state:merged
+    color: "ededed"
+    description: "已合并：PR 已合入 main，Issue 可关闭"
+  - name: state:blocked
+    color: "e4e669"
+    description: "阻塞：依赖未满足或等用户决定，见 Issue 评论"
+
+  # --- 风险与返工（红色系）---
+  - name: risk:high
+    color: "b60205"
+    description: "重大风险：生产环境、数据库结构、VMAX、nginx、生产服务重启等，须用户明确批准"
+  - name: needs-replan
+    color: "b60205"
+    description: "需重新规划：自动修复已达 3 次上限，由 Muse 1 重新规划，不再自动重派"
