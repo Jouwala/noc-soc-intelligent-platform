@@ -1,0 +1,89 @@
+# 离线质量检查（第一轮重构批 E）
+#
+# 与本地 ops/quality/check_all.ps1 同一份检查（离线部分），跑在 windows-latest
+# 上——后端有 Windows 专用代码，Linux runner 会误报。
+#
+# 不访问 UME、eFlow、生产库、邮箱、WhatsApp、内网地址；不跑还没标记好的全量
+# pytest。live 标记加完、离线集合有基线之后，再把 pytest -m "not live" 加进
+# CI，那是后续提交，不塞进目录搬家。
+#
+# 每个 job 都写明 working-directory（defaults.run.working-directory）。
+
+name: quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compileall:
+    name: compileall（apps + ops/deploy）
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: .
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: compileall
+        run: python -m compileall -q apps ops/deploy
+
+  ruff:
+    name: ruff E9,F821（my_app）
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/my_app
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 安装 ruff
+        run: python -m pip install ruff
+      - name: ruff E9,F821
+        run: python -m ruff check backend --select E9,F821
+
+  portal:
+    name: 门户 lint / test / 文档守卫
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/portal
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: 安装依赖
+        run: npm ci
+      - name: lint（tsc --noEmit）
+        run: npm run lint
+      - name: test
+        run: npm test
+      - name: 文档守卫 check:docs
+        run: npm run check:docs
+
+  my-app-docs:
+    name: my_app 文档一致性守卫
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/my_app
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 文档一致性守卫
+        run: python tests/test_doc_consistency.py
