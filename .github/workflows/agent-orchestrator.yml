@@ -1,0 +1,83 @@
+# Agent orchestrator：只做机械触发，不做判断。
+#
+# PR 被打上 QA 就绪标签（`state:qa-ready`），或手动 dispatch 本工作流时，
+# 向 Grok Routine 的 webhook POST 一次冒烟测试请求。Grok 读 Issue/PR、
+# 在 D:\02 上跑 §8.2–8.4 冒烟 + 离线 pytest，结果发到用户与 Grok 的聊天里；
+# 它不在 GitHub 上回帖。
+#
+# webhook 地址和 sender key 放在仓库 secret 里（绝不写进代码）：
+#   GROK_ROUTINE_WEBHOOK_URL
+#   GROK_ROUTINE_WEBHOOK_KEY
+# 请求头：Authorization: Bearer <secret 里的 sender key>
+
+name: agent-orchestrator
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to smoke-test'
+        required: true
+        type: number
+      issue_number:
+        description: 'Linked task Issue number (if any)'
+        required: false
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  trigger-grok-smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'state:qa-ready'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve PR head SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          HEAD_SHA="$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}" | jq -r '.head.sha')"
+          test -n "$HEAD_SHA" && test "$HEAD_SHA" != 'null' || { echo "cannot resolve head SHA for PR ${PR_NUMBER}"; exit 1; }
+          echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "PR #${PR_NUMBER} head: ${HEAD_SHA}"
+
+      - name: POST smoke request to Grok Routine webhook
+        env:
+          WEBHOOK_URL: ${{ secrets.GROK_ROUTINE_WEBHOOK_URL }}
+          WEBHOOK_KEY: ${{ secrets.GROK_ROUTINE_WEBHOOK_KEY }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          test -n "$WEBHOOK_URL" || { echo 'GROK_ROUTINE_WEBHOOK_URL secret is missing'; exit 1; }
+          test -n "$WEBHOOK_KEY" || { echo 'GROK_ROUTINE_WEBHOOK_KEY secret is missing'; exit 1; }
+          jq -n \
+            --arg event 'qa_requested' \
+            --arg repo "$REPO" \
+            --argjson pr_number "$PR_NUMBER" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg issue_number "$ISSUE_NUMBER" \
+            --arg run_url "$RUN_URL" \
+            '{event: $event, repo: $repo, pr_number: $pr_number, head_sha: $head_sha, issue_number: ($issue_number | select(. != "") | tonumber?), run_url: $run_url}' \
+            > /tmp/grok-qa-payload.json
+          HTTP_CODE="$(curl -sS -o /tmp/grok-qa-response.json -w '%{http_code}' \
+            -X POST "$WEBHOOK_URL" \
+            -H "Authorization: Bearer ${WEBHOOK_KEY}" \
+            -H 'Content-Type: application/json' \
+            --data @/tmp/grok-qa-payload.json)"
+          echo "webhook HTTP status: ${HTTP_CODE}"
+          case "$HTTP_CODE" in
+            2*) echo 'Grok smoke request accepted.' ;;
+            *) echo 'Webhook POST failed:'; cat /tmp/grok-qa-response.json; exit 1 ;;
+          esac
