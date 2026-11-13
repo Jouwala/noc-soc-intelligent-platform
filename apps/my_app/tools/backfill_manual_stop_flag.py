@@ -37,7 +37,7 @@
 ----
 * 默认 dry-run，**必须显式加 `--apply` 才写库**；
 * 写入只碰 `manually_stopped` 一列，`enabled` / `cron` / `updated_at` 不动；
-* 强制走原生 `sqlite3.connect`（与 `task_runner._save_schedule_config` 一致）：
+* 强制走本地入口 `get_sqlite_connection`（与 `task_runner._save_schedule_config` 同一入口）：
   `DB_MODE=pg` 时 `get_raw_connection` 的 upsert 语法不兼容，静默失败过一次。
 * 任务不在 `task_schedule_config` 表里时会**插入**一行（沿用注册表里的默认 cron），
   不会因为「表里没这行」就静默跳过。
@@ -55,7 +55,7 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 
-from backend.database import DB_PATH  # noqa: E402
+from backend.database import DB_PATH, get_sqlite_connection  # noqa: E402
 from backend.task_registry import TASK_SPECS  # noqa: E402
 
 # task_id → 注册表里的默认定义（供「表中无此行」时取默认 cron / enabled）。
@@ -78,7 +78,7 @@ DEFAULT_TASK_IDS = [
 def _connect():
     """原生 SQLite 连接（不走 get_raw_connection，理由见模块 docstring）。"""
     import sqlite3
-    return sqlite3.connect(str(DB_PATH), timeout=30)
+    return get_sqlite_connection(str(DB_PATH), timeout=30)
 
 
 def _ensure_column(conn) -> None:

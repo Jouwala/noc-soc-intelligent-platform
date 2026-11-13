@@ -58,6 +58,7 @@ from typing import Any, Dict, Iterable, List, Optional
 if __package__ in (None, ""):                                            # 直接 python 跑本文件时
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from backend.database import get_sqlite_connection
 from backend.services.vmax_multi_data import vmax_report_client as vrc
 
 logger = logging.getLogger("vmax_multi_data")
@@ -227,7 +228,7 @@ def persist_sqlite(result: Dict[str, Any], db_path: Optional[Path] = None) -> in
     begin = result["window"]["begin"]
     end = result["window"]["end"]
     gran = result["granularity"]
-    conn = sqlite3.connect(str(path), timeout=30)
+    conn = get_sqlite_connection(str(path), timeout=30)
     try:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS kpi_rows (
@@ -275,7 +276,7 @@ def persist_run(report_part: str, report_key: str, granularity: str, window: Dic
     """记录一次采集运行（成功/失败都记），便于排查「某小时为什么没数据」。"""
     path = Path(db_path or SQLITE_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=30)
+    conn = get_sqlite_connection(str(path), timeout=30)
     try:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sync_runs (

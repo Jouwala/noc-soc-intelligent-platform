@@ -50,6 +50,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.database import get_sqlite_connection, get_sqlite_readonly_connection
 from backend.services.remote_readonly import query_dicts
 
 logger = logging.getLogger("mttr_tt_sync")
@@ -140,7 +141,7 @@ def _load_ref(path: Path) -> Tuple[Dict[str, str], Dict[str, Tuple[float, ...]]]
     """读 excel_ds 参考库：Site ID → Site Category、Site Name → 四制式小区数。"""
     if not path.is_file():
         raise MttrTtError(f"参考库不存在: {path}（需从 my-finebi data/ 同步过来）")
-    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30)
+    con = get_sqlite_readonly_connection(path, timeout=30)
     try:
         smc = {r[0]: r[1] for r in con.execute(
             'SELECT "Site ID", "Site Category" FROM "Site_Maintainer_Category"')}
@@ -176,7 +177,7 @@ def build(target: Path = OUT_DB, progress=None) -> Dict[str, Any]:
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".tmp")
     tmp.unlink(missing_ok=True)
-    out = sqlite3.connect(str(tmp), timeout=60)
+    out = get_sqlite_connection(str(tmp), timeout=60)
     try:
         out.execute(DDL)
         batch: List[Tuple[Any, ...]] = []

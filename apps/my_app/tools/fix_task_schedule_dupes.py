@@ -68,13 +68,17 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from backend.database import get_sqlite_connection  # noqa: E402
+
 DB_PATH = ROOT / "db" / "app.db"
 TABLE = "task_schedule_config"
 UNIQUE_INDEX = "ux_task_schedule_config_task_id"
 
 
 def _connect() -> sqlite3.Connection:
-    con = sqlite3.connect(str(DB_PATH), timeout=60)
+    con = get_sqlite_connection(str(DB_PATH), timeout=60)
     con.execute("PRAGMA busy_timeout = 60000")
     return con
 

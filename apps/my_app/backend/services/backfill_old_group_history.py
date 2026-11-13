@@ -34,6 +34,9 @@ except Exception:
     pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from backend.database import get_sqlite_readonly_connection  # noqa: E402
 try:
     from backend.services.db_writer_client import DbWriterClient
 except ImportError:
@@ -83,7 +86,7 @@ def main():
         return 1
 
     client = None if dry_run else DbWriterClient()
-    conn = sqlite3.connect(f"file:{SOURCE_DB}?mode=ro", uri=True)
+    conn = get_sqlite_readonly_connection(SOURCE_DB)
     cur = conn.cursor()
     total_sent = total_skipped = 0
     failed = []

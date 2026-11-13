@@ -25,7 +25,7 @@ from ftplib import FTP, error_perm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from backend.database import get_raw_connection
+from backend.database import get_raw_connection, get_sqlite_connection
 from backend.dialect_helpers import list_table_names
 
 logger = logging.getLogger("ran_ume_service")
@@ -1072,7 +1072,7 @@ def _refresh_local_daily_db(table_dfs: dict):
             os.remove(tmp_path)
         # 注意：sqlite3 连接必须显式 close（with 块只提交不关闭），
         # 否则 Windows 上 tmp 文件被占用导致 os.replace 失败
-        conn = sqlite3.connect(tmp_path, timeout=60)
+        conn = get_sqlite_connection(tmp_path, timeout=60)
         try:
             for table, df in table_dfs.items():
                 df.to_sql(table, conn, if_exists="replace", index=False)

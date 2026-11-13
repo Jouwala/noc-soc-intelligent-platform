@@ -143,8 +143,9 @@ def _ident(name: str) -> str:
 # 本机镜像库
 # ----------------------------------------------------------------------
 def _open_local(path: Path) -> sqlite3.Connection:
+    from backend.database import get_sqlite_connection
     path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(path), timeout=60)
+    con = get_sqlite_connection(str(path), timeout=60)
     con.execute("PRAGMA journal_mode=DELETE")
     con.execute("PRAGMA synchronous=NORMAL")
     con.execute(

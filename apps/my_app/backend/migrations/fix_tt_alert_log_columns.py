@@ -57,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import transfer_lib as tl  # noqa: E402  (get_pg_url / pg_quote / load_env)
 
+from backend.database import get_sqlite_connection  # noqa: E402
 from backend.services.tt_alarm_store import (  # noqa: E402
     LOG_COLUMNS, LOG_PK, COLUMN_TYPES,
 )
@@ -207,7 +208,7 @@ def run_sqlite(dry_run: bool) -> int:
     if not db_path.exists():
         print(f"== 本地库不存在: {db_path}")
         return 0
-    conn = sqlite3.connect(str(db_path), timeout=30)
+    conn = get_sqlite_connection(str(db_path), timeout=30)
     try:
         exists = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",

@@ -181,6 +181,72 @@ def get_raw_connection(db_path=None, timeout=30, check_same_thread=False, logica
     return conn
 
 
+def get_sqlite_connection(db_path, timeout=30, check_same_thread=True, isolation_level=""):
+    """本地 SQLite 专用连接（数据访问收口入口，§11-2）。
+
+    与 `get_raw_connection` 的分工：后者是**双模**入口（PG 模式按路径映射
+    schema）；本函数**永不走 PG 路由**，只打开本地文件。适用于三类目标：
+
+    1. 本地权威库（`credentials` / `email_recipients` / `task_schedule_config`
+       所在的 `db/app.db`）——与 DB_MODE 无关地固定存本地，见
+       `docs/manual/03-data-layer.md` 的 SKIP_TABLES 说明；
+    2. 本地专属数据文件（镜像库、报告中间库、各任务的专用库文件、
+       同步临时产物）——物理文件就是真相源，PG 里没有对应 schema，
+       走双模入口反而会被误映射；
+    3. 迁移与离线工具打开的指定文件。
+
+    连接语义与 `get_raw_connection` 的 sqlite 分支**完全一致**：
+    `_ClosingConnection`（`with` 退出提交并关闭）+ `row_factory=Row` +
+    `busy_timeout` / `synchronous` PRAGMA。调用方原有的显式 PRAGMA
+    （如 `journal_mode`）照旧在拿到连接后自行设置。
+
+    timeout / check_same_thread / isolation_level 均透传 `sqlite3.connect`，
+    缺省值与标准库一致（isolation_level=None 表示 autocommit，
+    `sync_pg_to_sqlite` 的快照重建用）。
+    """
+    conn = sqlite3.connect(
+        str(db_path),
+        timeout=timeout,
+        check_same_thread=check_same_thread,
+        isolation_level=isolation_level,
+        factory=_ClosingConnection,
+    )
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    try:
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.execute("PRAGMA synchronous=NORMAL")
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).warning("[SILENT-EXCEPT] get_sqlite_connection: exception swallowed", exc_info=True)
+        pass
+    finally:
+        cur.close()
+    return conn
+
+
+def get_sqlite_readonly_connection(db_path, timeout=30, check_same_thread=True):
+    """本地 SQLite **只读**连接（数据访问收口入口，§11-2）。
+
+    以 URI `mode=ro` 打开：文件不存在直接报错（不会像普通 connect 那样
+    静默新建空库），写入直接报错。语义与 `get_sqlite_connection` 一致
+    （`_ClosingConnection` + `row_factory=Row`），但不设置写侧 PRAGMA。
+
+    注意：`file:` URI 对 UNC 网络路径解析有坑（见 `bp_report_store` /
+    `ran_cells_kpi_service` 的既有注释）——目标在网络映射盘上时不要用
+    本函数，改走 `get_sqlite_connection` + `PRAGMA query_only=ON`。
+    """
+    uri = "file:%s?mode=ro" % Path(db_path).as_posix()
+    conn = sqlite3.connect(
+        uri,
+        uri=True,
+        timeout=timeout,
+        check_same_thread=check_same_thread,
+        factory=_ClosingConnection,
+    )
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def _resolve_pg_schema(db_path) -> str:
     """把 sqlite 文件路径映射到 PG schema 名（pg 模式用）。
 

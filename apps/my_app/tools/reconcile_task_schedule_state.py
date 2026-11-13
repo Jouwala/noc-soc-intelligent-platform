@@ -58,6 +58,8 @@ sys.path.insert(0, str(ROOT))
 
 import psycopg2
 
+from backend.database import get_sqlite_connection  # noqa: E402
+
 try:
     from dotenv import load_dotenv
     load_dotenv(ROOT / "backend" / ".env", override=False)
@@ -160,7 +162,7 @@ def main() -> int:
     db = _sqlite_path()
     print(f"SQLite：{db}")
 
-    con = sqlite3.connect(str(db), timeout=60)
+    con = get_sqlite_connection(str(db), timeout=60)
     con.execute("PRAGMA busy_timeout=60000")
     sqlite_rows = _read_sqlite(con)
     print(f"  行数={len(sqlite_rows)}  enabled=1 有 {sum(r['enabled'] for r in sqlite_rows.values())}"
@@ -206,7 +208,7 @@ def main() -> int:
     shutil.copy2(db, bak)
     print(f"\n已备份整库 → {bak}")
 
-    con = sqlite3.connect(str(db), timeout=60)
+    con = get_sqlite_connection(str(db), timeout=60)
     con.execute("PRAGMA busy_timeout=60000")
     try:
         removed = _dedup(con)

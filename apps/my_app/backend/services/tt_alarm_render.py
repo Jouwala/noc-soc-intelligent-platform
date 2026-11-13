@@ -263,12 +263,13 @@ def _snapshot_tt(tt_no: str, row: Optional[dict] = None) -> Optional[Path]:
             col_names = [c for c in row.keys() if not str(c).startswith("_")]
             row_tuples = [tuple(None if row[c] is None else str(row[c]) for c in col_names)]
 
-    import sqlite3
     import tempfile
+
+    from backend.database import get_sqlite_connection
 
     tmp = Path(tempfile.mkdtemp(prefix="tt_snap_")) / "tt.db"
     try:
-        con = sqlite3.connect(str(tmp))
+        con = get_sqlite_connection(str(tmp))
         try:
             # 引擎用的是 `SELECT ... FROM eflow_tt`，故只要这一张表。
             # 类型统一 TEXT —— 引擎只做字符串比较与正则提取，不依赖数值亲和性，

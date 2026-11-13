@@ -267,7 +267,7 @@ def _query_local(sql: str, limit: int, path: Optional[Path] = None) -> Dict[str,
     path 为空时读 db/app.db（与 sp_dashboard 同源）；
     否则读 LOCAL_SQLITE_FILES 里的 my_app 自持派生库。
     """
-    import sqlite3
+    from backend.database import get_sqlite_readonly_connection
 
     if path is None:
         from backend.services.sp_dashboard import DB_PATH  # 复用既有路径定义
@@ -279,7 +279,7 @@ def _query_local(sql: str, limit: int, path: Optional[Path] = None) -> Dict[str,
 
     sql = _guard(sql)
     t0 = time.time()
-    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30)
+    con = get_sqlite_readonly_connection(path, timeout=30)
     try:
         con.execute("PRAGMA query_only=ON")
         cur = con.execute(sql)

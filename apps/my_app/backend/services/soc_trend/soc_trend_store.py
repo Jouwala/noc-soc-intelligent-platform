@@ -18,6 +18,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+from backend.database import get_sqlite_connection, get_sqlite_readonly_connection
+
 logger = logging.getLogger("soc_trend")
 
 _ROOT = Path(__file__).resolve().parents[3]                              # my_app/
@@ -48,10 +50,9 @@ def connect(readonly: bool = False) -> sqlite3.Connection:
     """打开本地库（无则建目录建表）。只读方传 readonly=True 拿 URI 连接。"""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if readonly:
-        conn = sqlite3.connect("file:%s?mode=ro" % DB_PATH.as_posix(), uri=True,
-                               timeout=15, check_same_thread=False)
+        conn = get_sqlite_readonly_connection(DB_PATH, timeout=15, check_same_thread=False)
     else:
-        conn = sqlite3.connect(DB_PATH, timeout=15, check_same_thread=False)
+        conn = get_sqlite_connection(DB_PATH, timeout=15, check_same_thread=False)
         conn.execute("pragma journal_mode=wal")
         conn.execute("pragma busy_timeout=15000")
     conn.row_factory = sqlite3.Row

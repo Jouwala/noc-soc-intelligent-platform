@@ -30,6 +30,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]   # D:\01_RPA\Task\my_app
 BACKEND_DIR = PROJECT_ROOT / "backend"
 TMP_DIR = PROJECT_ROOT / "TMP"
 
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from backend.database import get_sqlite_readonly_connection  # noqa: E402
+
 SAMPLE_SIZE = 200          # 每表抽样上限
 RANDOM_SEED = 20260807     # 固定抽样种子
 DIFF_THRESHOLD = 0.001     # 差异率阈值 0.1%
@@ -158,7 +162,7 @@ class SqliteSide:
         self.conn = None
         if self.exists:
             # mode=ro 强制只读，杜绝任何写入
-            self.conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30)
+            self.conn = get_sqlite_readonly_connection(path, timeout=30)
 
     def tables(self) -> list:
         if not self.conn:

@@ -41,6 +41,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.database import get_sqlite_connection
 from backend.services.remote_readonly import query_dicts
 
 logger = logging.getLogger("progress_sync")
@@ -373,7 +374,7 @@ def build(target: Path = OUT_DB, progress=None) -> Dict[str, Any]:
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".tmp")
     tmp.unlink(missing_ok=True)
-    out = sqlite3.connect(str(tmp), timeout=60)
+    out = get_sqlite_connection(str(tmp), timeout=60)
     try:
         out.execute(DDL)
         out.executemany(

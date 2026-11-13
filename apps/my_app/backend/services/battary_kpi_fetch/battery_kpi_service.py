@@ -296,7 +296,8 @@ def _connect() -> sqlite3.Connection:
     try:
         from backend.database import get_raw_connection
         return get_raw_connection(str(BATT_DB_PATH), timeout=30)
-    except Exception:  # 独立运行（无 backend 包）时的兜底
+    except Exception:  # 独立运行（无 backend 包）时的兜底：§11-2 收口评估后保留裸连——
+        # 兜底的前提就是 backend 包不可用，改走 get_sqlite_connection 会让兜底本身失效
         conn = sqlite3.connect(str(BATT_DB_PATH), timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout=30000")

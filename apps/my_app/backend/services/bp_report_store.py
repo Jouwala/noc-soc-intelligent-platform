@@ -35,6 +35,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from backend.database import get_sqlite_connection, get_sqlite_readonly_connection
+
 logger = logging.getLogger("bp_report_store")
 
 # 产物库：my_app 自持，后端每请求只读打开
@@ -181,10 +183,10 @@ def connect(path: Optional[os.PathLike] = None, read_only: bool = False) -> sqli
     """
     p = os.path.abspath(str(path or DB_PATH))
     if read_only:
-        conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=30)
+        conn = get_sqlite_readonly_connection(p, timeout=30)
     else:
         Path(p).parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(p, timeout=60)
+        conn = get_sqlite_connection(p, timeout=60)
     conn.row_factory = sqlite3.Row
     return conn
 

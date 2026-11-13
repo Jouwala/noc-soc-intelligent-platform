@@ -510,14 +510,14 @@ def write_to_remote_db(rows, device_id):
 
 def _open_db():
     """打开数据库；sqlite 模式下若被占用（锁定）则按规则追加 _序号 生成新文件；pg 模式走 PG 连接。"""
-    from backend.database import DB_MODE, get_raw_connection
+    from backend.database import DB_MODE, get_raw_connection, get_sqlite_connection
     candidate = DB_PATH
     if DB_MODE == "pg":
         return get_raw_connection(str(candidate), logical_name="fw_db", timeout=10), candidate
     idx = 0
     while True:
         try:
-            conn = sqlite3.connect(candidate, timeout=10)
+            conn = get_sqlite_connection(candidate, timeout=10)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=OFF")
             conn.execute("PRAGMA cache_size=-64000")

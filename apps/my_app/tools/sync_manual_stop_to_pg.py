@@ -3,8 +3,8 @@
 
 背景见 tools/backfill_manual_stop_flag.py 与 tools/fix_task_schedule_dupes.py：
 生产是双库（SQLite db/app.db + PG 192.168.100.20:5432/myapp）。
-task_runner 的读写**只走 SQLite**（`_load/_save_schedule_config` 硬编码
-sqlite3.connect），但 PG 侧存在同一张表且对外可见，两边不一致会让
+task_runner 的读写**只走 SQLite**（`_load/_save_schedule_config` 经
+get_sqlite_connection 本地入口），但 PG 侧存在同一张表且对外可见，两边不一致会让
 「界面上关着、另一侧查出来是开着」这类问题无从排查。
 
 本脚本只做一件事：把 SQLite 里这三行的 manually_stopped 写到 PG，
@@ -28,8 +28,8 @@ TASK_IDS = ("whatsapp_send", "whatsapp_send_ext", "sp_whatsapp_report")
 
 
 def _sqlite_rows():
-    import sqlite3
-    con = sqlite3.connect(str(ROOT / "db" / "app.db"), timeout=30)
+    from backend.database import get_sqlite_connection
+    con = get_sqlite_connection(str(ROOT / "db" / "app.db"), timeout=30)
     try:
         q = ",".join("?" * len(TASK_IDS))
         rows = con.execute(

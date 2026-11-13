@@ -43,6 +43,8 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.database import get_sqlite_connection
+
 logger = logging.getLogger("ran_cells_kpi")
 
 # ---------- 路径 ----------
@@ -57,7 +59,7 @@ KPI_DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "data",
 
 def _connect_ro(path: str) -> sqlite3.Connection:
     """只读连接本地 sqlite（不走 file: URI，避免网络盘 UNC 路径解析失败）。"""
-    conn = sqlite3.connect(path, timeout=60)
+    conn = get_sqlite_connection(path, timeout=60)
     try:
         conn.execute("PRAGMA query_only=ON")
     except Exception:
@@ -567,7 +569,7 @@ def write_month_to_db(month: str, threshold: float = DEFAULT_THRESHOLD) -> Dict[
     os.makedirs(os.path.dirname(KPI_DB_PATH), exist_ok=True)
     techs = [compute_tech(t, month, threshold) for t in TECHS]
 
-    conn = sqlite3.connect(KPI_DB_PATH)
+    conn = get_sqlite_connection(KPI_DB_PATH)
     rows_written = 0
     try:
         conn.execute(

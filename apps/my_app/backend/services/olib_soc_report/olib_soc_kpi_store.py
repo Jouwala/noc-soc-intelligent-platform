@@ -30,6 +30,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from backend.database import get_sqlite_connection
+
 logger = logging.getLogger("olib_soc_kpi")
 
 _ROOT = Path(__file__).resolve().parents[3]
@@ -164,11 +166,11 @@ def connect(path: Optional[Path] = None, readonly: bool = False) -> sqlite3.Conn
     if readonly:
         if not target.exists():
             raise FileNotFoundError(str(target))
-        conn = sqlite3.connect(str(target), timeout=30)
+        conn = get_sqlite_connection(str(target), timeout=30)
         conn.execute("PRAGMA query_only=ON")
         return conn
     target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(target), timeout=30)
+    conn = get_sqlite_connection(str(target), timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")                              # 任务写 + 看板读并发
     conn.execute("PRAGMA synchronous=NORMAL")
     return conn
