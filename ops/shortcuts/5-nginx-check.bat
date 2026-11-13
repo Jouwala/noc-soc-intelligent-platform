@@ -6,7 +6,7 @@ REM  ASCII-only + CRLF on purpose; non-ASCII breaks cmd parsing.
 REM ============================================================
 setlocal
 cd /d "%~dp0.."
-"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\write_nginx_conf.ps1"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\ops\deploy\write_nginx_conf.ps1"
 
 echo.
 echo ---- done. Press any key to close. ----

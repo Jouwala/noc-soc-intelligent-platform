@@ -65,7 +65,7 @@
 cd /d/01_RPA/Task/my_app
 
 # 1) 根目录是否出现新的散落文件（源码/配置白名单之外）
-ls -1 | grep -vE '^(backend|frontend|docs|data|db|log|TMP|tests|outputs|Lib|Scripts|include|alembic|monitor_fixes|whatsapp_sender_extension|whatsapp_session|email_reports|nginx|\.|_myapp_trash|CREDENTIALS|PROJECT_DOCS|requirements|start|stop|fix_backend|restart_workers|mw_links_sync|pyvenv|reload|routes|send)'
+ls -1 | grep -vE '^(backend|frontend|docs|data|db|log|TMP|tests|outputs|Lib|Scripts|include|alembic|monitor_fixes|whatsapp_session|email_reports|nginx|\.|_myapp_trash|CREDENTIALS|requirements|start|stop|fix_backend|restart_workers|mw_links_sync|pyvenv|reload|routes|send)'
 
 # 2) 临时 profile 是否堆积
 ls -d data/portal_profiles/_tmp_* 2>/dev/null | wc -l

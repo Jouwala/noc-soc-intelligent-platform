@@ -1,6 +1,6 @@
 # WhatsApp 出图接口（whatsapp_outbox）
 
-为「WhatsApp 定时发图」Chrome 扩展（`Task/my_app/whatsapp_sender_extension/`）提供
+为「WhatsApp 定时发图」Chrome 扩展（`extensions/whatsapp_sender_extension/`）提供
 图片拉取与「待发作业」的 HTTP 接口。它复用
 `backend/services/whatsapp_service.py`（即 `/myapp/?page=sync` 的 **WhatsApp Message Send** 任务）
 的图片目录与群组/备注配置，但**不走 Playwright**——发送由扩展在已登录的 WhatsApp Web 标签页里完成。

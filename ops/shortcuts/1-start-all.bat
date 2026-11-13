@@ -6,7 +6,7 @@ REM  ASCII-only + CRLF on purpose; non-ASCII breaks cmd parsing.
 REM ============================================================
 setlocal
 cd /d "%~dp0.."
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\my_portal_ctl.ps1" 8-start-all
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\ops\deploy\my_portal_ctl.ps1" 8-start-all
 
 echo.
 echo ---- done. Press any key to close. ----

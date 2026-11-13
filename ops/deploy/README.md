@@ -13,6 +13,8 @@
   （`credentials`、`task_schedule_config`、`email_recipients`）
 - `ensure_portal.ps1`：门户保活（计划任务调用）
 - `bundle_data.ps1`：把生产 PostgreSQL 快照灌进副本便携实例
+- `my_portal_ctl.ps1`、`write_nginx_conf.ps1`：§11-5 自仓库根归位至此；
+  两者都按自身位置向上推导仓库根，`ops/shortcuts/` 的 bat 已指向新位置
 
 ## 已停用：从 RPA（主仓库）来的同步
 

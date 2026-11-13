@@ -104,7 +104,7 @@ my_app 的第二种 WhatsApp 发送通道：直接运行在**用户已登录的 
 1. 确认 my_app 后端已在运行（与 `http://localhost/myapp/` 同一个后端，扩展默认走
    `http://localhost` 的 nginx 反代，**无需单独的 8000 服务**）。
 2. Chrome 打开 `chrome://extensions` → 开启右上角「开发者模式」。
-3. 「加载已解压的扩展程序」→ 选择本目录（`Task/my_app/whatsapp_sender_extension`）。
+3. 「加载已解压的扩展程序」→ 选择本目录（`extensions/whatsapp_sender_extension`）。
 4. 打开并登录一个 WhatsApp Web 标签页（`https://web.whatsapp.com`）。
 5. 点击扩展图标打开侧栏，确认「后端状态」为**可连接**。
 

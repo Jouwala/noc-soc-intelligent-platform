@@ -291,7 +291,7 @@ PG 的 `DROP TABLE` 沿 `search_path`（`app,eflow,lte_pl,…`，
 | 任务注册表字段 | `backend\task_registry.md` |
 | 上游集成清单 | `docs\manual\14-integrations.md` |
 | 配置项与开关 | `docs\manual\12-configuration.md` |
-| 迁移历史与风险 | `PROJECT_DOCS.md` §2（历史档案） |
+| 迁移历史与风险 | `../../docs/archive/PROJECT_DOCS.md` §2（历史档案） |
 | 全域拓扑 | `D:\01_RPA\architecture.md` |
 
 > **工具负责整理，人与 AI 负责协作执行。**

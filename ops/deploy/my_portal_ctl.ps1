@@ -60,11 +60,12 @@ $ErrorActionPreference = 'Continue'
 # This script's own directory is the stable anchor for everything else.
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# Workspace root. The script lives at the root today; fall back to a search so
-# the shortcut keeps working if the file is ever moved one level down.
+# Workspace root. The script lives in ops\deploy since §11-5 (previously at
+# the root); fall back to a search so the shortcut keeps working wherever
+# the file sits within two levels of the root.
 $Root = $ScriptDir
 if (-not (Test-Path (Join-Path $Root 'apps\my_app'))) {
-    foreach ($candidate in @((Split-Path -Parent $ScriptDir), 'D:\01_olbr_portal')) {
+    foreach ($candidate in @((Split-Path -Parent $ScriptDir), (Split-Path -Parent (Split-Path -Parent $ScriptDir)), 'D:\01_olbr_portal')) {
         if ($candidate -and (Test-Path (Join-Path $candidate 'apps\my_app'))) {
             $Root = $candidate
             break

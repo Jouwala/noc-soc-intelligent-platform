@@ -20,7 +20,7 @@
 - **定位**：网络运维数据的**唯一自研数据底座**。23+ 个功能页（同步、告警、工单、SLA、GIS、库存、电池、丢包、IP Trace 等），44+ 个定时任务。
 - **技术栈**：后端 FastAPI + SQLAlchemy（SQLite / PostgreSQL 双模）+ Alembic；前端 React + Vite；任务经 worker 分组执行 + 看门狗守护。
 - **部署**：前端 vite `7090`（`base=/myapp/`）、后端 uvicorn `7038`，由 `192.168.100.19:80` 的 nginx 反代。
-- **文档**：`apps\my_app\docs\manual\`（13 份手册，**现状以此为准**）；`apps\my_app\PROJECT_DOCS.md` 是历史档案。
+- **文档**：`apps\my_app\docs\manual\`（13 份手册，**现状以此为准**）；`docs\archive\PROJECT_DOCS.md` 是历史档案。
 
 ### 2. apps\portal —— 统一入口
 

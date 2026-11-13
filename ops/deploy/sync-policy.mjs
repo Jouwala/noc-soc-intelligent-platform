@@ -21,7 +21,8 @@ export const ROOT_FILES = [
 ];
 // 只同步源码；构建产物（apps/_fe_dist、门户 dist）由副本自行构建，绝不从生产拷贝。
 export const GROUPS = [
-  { root: APP, dirs: ['backend', 'frontend', 'alembic', 'docs', 'tests', 'tools', 'email_reports', 'monitor_fixes', 'portal_login_extension', 'whatsapp_sender_extension'] },
+  { root: APP, dirs: ['backend', 'frontend', 'alembic', 'docs', 'tests', 'tools', 'email_reports', 'monitor_fixes'] },
+  { root: 'extensions', dirs: ['whatsapp_sender_extension', 'portal_login_extension'] },
   { root: 'apps/whatsapp-kb-bot', dirs: ['src', 'scripts', 'docs', 'knowledge', 'evals', 'certs'] },
   { root: 'apps/eflow_Q&A', dirs: null },
   { root: PORTAL, dirs: ['src', 'server', 'public', 'scripts', 'docs', 'tests', 'MsPortal', 'OlrPortal', 'olbrportal', 'v1', 'v2', 'v3'] },

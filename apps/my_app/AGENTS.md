@@ -252,7 +252,7 @@ uvicorn 后端 (:7038)
 | 07 | `development.md` | 开发方式、命令与回归清单 |
 | 08 | `component-api.md` | 组件索引 |
 
-> 均在 `apps\my_app\` 根目录（与 `PROJECT_DOCS.md` 同级）。
+> 均在 `apps\my_app\` 根目录。
 > **手册（`docs\manual\`）仍是详细内容的权威来源**，这 8 份负责"入口与约束"。
 
 ## 十、相关文档
@@ -264,7 +264,7 @@ uvicorn 后端 (:7038)
 | 代码清理指南 | `docs\CODE_CLEANUP_GUIDE.md` |
 | Excel 导出规范 | `docs\EXCEL_EXPORT_STANDARD.md` |
 | FineBI 迁移 | `docs\FINEBI_MIGRATION.md` |
-| 历史档案 | `PROJECT_DOCS.md`、`PROJECT_DOCS_ARCHIVE.md` |
+| 历史档案 | `../../docs/archive/PROJECT_DOCS.md`、`../../docs/archive/PROJECT_DOCS_ARCHIVE.md` |
 | 统一门户 | `D:\02_olbr_portal\apps\portal\docs\AGENTS.md` |
 
 > **工具负责整理，人与 AI 负责协作执行。**

@@ -1,5 +1,5 @@
 """
-WhatsApp 扩展发送服务（配合 Chrome 扩展 Task/my_app/whatsapp_sender_extension）
+WhatsApp 扩展发送服务（配合 Chrome 扩展 extensions/whatsapp_sender_extension）
 
 与 whatsapp_service.run_whatsapp_send（Playwright 自启浏览器）**并行**的第二种实现，
 两者共用同一份图片目录与群组/备注配置；原任务保持不动。

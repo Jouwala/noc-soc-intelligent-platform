@@ -7,7 +7,7 @@
 ## 工作模型（拉取 / 工人）
 1. 任务 `whatsapp_send_ext` 运行（手动或定时）→ `run_whatsapp_send_ext()` 投递一个
    「待发作业」并阻塞等待。
-2. Chrome 扩展（`Task/my_app/whatsapp_sender_extension`，运行在已登录的 WhatsApp Web 标签页）
+2. Chrome 扩展（`extensions/whatsapp_sender_extension`，运行在已登录的 WhatsApp Web 标签页）
    定期轮询 `GET /api/whatsapp/ext/job` 认领作业、在浏览器里逐群逐图发送。
 3. 扩展完成后 `POST /api/whatsapp/ext/job/result` 回报；任务收到回报（或超时）后返回结果，
    在 sync 页面像普通任务一样显示成功 / 失败 / 耗时 / 历史。

@@ -30,8 +30,14 @@ $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-# 本脚本被铺在副本根目录，所以根 = 脚本所在目录
-if (-not $Root) { $Root = $PSScriptRoot }
+# 本脚本位于 ops\deploy（§11-5 归位；打包铺到副本根时也在根目录），根目录按
+# nginx.conf.template 的所在位置自脚本目录起向上查找，不写死层级
+if (-not $Root) {
+    $Root = $PSScriptRoot
+    foreach ($candidate in @($PSScriptRoot, (Split-Path -Parent $PSScriptRoot), (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))) {
+        if ($candidate -and (Test-Path -LiteralPath (Join-Path $candidate 'nginx.conf.template'))) { $Root = $candidate; break }
+    }
+}
 $Root = (Resolve-Path -LiteralPath $Root).Path
 # nginx 在 Windows 上接受正斜杠；反斜杠在 conf 里是转义字符，必须换掉
 $rootFwd = $Root.Replace('\', '/').TrimEnd('/')
