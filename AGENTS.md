@@ -1,16 +1,16 @@
 # 01 AGENTS.md —— AI 进入本项目首先需要知道的信息
 
-> 基准日期：2026-09-22　|　适用：`D:\01_RPA` 工作区根目录
-> 本目录（`D:\01_RPA`）是**整个 RPA 工作区的总纲**。各子系统的细节一律看各自的 `AGENTS.md` 与手册，**不要**把子系统细节抄到这里。
+> 基准日期：2026-09-22　|　适用：`D:\02_olbr_portal` 工作区根目录
+> 本目录（`D:\02_olbr_portal`）是 **NOC/SOC Intelligent Platform 工作区的总纲**。各子系统的细节一律看各自的 `AGENTS.md` 与手册，**不要**把子系统细节抄到这里。
 
 ## 一、先读什么（阅读顺序）
 
 | 顺序 | 文件 | 作用 |
 | --- | --- | --- |
 | 1 | `AGENTS.md`（本文） | 工作区地图、工程原则、硬性约束、**自主执行契约（第五节）** |
-| 2 | `project-overview.md` | 整个工作区是干什么的 |
-| 3 | `architecture.md` | 三个主要系统如何连在一起 |
-| 4 | `TODO.md` | 当前在办的事 |
+| 2 | `docs\workspace\project-overview.md` | 整个工作区是干什么的 |
+| 3 | `docs\workspace\architecture.md` | 三个主要系统如何连在一起 |
+| 4 | `docs\workspace\TODO.md` | 当前在办的事 |
 | 5 | 进入具体子系统后 | 读该子系统的 `AGENTS.md`，再读其 `docs/manual/` |
 
 ## 二、工作区地图
@@ -25,9 +25,10 @@
 
 | 目录 | 是什么 | 技术栈 | 该处文档入口 |
 | --- | --- | --- | --- |
-| `Task\my_app\` | **Data Insight MVP**（网络运维数据平台，自研主系统） | FastAPI + SQLite/PG + React | `Task\my_app\AGENTS.md`、`Task\my_app\docs\manual\` |
-| `liberia-noc_soc-数据看板统一门户\` | **Liberia NOC/SOC 数据看板统一门户**（聚合 FineBI 与 my_app 看板） | React 19 + Vite + Tailwind v4 | `...\AGENTS.md`、`...\README.md` |
-| `Task\` | 各类交付任务（eflow_Q&A、RAN、ORANGE、MTN_Comsal、Monthly_Report 等） | 混合 | 各任务目录内的 `README.md` |
+| `apps\my_app\` | **Data Insight MVP**（网络运维数据平台，自研主系统） | FastAPI + SQLite/PG + React | `apps\my_app\AGENTS.md`、`apps\my_app\docs\manual\` |
+| `apps\portal\` | **Liberia NOC/SOC 数据看板统一门户**（聚合 FineBI 与 my_app 看板） | React 19 + Vite + Tailwind v4 | `apps\portal\docs\AGENTS.md`、`apps\portal\README.md` |
+| `apps\whatsapp-kb-bot\` | **WhatsApp 知识库问答 bot**（与 my_app 同级，叶子名不改） | Node | `apps\whatsapp-kb-bot\docs\` |
+| `apps\eflow_Q&A\` | **eFlow 知识库**（问答/排障文档，含 `tools\inspect_tt.py`） | Markdown + Python | `apps\eflow_Q&A\README.md` |
 | `LBR_Tools\`、`Unified_Tools\`、`openclaw_api_selector\`、`ticket_export_rpa\` | 工具与 RPA 脚本集 | Python / 混合 | 各自目录 |
 | `chrome-win\`、`whatsapp*\`、`scheduler_logs\`、`report\` | 运行时依赖与产出 | — | 一般不直接改。nginx 也在运行时依赖之列：本机 (.20) 生效目录是 `D:\01_RPA\nginx-1.28.0\`（2026-10-01 从 Y: 网络映射盘搬回本地，已加入 `.gitignore`）；`Y:\01_RPA\nginx-1.28.0\` 是 **.19 那台**在用的，不要动（见第四节第 6b 条） |
 
@@ -35,36 +36,27 @@
 
 | | 路径 | 角色 |
 | --- | --- | --- |
-| **编辑区** | `D:\01_RPA` | **改代码的地方**。git 仓库、文档、手册、守卫脚本都在这里。 |
-| **运行副本** | `D:\01_olbr_portal` | **实际跑起来的地方**。2026-11-11 起接管 80/443/7038/7090/9267/5432。 |
+| **工作区 / 隔离副本** | `D:\02_olbr_portal` | **改代码的地方**。git 仓库、文档、手册、守卫脚本都在这里；也是隔离运行的副本（8080/8443/7039/7091/9277/55432）。 |
+| **生产** | `D:\01_olbr_portal` | **实际跑起来的地方**。2026-11-11 起接管 80/443/7038/7090/9267/5432。**本轮重构不动。** |
 
-**工作流：在 `D:\01_RPA` 改完 → 同步到 `D:\01_olbr_portal` → 那里才是线上。**
+**工作流：在 `D:\02_olbr_portal` 改完 → 按 `ops\deploy\README.md` 隔离启动验证；生产（`D:\01_olbr_portal`）本轮不动。**
 
-一条命令收口（**同步 + 重建前端 + 校验一致性**）。双击运行副本根目录的 `sync-now.bat` 就是这一条，不必再选：
+> ⚠ 从主仓库（`D:\01_RPA`）来的同步已随第一轮重构批 C 停用：根 `sync-now.bat` 已删除，`ops\deploy\sync-engine.mjs` / `sync-policy.mjs` 只保留备查，`sync_from_main.ps1` 禁止对这个新目录跑。不要在这里恢复同步入口。详见 `ops\deploy\README.md`「已停用」一节。
 
-```text
-D:\01_olbr_portal\sync-now.bat
-```
-
-它调用的就是下面这个脚本（在编辑区里直接跑也一样）：
-
-```powershell
-cd D:\01_RPA
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
-```
+隔离启动只走 `ops\deploy\start_all.ps1`（方案第 8.3 节）；启动前确认调度器关闭、WhatsApp bot 关闭、`.env` 是 02 的隔离配置。
 
 **为什么必须用这个脚本，不能只「同步源码」**（2026-11-11 实测事故）：
 
-- 同步只搬**源码**；前端是**构建产物**（`Task\_fe_dist`）、后端是**常驻进程**，两者都不吃源码变更。
+- 同步只搬**源码**；前端是**构建产物**（`apps\_fe_dist`）、后端是**常驻进程**，两者都不吃源码变更。
 - 只同步不重建 → 副本前端仍是旧界面；只重建不重启 → 后端仍是旧接口。
 - **实测 split-brain**：前端 chunk 已含 `col_filters`（列头筛选），而 live 后端的 `/api/tables/{t}/data` OpenAPI 参数里**没有** `col_filters`、也没有 `/column-values` 路由 → 用户看到「列头筛选点了没反应」「选值模式永远显示没有可选值」，是**完全坏掉的新功能**而不是报错。
 - 脚本第 3 步用 live OpenAPI 实测判定，命中不一致直接**非零退出**并点名 `SPLIT-BRAIN`，不会让「我明明同步了」变成排查一小时的谜题。
 
 **脚本不自动重启服务** —— 重启会打断正在看数据的人（第四节第 6 条）。需要重启时由人显式执行，脚本会提示该重启什么。
 
-> `sync-now.bat` 从 2026-11-11 起就是 `deploy_to_copy.ps1` 的双击入口（同步引擎仍是副本里的 `sync-engine.mjs`，源只读、冲突 fail-closed）。只搬源码、不重建前端：`sync-now.bat -SkipBuild`。
+> （历史做法：`sync-now.bat` 曾是 `deploy_to_copy.ps1` 的双击入口，批 C 已随同步链一起停用。）
 
-> ⚠️ **迁移/换目录时还有一类东西同步器不会搬：`Task\my_app\db\app.db` 里的三张「本地权威表」**
+> ⚠️ **迁移/换目录时还有一类东西同步器不会搬：`apps\my_app\db\app.db` 里的三张「本地权威表」**
 > —— `credentials`（设置页凭据）、`task_schedule_config`（任务启停/cron）、
 > `email_recipients`（邮件收件人）。它们由应用**固定写 SQLite**（不走 PG），
 > 同步器按策略不搬 `db/`，`sync_pg_to_sqlite.py` 又为避免 DROP 本地数据把它们列进
@@ -73,8 +65,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
 > 4 个手动停用任务全变回启用。检查/迁移命令：
 >
 > ```powershell
-> python scripts\local_authority_tools.py check   --source <旧app.db> --target <新app.db>
-> python scripts\local_authority_tools.py migrate --source <旧app.db> --target <新app.db>
+> python ops\deploy\local_authority_tools.py check   --source <旧app.db> --target <新app.db>
+> python ops\deploy\local_authority_tools.py migrate --source <旧app.db> --target <新app.db>
 > ```
 >
 > `deploy_to_copy.ps1` 的 **Step 1.5** 已自动跑 `check`：缺失即非零退出并打印上面的
@@ -90,7 +82,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
  └── /uniplam/          → 9267  统一门户自身（含 /uniplam/api/* 门户后端）
 ```
 
-> 主机名与端口以 `liberia-noc_soc-数据看板统一门户\src\config.ts` 为准（那里是**单一真相源**，换机房只改这一处）。细节见 `architecture.md`。
+> 主机名与端口以 `apps\portal\src\config.ts` 为准（那里是**单一真相源**，换机房只改这一处）。细节见 `docs\workspace\architecture.md`。
 
 ## 三、核心工程原则
 
@@ -99,41 +91,41 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
 1. **架构与领域优先。** 计划阶段先明确业务目标、领域边界、模块职责、依赖方向与数据流，形成符合领域规律、面向长期维护且可持续演进的设计后再编码；不得以短期实现便利牺牲整体设计。设计必须完整，实现应当克制：不做推测性抽象，抽象延迟到**第二个真实用例**出现时才引入，单一场景直接实现。
 2. **追求优雅的代码模块。** 模块高内聚、低耦合，用精简且稳定的接口封装内部复杂度，让职责、命名、依赖和扩展方式清晰自然；代码按单一职责拆分。**新增/新建文件单个不超过 500 行**，接近上限时优先重构模块边界。存量超限文件（`backend\task_registry.py` ≈117KB、`frontend\src\i18n.tsx` ≈783KB、`frontend\src\App.tsx` ≈126KB）列入待重构清单，**不要求一次性拆分**，但改到它们时不得继续无度膨胀。
 3. **保持边界与数据流清晰。** 协议模型（Pydantic `schemas\`）、领域模型、持久化模型（SQLAlchemy `models\`）与视图模型不得相互泄漏；数据必须在边界处完成校验和独立转换，避免跨层共享可变状态。
-4. **安全与隔离默认开启。** 所有功能按多租户、多用户场景设计，明确认证、授权与数据隔离边界（my_app 的角色与凭据体系见 `Task\my_app\docs\manual\05-security-and-credentials.md`）；遵循最小权限，任何外部输入均视为不可信，敏感信息不得进入代码、日志或响应（落地写法见第四节第 2 条）。
-5. **面向并发与故障设计。** 后端主动考虑幂等性、竞态、事务边界、超时、取消、重试、背压和资源释放；不得通过无边界重试、吞错或隐式共享状态掩盖问题。本工作区的 RPA 采集与 worker 任务尤其要显式处理「上游返回半截数据」与重复投递（投递前查重见 `Task\my_app\docs\manual\04-task-system.md`）。
+4. **安全与隔离默认开启。** 所有功能按多租户、多用户场景设计，明确认证、授权与数据隔离边界（my_app 的角色与凭据体系见 `apps\my_app\docs\manual\05-security-and-credentials.md`）；遵循最小权限，任何外部输入均视为不可信，敏感信息不得进入代码、日志或响应（落地写法见第四节第 2 条）。
+5. **面向并发与故障设计。** 后端主动考虑幂等性、竞态、事务边界、超时、取消、重试、背压和资源释放；不得通过无边界重试、吞错或隐式共享状态掩盖问题。本工作区的 RPA 采集与 worker 任务尤其要显式处理「上游返回半截数据」与重复投递（投递前查重见 `apps\my_app\docs\manual\04-task-system.md`）。
 6. **保障完整前端体验。** 控制渲染成本、异步状态与并发请求，保持清晰的 UI 结构；用户流程必须覆盖加载、空状态、错误、重试、反馈与可访问性。取不到数据显示 `—`，不得显示成 `0`。
-7. **复用稳定的业务语义。** 优先复用已有模块与能力（my_app 的 `components/cards`、`utils/excelReport`、`components/DraggableClickModal` 等统一组件是**强制入口**，细则见 `Task\my_app\AGENTS.md` 第三节第 3 条），但不要仅因外形相似就过早抽象；确需重复实现时，必须在注释中说明其独立演进或暂不抽象的原因。**新增依赖前先核查本处已有依赖** —— 本仓库没有统一的根 `package.json`，`Task\my_app\frontend\package.json` 与门户 `package.json` 各自独立，Python 依赖看各任务目录的 `requirements.txt`（如 `Task\my_app\requirements.txt`）。先查这些文件、库的文档与类型定义，不臆断已有库缺功能；确需引入时选成熟且维护良好的库，不重复实现通用功能。
-8. **为未来维护者保留上下文。** 代码、注释、测试与架构文档是跨越时间的协作媒介。非显然的设计决策、兼容约束、已知缺陷和临时方案，必须记录原因、影响范围、潜在风险与移除条件；技术债务要关联可追踪的归属（`TODO.md` 条目），**禁止**留下没有上下文的裸 `TODO`。本仓库当前**没有独立 ADR 目录**，重大架构决策请在 `architecture.md` 追加带日期的决策小节，形成事实上的 ADR，并按 `Task\my_app\AGENTS.md` 第三节第 8 条标注 `文件路径:行号` 出处。
+7. **复用稳定的业务语义。** 优先复用已有模块与能力（my_app 的 `components/cards`、`utils/excelReport`、`components/DraggableClickModal` 等统一组件是**强制入口**，细则见 `apps\my_app\AGENTS.md` 第三节第 3 条），但不要仅因外形相似就过早抽象；确需重复实现时，必须在注释中说明其独立演进或暂不抽象的原因。**新增依赖前先核查本处已有依赖** —— 本仓库没有统一的根 `package.json`，`apps\my_app\frontend\package.json` 与门户 `package.json` 各自独立，Python 依赖看各任务目录的 `requirements.txt`（如 `apps\my_app\requirements.txt`）。先查这些文件、库的文档与类型定义，不臆断已有库缺功能；确需引入时选成熟且维护良好的库，不重复实现通用功能。
+8. **为未来维护者保留上下文。** 代码、注释、测试与架构文档是跨越时间的协作媒介。非显然的设计决策、兼容约束、已知缺陷和临时方案，必须记录原因、影响范围、潜在风险与移除条件；技术债务要关联可追踪的归属（`docs\workspace\TODO.md` 条目），**禁止**留下没有上下文的裸 `TODO`。本仓库当前**没有独立 ADR 目录**，重大架构决策请在 `docs\workspace\architecture.md` 追加带日期的决策小节，形成事实上的 ADR，并按 `apps\my_app\AGENTS.md` 第三节第 8 条标注 `文件路径:行号` 出处。
 9. **确保变更可验证、可观测、可回滚。** 每项改动都应行为可测试、运行状态可观测、故障可定位，并兼顾向后兼容和回滚路径；错误与日志必须保留诊断上下文，但不得泄露敏感信息。回滚手段在本仓库是实打实的：表结构走 `alembic downgrade`，进程有 `worker_watchdog.py` / `backend_watchdog.py` 守护，改大文件前先建 `_bak_<日期>_<说明>` 快照。
 10. **删除优于兼容。** 内部路径重构时直接删除过时实现，**禁止**新增兼容层、deprecated shim 或双写逻辑；对外契约（`/api/*`、`/uniplam/api/*` 等稳定接口与数据库迁移）的兼容性按协议契约单独评估 —— 那是合同义务，不是迁就旧代码。
 
-> **变更速查（本仓库真实命令）**。完整回归清单以 `development.md` 第四节的表为准，不要在这里另起一套。
+> **变更速查（本仓库真实命令）**。完整回归清单以 `docs\workspace\development.md` 第四节的表为准，不要在这里另起一套。
 >
 > - 通用：提交前 `git status --porcelain` 复查，没有运行时产物混入。
 > - **收尾自检（第四节第 7 条的机器可验证版本）**：`git status --porcelain` 里 `??` 行必须为空或全部是你本次要提交的真文件；出现 `_*.txt` / `*.bak_*` / `TMP/` 之类的行说明探针落了错误的地方。怀疑某个文件为何没被跟踪时问 `git check-ignore -v <路径>`，它会把命中的规则与所在文件行号打出来。
-> - my_app 前端：`cd Task\my_app\frontend` → `npm run check:i18n`（漏键守卫）→ `npm run build`（内含 `tsc`；产物必须落在 `Task\_fe_dist`，否则后端白屏）。
-> - **my_app 文档一致性**：`cd Task\my_app` → `python tests\test_doc_consistency.py`（17 个用例，核对手册与站内帮助里「从代码抄来的数字」：任务数 / 页面数 / iframe 页数 / worker 组数 / 队列保留期 / 路由数 / 凭据分组数 / 组件数 / 文件体积，以及「每个页面都有按页刷新设置」「看板下推的每张表都有本机 PG 巡检且窗口同档」；**本地钩子与 CI 都会跑，文档与代码对不上会拦下提交**）。改动页面或任务后必须跑。详见 `Task\my_app\docs\manual\04-task-system.md`「文档一致性守卫」一节。
-> - **my_app 帮助内容改动后**：`cd Task\my_app\frontend` → `npm run docs`（重生成 `15-user-help*.md` 与 `public\manual.html`）。
-> - 门户前端：`cd liberia-noc_soc-数据看板统一门户` → `npm run lint`（`tsc --noEmit`）→ `npm run build`。
-> - **门户文档一致性**：`cd liberia-noc_soc-数据看板统一门户` → `npm run check:docs`（6 个用例，核对 README/docs 里的看板条数 / 组件数 / 任务数；**本地钩子与 CI 都会跑**）。详见门户 `docs\development.md`「文档一致性」一节。
-> - **门户 i18n**：`cd liberia-noc_soc-数据看板统一门户` → `npm run check:i18n`（已内置进 `npm run build`，不通过会**中断构建**；本地钩子与 CI 也跑）。门户文案有**两本字典**：界面 `zh/en` 与看板目录 `zhDashboard/enDashboard`，后者键名来自 `src\data\initialDashboards.ts` 的**数据值**，不在代码里 —— 所以「加一条看板忘了补英文」「改了分类/部门/负责人名称」「en 侧的值还是中文」这三类最常见的门户事故，my_app 那份只扫代码的守卫查不到，必须两道都跑。详见门户 `docs\development.md`「i18n 守卫」一节。
-> - **提交前守卫（新增机器必做一步）**：克隆后跑一次 `node scripts\setup-git-hooks.mjs`（或任一子项目里 `npm run setup:hooks`），把 `core.hooksPath` 指向仓库内的 `.githooks\`。钩子文件**随仓库分发**，不再只存在于某台机器的 `.git\hooks\` 里。详见本文件第四节第 9 条。
-> - 改表结构：`cd Task\my_app` → `alembic revision --autogenerate -m "<模块>-<变更>"` → `alembic upgrade head`（回退 `alembic downgrade base`；动态 eFlow 表不进 migration，见 `Task\my_app\docs\manual\03-data-layer.md`）。
+> - my_app 前端：`cd apps\my_app\frontend` → `npm run check:i18n`（漏键守卫）→ `npm run build`（内含 `tsc`；产物必须落在 `apps\_fe_dist`，否则后端白屏）。
+> - **my_app 文档一致性**：`cd apps\my_app` → `python tests\test_doc_consistency.py`（17 个用例，核对手册与站内帮助里「从代码抄来的数字」：任务数 / 页面数 / iframe 页数 / worker 组数 / 队列保留期 / 路由数 / 凭据分组数 / 组件数 / 文件体积，以及「每个页面都有按页刷新设置」「看板下推的每张表都有本机 PG 巡检且窗口同档」；**本地钩子与 CI 都会跑，文档与代码对不上会拦下提交**）。改动页面或任务后必须跑。详见 `apps\my_app\docs\manual\04-task-system.md`「文档一致性守卫」一节。
+> - **my_app 帮助内容改动后**：`cd apps\my_app\frontend` → `npm run docs`（重生成 `15-user-help*.md` 与 `public\manual.html`）。
+> - 门户前端：`cd apps\portal` → `npm run lint`（`tsc --noEmit`）→ `npm run build`。
+> - **门户文档一致性**：`cd apps\portal` → `npm run check:docs`（6 个用例，核对 README/docs 里的看板条数 / 组件数 / 任务数；**本地钩子与 CI 都会跑**）。详见门户 `apps\portal\docs\development.md`「文档一致性」一节。
+> - **门户 i18n**：`cd apps\portal` → `npm run check:i18n`（已内置进 `npm run build`，不通过会**中断构建**；本地钩子与 CI 也跑）。门户文案有**两本字典**：界面 `zh/en` 与看板目录 `zhDashboard/enDashboard`，后者键名来自 `src\data\initialDashboards.ts` 的**数据值**，不在代码里 —— 所以「加一条看板忘了补英文」「改了分类/部门/负责人名称」「en 侧的值还是中文」这三类最常见的门户事故，my_app 那份只扫代码的守卫查不到，必须两道都跑。详见门户 `apps\portal\docs\development.md`「i18n 守卫」一节。
+> - **提交前守卫（新增机器必做一步）**：克隆后跑一次 `node ops\deploy\setup-git-hooks.mjs`（或任一子项目里 `npm run setup:hooks`），把 `core.hooksPath` 指向仓库内的 `.githooks\`。钩子文件**随仓库分发**，不再只存在于某台机器的 `.git\hooks\` 里。详见本文件第四节第 9 条。
+> - 改表结构：`cd apps\my_app` → `alembic revision --autogenerate -m "<模块>-<变更>"` → `alembic upgrade head`（回退 `alembic downgrade base`；动态 eFlow 表不进 migration，见 `apps\my_app\docs\manual\03-data-layer.md`）。
 > - 存量数据搬迁/修复/回填：回填脚本随迁移版本一起提交，`upgrade head` 之后执行并核对行数。
 > - PowerShell 不支持 `&&`，多条命令用 `;` 分隔（细则见 `_agents\rules\shell_safe.md`，`.qoder\rules\` 是指向它的 junction）。
 
 ## 四、给 AI 的硬性约束
 
 1. **中文优先。** 本工作区的注释、文档、提交信息全部是中文。新写的文档、代码注释、提交信息也用中文。用户的业务数据（看板名称、分类、部门）保持原值不翻译。
-2. **绝不写敏感值。** 文档里可以出现**配置项名称**、**环境变量键名**、**分组 key**，**不得**出现口令、Token、授权码、账号、密码哈希。这是 `Task\my_app\docs\manual\README.md` 已确立的维护约定，全域适用。内网 IP（`192.168.100.19` / `.20`）在既有代码与文档中已是公开事实，沿用其写法即可。
+2. **绝不写敏感值。** 文档里可以出现**配置项名称**、**环境变量键名**、**分组 key**，**不得**出现口令、Token、授权码、账号、密码哈希。这是 `apps\my_app\docs\manual\README.md` 已确立的维护约定，全域适用。内网 IP（`192.168.100.19` / `.20`）在既有代码与文档中已是公开事实，沿用其写法即可。
 3. **改前先读，别猜。** 每个子系统都有约定（例如 my_app 的任务必须登记在 `backend/task_registry.py` 的 `TASK_SPECS`；门户的文案必须同时加进 `src/i18n.tsx` 的 `zh` 与 `en` 两份字典）。跳过这些约定会做出「看起来对、实际坏」的改动。
 4. **先看 `.gitignore` 再 `git add`。** 工作区里有大量运行时产物被显式忽略，禁止入库：
-   - 根 `.gitignore`：`*.zip` / `*.exe` / `*.dll` / `*.db` / `*.sqlite3` / `*.xlsx` / `*.csv` / `*.png|jpg|svg` 等二进制与文档；**`Task\_fe_dist\`、`Task\_fe_dist_tmp\`、`Task\_fe_dist_bak_*\`、`Task\_fe_cloud\` 整目录（vite 构建产物及其手工副本，2026-09-24 起脱离跟踪）** —— 但只有 `Task\_fe_dist\` 是**线上服务目录**（`nginx.conf:150/160` 用 alias 从磁盘直接读它，不经任何构建步骤），所以**忽略跟踪 ≠ 可以删除**，它必须留在磁盘上；其余三份是历史副本，2026-09-25 已移入 `_quarantine_20260925\`。另有 `/_quarantine_*/`（隔离区）、`/_myapp_trash_*/`、`*.rpltmp`、`*.tsbuildinfo`、`*.log.err`。
-   - `Task\my_app\.gitignore`：`/db/`（SQLite 约 1.5G）、`/log/`、`/TMP/`、`/Lib/`、`/Scripts/`、`auth_cache/`、`*.pid`、`*.bak_*`、`_myapp_trash_*/`、`/backend/data/native_board_cache/`、**根目录 `/_*`（一次性探针）**。注意 `/_*` **刻意没有**写成 `**/_*` —— `backend/services/_playwright_utils.py`（被 `site_outage_service.py:22` import）、`_gen_native_catalog.py`、`frontend/src/pages/_TemplatePage.tsx` 都是带下划线的**真源码**，必须保持在版本库里。
+   - 根 `.gitignore`：`*.zip` / `*.exe` / `*.dll` / `*.db` / `*.sqlite3` / `*.xlsx` / `*.csv` / `*.png|jpg|svg` 等二进制与文档；**`apps\_fe_dist\`、`apps\_fe_dist_tmp\`、`apps\_fe_dist_bak_*\`、`Task\_fe_cloud\` 整目录（vite 构建产物及其手工副本，2026-09-24 起脱离跟踪）** —— 但只有 `apps\_fe_dist\` 是**线上服务目录**（`nginx.conf:150/160` 用 alias 从磁盘直接读它，不经任何构建步骤），所以**忽略跟踪 ≠ 可以删除**，它必须留在磁盘上；其余三份是历史副本，2026-09-25 已移入 `_quarantine_20260925\`。另有 `/_quarantine_*/`（隔离区）、`/_myapp_trash_*/`、`*.rpltmp`、`*.tsbuildinfo`、`*.log.err`。
+   - `apps\my_app\.gitignore`：`/db/`（SQLite 约 1.5G）、`/log/`、`/TMP/`、`/Lib/`、`/Scripts/`、`auth_cache/`、`*.pid`、`*.bak_*`、`_myapp_trash_*/`、`/backend/data/native_board_cache/`、**根目录 `/_*`（一次性探针）**。注意 `/_*` **刻意没有**写成 `**/_*` —— `backend/services/_playwright_utils.py`（被 `site_outage_service.py:22` import）、`_gen_native_catalog.py`、`frontend/src/pages/_TemplatePage.tsx` 都是带下划线的**真源码**，必须保持在版本库里。
    - 门户 `.gitignore`：`node_modules/`、`dist/`、`*.log`、`.env*`、`portal-default.json`（运行时写入）、`auth-data/`（含加盐密码哈希，**严禁入库**）、**`_*` / `.tmp_*` / `tmp_*` / `seg*.txt` / `listing.txt` / `out.txt`（一次性转储）、`*.bak` / `*.bak_*` / `*_bak_*`（手工快照）、`log/`、`tsconfig.tsbuildinfo`**。`MsPortal\`、`OlrPortal\`、`olbrportal\` 是**手写静态壳**（`nginx.conf:102/108` 直接 alias 发它们），是源码，上面这些规则刻意没有整目录忽略它们。
    - **门户的 `.gitignore` 与 `vite.config.ts` 的 `server.watch.ignored`（约 :242-267）是同一套判断的两个副本。** 那份 watch 清单早就把「什么不是源码、什么会触发无意义整页刷新」逐条写了理由，只是从没同步给 git，于是同一个文件在 dev 里被当垃圾、在版本库里却被当源码跟踪。**改一个必须改另一个**，否则两边立刻重新分叉。
    - 提交前用 `git status --porcelain` 复查有没有被忽略规则漏掉的运行时文件混进来。
-5. **不要新增第二个真相源。** 现状文档以各子系统的 `docs/manual/` 与 `README.md` 为准；`Task\my_app\PROJECT_DOCS.md`（151KB）是**历史档案**（迁移计划、架构评估、i18n 审计、失败复盘），其自身 README 已声明「现状以 `docs/manual/` 为准」。**不要**把现状写回 `PROJECT_DOCS.md`。
+5. **不要新增第二个真相源。** 现状文档以各子系统的 `docs/manual/` 与 `README.md` 为准；`apps\my_app\PROJECT_DOCS.md`（151KB）是**历史档案**（迁移计划、架构评估、i18n 审计、失败复盘），其自身 README 已声明「现状以 `docs/manual/` 为准」。**不要**把现状写回 `PROJECT_DOCS.md`。
 6. **破坏性操作先确认。** 删除目录、批量移动、改数据库、动 nginx 配置、重启生产服务（7038/7090/9267）前，先说明影响面并取得确认。工作区里有多个 `start.bat` / `stop.bat` / `*_ensure.bat`，误跑会打断在看板上看数据的人。
 6b. **本机（MSNOC1 / .20）nginx 的生效目录是 `D:\01_RPA\nginx-1.28.0\`（本地盘）。2026-10-01 起如此。** 这条经历过两次事故，务必按现状操作：
    - **生效位置**：`D:\01_RPA\nginx-1.28.0\`，nginx 进程的 `ExecutablePath` 就来自这里。**改本机配置只改 `D:\01_RPA\nginx-1.28.0\conf\nginx.conf`。**
@@ -163,13 +155,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
      - 2026-11-11 实测：80/443 的归属在排查期间**来回变过两次**（`D:\01_olbr_portal` → `D:\01_RPA`），排查期间看到「nginx 突然 502 / 后端连不上」时，**先查归属再查后端**。
 
 
-7. **一次性探针与转储只能落 `TMP\`，并且任务结束前自清。** 这条约定已经失效过三次，每次都有记录：`7b1d33b`（根目录 98 个探针脚本随提交入库）、`_myapp_trash_20260918\`、以及 2026-09-24 的审计（门户 506 个被跟踪文件里 347 个是探针/转储/手工快照/日志，`Task\_fe_dist` 有 5240 个构建产物入库）。所以拆成可执行的四条：
+7. **一次性探针与转储只能落 `TMP\`，并且任务结束前自清。** 这条约定已经失效过三次，每次都有记录：`7b1d33b`（根目录 98 个探针脚本随提交入库）、`_myapp_trash_20260918\`、以及 2026-09-24 的审计（门户 506 个被跟踪文件里 347 个是探针/转储/手工快照/日志，`apps\_fe_dist` 有 5240 个构建产物入库）。所以拆成可执行的四条：
 
    - **先问：这个文件非落盘不可吗？** 绝大多数「想看看结果」不需要文件 —— 让命令直接输出 stdout，或用 Read/Grep 读原文件。**「写个 `_dump.txt` 再回头读它」是这两个仓库噪声的第一来源**：它把一次性的中间思考固化成了仓库里的长期资产。
-   - **必须落盘时只有一个去处**：所在子系统的 `TMP\`（`Task\my_app\TMP\`、门户 `TMP\`、工作区根 `TMP\`），文件名带 `_` 前缀。这三处都已被忽略规则覆盖，带 `_` 前缀是为了让人一眼认出它不是产物。
+   - **必须落盘时只有一个去处**：所在子系统的 `TMP\`（`apps\my_app\TMP\`、门户 `TMP\`、工作区根 `TMP\`），文件名带 `_` 前缀。这三处都已被忽略规则覆盖，带 `_` 前缀是为了让人一眼认出它不是产物。
    - **收尾自清**：任务结束前删掉本次创建的一次性探针（`_agents\rules\shell_safe.md` 第 2 条已要求，此前没有落实）。**可复用的诊断/审计脚本不删**，但必须留在 `TMP\` 里并在对应手册写一行用途 —— 否则下一个 agent 会重写一遍，仓库里就出现三份功能相同的 `_check_*.py`。
    - **手工快照继续允许**（第三节原则 9 的 `_bak_<日期>_<说明>` 是本项目既有习惯），但**2026-09-24 起快照一律不进版本库**：`.gitignore` 已覆盖 `*.bak`/`*.bak_*`/`*_bak_*`。也就是说快照是**本机磁盘上**的回滚手段，git 历史只保留正式改动。同一个源文件的快照只留最近 3 份，更早的自己清。
-8. **VMAX 数仓 GBase 8a（库 `zxvmax`）是生产环境：只能查询，不得在上面修改或创建任何东西。**（2026-10-31 与用户确认，硬性）覆盖所有直连该数仓的取数链路（`Task\my_app\backend\services\vmax_gbase\`、`olib_soc_report\`、`soc_trend\` 及任务 `42 olib_soc_vmax_report` / `olib_soc_kpi_daily_sync` / `47 soc_trend_sync` 等）。具体禁止：`CREATE` / `DROP` / `ALTER`（含临时表、视图、索引）、`INSERT` / `UPDATE` / `DELETE`、改权限 / 参数 / 调度、任何"顺手建张小表 / 回写一列"也不行。**需要数仓侧做任何修改或创建时：停止编码，明确告诉用户，由用户找领导申请**；获批后数仓操作由用户或其指定的人执行，我们的代码只保留只读接线。方案/设计阶段同样适用 —— **不得以"以后会在数仓建对象"为前提设计方案**。新增 SELECT 查询（如按新维度的下钻 SQL）不需要申请，但实施前必须评估查询负载：低峰先试跑单日实测耗时，与既有同步任务错开窗口，并准备好"数仓方反对新增查询"时的降级路线（合并进既有查询或配置开关关闭）。客户端层已有只读断言兜底（`vmax_gbase_client.py` 顶部注释：仅放行 SELECT/SHOW/DESC），**断言是防误操作，不是授权** —— 不要想办法绕过或放宽它。
+8. **VMAX 数仓 GBase 8a（库 `zxvmax`）是生产环境：只能查询，不得在上面修改或创建任何东西。**（2026-10-31 与用户确认，硬性）覆盖所有直连该数仓的取数链路（`apps\my_app\backend\services\vmax_gbase\`、`olib_soc_report\`、`soc_trend\` 及任务 `42 olib_soc_vmax_report` / `olib_soc_kpi_daily_sync` / `47 soc_trend_sync` 等）。具体禁止：`CREATE` / `DROP` / `ALTER`（含临时表、视图、索引）、`INSERT` / `UPDATE` / `DELETE`、改权限 / 参数 / 调度、任何"顺手建张小表 / 回写一列"也不行。**需要数仓侧做任何修改或创建时：停止编码，明确告诉用户，由用户找领导申请**；获批后数仓操作由用户或其指定的人执行，我们的代码只保留只读接线。方案/设计阶段同样适用 —— **不得以"以后会在数仓建对象"为前提设计方案**。新增 SELECT 查询（如按新维度的下钻 SQL）不需要申请，但实施前必须评估查询负载：低峰先试跑单日实测耗时，与既有同步任务错开窗口，并准备好"数仓方反对新增查询"时的降级路线（合并进既有查询或配置开关关闭）。客户端层已有只读断言兜底（`vmax_gbase_client.py` 顶部注释：仅放行 SELECT/SHOW/DESC），**断言是防误操作，不是授权** —— 不要想办法绕过或放宽它。
 
 9. **改完代码必须让文档跟着改 —— 这件事现在有机器强制，不要靠自觉。**（2026-10-31 新增）
 
@@ -185,9 +177,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
 
    具体要求：
 
-   - **新克隆一台机器后，先跑一次 `node scripts\setup-git-hooks.mjs`**（或任一子项目里 `npm run setup:hooks`）。它把 `core.hooksPath` 指向仓库内的 `.githooks\` —— 钩子文件**随仓库分发**，不再只存在于某台机器的 `.git\hooks\` 里。`core.hooksPath` 是本地配置（写在 `.git\config`，不入库），所以每台机器都要装一次。
-   - **⚠️ worktree 里的坑**：`core.hooksPath` 是**相对路径**，Git 按「**当前工作树根目录**」解析，不是主仓库根目录。所以并行开发用的 worktree（`.agent-worktrees\<任务>`）若所在分支还没合入含 `.githooks\` 的提交，**钩子会静默不执行** —— 不报错，只是没人拦。用 `node scripts\setup-git-hooks.mjs --check`（在那个 worktree 里跑）可查；修复办法是把 `.githooks\` 合进该分支。
-   - **守卫的真相源一律用 AST 静态解析**（`Task\my_app\tests\doc_truth.py`），**不 import 业务模块** —— 否则 `ctypes.wintypes` 在 Linux 上直接失败，且要求整套后端运行环境。改守卫时守住这条：守卫必须**零第三方依赖、跨平台**才能进 CI。
+   - **新克隆一台机器后，先跑一次 `node ops\deploy\setup-git-hooks.mjs`**（或任一子项目里 `npm run setup:hooks`）。它把 `core.hooksPath` 指向仓库内的 `.githooks\` —— 钩子文件**随仓库分发**，不再只存在于某台机器的 `.git\hooks\` 里。`core.hooksPath` 是本地配置（写在 `.git\config`，不入库），所以每台机器都要装一次。
+   - **⚠️ worktree 里的坑**：`core.hooksPath` 是**相对路径**，Git 按「**当前工作树根目录**」解析，不是主仓库根目录。所以并行开发用的 worktree（`.agent-worktrees\<任务>`）若所在分支还没合入含 `.githooks\` 的提交，**钩子会静默不执行** —— 不报错，只是没人拦。用 `node ops\deploy\setup-git-hooks.mjs --check`（在那个 worktree 里跑）可查；修复办法是把 `.githooks\` 合进该分支。
+   - **守卫的真相源一律用 AST 静态解析**（`apps\my_app\tests\doc_truth.py`），**不 import 业务模块** —— 否则 `ctypes.wintypes` 在 Linux 上直接失败，且要求整套后端运行环境。改守卫时守住这条：守卫必须**零第三方依赖、跨平台**才能进 CI。
    - **守卫取不到真相源时必须显式失败**，不能当成「不适用」跳过。2026-10-31 就在门户侧踩了这个坑：`myAppTaskCount()` 的正则只认 `"task_id": "..."`，而 `task_registry.py` 实际写的是 `dict(task_id="...")` → 匹配 0 条 → 两个检查走 `if (!n) return` **静默跳过**，守卫显示 PASS 却什么都没查。
    - 守卫清单：门户整洁度 / 团队门户生成物一致性 / 门户文档一致性 / **门户 i18n** / my_app 文档一致性 / my_app i18n 漏键 —— 共六道。全部**零第三方依赖**（Node 内置模块 + Python 标准库），CI 不需要 `pip install` 或 `npm install`。
 
@@ -195,13 +187,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
 
     | 子系统 | 统一载体 |
     | --- | --- |
-    | my_app（`Task\my_app\frontend`） | `src\components\CalcChainNote.tsx`（`title` + `sections[{title, lines}]`，异常走 `warning` 口）。参考 `pages\CnKpi5mins.tsx` |
-    | 统一门户（`liberia-noc_soc-数据看板统一门户`） | 该子系统暂无同名组件；新写时按同一行为实现（默认收起 + 点击展开 + 「展开/收起」文案，中英双字典），并在 `src\components\` 下沉淀一个可复用组件，不要每页各写一遍 |
+    | my_app（`apps\my_app\frontend`） | `src\components\CalcChainNote.tsx`（`title` + `sections[{title, lines}]`，异常走 `warning` 口）。参考 `pages\CnKpi5mins.tsx` |
+    | 统一门户（`apps\portal`） | 该子系统暂无同名组件；新写时按同一行为实现（默认收起 + 点击展开 + 「展开/收起」文案，中英双字典），并在 `src\components\` 下沉淀一个可复用组件，不要每页各写一遍 |
 
     - **例外是「异常」不是「解释」**：口径缺陷、数据错误、站点匹配失败、截断这类会让用户带着错数字看报表的信息，必须**常驻可见**。判断一句话：**说「怎么算的」→ 收起；说「这次算错了/算不全」→ 常驻**。
     - **状态反馈不受约束**：查询失败 `Alert type="error"`、加载态、空态占位该显示就显示 —— 收起来的是解释，不是状态。
     - `Alert closable`（让用户自己动手关）、一行常驻小字、悬停气泡装多段说明，**都不算满足本条**。
-    - 细则见 `Task\my_app\AGENTS.md` 三.3b、`docs\manual\16-new-page-guide.md` 3.4b。
+    - 细则见 `apps\my_app\AGENTS.md` 三.3b、`apps\my_app\docs\manual\16-new-page-guide.md` 3.4b。
 
 10b. **⭐ 数字本身要能悬浮问到「这个数怎么算」（2026-11-03 如意定，与第 10 条并存不互替）。** 第 10 条管「这页整体怎么算」（收起的说明块），本条管用户把鼠标停在**一个具体数字**上时的追问：标题/列头挂 ⓘ（讲这一列的算法），数字本身可悬浮出该格构成（样本数、未达标数、区间、上一期与环比）。只有收起的说明块、数字问不到，**等于没做**。
 
@@ -212,7 +204,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
 
     - **气泡内容一律取接口既有字段，禁止前端重算口径**；口径文字**必须从代码核实**后再写 —— 2026-11-03 就抓到手册与 `avail_county_aggregate.summary_by_tech()` 相反，写错口径比不写更糟。
     - iframe 页（外部 BI / 遗留工具）不适用 —— 数字不在我们 DOM 里。
-    - 细则见 `Task\my_app\AGENTS.md` 三.3c；铺开进度见 `TODO.md`「数字悬浮说明铺开」。
+    - 细则见 `apps\my_app\AGENTS.md` 三.3c；铺开进度见 `docs\workspace\TODO.md`「数字悬浮说明铺开」。
 
 ## 五、AI 自主执行契约（2026-11-02 新增）
 
@@ -243,13 +235,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
 
 ```powershell
 # 任何改动（快，几秒）
-node scripts\agent-done-check.mjs
+node ops\deploy\agent-done-check.mjs
 
 # 改过前端源码 / 后端代码（慢，几分钟）
-node scripts\agent-done-check.mjs --full
+node ops\deploy\agent-done-check.mjs --full
 ```
 
-脚本按改动路径自动决定还要跑什么（见 `scripts\lib\agent-checks.mjs`）。它的四个档位：
+脚本按改动路径自动决定还要跑什么（见 `ops\deploy\lib\agent-checks.mjs`）。它的四个档位：
 
 | 档位 | 内容 | 何时用 |
 | --- | --- | --- |
@@ -258,13 +250,13 @@ node scripts\agent-done-check.mjs --full
 | `--status` | 只看改动分布、指纹、基线 | 排查 |
 | `--update-baseline` | 记录当前 pytest 失败为基线 | **只**在确认失败非本次引入时 |
 
-补充几条脚本覆盖不到的（按改动类型，见 `development.md` 第四节）：
+补充几条脚本覆盖不到的（按改动类型，见 `docs\workspace\development.md` 第四节）：
 
-- 改了**页面/任务/数字类文档** → `cd Task\my_app && python tests\test_doc_consistency.py`
+- 改了**页面/任务/数字类文档** → `cd apps\my_app && python tests\test_doc_consistency.py`
 - 改了**帮助内容源**（`helpContent.ts` / `helpTaskDocs.ts`）→ `npm run docs` 重生成
 - 改了**表结构** → `alembic upgrade head` 并核对回滚
-- 新增**外部副作用**（发信/投递/调外部 API）→ 按 `development.md` A0 用「地雷」证伪一次
-- **改完即合入主线并推送**（2026-11-12 用户定，长期有效）：自检通过后，把工作分支合入主线 **`master`** 并 `git push origin master`，**不要**只留在特性分支上等人合并。注意本仓库主线叫 `master`（没有 `main`）；合之前先 `git fetch`，用 `git merge --ff-only` 保持线性。
+- 新增**外部副作用**（发信/投递/调外部 API）→ 按 `docs\workspace\development.md` A0 用「地雷」证伪一次
+- **改完即走 PR 合入主线，不要只留在分支上**（2026-11-12 用户定，长期有效；2026-11-13 按新仓库流程改写）：自检通过后，把工作分支推到远程并开 PR 到主线 **`main`**，CI 与 review 通过后再合并；**禁止**直接推 `main`。注意本仓库主线叫 `main`（没有 `master` 分支）；开 PR 之前先 `git fetch`，确认分支已 rebase 到最新 `main`。
 
 ### 3. 唯一允许停下来的三种情况
 
@@ -289,12 +281,12 @@ Claude Code 侧已接 **Stop 钩子**：本轮改过文件但自检未通过时�
 >
 > | session 启动于 | 钩子文件 |
 > | --- | --- |
-> | `D:\01_RPA` | `.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/scripts/agent-done-check.mjs` |
-> | `Task\my_app` | `Task\my_app\.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/../../scripts/...` |
-> | `liberia-noc_soc-数据看板统一门户` | 门户 `.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/../scripts/...` |
+> | `D:\02_olbr_portal` | `.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/ops/deploy/agent-done-check.mjs` |
+> | `apps\my_app` | `apps\my_app\.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/../../ops/deploy/agent-done-check.mjs` |
+> | `apps\portal` | 门户 `.claude\settings.json` → `${CLAUDE_PROJECT_DIR}/../../ops/deploy/agent-done-check.mjs` |
 >
-> 脚本本身一份，装在仓库根 `scripts\`；三份 settings 只是三根接线。**新增常用启动目录时照着加一份。**
-> 另外：`Task\my_app\.claude\settings.local.json` 是既有的本机权限配置（已被全局 gitignore 排除），
+> 脚本本身一份，装在 `ops\deploy\`；三份 settings 只是三根接线。**新增常用启动目录时照着加一份。**
+> 另外：`apps\my_app\.claude\settings.local.json` 是既有的本机权限配置（已被全局 gitignore 排除），
 > 两者互不冲突 —— `settings.json` 存钩子（共享），`settings.local.json` 存本机允许清单（私有）。
 
 它靠**差分指纹**判断「这一轮到底有没有动文件」，而不是看工作区脏不脏 ——
@@ -312,12 +304,12 @@ Claude Code 侧已接 **Stop 钩子**：本轮改过文件但自检未通过时�
 
 | 你要做什么 | 去哪读 |
 | --- | --- |
-| 改门户界面 / 看板配置 / 鉴权 | `liberia-noc_soc-数据看板统一门户\AGENTS.md` → `DESIGN.md` → `development.md` |
-| 改 my_app 后端 / 任务 / 数据层 | `Task\my_app\AGENTS.md` → `Task\my_app\docs\manual\02-architecture.md`、`04-task-system.md` |
-| 加一个 my_app 功能页 | `Task\my_app\docs\manual\README.md` 的「手册维护约定」第 1 条（三处必须同步） |
-| 排查线上问题 | 门户 → `Task\my_app\docs\manual\13-operations.md` |
-| 新任务交付 | `Task\` 下对应目录 |
-| 整体视觉规则 | `DESIGN.md` |
+| 改门户界面 / 看板配置 / 鉴权 | `apps\portal\docs\AGENTS.md` → `docs\workspace\DESIGN.md` → `docs\workspace\development.md` |
+| 改 my_app 后端 / 任务 / 数据层 | `apps\my_app\AGENTS.md` → `apps\my_app\docs\manual\02-architecture.md`、`apps\my_app\docs\manual\04-task-system.md` |
+| 加一个 my_app 功能页 | `apps\my_app\docs\manual\README.md` 的「手册维护约定」第 1 条（三处必须同步） |
+| 排查线上问题 | 门户 → `apps\my_app\docs\manual\13-operations.md` |
+| 新任务交付 | `apps\` 下对应目录 |
+| 整体视觉规则 | `docs\workspace\DESIGN.md` |
 
 ## 七、规则细则（`_agents\rules\` 的展开）
 
@@ -349,12 +341,12 @@ Claude Code 侧已接 **Stop 钩子**：本轮改过文件但自检未通过时�
 | # | 文件 | 内容 |
 | --- | --- | --- |
 | 01 | `AGENTS.md` | 本文。AI 首先需要知道的信息 |
-| 02 | `DESIGN.md` | 视觉规则 |
-| 03 | `TODO.md` | 当前任务、优先级与进度 |
-| 04 | `project-overview.md` | 工作区整体说明 |
-| 05 | `architecture.md` | 架构与数据流 |
-| 06 | `user-guide.md` | 面向使用者的功能说明 |
-| 07 | `development.md` | 开发方式、命令与回归清单 |
-| 08 | `component-api.md` | 组件索引 |
+| 02 | `docs\workspace\DESIGN.md` | 视觉规则 |
+| 03 | `docs\workspace\TODO.md` | 当前任务、优先级与进度 |
+| 04 | `docs\workspace\project-overview.md` | 工作区整体说明 |
+| 05 | `docs\workspace\architecture.md` | 架构与数据流 |
+| 06 | `docs\workspace\user-guide.md` | 面向使用者的功能说明 |
+| 07 | `docs\workspace\development.md` | 开发方式、命令与回归清单 |
+| 08 | `docs\workspace\component-api.md` | 组件索引 |
 
 > **工具负责整理，人与 AI 负责协作执行。**

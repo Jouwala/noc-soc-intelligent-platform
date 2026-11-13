@@ -45,7 +45,7 @@ data_base/
 # Excel / CSV / 文档（非代码）
 *.xlsx
 *.xls
-# 带宏的 Excel（2026-09-28 补）：`Task\my_app\Contract KPI&SLA Report Template.xlsm`
+# 带宏的 Excel（2026-09-28 补）：`apps\my_app\Contract KPI&SLA Report Template.xlsm`
 # 是手工放的对照模板，全仓 0 处代码引用（只有 .venv 里 pandas 自己的字符串命中 *.xlsm），
 # 而 *.xls 只匹配旧格式、*.xlsx 匹配不到 xlsm，于是它一直挂成待提交的 ?? 噪音。
 # 忽略跟踪 ≠ 删除，文件留在本机对照用。
@@ -158,7 +158,7 @@ Thumbs.db
 logs/
 
 # 测试报告
-Task/my_app/tests/reports/
+apps/my_app/tests/reports/
 
 # 鉴权缓存（敏感）
 Task/auth_cache/
@@ -216,7 +216,7 @@ LOCAL_*.txt
 *.local.txt
 
 # ─────────────────────────────────────────────────────────────────────────────
-# novel_dl 语音合成工作区（Task/my_app/TMP/novel_dl）
+# novel_dl 语音合成工作区（apps/my_app/TMP/novel_dl）
 #
 # 注意：本文件前面的 "TMP/" 已经把整个目录忽略了，所以下面这些规则目前是"双保险"
 # —— 它们真正起作用是在以后有人把 TMP/ 从忽略列表里去掉、想单独提交 novel_dl
@@ -225,53 +225,53 @@ LOCAL_*.txt
 # 体积参考：venv 5.5G / CosyVoice-300M-SFT 5.4G / CosyVoice2-0.5B 5.2G
 # ─────────────────────────────────────────────────────────────────────────────
 # 虚拟环境（不可搬迁，新机用 setup_new_pc.py 重建）
-Task/my_app/TMP/novel_dl/venv/
+apps/my_app/TMP/novel_dl/venv/
 # 模型权重（首次运行自动下载，或用 make_portable.py --with-models 单独分发）
-Task/my_app/TMP/novel_dl/CosyVoice/pretrained_models/
+apps/my_app/TMP/novel_dl/CosyVoice/pretrained_models/
 # CosyVoice 上游仓库的 .git（约 40MB）
-Task/my_app/TMP/novel_dl/CosyVoice/.git/
+apps/my_app/TMP/novel_dl/CosyVoice/.git/
 # 声纹缓存，随时可重建
-Task/my_app/TMP/novel_dl/.spkcache/
+apps/my_app/TMP/novel_dl/.spkcache/
 # 抓取小说用的浏览器 profile
-Task/my_app/TMP/novel_dl/chrome_profile/
+apps/my_app/TMP/novel_dl/chrome_profile/
 # 合成产出（每本书一个目录，内含 full.wav）
-Task/my_app/TMP/novel_dl/audio_*/
+apps/my_app/TMP/novel_dl/audio_*/
 # 合成中间产物：分块 wav / ffmpeg 拼接列表
-Task/my_app/TMP/novel_dl/_c[0-9]*_b[0-9]*.wav
-Task/my_app/TMP/novel_dl/_t[0-9]*_s[0-9]*.wav
-Task/my_app/TMP/novel_dl/_batch[0-9]*
-Task/my_app/TMP/novel_dl/_final[0-9]*
-Task/my_app/TMP/novel_dl/_full_list*
-Task/my_app/TMP/novel_dl/*.tmp.wav
+apps/my_app/TMP/novel_dl/_c[0-9]*_b[0-9]*.wav
+apps/my_app/TMP/novel_dl/_t[0-9]*_s[0-9]*.wav
+apps/my_app/TMP/novel_dl/_batch[0-9]*
+apps/my_app/TMP/novel_dl/_final[0-9]*
+apps/my_app/TMP/novel_dl/_full_list*
+apps/my_app/TMP/novel_dl/*.tmp.wav
 # 打包产物
-Task/my_app/TMP/novel_dl_portable_*.zip
+apps/my_app/TMP/novel_dl_portable_*.zip
 # 调试/临时脚本
-Task/my_app/TMP/novel_dl/_smoke*
-Task/my_app/TMP/novel_dl/bench_*.py
-Task/my_app/TMP/novel_dl/profile_*.py
+apps/my_app/TMP/novel_dl/_smoke*
+apps/my_app/TMP/novel_dl/bench_*.py
+apps/my_app/TMP/novel_dl/profile_*.py
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 前端构建产物整目录（2026-09-24 新增）
 #
-# vite 的 build.outDir 是 D:/01_RPA/Task/_fe_dist（在 my_app 之上），所以
-# Task/my_app/.gitignore 里的 /frontend/dist*/ 匹配不到它；根规则的 dist/
+# vite 的 build.outDir 是 D:/01_RPA/apps/_fe_dist（在 my_app 之上），所以
+# apps/my_app/.gitignore 里的 /frontend/dist*/ 匹配不到它；根规则的 dist/
 # 也匹配不到 _fe_dist/。结果 9047 个产物文件被跟踪，每次 npm run build
 # 都产生几百条 diff。
 #
 # 已实测这些目录 100% 可由 frontend/ 源码重建：public/ 下有 lib/、legacy-*.css、
 # *.geojson、各手写 HTML 的母本，index.html 是 vite 根模板。
-# nginx.conf:150/160 用 alias 直接发 Task/_fe_dist/，它是**运行时服务目录**，
+# nginx.conf:150/160 用 alias 直接发 apps/_fe_dist/，它是**运行时服务目录**，
 # 忽略跟踪 ≠ 删除，磁盘上必须留着。
 # ─────────────────────────────────────────────────────────────────────────────
-Task/_fe_dist/
-Task/_fe_dist_tmp/
-Task/_fe_dist_bak_*/
-# 2026-09-25 修正：这条原先写的是 `Task/_fe_dist_cloud/`，**磁盘上从来没有这个目录**，
-# 真名是 `Task/_fe_cloud/`（59 个文件 / 9MB）。错名字当时没出事，是因为该目录压根没被
-# 跟踪过；但它已被移进 `_quarantine_20260925/Task/_fe_cloud/`，而 AGENTS.md 第四节第 4 条
+apps/_fe_dist/
+apps/_fe_dist_tmp/
+apps/_fe_dist_bak_*/
+# 2026-09-25 修正：这条原先写的是 `apps/_fe_dist_cloud/`，**磁盘上从来没有这个目录**，
+# 真名是 `apps/_fe_cloud/`（59 个文件 / 9MB）。错名字当时没出事，是因为该目录压根没被
+# 跟踪过；但它已被移进 `_quarantine_20260925/apps/_fe_cloud/`，而 AGENTS.md 第四节第 4 条
 # 记录的规则名是真名 —— 谁按那份清单把目录移回来，就会立刻冒出 59 条待提交新文件。
 # 这里补真名；旧的不存在规则直接删掉，不留兼容写法。
-Task/_fe_cloud/
+apps/_fe_cloud/
 
 # 一次性隔离区（同盘移动产物，保留原相对路径，确认无碍后再处置）
 /_quarantine_*/
@@ -407,10 +407,10 @@ Task/PS_CS_CORE_Scripts/openclaw_new.json
 # （ume_screen_caps/data.json、make_desktop_shortcuts.ps1），整目录挡会把真源码一起吞掉。
 # ─────────────────────────────────────────────────────────────────────────────
 # county 名称归一等一次性回填任务落的备份与对账 JSON，以及导出的对比 PNG
-Task/my_app/outputs/*.json
-Task/my_app/outputs/*.png
+apps/my_app/outputs/*.json
+apps/my_app/outputs/*.png
 # 改前整目录快照，本机回滚用（AGENTS.md 四.7：快照不进版本库）
-Task/my_app/backup/
+apps/my_app/backup/
 # Windows 桌面快捷方式：里面是本机绝对路径，换台机器就是错的
 **/*.url
 
@@ -433,7 +433,7 @@ Task/my_app/backup/
 # **有效会话凭据**（Cookie 里的 Z-AUTH-CODE / x-dexmesh-user / forgerydefense
 # 与 token 同效力），不属于源码。AGENTS.md 第四节第 2 条「绝不写敏感值」直接适用。
 #
-# 现状：`Task/my_app/backend/services/` 下已有 5 个 url.txt 被历史提交跟踪
+# 现状：`apps/my_app/backend/services/` 下已有 5 个 url.txt 被历史提交跟踪
 # （cm_data/new_url.txt、eflow_rules、ume_in、vmax_cca、vmax_multi_data），
 # 忽略规则对已跟踪文件无效，要清理得单独 `git rm --cached` 并轮换会话凭据 ——
 # 此事待用户决定，不在本次忽略规则的处理范围内。
@@ -469,8 +469,10 @@ Task/my_app/backup/
 # 拿到别人的副本时怎么补齐：跑 D:/01_RPA/scripts/build_olbr_portable.ps1
 # 的 -Stage runtimes，或按 scripts\start_all.ps1 的报错提示逐个装。
 # 首次启动时 start_all.ps1 会对缺失的 runtime 自动 initdb 建库。
-# ─────────────────────────────────────────────────────────────────────────────
-/runtime/
+# 例外（第一轮重构批 E）：runtime/README.md 说明本目录应有什么、从哪里补，
+# 必须入库；/runtime/* 只忽略目录内容、不忽略目录本身，否定规则才能生效。
+/runtime/*
+!/runtime/README.md
 
 # ─────────────────────────────────────────────────────────────────────────────
 # nginx 发行包（37 MB）
@@ -485,15 +487,15 @@ Task/my_app/backup/
 #   portal_eflow_common.conf eFlow 反代公共段
 # 这两份在主仓库也是落在 nginx-1.28.0/conf/ 下、未入库；它们的**留档副本**
 # 分别在主仓库 docs/nginx-reference/portal_ports.conf.txt 与本副本
-# Task/my_app/nginx/ 下（后者已入库）。此处保持与主仓库一致：整个目录不入库。
+# apps/my_app/nginx/ 下（后者已入库）。此处保持与主仓库一致：整个目录不入库。
 # 副本根的 nginx.conf.template 是入库的真源。
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 前端构建产物
 #
-# 主仓库规则里的 `Task/_fe_dist/` 已覆盖（277 MB / 8751 个文件）。
-# 副本的 dist/ 由 Task/my_app/frontend/ 源码经 `npm run build` 重建，
+# 主仓库规则里的 `apps/_fe_dist/` 已覆盖（277 MB / 8751 个文件）。
+# 副本的 dist/ 由 apps/my_app/frontend/ 源码经 `npm run build` 重建，
 # 前端源码已入库，所以产物不入库。
 # ⚠ nginx.conf.template 里用 alias 直接发这个目录 —— 它是**运行时服务目录**，
 #   忽略跟踪 ≠ 删除：磁盘上必须留着，否则副本起来是白屏。
@@ -547,7 +549,7 @@ Task/my_app/backup/
 # 它是门户 51 条看板的**免密链接清单**（含单个稳定的 t= 参数），
 # 不是浏览器抓包样本、不含会话 cookie（实测 password/token/cookie 关键词 0 命中）。
 # 主仓库已跟踪它（PUBLIC 仓库里已公开），此处保持一致，避免副本与主仓库脱节。
-!liberia-noc_soc-数据看板统一门户/MsPortal/all_urls.txt
+!apps/portal/MsPortal/all_urls.txt
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 桌面快捷方式（.lnk）
@@ -564,7 +566,7 @@ Task/my_app/backup/
 # ISOLATED_COPY.flag 是**本机运行态标记**（让 my_portal_ctl.ps1 拦截所有
 # start/stop 命令）。它记录的是"这台机器当前是什么角色"，不是源码 ——
 # 换台机器该文件该不该存在，取决于那台机器是生产还是副本。
-# 标记语义已在 部署说明.md 里写清，故不入库。
+# 标记语义已在 docs/workspace/部署说明.md 里写清，故不入库。
 # ─────────────────────────────────────────────────────────────────────────────
 /ISOLATED_COPY.flag
 
@@ -585,13 +587,13 @@ Task/my_app/backup/
 # ─────────────────────────────────────────────────────────────────────────────
 # my_app 的本地 SQLite 兜底库（2.4 GB）
 #
-# 主仓库规则里的 `Task/my_app/.gitignore` 的 `/db/` 已覆盖 Task/my_app/db/，
-# 但副本的 Task/my_app/db/ 里**另外带了 4 份 xlsx 业务表**（Eflow_TT_FB.xlsx、
+# 主仓库规则里的 `apps/my_app/.gitignore` 的 `/db/` 已覆盖 apps/my_app/db/，
+# 但副本的 apps/my_app/db/ 里**另外带了 4 份 xlsx 业务表**（Eflow_TT_FB.xlsx、
 # Eflow_WO_FB.xlsx、ZTE OLR MS Master Site Database*.xlsx）——
 # 这些是 master site 数据库，属于**业务数据不是源码**，且根规则 `*.xlsx` 已挡。
 # 单独再写一条是为了让"为什么 db/ 整个不入库"在本文件里能一眼看到。
 # ─────────────────────────────────────────────────────────────────────────────
-/Task/my_app/db/
+/apps/my_app/db/
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 便携 PG 数据快照（若有人手工 dump 到根目录）

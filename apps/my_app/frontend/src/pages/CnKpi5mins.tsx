@@ -1,0 +1,611 @@
+/* ============================================================================
+ * CN KPI 5 分钟看板（?page=cn_kpi_5mins）
+ * ----------------------------------------------------------------------------
+ * 数据源：后端 /api/cn-kpi-5mins/overview
+ *   → services/cn_kpi_5mins_service.py（读远端 db_ps_cs_cn 的 5mins_* 表）
+ *   → 由任务 cnn_kpi_sync_5mins 每 15 分钟写入（gr=300，窗口昨天 00:00 → 现在）。
+ *
+ * 核心展示：每个组件画 **Day0（今天）/ Day1（昨天）/ Day7（7 天前，同一星期几）
+ * 曲线**，x 轴为 HH:MM。
+ * 后端 SQL 已输出三列 [HH:MM, 'Day0'|'Day1'|'Day7', 值]，本页复用 pivot 机制
+ * （按第 2 列透视成多序列），不需要前端再拆日。序列条数不固定：某个日子在库里
+ * 还没有数据时后端就不会返回那一类标签，本页少画一条线，并在页头说明。
+ *
+ * Day7 的数据从哪来：采集任务的窗口只取「昨天 00:00 → 现在」，但写库是 upsert
+ * 且没有清理，所以每个日子在其次日被采到之后就永久留在表里 —— 库里攒够 8 天
+ * 才画得出 Day7。攒不够的那些天需要回补，见后端服务文件头的实测说明。
+ *
+ * 空态：上游 xGW License / xGW CPU / 3G FDD 三个模板**没有 5 分钟粒度**
+ * （实测恒 0 行，详见后端服务文件头）。它们仍列出卡片，但显示业务原因，
+ * 而不是红色报错 —— 这是刻意的：「空的不报错」。
+ *
+ * 约定（AGENTS.md 第三节第 3 条）：卡片走 components/cards，导出走 utils/excelReport，
+ * ECharts 用 DARK/LIGHT 实值（canvas 解析不了 WH.* CSS 变量），文案走 t()。
+ * ========================================================================== */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Button, Col, Empty, Row, Space, Spin, Tag, Tooltip, Typography } from 'antd'
+import { DownloadOutlined, InfoCircleOutlined, ReloadOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
+import ReactECharts from '../components/ECharts'
+import { CardBase } from '../components/cards'
+import CalcChainNote from '../components/CalcChainNote'
+// 数字悬浮口径说明（AGENTS.md 三.3c）：本页此前只有整页级 CalcChainNote，
+// 组件卡与页头统计的数字问不到。口径对过 services/cn_kpi_5mins_service.py 的 WIDGETS 与 _agg_sql。
+import { ExplainIcon, ExplainLabel, ExplainPopover } from '../components/MetricExplain'
+import { exportReport, type ReportSheetSpec } from '../utils/excelReport'
+import { getCnKpi5minsOverview } from '../api'
+import { useI18n } from '../i18n'
+import { formatDateTime } from '../datetime'
+import { axisLabel, axisLine, darkTooltip, useTheme } from '../theme'
+
+const { Text } = Typography
+
+// ---------------- 类型（与后端 cn_kpi_5mins_service 对齐） ----------------
+interface CnWidget5 {
+  id: string
+  title: string
+  chart: 'line' | 'kpi' | 'text' | 'bar' | 'table'
+  pivot: boolean
+  pct: boolean
+  sql: string
+  columns: string[]
+  rows: (string | number | null)[][]
+  error: string
+  /** 上游无 5 分钟数据 / 窗口内无数据（业务空态，不是故障） */
+  empty: boolean
+  /** 空态原因（展示给用户，讲清为什么没有数据） */
+  empty_reason: string
+}
+interface OverviewResp5 {
+  meta: {
+    db: string
+    count: number
+    failed: number
+    empty: number
+    elapsed_ms: number
+    cached: boolean
+  }
+  title: string
+  widgets: CnWidget5[]
+}
+
+function toNumber(v: unknown): number {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+// ---------------- 今日 vs 昨日波动 ----------------
+// 背景（2026-11-03 核查）：Data Subscribers 图上 Day0 末端"下沉"实为当日截断效应
+// ——不完整的今天对比完整的昨天会虚低。因此对比时把昨天截到今天最后一个点的
+// 同一时刻，两边都是"同时长窗口的均值"，才是同口径对比。
+/** 每日序列：[{t: 'HH:MM', v: 数值}]，v 为 null 表示该点无数据 */
+type DaySeries = { t: string; v: number | null }[]
+
+function collectDay(rows: CnWidget5['rows'], day: string): DaySeries {
+  const out: DaySeries = []
+  for (const r of rows) {
+    if (String(r[1]) !== day) continue
+    const v = r[2] === null || r[2] === undefined || r[2] === '' ? null : toNumber(r[2])
+    out.push({ t: String(r[0]), v })
+  }
+  return out
+}
+
+/**
+ * 今日 vs 昨日波动（%）：Day0 全部点均值 vs Day1 截到 Day0 最后时刻的均值。
+ * 返回 null 表示不可比（任一侧无数据，或昨日基数为 0 —— 后者如 Voice Traffic
+ * 历史贴地，比值无意义，同样不显示数字）。
+ */
+function compareDay0Day1(w: CnWidget5): { pct: number | null; last0: string } {
+  const d0 = collectDay(w.rows, 'Day0')
+  const d1 = collectDay(w.rows, 'Day1')
+  if (d0.length === 0 || d1.length === 0) return { pct: null, last0: '' }
+  const last0 = d0.reduce((m, x) => (x.t > m ? x.t : m), d0[0].t)
+  const mean = (xs: DaySeries) => {
+    const vals = xs.map((x) => x.v ?? 0)
+    return vals.reduce((s, v) => s + v, 0) / (vals.length || 1)
+  }
+  const m0 = mean(d0)
+  const m1 = mean(d1.filter((x) => x.t <= last0))
+  if (!Number.isFinite(m1) || m1 === 0 || !Number.isFinite(m0)) return { pct: null, last0 }
+  return { pct: ((m0 - m1) / m1) * 100, last0 }
+}
+
+/** 波动文案：±1 位小数；比值极端（如 Voice Traffic 昨日贴地）时封顶为 ±>999%，避免一长串数字 */
+function fmtVsPct(pct: number): string {
+  if (Math.abs(pct) >= 999.95) return `${pct > 0 ? '+' : '-'}>999%`
+  return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`
+}
+
+/** 类目轴标签抽稀（一天 288 个 5 分钟点，不抽稀会糊成斜带） */
+function xAxisLabel(n: number) {
+  return {
+    rotate: 0,
+    hideOverlap: true,
+    interval: n > 24 ? Math.ceil(n / 24) - 1 : ('auto' as const),
+  }
+}
+
+/**
+ * pivot：SQL 返回 [HH:MM, 'Day0'|'Day1'|'Day7', 值] → 按第 2 列透视成多条序列。
+ * 与 CnKpi.tsx 的 buildPivotOption 同构，只是这里把 Day0/Day1/Day7 的顺序固定下来，
+ * 并给每条线固定配色，保证「今天」永远是同一种颜色。
+ */
+// 配色：Day0 绿 / Day1 蓝 / Day7 青（运维侧指定这三色，与门户参考图
+// vmax_cxo_dashboard.html 的 day-7 亮黄不同 —— 本页按「最近→最远」排色）。
+// Day0/Day1 沿用本页既有实值；Day7 的青取自 theme.ts 的 DARK.teal（#00d9ff）。
+// 必须是实值：canvas 解析不了 CSS 变量（AGENTS.md 第三节第 3 条的取色表）。
+const DAY_COLOR: Record<string, string> = {
+  Day0: '#08bd83',
+  Day1: '#2b8cff',
+  Day7: '#00d9ff',
+}
+
+// Day7 的青在浅色主题换成深青（theme.ts 的 LIGHT.blue #0e7490）：#00d9ff 是为深色底
+// 设计的霓虹青，1.5px 画在白卡上会发飘、几乎看不见。深浅各一套实值是本项目既有做法。
+const DAY_COLOR_LIGHT: Record<string, string> = {
+  Day7: '#0e7490',
+}
+
+function dayColor(name: string, isDark: boolean) {
+  return (!isDark && DAY_COLOR_LIGHT[name]) || DAY_COLOR[name] || '#8b95a7'
+}
+
+// 图例与导出列的固定顺序（后端只会产出这三个标签）
+const DAY_ORDER = ['Day0', 'Day1', 'Day7']
+
+/**
+ * 图例文案的 i18n key。必须写成显式 switch 返回字面量：动态拼 key
+ * （`t('cnkpi5.day.' + d)`）会被 `check:i18n` 守卫读成 `cnkpi5.day.` 并报字典缺失，
+ * 见 AGENTS.md 第三节 1b 的第三条铁律。
+ */
+function dayLabelKey(day: string) {
+  switch (day) {
+    case 'Day0': return 'cnkpi5.day0'
+    case 'Day1': return 'cnkpi5.day1'
+    case 'Day7': return 'cnkpi5.day7'
+    default: return ''
+  }
+}
+
+/** 日子标签的界面文案（图例与导出表头共用，避免两边说法不一致） */
+function dayLabel(t: (key: string) => string, day: string) {
+  const key = dayLabelKey(day)
+  return key ? t(key) : day
+}
+
+function fadeColor(hex: string, alpha: number) {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
+}
+
+function buildDayOption(w: CnWidget5, isDark: boolean) {
+  const cats: string[] = []
+  const seen = new Set<string>()
+  const lookup = new Map<string, number | null>()
+  const names: string[] = []
+  for (const r of w.rows) {
+    const x = String(r[0])
+    const day = String(r[1])
+    if (!day || day === 'null' || day === 'NULL' || day === 'undefined') continue
+    if (!seen.has(x)) { seen.add(x); cats.push(x) }
+    if (!names.includes(day)) names.push(day)
+    const v = r[2]
+    lookup.set(`${x}\u0000${day}`, v === null || v === undefined || v === '' ? null : toNumber(v))
+  }
+  // Day0 永远排在前面（图例顺序稳定）
+  names.sort((a, b) => (a === 'Day0' ? -1 : b === 'Day0' ? 1 : a.localeCompare(b)))
+  const dense = cats.length > 120
+  const isPct = w.pct
+  // tooltip 数值千分位 + 最多两位小数，与参考图的白卡数值形态一致；空值显示 —
+  const fmtValue = (v: unknown) => {
+    if (v === null || v === undefined || v === '') return '—'
+    const n = Number(v)
+    if (!Number.isFinite(n)) return String(v)
+    return isPct ? `${n.toFixed(2)}%` : n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  }
+  return {
+    tooltip: { ...darkTooltip(isDark), trigger: 'axis' as const, valueFormatter: fmtValue },
+    legend: {
+      top: 2,
+      type: 'scroll' as const,
+      icon: 'roundRect' as const,
+      show: names.length > 0,
+      textStyle: { color: isDark ? '#aebbd4' : '#3f5468', fontSize: 10 },
+      itemWidth: 14,
+      itemHeight: 8,
+      itemGap: 10,
+      data: names,
+    },
+    grid: { left: 12, right: 16, top: 34, bottom: 24, containLabel: true },
+    xAxis: {
+      type: 'category' as const,
+      data: cats,
+      boundaryGap: false,
+      axisLabel: { ...axisLabel(isDark), ...xAxisLabel(cats.length) },
+      axisLine: axisLine(isDark),
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: 'value' as const,
+      scale: true,
+      splitLine: { show: false },
+      axisLabel: {
+        ...axisLabel(isDark),
+        formatter: isPct ? (v: number) => `${Number(v).toFixed(2)}%` : undefined,
+      },
+    },
+    series: names.map((n) => {
+      const c = dayColor(n, isDark)
+      return {
+        name: n,
+        type: 'line' as const,
+        smooth: true,
+        showSymbol: false,
+        connectNulls: false,
+        sampling: dense ? ('lttb' as const) : undefined,
+        color: c,
+        lineStyle: { width: 1.5 },
+        areaStyle: {
+          color: {
+            type: 'linear' as const,
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: fadeColor(c, 0.25) },
+              { offset: 1, color: fadeColor(c, 0.02) },
+            ],
+          },
+        },
+        data: cats.map((x) => lookup.get(`${x}\u0000${n}`) ?? null),
+      }
+    }),
+  }
+}
+
+/** 组件 → 该卡「这个数怎么算」的文案键。
+ *  ⚠ **逐条写字面量**：`t('cnkpi5.explain.' + w.id)` 会被 check:i18n 读成键名
+ *  `cnkpi5.explain.` 而报「字典缺失」（AGENTS.md 第三节 1b）。
+ *  文字内容与 WIDGETS 里的 value_expr 逐条对过，改动 SQL 时必须同步改这里。 */
+function widgetExplainKey(id: string): string {
+  switch (id) {
+    case 'vlr': return 'cnkpi5.explain.vlr'
+    case 'voice': return 'cnkpi5.explain.voice'
+    case 'data_sub': return 'cnkpi5.explain.dataSub'
+    case '4g_traffic': return 'cnkpi5.explain.4gTraffic'
+    case 'rg30': return 'cnkpi5.explain.rg30'
+    case 'rg12': return 'cnkpi5.explain.rg12'
+    case 'rg11': return 'cnkpi5.explain.rg11'
+    case 'rg6': return 'cnkpi5.explain.rg6'
+    case 'xgw_license': return 'cnkpi5.explain.xgwLicense'
+    case 'xgw_cpu': return 'cnkpi5.explain.xgwCpu'
+    case '3g_traffic': return 'cnkpi5.explain.3gTraffic'
+    default: return ''
+  }
+}
+
+/** 单个组件卡片（图表 / 空态 / 错误三种状态） */
+function WidgetCard({ w, height }: { w: CnWidget5; height: number }) {
+  const { isDark } = useTheme()
+  const { t } = useI18n()
+
+  const option = useMemo(() => {
+    if (w.empty || w.error) return null
+    return buildDayOption(w, isDark)
+  }, [w, isDark])
+
+  // 今日 vs 昨日同时刻波动（昨天截到今天最后一点的同一时刻，剔除当日截断影响）
+  const vs = useMemo(() => (w.empty || w.error ? null : compareDay0Day1(w)), [w])
+  // |波动|≤10% 视为正常（灰）；超出则以橙色提示——运维 KPI 涨跌无好坏，只标"偏离"
+  const vsColor = vs?.pct != null && Math.abs(vs.pct) > 10 ? 'orange' : 'default'
+
+  return (
+    <CardBase
+      size="small"
+      // ⚠ 卡片必须自己是 flex 列、body 用 flex:1 扣除卡头高度。
+      // 之前 body 写 height:'100%'：antd Card 是 block 布局，100% 参照卡片内容盒
+      // （不减 38px 卡头）→ body 溢出卡片底部 36px，卡片 overflow:hidden 把
+      // canvas 底部 28px 裁掉，X 轴时间标签正好落在裁切带里只剩上半截
+      //（2026-11-03 CDP 实测：card 320 / head 38 / body 318 / canvas bottom 超出 28px）。
+      style={{ height, display: 'flex', flexDirection: 'column' }}
+      bodyStyle={{
+        flex: 1,
+        minHeight: 0,
+        padding: 8,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+      title={(
+        <ExplainLabel
+          label={<span style={{ fontSize: 13 }}>{w.title}</span>}
+          text={[
+            w.empty ? t('cnkpi5.explain.emptyCard', { reason: w.empty_reason || t('cnkpi5.noData') }) : '',
+            widgetExplainKey(w.id) ? t(widgetExplainKey(w.id)) : '',
+            t('cnkpi5.explain.common'),
+          ].filter(Boolean).join('\n')}
+        />
+      )}
+      extra={
+        <Space size={4}>
+          {vs && (vs.pct != null ? (
+            <ExplainPopover placement="bottom" text={[t('cnkpi5.vsDay1Hint', { time: vs.last0 }), t('cnkpi5.tip.vsFrontend')].join('\n')}>
+              <Tag color={vsColor} style={{ marginInlineEnd: 0, fontSize: 11, cursor: 'help' }}>
+                {t('cnkpi5.vsDay1', { pct: fmtVsPct(vs.pct) })}
+              </Tag>
+            </ExplainPopover>
+          ) : (
+            <ExplainPopover placement="bottom" text={[t('cnkpi5.vsDay1Hint', { time: vs.last0 || '—' }), t('cnkpi5.tip.vsNoBase')].join('\n')}>
+              <Tag color="default" style={{ marginInlineEnd: 0, fontSize: 11, cursor: 'help' }}>
+                {t('cnkpi5.vsDay1NoBase')}
+              </Tag>
+            </ExplainPopover>
+          ))}
+          {w.empty && <Tag color="default" style={{ marginInlineEnd: 0 }}>{t('cnkpi5.noGranularity')}</Tag>}
+          {w.pct && <Tag color="cyan" style={{ marginInlineEnd: 0 }}>%</Tag>}
+        </Space>
+      }
+    >
+      {w.error ? (
+        <Alert type="error" showIcon message={t('cnkpi5.queryFail')} description={w.error} style={{ fontSize: 12 }} />
+      ) : w.empty ? (
+        // 业务空态：讲清为什么没有，而不是空白的 Empty
+        <div style={{ margin: 'auto', maxWidth: 320, textAlign: 'center' }}>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={
+            <span style={{ fontSize: 12 }}>{w.empty_reason || t('cnkpi5.noData')}</span>
+          } />
+        </div>
+      ) : !option || w.rows.length === 0 ? (
+        <Empty description={t('cnkpi5.noData')} style={{ margin: 'auto' }} />
+      ) : (
+        <div style={{ flex: '1 1 auto', minHeight: 0 }}>
+          <ReactECharts
+            option={option}
+            notMerge
+            style={{ width: '100%', height: '100%' }}
+            opts={{ renderer: 'canvas' }}
+          />
+        </div>
+      )}
+    </CardBase>
+  )
+}
+
+export default function CnKpi5mins() {
+  const { t } = useI18n()
+  const { isDark } = useTheme()
+  const [data, setData] = useState<OverviewResp5 | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  // 只认最后一次请求：刷新间隔短于远端取数时，先发出的响应不许盖掉后发出的。
+  const reqSeq = useRef(0)
+  const inflight = useRef(false)
+  // load 不能依赖 data state，否则每次 setData 都换函数、把监听器拆了重挂。
+  const dataRef = useRef<OverviewResp5 | null>(null)
+
+  /**
+   * silent=true 供原地自动刷新（App.tsx 的 AR_INPLACE_REFRESH_PAGES → myapp-refresh）。
+   * 三条缺一就会把「静默」做成空白页：
+   *   · 不 setLoading(true) —— 本页 `loading && !data` 会卸掉全部图表、只留一个 Spin；
+   *   · 失败不清 data、也不新开错误条 —— 拿不到新数就继续显示上一帧；
+   *   · 还没有上一帧、且已有请求在飞时直接跳过，避免把首次加载的响应序号挤掉。
+   * 手动刷新走非静默（按钮要转圈），但已有 data 时同样不卸图。
+   * ⚠ 按钮必须 `onClick={() => load({ force: true })}`，写成 `onClick={load}` 会把
+   * MouseEvent 当成 opts（事件对象恒真）。
+   */
+  const load = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
+    const silent = !!opts?.silent
+    if (silent && !dataRef.current && inflight.current) return
+    const seq = ++reqSeq.current
+    inflight.current = true
+    if (!silent) {
+      setLoading(true)
+      setErr('')
+    }
+    try {
+      const res = await getCnKpi5minsOverview({ force: !!opts?.force })
+      if (seq !== reqSeq.current) return
+      dataRef.current = res.data
+      setData(res.data)
+      setErr('')
+    } catch (e: unknown) {
+      if (seq !== reqSeq.current) return
+      if (!silent) setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      if (seq === reqSeq.current) {
+        inflight.current = false
+        setLoading(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+  // 顶栏自动刷新：不重挂载本页（重挂载会把 data 清成 null，画面回到转圈空白）。
+  useEffect(() => {
+    const onInplaceRefresh = () => { void load({ silent: true }) }
+    document.addEventListener('myapp-refresh', onInplaceRefresh)
+    return () => document.removeEventListener('myapp-refresh', onInplaceRefresh)
+  }, [load])
+
+  const widgets = data?.widgets ?? []
+  const chartWidgets = widgets.filter((w) => w.chart !== 'kpi' && w.chart !== 'text')
+  const chartHeight = 320
+
+  /**
+   * 页头图例只列**库里真有数据**的那几天。Day7 需要历史攒够 8 天（或做过回补）
+   * 才会出现，缺的时候明说一句，而不是画三条色块却只出两条线。
+   */
+  const presentDays = useMemo(() => {
+    const found = new Set<string>()
+    for (const w of chartWidgets) {
+      for (const r of w.rows) {
+        const d = String(r[1])
+        if (d && d !== 'null' && d !== 'NULL' && d !== 'undefined') found.add(d)
+      }
+    }
+    return DAY_ORDER.filter((d) => found.has(d))
+  }, [chartWidgets])
+
+  /** 有数据的组件数，用于页头统计 */
+  const withData = widgets.filter((w) => !w.empty && !w.error).length
+
+  /**
+   * 导出 Excel：每个组件一张工作表（含 Day0/Day1 两列宽表）。
+   * 表头写明数据口径，便于事后复核。
+   */
+  const exportExcel = useCallback(() => {
+    if (!data) return
+    const stamp = dayjs().format('YYYYMMDD_HHmmss')
+    const sheets: ReportSheetSpec[] = [{
+      name: 'Overview',
+      title: 'CCN_KPI_5mins',
+      subtitle: `${t('cnkpi5.exportSource')}: ${data.meta.db}`,
+      header: ['', ''],
+      rows: [
+        [t('cnkpi5.exportSource'), data.meta.db],
+        [t('cnkpi5.exportGenerated'), formatDateTime(new Date(), { zone: true })],
+        [],
+        ...widgets.map((w) => [
+          w.title,
+          w.empty ? t('cnkpi5.noGranularity') : `${w.rows.length} ${t('cnkpi5.rows')}`,
+        ]),
+      ] as (string | number)[][],
+      columnWidths: [26, 46],
+    }]
+
+    for (const w of chartWidgets) {
+      if (w.empty || w.error || w.rows.length === 0) continue
+      // 宽表：每行 [HH:MM, Day0, Day1, Day7]，便于对账。
+      // 列只取本组件实际有数据的日子，与图上画出的线一一对应。
+      const days = DAY_ORDER.filter((d) => w.rows.some((r) => String(r[1]) === d))
+      const byTime = new Map<string, Record<string, number | null>>()
+      const times: string[] = []
+      for (const r of w.rows) {
+        const tt = String(r[0])
+        const d = String(r[1])
+        if (!byTime.has(tt)) { byTime.set(tt, {}); times.push(tt) }
+        byTime.get(tt)![d] = r[2] === null || r[2] === undefined || r[2] === '' ? null : toNumber(r[2])
+      }
+      const hdr = [t('cnkpi5.time'), ...days.map((d) => `${dayLabel(t, d)} (${t('cnkpi5.value')})`)]
+      const body = times.map((tt) => [tt, ...days.map((d) => byTime.get(tt)?.[d] ?? null)])
+      sheets.push({
+        name: w.id,
+        title: w.title,
+        subtitle: `${t('cnkpi5.exportSource')}: ${data.meta.db}`,
+        header: hdr,
+        rows: body as (string | number | null)[][],
+        columnWidths: [12, ...days.map(() => 20)],
+      })
+    }
+
+    void exportReport(sheets, `CN_KPI_5mins_${stamp}.xlsx`)
+  }, [data, widgets, chartWidgets, t])
+
+  return (
+    <div style={{ padding: 4 }}>
+      {/* 工具条：全局 Header 已显示页面标题（菜单名），页内不再重复画大标题，
+          只保留统计/图例/操作一行，避免同一页出现两个 header */}
+      <CardBase size="small" style={{ marginBottom: 12 }} bodyStyle={{ padding: '8px 12px' }}>
+        <Row align="middle" justify="space-between" gutter={[12, 8]}>
+          <Col>
+            <Space size={10} wrap>
+              <ExplainPopover placement="bottom" text={[t('cnkpi5.legendHint'), t('cnkpi5.tip.summary', { ok: withData, total: widgets.length })].join('\n')}>
+                <Tag icon={<InfoCircleOutlined />} color="blue" style={{ cursor: 'help' }}>
+                  {t('cnkpi5.summary', { ok: withData, total: widgets.length })}
+                </Tag>
+              </ExplainPopover>
+              <ExplainIcon text={t('cnkpi5.barHint')} placement="bottomLeft" icon="question" />
+              {data?.meta && (
+                <ExplainPopover placement="bottom" text={t('cnkpi5.tip.elapsed', { ms: data.meta.elapsed_ms, cached: data.meta.cached ? t('cnkpi5.tip.cachedYes') : t('cnkpi5.tip.cachedNo') })}>
+                  <Tag style={{ cursor: 'help' }}>{data.meta.elapsed_ms}ms{data.meta.cached ? ` · ${t('cnkpi.cached')}` : ''}</Tag>
+                </ExplainPopover>
+              )}
+              {data?.meta && data.meta.failed > 0 && (
+                <ExplainPopover placement="bottom" text={t('cnkpi5.tip.failed', { n: data.meta.failed })}>
+                  <Tag color="error" style={{ cursor: 'help' }}>{t('cnkpi.failed', { n: data.meta.failed })}</Tag>
+                </ExplainPopover>
+              )}
+              {/* 图例：按**实际取到的日子**渲染。Day7 要等库里攒够 8 天（或做过回补）
+                  才会出现，缺的时候直接说明，而不是留着一条永远不出来的色块。 */}
+              <Space size={6} align="center" wrap>
+                {presentDays.map((d) => (
+                  <Space key={d} size={4} align="center">
+                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: dayColor(d, isDark) }} />
+                    <Text type="secondary" style={{ fontSize: 12 }}>{dayLabel(t, d)}</Text>
+                  </Space>
+                ))}
+                {!presentDays.includes('Day7') && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>{t('cnkpi5.day7Absent')}</Text>
+                )}
+              </Space>
+            </Space>
+          </Col>
+          <Col>
+            <Space wrap>
+              <Button icon={<ReloadOutlined />} onClick={() => load({ force: true })} loading={loading} size="small">
+                {t('cnkpi.refresh')}
+              </Button>
+              <Button icon={<DownloadOutlined />} onClick={exportExcel} disabled={!data || loading} size="small">
+                {t('cnkpi.export')}
+              </Button>
+            </Space>
+          </Col>
+        </Row>
+      </CardBase>
+
+      {err && (
+        <Alert
+          type="error"
+          showIcon
+          message={t('cnkpi5.loadFail')}
+          description={
+            <Space direction="vertical" size={2}>
+              <Text>{err}</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>{t('cnkpi.hint')}</Text>
+            </Space>
+          }
+          style={{ marginBottom: 12 }}
+        />
+      )}
+
+      {/* 口径说明：默认收起（AGENTS.md 三.3 全站约定「口径说明一律默认隐藏、点击展开」）。
+          原先两条 Alert 常驻占 4~6 行，只在第一次看不懂时有用；现合并成一条可展开的说明：
+           ① 粒度混用（5 分钟 / 15 分钟）—— 否则 15 分钟组件的稀疏点会被误读成「数据缺失」；
+           ② 空卡片原因 —— 避免被当成故障。
+          注意：真正的**口径异常/数据错误**仍要常驻（CalcChainNote 的 warning 口），不能藏进收起区。 */}
+      <CalcChainNote
+        title={t('cnkpi5.note.title')}
+        style={{ marginBottom: 12 }}
+        sections={[
+          {
+            title: t('cnkpi5.note.sec.granularity'),
+            lines: [t('cnkpi5.mixedGranularity'), t('cnkpi5.mixedGranularityHint')],
+          },
+          ...((data?.meta?.empty ?? 0) > 0
+            ? [{
+                title: t('cnkpi5.note.sec.empty'),
+                lines: [
+                  t('cnkpi5.emptyBanner', { n: data?.meta?.empty ?? 0 }),
+                  t('cnkpi5.emptyWhy'),
+                ],
+              }]
+            : []),
+        ]}
+      />
+
+      {loading && !data ? (
+        <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>
+      ) : (
+        <Row gutter={[12, 12]}>
+          {chartWidgets.map((w) => (
+            <Col key={w.id} xs={24} md={12} xl={8}>
+              <WidgetCard w={w} height={chartHeight} />
+            </Col>
+          ))}
+        </Row>
+      )}
+    </div>
+  )
+}

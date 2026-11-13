@@ -2,12 +2,12 @@
 #  my_portal_ctl.ps1 - single entry point behind every desktop shortcut
 #
 #  WHY THIS FILE EXISTS (do not delete, do not rename):
-#  The portal directory name contains Chinese characters
-#  ("liberia-noc_soc-数据看板统一门户"). This machine's ANSI codepage is
+#  The portal directory used to have a Chinese name (since renamed to apps\portal).
+#  This machine's ANSI codepage is
 #  Windows-1252, which cannot round-trip those characters into a .lnk, so a
 #  shortcut pointing straight at the portal's start.bat would be corrupted.
 #  Every shortcut therefore points HERE - this filename is pure ASCII - and
-#  the portal directory is resolved at run time by wildcard matching.
+#  the portal directory (now apps\portal, pure ASCII) is resolved at run time.
 #
 #  USER-VISIBLE CONTRACT (what the shortcuts promise):
 #    * Double-click runs it; a console window shows what is happening.
@@ -22,8 +22,8 @@
 #    1-start-nginx   1-start_nginx.lnk   pop up start_nginx.bat (skips if already up)
 #    2-stop-nginx    2-stop_nginx.lnk    pop up stop_nginx.bat  (signals from nginx's own dir)
 #    3-reload-nginx  3-reload_nginx.lnk  pop up reload_nginx.bat (nginx -t first, reload only if valid)
-#    4-start-myapp   4-start_myapp.lnk   run Task\my_app\start.bat
-#    5-stop-myapp    5-stop_myapp.lnk    run Task\my_app\stop.bat (writes stopped.flag)
+#    4-start-myapp   4-start_myapp.lnk   run apps\my_app\start.bat
+#    5-stop-myapp    5-stop_myapp.lnk    run apps\my_app\stop.bat (writes stopped.flag)
 #    6-start-portal  6-start_portal.lnk  run <portal>\start.bat
 #    7-stop-portal   7-stop_portal.lnk   run <portal>\stop.bat
 #    8-start-all     8-start_all.lnk     my_app -> portal -> nginx (nginx silent)
@@ -63,9 +63,9 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 # Workspace root. The script lives at the root today; fall back to a search so
 # the shortcut keeps working if the file is ever moved one level down.
 $Root = $ScriptDir
-if (-not (Test-Path (Join-Path $Root 'Task\my_app'))) {
+if (-not (Test-Path (Join-Path $Root 'apps\my_app'))) {
     foreach ($candidate in @((Split-Path -Parent $ScriptDir), 'D:\01_olbr_portal')) {
-        if ($candidate -and (Test-Path (Join-Path $candidate 'Task\my_app'))) {
+        if ($candidate -and (Test-Path (Join-Path $candidate 'apps\my_app'))) {
             $Root = $candidate
             break
         }
@@ -79,31 +79,21 @@ if (-not (Test-Path (Join-Path $Root 'Task\my_app'))) {
 # Only the read-only status command is allowed. Delete the flag to promote.
 if ((Test-Path -LiteralPath (Join-Path $Root 'ISOLATED_COPY.flag')) -and $Command -ne '0-status') {
     Write-Host '[BLOCKED] ISOLATED COPY: start/stop commands are disabled here.' -ForegroundColor Red
-    Write-Host 'This copy uses its own ports (8080/8443/...). Use .\start.bat or .\my_portal\1-start-all.bat instead.' -ForegroundColor Yellow
+    Write-Host 'This copy uses its own ports (8080/8443/...). Use .\start.bat or .\ops\shortcuts\1-start-all.bat instead.' -ForegroundColor Yellow
     Write-Host 'To promote: restore production ports in .env, then delete ISOLATED_COPY.flag.' -ForegroundColor Yellow
     exit 1
 }
 
-$MyAppDir  = Join-Path $Root 'Task\my_app'
+$MyAppDir  = Join-Path $Root 'apps\my_app'
 $NginxDir  = Join-Path $Root 'nginx-1.28.0'
 $NginxExe  = Join-Path $NginxDir 'nginx.exe'
-$BotDir    = Join-Path $Root 'Task\whatsapp-kb-bot'
+$BotDir    = Join-Path $Root 'apps\whatsapp-kb-bot'
 
-# Portal directory: name is non-ASCII, so match it by wildcard. The distinctive
-# ASCII prefix/suffix avoids hardcoding Chinese text in this file at all.
+# Portal directory: fixed at apps\portal (pure ASCII since refactor round-1,
+# batch B). No wildcard matching needed any more.
 function Resolve-PortalDir {
-    # Preferred: the known prefix, wildcarded.
-    $hit = Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
-           Where-Object { $_.Name -like 'liberia-noc_soc-*' } |
-           Select-Object -First 1
-    if ($hit) { return $hit.FullName }
-
-    # Fallback: any directory holding the portal's own start.bat.
-    $hit = Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
-           Where-Object { Test-Path (Join-Path $_.FullName 'start_hidden.ps1') } |
-           Select-Object -First 1
-    if ($hit) { return $hit.FullName }
-
+    $dir = Join-Path $Root 'apps\portal'
+    if (Test-Path -LiteralPath $dir) { return $dir }
     return $null
 }
 
@@ -522,7 +512,7 @@ function Invoke-StopMyApp {
 function Invoke-StartPortal {
     Write-Head 'Start portal'
     if (-not $PortalDir) {
-        Write-Err 'Could not locate the portal directory (expected liberia-noc_soc-* under:'
+        Write-Err 'Could not locate the portal directory (expected apps\portal under:'
         Write-Err "  $Root)"
         Write-Err 'Nothing started.'
         return
@@ -537,7 +527,7 @@ function Invoke-StartPortal {
 function Invoke-StopPortal {
     Write-Head 'Stop portal'
     if (-not $PortalDir) {
-        Write-Err 'Could not locate the portal directory (expected liberia-noc_soc-* under:'
+        Write-Err 'Could not locate the portal directory (expected apps\portal under:'
         Write-Err "  $Root)"
         Write-Err 'Nothing stopped.'
         return
