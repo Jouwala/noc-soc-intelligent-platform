@@ -69,13 +69,15 @@ jobs:
             --arg head_sha "$HEAD_SHA" \
             --arg issue_number "$ISSUE_NUMBER" \
             --arg run_url "$RUN_URL" \
-            '{event: $event, repo: $repo, pr_number: $pr_number, head_sha: $head_sha, issue_number: ($issue_number | select(. != "") | tonumber?), run_url: $run_url}' \
+            '{event: $event, repo: $repo, pr_number: $pr_number, head_sha: $head_sha, run_url: $run_url} + (if $issue_number != "" then {issue_number: ($issue_number | tonumber)} else {} end)' \
             > /tmp/grok-qa-payload.json
+          test -s /tmp/grok-qa-payload.json || { echo 'payload is empty after jq; refusing to POST'; exit 1; }
+          echo "payload bytes: $(wc -c < /tmp/grok-qa-payload.json)"
           HTTP_CODE="$(curl -sS -o /tmp/grok-qa-response.json -w '%{http_code}' \
             -X POST "$WEBHOOK_URL" \
             -H "Authorization: Bearer ${WEBHOOK_KEY}" \
             -H 'Content-Type: application/json' \
-            --data @/tmp/grok-qa-payload.json)"
+            --data-binary @/tmp/grok-qa-payload.json)"
           echo "webhook HTTP status: ${HTTP_CODE}"
           case "$HTTP_CODE" in
             2*) echo 'Grok smoke request accepted.' ;;
