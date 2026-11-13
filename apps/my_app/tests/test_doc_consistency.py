@@ -30,7 +30,7 @@
 在 Linux 上会因 `ctypes.wintypes` 直接失败，且要求整套后端运行环境。）
 
 运行（任何有 Python 3.10+ 的机器均可）：
-    cd D:/01_RPA/Task/my_app
+    cd D:/02_olbr_portal/apps/my_app
     python tests/test_doc_consistency.py
 """
 
@@ -414,11 +414,11 @@ def test_page_counts_in_docs_match_code():
             f"{rel} 里的「页面指南数」不是 {listed}（PAGE_LIST 条数）"
         )
 
-    # 根 user-guide.md 也要跟
-    root = (ROOT.parent.parent / "user-guide.md").read_text(encoding="utf-8", errors="replace")
-    assert re.search(rf"{total} 个页面", root), f"根 user-guide.md 里的页面数不是 {total}"
+    # docs/workspace/user-guide.md 也要跟
+    root = (ROOT.parent.parent / "docs" / "workspace" / "user-guide.md").read_text(encoding="utf-8", errors="replace")
+    assert re.search(rf"{total} 个页面", root), f"docs/workspace/user-guide.md 里的页面数不是 {total}"
     assert re.search(rf"{listed} 个页面指南", root), (
-        f"根 user-guide.md 里的「页面指南数」不是 {listed}"
+        f"docs/workspace/user-guide.md 里的「页面指南数」不是 {listed}"
     )
 
 

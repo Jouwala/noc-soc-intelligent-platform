@@ -89,7 +89,7 @@ footer.colophon { text-align: center; color: var(--muted); font-size: 12px; marg
     <div class="logo">📘</div>
     <h1>my_app 项目手册</h1>
     <div class="sub">网络运维数据平台 · 设计手册 + 使用手册</div>
-    <div class="meta">基准日期 2026-08-27　|　适用版本 master 当前代码　|　HTML 合成生成 2026-11-12<br>含 13 章 · 141 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
+    <div class="meta">基准日期 2026-08-27　|　适用版本 master 当前代码　|　HTML 合成生成 2026-11-13<br>含 13 章 · 141 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
     <ul class="parts"><li><a href="#ch-00">前言 · 关于本手册</a></li><li><a href="#ch-01">设计篇 · 01 项目总览</a></li><li><a href="#ch-02">设计篇 · 02 架构设计</a></li><li><a href="#ch-03">设计篇 · 03 数据层设计</a></li><li><a href="#ch-04">设计篇 · 04 任务与调度系统</a></li><li><a href="#ch-05">设计篇 · 05 访问控制与凭据</a></li><li><a href="#ch-10">使用篇 · 10 快速上手</a></li><li><a href="#ch-11">使用篇 · 11 功能页使用手册</a></li><li><a href="#ch-12">使用篇 · 12 配置项与开关</a></li><li><a href="#ch-13">使用篇 · 13 运维手册</a></li><li><a href="#ch-14">使用篇 · 14 外部系统与数据流</a></li><li><a href="#ch-15">使用篇 · 使用帮助（一站式指南）</a></li><li><a href="#ch-90">附录 · 90 附录</a></li></ul>
   </section>
   <section class="toc-section">
@@ -5500,7 +5500,7 @@ Network 取 <code>ms_sla_kpi</code> 快照原值不重算；PS_* = 阈值达标�
 所以达标+未达标+无目标 可能小于指标总数）、<code>overviewDays</code>（= 矩阵日行数，<strong>不是自然月天数</strong>）、
 <code>overviewRate</code>（Total / Within SLA / Achieve 是三列<strong>各自的原值</strong>，Achieve 不一定等于 Within ÷ Total）、
 <code>worst</code>（按相对目标差距排序；<strong>无目标或目标为 0 的 gap 记 0，永不进榜</strong>）。
-实机验证：<code>?page=ms_contract_kpi</code> 概览卡 <code>27</code> / <code>15</code> / <code>3</code> 三个数字悬浮均出「这几张卡统计的是指标个数…」。<strong>待办</strong>：这三页（<code>nur</code> / <code>ms_wo_sla</code> / <code>ms_contract_kpi</code>）的<strong>站内帮助条目</strong>尚未补，见 <code>D:\01_RPA\TODO.md</code>。</p>
+实机验证：<code>?page=ms_contract_kpi</code> 概览卡 <code>27</code> / <code>15</code> / <code>3</code> 三个数字悬浮均出「这几张卡统计的是指标个数…」。<strong>待办</strong>：这三页（<code>nur</code> / <code>ms_wo_sla</code> / <code>ms_contract_kpi</code>）的<strong>站内帮助条目</strong>尚未补，见 <code>D:\02_olbr_portal\docs\workspace\TODO.md</code>。</p>
 </blockquote>
 <ul>
 <li>
@@ -20409,7 +20409,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <p><strong>保留在 PROJECT_DOCS.md 不动</strong>（属于历史决策与复盘，不是&quot;现状描述&quot;）：§2 迁移计划、§3 架构评估与 Django 论证、§4 FastAPI 架构优化方案、§5–§6 i18n 审计与复查、§8 IP Trace 集成方案、§10 迁移失败复盘、§11 优化建议。</p>
 
 </section>
-  <footer class="colophon">my_app 项目手册 · 由 frontend/scripts/generate-manual-html.mjs 从 docs/manual/*.md 同源生成于 2026-11-12 · 改 MD 后重跑该脚本并重新构建前端即可更新</footer>
+  <footer class="colophon">my_app 项目手册 · 由 frontend/scripts/generate-manual-html.mjs 从 docs/manual/*.md 同源生成于 2026-11-13 · 改 MD 后重跑该脚本并重新构建前端即可更新</footer>
 </div>
 </body>
 </html>

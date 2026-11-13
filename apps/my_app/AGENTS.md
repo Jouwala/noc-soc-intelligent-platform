@@ -1,7 +1,7 @@
 # 01 AGENTS.md —— AI 进入本项目首先需要知道的信息
 
-> 基准日期：2026-09-22　|　项目根：`D:\01_RPA\Task\my_app`
-> 上级总纲：`D:\01_RPA\AGENTS.md`（工作区级约束，**先读那个**）
+> 基准日期：2026-09-22　|　项目根：`D:\02_olbr_portal\apps\my_app`
+> 上级总纲：`D:\02_olbr_portal\AGENTS.md`（工作区级约束，**先读那个**）
 
 ## 一、这个项目是什么
 
@@ -11,29 +11,23 @@
 
 **权威文档**：`docs\manual\`（16 份手册，**现状以它为准**）。
 
-## 一.5、⭐ 改完记得同步到运行副本（2026-11-11 用户确认）
+## 一.5、⭐ 本仓库不再从 RPA 同步（2026-11-13 重构确认）
 
 | | 路径 | 角色 |
 | --- | --- | --- |
-| 编辑区 | `D:\01_RPA` | **你在这里改代码**（git 仓库 / 文档 / 守卫） |
-| 运行副本 | `D:\01_olbr_portal` | **实际跑起来的地方**（7038/7090/80/443） |
+| 新仓库 | `Jouwala/noc-soc-intelligent-platform`（`main`） | **改动落地的地方**：`refactor/round-1` 走 PR 合并进 `main` |
+| 重构工作区 | `D:\02_olbr_portal` | **隔离验证的地方**（8080/8443/7039/7091/9277/55432） |
+| 生产 | `D:\01_olbr_portal` | **实际跑起来的地方**（7038/7090/80/443），本轮不动 |
 
-改完在 `D:\01_RPA` 做完，**一定要同步过去**：
+**不要再用 `deploy_to_copy.ps1` 从 `D:\01_RPA` 同步到这里**：同步链已在批 C 停用（`sync-now.bat` 已删除，`ops\deploy\sync-engine.mjs` / `sync-policy.mjs` 已停用，见 `ops\deploy\README.md`）。改动走新仓库的 PR 流程；部署到 02 用隔离启动 `ops\deploy\start_all.ps1`。
 
-```powershell
-cd D:\01_RPA
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
-```
-
-它做三件事：**同步源码 → 在副本里重建前端 → 校验副本真的在跑新代码**。
-
-> **为什么不能只同步源码**：同步只搬源码；前端是**构建产物**（`Task\_fe_dist`）、后端是**常驻进程**，两者都不吃源码变更。
+> **为什么不能只同步源码**（2026-11-11 实测教训，仍适用）：同步只搬源码；前端是**构建产物**（`apps\_fe_dist`）、后端是**常驻进程**，两者都不吃源码变更。
 > 2026-11-11 实测 split-brain：前端 chunk 已含 `col_filters`（列头筛选），而 live 后端的
 > `/api/tables/{t}/data` OpenAPI 参数里**没有** `col_filters`、也没有 `/column-values` 路由 →
 > 用户看到「列头筛选点了没反应」「选值模式永远显示没有可选值」，是**完全坏掉的新功能**而不是报错。
 >
-> **脚本不自动重启**（重启会打断看数据的人）；校验不通过时会点名 `SPLIT-BRAIN` 并非零退出。
-> 细则见工作区根 `development.md` 第四节 D0。
+> **启动脚本不自动重启服务**（重启会打断看数据的人）；隔离冒烟的校验不通过时同样非零退出。
+> 细则见工作区根 `docs\workspace\development.md` 第四节 D0。
 
 ## 二、新会话上手顺序
 
@@ -59,7 +53,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
    - 站内帮助另有三处要同步：`helpContent.ts` 的 **`PAGE_DOCS`（zh/en 两份）+ `PAGE_LIST` + `NAV_KEY_MAP`**，并加进 `CATEGORIES` 的某个分类。**只加 `PAGE_DOCS` 不会显示** —— 页面清单由 `PAGE_LIST` 驱动。
    - **`socTrendDashboard` 曾在 `PAGE_META` / i18n / 刷新配置里都齐了，唯独没进 `DEFAULT_GROUPS`**（2026-10-31 已补）—— 页面能路由到，侧边栏却没有它的位置。**加了页面别忘了加进 `DEFAULT_GROUPS` 的某个组**。
    - ⚠️ **这些约定现在有机器守卫了**：`tests\test_doc_consistency.py`（17 个用例，**零第三方依赖、跨平台**，真相源用 AST 静态解析）会核对「任务数 / 页面数 / iframe 页数 / worker 组数 / 队列保留期 / 路由数 / 凭据分组数 / 组件数 / 文件体积 / 页面表与菜单一致 / 帮助条目齐全 / 每个页面都有按页刷新设置 / 看板下推的每张表都有本机 PG 巡检且窗口同档」等**从代码抄来的数字**，不一致就跑测试失败，**本地钩子与 CI 都会拦下**。详见 `docs\manual\04-task-system.md`「文档一致性守卫」一节。**别再靠自觉** —— 靠自觉已经失效过 15 次。
-   - **门户那一侧也有同款守卫**：`liberia-noc_soc-数据看板统一门户\scripts\check-doc-consistency.mjs`（`npm run check:docs`，6 个用例，核对 README/docs 里的看板条数 / 组件数 / 任务数）。两边同一套约定、同一套哲学。
+   - **门户那一侧也有同款守卫**：`apps\portal\scripts\check-doc-consistency.mjs`（`npm run check:docs`，6 个用例，核对 README/docs 里的看板条数 / 组件数 / 任务数）。两边同一套约定、同一套哲学。
    - **钩子怎么装**（新克隆的机器必做一次）：`cd frontend && npm run setup:hooks` —— 把 `core.hooksPath` 指向仓库内的 `.githooks\`（钩子文件随仓库分发，不再只存在于某台机器的 `.git\hooks\` 里）。详见根 `AGENTS.md` 第四节第 9 条。
 1b. **看板页"能下钻尽下钻"是硬要求**：页面上**每个数字都要可点**并落到对应明细，不允许只有汇总数字没有下钻路径。`noc_analyst` 是参考实现（四层：人 → 切片明细 → 站点 → 单 TT 告警链路，见 `docs\manual\11-feature-guide.md` 的 14b 节）。做下钻时三条铁律：
    - **下钻端点的 WHERE 必须与概览端点完全一致**（同一时间字段、同一精确匹配），否则"表格里的数字"与"下钻的行数"对不上，用户会当成 bug。**不要用 `LIKE` 做下钻、用 `=` 做概览**这类不一致写法。
@@ -100,7 +94,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
    - **口径文字必须从代码核实后再写**，不得照抄手册：本次就抓到手册与 `summary_by_tech()` 相反（手册写「全网汇总不是县等权平均」，实测 `/api/avail-county/matrix` 的 2G 值与 15 个县值的算术平均逐位相等）。写错口径比不写更糟 —— 用户会带着错的解释去汇报。
    - **禁止**用 `title=` 原生提示（不可复制、样式不受主题管、移动端读不到）；`ExplainIcon` 已自带 `stopPropagation`，挂在可下钻的卡片上时点 ⓘ **不会**顺带打开下钻弹窗。
    - **不适用**：`LegacyToolFrame` 的 iframe 页（FineBI/外部工具，数字不在我们 DOM 里）；纯列表页没有「算出来的数字」的不硬凑。
-   - **改造进度**：`D:\01_RPA\TODO.md` 的「数字悬浮说明铺开」条目（2026-11-03 起按族分批推进，`avail_county` 已完成）。
+   - **改造进度**：`D:\02_olbr_portal\docs\workspace\TODO.md` 的「数字悬浮说明铺开」条目（2026-11-03 起按族分批推进，`avail_county` 已完成）。
 3d. **⭐ 每个页面都要有自己的「按页刷新设置」（全站硬要求，2026-11-04 如意定）**：顶栏的「停止/开启刷新」按钮 + 间隔下拉对**每一个页面**都必须可用，选择按页持久化（`localStorage['myapp_auto_refresh_pages']`，一张 `{page: 秒}` 表，**默认关闭**）—— 刷不刷由用户自己决定，但**每页都得能决定**。**禁止**再引入「只有某类页面参与刷新」的白名单或把控件按页禁用：2026-11-03 那版 `AR_BOARD_PAGES` 白名单就是这么被否掉的（配置 / 操作 / 工具页的控件是禁用态，用户想刷也刷不了，而且每加一个页面都要回来改名单）。
    - **新增页面必须做两件事**：
      1. 在 `frontend\src\App.tsx` 的 `AR_PAGE_DEFAULTS` 登记该页的**建议间隔**（点「开启刷新」时落到的值，必须是 `AR_OPTIONS` 里的档位）。取档按该页**数据更新频率**：`60` 实时告警 / `300` 看板主力（上游多为 15 分钟级）/ `900` 上游日更或低频报表 / `1800` 配置、操作、工具类页面。
@@ -113,11 +107,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
    ```
    cd frontend && npm run build
    # ① 看 index.html 引用的入口 hash 是不是新的
-   Get-Content D:\01_RPA\Task\_fe_dist\index.html | Select-String 'index-.*\.js'
+   Get-Content D:\02_olbr_portal\apps\_fe_dist\index.html | Select-String 'index-.*\.js'
    # ② 服务端返回的是不是同一份（直连 7090，绕过浏览器缓存）
    (Invoke-WebRequest http://127.0.0.1:7090/myapp/ -UseBasicParsing).Content
    # ③ 改动的代码是否真在那个 chunk 里（按特征串搜）
-   Select-String -Path D:\01_RPA\Task\_fe_dist\assets\*.js -Pattern '你的新增端点或文案key'
+   Select-String -Path D:\02_olbr_portal\apps\_fe_dist\assets\*.js -Pattern '你的新增端点或文案key'
    ```
    ① 与 ② 一致、③ 命中 = 已上线，此时"界面没变"就是**浏览器缓存**，硬刷新（Ctrl+F5）即可。
    > 排查"改了没生效"时**不要**只凭 `_fe_dist` 里存在旧文件名就断定构建失败 —— 见第四节 `emptyOutDir: false` 的说明。
@@ -150,7 +144,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
 
 > **注意 `backend\app.db` 是误建的空占位**，真库在 `db\app.db`。读错库会得到"空的但不报错"的结果。
 >
-> **前端构建产物不在 `my_app` 内**：`vite.config.ts` 的 `outDir` 是 `D:/01_RPA/Task/_fe_dist`（在**仓库根**下、`my_app` 的**上一级**），且 `emptyOutDir: false`。
+> **前端构建产物不在 `my_app` 内**：`vite.config.ts` 的 `outDir` 是 `D:/02_olbr_portal/apps/_fe_dist`（在**仓库根**下、`my_app` 的**上一级**），且 `emptyOutDir: false`。
 > 两个后果，都会让人误判：
 > 1. 产物目录**只增不减** —— 改版后旧页面 chunk（如旧版 `NocAnalyst-*.js` 8KB）会和新 chunk（34KB）**同时存在**。看到旧文件名不代表构建失败，`index.html` 里引用的那个才是真正生效的。
 > 2. `my_app\_fe_dist` **不存在**，别在那里找产物；`cd frontend && npm run build` 的输出路径前缀是 `../../_fe_dist/`。
@@ -204,7 +198,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1
 > - 鉴权库（`auth_cache`）被硬排除在 PG 之外（R8，`:39`），无论 `DB_MODE` 为何值都走 SQLite。
 > - 想确认当前跑在哪个库，**不要猜**，问 `/api/health` 或看 `MY_APP_DB_MODE`。
 >
-> **⚠ 第 6 条（2026-10-31 新增，与上面同级硬性）：VMAX 数仓 GBase 8a（库 `zxvmax`）是生产环境 —— 只允许 SELECT/SHOW/DESC 查询，禁止在其上做任何修改或创建（建表/临时表/视图/回写/改权限一概不行）。需要数仓侧改动时：停止编码并告知用户，由用户找领导申请；获批后数仓操作由用户方执行，代码只做只读接线。新增 SELECT 不必申请，但须先评估负载、低峰试跑单日、与既有同步任务错开窗口。完整规则（含覆盖链路与降级要求）见工作区总纲 `D:\01_RPA\AGENTS.md` 第四节第 8 条 —— 那里是真相源，本条只是指针。** 代码侧兜底：`backend\services\vmax_gbase\vmax_gbase_client.py` 的只读断言（仅放行 SELECT/SHOW/DESC），**断言是防误操作，不是授权**，不得绕过或放宽；`soc_trend_sync` / `olib_soc_*` 任务全部走该客户端。
+> **⚠ 第 6 条（2026-10-31 新增，与上面同级硬性）：VMAX 数仓 GBase 8a（库 `zxvmax`）是生产环境 —— 只允许 SELECT/SHOW/DESC 查询，禁止在其上做任何修改或创建（建表/临时表/视图/回写/改权限一概不行）。需要数仓侧改动时：停止编码并告知用户，由用户找领导申请；获批后数仓操作由用户方执行，代码只做只读接线。新增 SELECT 不必申请，但须先评估负载、低峰试跑单日、与既有同步任务错开窗口。完整规则（含覆盖链路与降级要求）见工作区总纲 `D:\02_olbr_portal\AGENTS.md` 第四节第 8 条 —— 那里是真相源，本条只是指针。** 代码侧兜底：`backend\services\vmax_gbase\vmax_gbase_client.py` 的只读断言（仅放行 SELECT/SHOW/DESC），**断言是防误操作，不是授权**，不得绕过或放宽；`soc_trend_sync` / `olib_soc_*` 任务全部走该客户端。
 
 ## 七、进程与运维
 
@@ -235,10 +229,10 @@ uvicorn 后端 (:7038)
 - [ ] 新任务：`TASK_SPECS` 已登记，且 `04-task-system.md` 已更新
 - [ ] **新页面：`App.tsx` 的 `AR_PAGE_DEFAULTS` 已登记该页建议刷新间隔**（三.3d；重挂载代价大的页还要进 `AR_INPLACE_REFRESH_PAGES` / `AR_SOFT_REFRESH_PAGES`）
 - [ ] **改了「从代码抄来的数字」（任务数/页面数/分组数/保留期/路由数）→ 手册与站内帮助两处都改了**
-- [ ] **`cd Task\my_app && python tests\test_doc_consistency.py` 通过**（17 个用例；本地钩子与 CI 也会跑）
+- [ ] **`cd apps\my_app && python tests\test_doc_consistency.py` 通过**（17 个用例；本地钩子与 CI 也会跑）
 - [ ] **新克隆的机器**跑过一次 `cd frontend && npm run setup:hooks`（否则本地钩子不生效，只能靠 CI 兜底）
 - [ ] 前端产物目录仍是 `_fe_dist`，且已重新 `npm run build`
-- [ ] **改动已同步到运行副本 `D:\01_olbr_portal`**（`cd D:\01_RPA` → `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy_to_copy.ps1`；见本文一.5 节 —— 不同步 = 线上没生效）
+- [ ] **改动已按新仓库流程走 PR**（本仓库不再用 `deploy_to_copy.ps1` 从 `D:\01_RPA` 同步；见本文一.5 节）
 - [ ] 帮助内容改动后已重跑 `npm run docs`（`generate-help-doc.mjs` + `generate-manual-html.mjs`）
 - [ ] 没有新增裸 `sqlite3.connect`
 - [ ] 没有把 `db\`、`log\`、`TMP\`、`auth_cache\`、`*.pid` 加进版本库
@@ -258,19 +252,19 @@ uvicorn 后端 (:7038)
 | 07 | `development.md` | 开发方式、命令与回归清单 |
 | 08 | `component-api.md` | 组件索引 |
 
-> 均在 `Task\my_app\` 根目录（与 `PROJECT_DOCS.md` 同级）。
+> 均在 `apps\my_app\` 根目录（与 `PROJECT_DOCS.md` 同级）。
 > **手册（`docs\manual\`）仍是详细内容的权威来源**，这 8 份负责"入口与约束"。
 
 ## 十、相关文档
 
 | 内容 | 去哪里 |
 | --- | --- |
-| 工作区总纲 | `D:\01_RPA\AGENTS.md` |
+| 工作区总纲 | `D:\02_olbr_portal\AGENTS.md` |
 | 手册导航 | `docs\manual\README.md` |
 | 代码清理指南 | `docs\CODE_CLEANUP_GUIDE.md` |
 | Excel 导出规范 | `docs\EXCEL_EXPORT_STANDARD.md` |
 | FineBI 迁移 | `docs\FINEBI_MIGRATION.md` |
 | 历史档案 | `PROJECT_DOCS.md`、`PROJECT_DOCS_ARCHIVE.md` |
-| 统一门户 | `D:\01_RPA\liberia-noc_soc-数据看板统一门户\docs\AGENTS.md` |
+| 统一门户 | `D:\02_olbr_portal\apps\portal\docs\AGENTS.md` |
 
 > **工具负责整理，人与 AI 负责协作执行。**

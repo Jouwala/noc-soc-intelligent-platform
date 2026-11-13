@@ -5,19 +5,19 @@ export const APP = 'apps/my_app';
 export const EMS = `${APP}/backend/services/cn_ems`;
 export const STATE = 'TMP/_sync_state.json';
 export const FIX_TARGETS = [`${APP}/monitor_fixes/nginx_monitor.ps1`, `${PORTAL}/rotate_nginx_logs.ps1`];
-// 根级文档：副本的 AGENTS.md 曾在「建库初始提交」后冻结不动，
+// 工作区级文档（docs/workspace/）：副本的 AGENTS.md 曾在「建库初始提交」后冻结不动，
 // 于是副本里的规则与编辑区分了叉（2026-11-11 实测：副本 AGENTS.md 停在 2026-11-10，
-// 编辑区已到 2026-11-06 之后的多次修订）。根级 md 同步过来即可保持一致。
-// 注意：只同步 .md —— 根级脚本（scripts\）由副本自己维护，见下方 ROOT_FILES 的用途说明。
+// 编辑区已到 2026-11-06 之后的多次修订）。docs/workspace/ 的 md 同步过来即可保持一致。
+// 注意：只同步 .md —— 副本自己的脚本（ops\deploy\）由副本自己维护，见下方 ROOT_FILES 的用途说明。
 export const ROOT_FILES = [
   'AGENTS.md',
-  'development.md',
-  'architecture.md',
-  'TODO.md',
-  'project-overview.md',
-  'user-guide.md',
-  'DESIGN.md',
-  'component-api.md',
+  'docs/workspace/development.md',
+  'docs/workspace/architecture.md',
+  'docs/workspace/TODO.md',
+  'docs/workspace/project-overview.md',
+  'docs/workspace/user-guide.md',
+  'docs/workspace/DESIGN.md',
+  'docs/workspace/component-api.md',
 ];
 // 只同步源码；构建产物（apps/_fe_dist、门户 dist）由副本自行构建，绝不从生产拷贝。
 export const GROUPS = [
@@ -81,7 +81,7 @@ export function allowedDirectory(rel, group) {
   return true;
 }
 export function allowedFile(rel, group = groupFor(rel)) {
-  // 根级文档：显式白名单放行（它们不属于任何 GROUP，但必须跟着同步，见 ROOT_FILES 注释）。
+  // 工作区级文档：显式白名单放行（它们不属于任何 GROUP，但必须跟着同步，见 ROOT_FILES 注释）。
   if (ROOT_FILES.includes(rel)) return true;
   if (!group) return false;
   if (resources.has(rel.toLowerCase())) return true; // 显式业务输入（规则表/模板/公共CA）优先放行

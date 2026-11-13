@@ -1,16 +1,16 @@
 # 08 component-api.md —— 组件索引
 
-> 基准日期：2026-09-22　|　适用：`D:\01_RPA` 工作区根目录
+> 基准日期：2026-09-22　|　适用：`D:\02_olbr_portal` 工作区根目录
 > **本文只做索引**（哪个组件在哪、干什么），**不复制 props 签名**——API 细节以源码为准，避免文档漂移。
-> 权威正文：门户 `liberia-noc_soc-数据看板统一门户\docs\component-api.md`；my_app `Task\my_app\component-api.md`。
+> 权威正文：门户 `apps\portal\docs\component-api.md`；my_app `apps\my_app\component-api.md`。
 
 ## 一、跨项目组件总览
 
 | 项目 | 组件位置 | 数量 | 技术 |
 | --- | --- | --- | --- |
-| 统一门户 | `liberia-noc_soc-数据看板统一门户\src\components\` | 24 个 `.tsx` | React 19 + Tailwind v4 + lucide-react |
+| 统一门户 | `apps\portal\src\components\` | 24 个 `.tsx` | React 19 + Tailwind v4 + lucide-react |
 | 门户页面级 | `...\src\App.tsx` | 状态中枢 | 非组件化，状态与持久化都在这 |
-| my_app 前端 | `Task\my_app\frontend\src\` | 见 my_app 索引 | React + Vite |
+| my_app 前端 | `apps\my_app\frontend\src\` | 见 my_app 索引 | React + Vite |
 | 门户静态页 | `...\MsPortal\` | `index.html` / `viewer.html` | 原生 HTML（复刻参考与查看器） |
 
 ## 二、门户组件索引（`src\components\`）
@@ -89,27 +89,27 @@
 
 ## 四、my_app 前端组件
 
-见 `Task\my_app\component-api.md`。目录为 `Task\my_app\frontend\src\`（`pages\` 页面组件 + `components\` 通用组件），逐页功能说明在 `Task\my_app\docs\manual\11-feature-guide.md`。
+见 `apps\my_app\component-api.md`。目录为 `apps\my_app\frontend\src\`（`pages\` 页面组件 + `components\` 通用组件），逐页功能说明在 `apps\my_app\docs\manual\11-feature-guide.md`。
 
 ## 五、如何自己查（比读文档更可靠）
 
 ```powershell
 # 门户：列出所有组件及其导出
-Get-ChildItem "liberia-noc_soc-数据看板统一门户\src\components" -Filter *.tsx |
+Get-ChildItem "apps\portal\src\components" -Filter *.tsx |
   Where-Object { $_.Name -notlike "*_bak*" } |
   ForEach-Object { $_.Name; Select-String -Path $_.FullName -Pattern "^export (const|function|interface)" }
 
 # 查某个组件被谁用了
-Select-String -Path "liberia-noc_soc-数据看板统一门户\src\*.tsx","liberia-noc_soc-数据看板统一门户\src\components\*.tsx" -Pattern "DynamicIcon"
+Select-String -Path "apps\portal\src\*.tsx","apps\portal\src\components\*.tsx" -Pattern "DynamicIcon"
 ```
 
 ## 六、相关文档
 
 | 内容 | 去哪里 |
 | --- | --- |
-| 门户组件权威说明 | `liberia-noc_soc-数据看板统一门户\docs\component-api.md` |
-| my_app 组件权威说明 | `Task\my_app\component-api.md` |
-| 视觉规则 | `DESIGN.md`、`liberia-noc_soc-数据看板统一门户\DESIGN.md` |
+| 门户组件权威说明 | `apps\portal\docs\component-api.md` |
+| my_app 组件权威说明 | `apps\my_app\component-api.md` |
+| 视觉规则 | `DESIGN.md`、`apps\portal\DESIGN.md` |
 | 使用者视角的功能说明 | `user-guide.md` |
 | 整体架构 | `architecture.md` |
 

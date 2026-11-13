@@ -19,7 +19,7 @@
  *   StatCard  —— 数字卡，在 CardBase 皮肤之上加「标题 + 大数字 + 图标」结构
  *   CardTitle —— 项目统一的卡头文字排版（此前在 12 处各写一份内联 span）
  *
- * 相关约定见 Task/my_app/component-api.md 与 DESIGN.md。
+ * 相关约定见 apps/my_app/component-api.md 与 DESIGN.md。
  * ========================================================================== */
 
 export { default as CardBase, CardTitle } from './CardBase'

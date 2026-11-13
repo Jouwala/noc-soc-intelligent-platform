@@ -1,8 +1,8 @@
 # 03 TODO.md —— 当前任务、优先级和开发进度
 
-> 基准日期：2026-09-22　|　适用：`D:\01_RPA` 工作区根目录
+> 基准日期：2026-09-22　|　适用：`D:\02_olbr_portal` 工作区根目录
 > **本文只放"当前在办"的少数几项。** 历史清单与已完成规划**不进本文**——那些看 `git log`、
-> `Task\my_app\PROJECT_DOCS.md`（历史档案）以及各子系统手册。
+> `apps\my_app\PROJECT_DOCS.md`（历史档案）以及各子系统手册。
 
 ## 一、进度快照
 
@@ -25,21 +25,21 @@
 
 ### P1 —— 数据正确性与稳定性
 
-- [ ] **站点可用率取数改走本地 PG（2026-10-15，已定性、待观察上游）。** 站点可用率已从远端 UME HTTP（`192.168.100.19:8765`）改为**本地 PG 优先、远端回退**，代码在 `Task\my_app\backend\services\site_availability_service.py`（`PG_SPEC` / `_load_pg_tech` / `_load_tech`，快照 `..._bak_20261015_PG双模前`）。
+- [ ] **站点可用率取数改走本地 PG（2026-10-15，已定性、待观察上游）。** 站点可用率已从远端 UME HTTP（`192.168.100.19:8765`）改为**本地 PG 优先、远端回退**，代码在 `apps\my_app\backend\services\site_availability_service.py`（`PG_SPEC` / `_load_pg_tech` / `_load_tech`，快照 `..._bak_20261015_PG双模前`）。
   - **2G / 3G 两源等价**：重叠键 100% 一致、零值差异；且 PG 严格超集（另有 47 个站点在 `master_site_db` 里但远端查不到 —— 切换后这些站从"空白"变为有数据）。同时去掉对 .19 HTTP API 的运行时依赖。
   - **4G 已定性（2026-10-15 实测 UME 直查）**：用 MS SLA 的 FDD 模板对 2026-10 整月直查 UME 自身（`10.100.28.27:28001`）当裁判，5342 条：
     - 只切换 `indexfillingtype`（`default` vs `zeroDenominator`）→ **5342/5342 逐行完全相同**，故**该设置不是差异根因**（原假设已证伪）。
     - **UME == PG = 99.4%**（排除最新一天的同步滞后后达 **99.9%**，仅 4 条残差）；**UME == 远端 = 85.8%**，且排除最新几天后仍卡在 ~86%。
     - **结论：PG 就是 UME 的值，4G 走 PG 正确，无需回退远端。** 远端 `4G_Main_Kpi_Site_Daily`（`FDD_KPIs_ZTE_OLR_FB` 模板 + `layer: Sites`）的 4G 可用率**系统性偏高约 14%**，是独立的上游数据质量问题。
-  **待办**：把"远端 4G 可用率偏高约 14%"作为**上游数据问题**反馈（本条不再阻塞本站点可用率看板）；`docs\manual\` 的站点可用率口径说明如需同步为"PG 与 UME 一致"，一并更新。**观察点**：PG 的 4G 当天值有增量同步滞后（当天可能尚未吸收终值，如 `2026-10-14` 有 27 条残差），看板若要求当天实时终值需另评估。
-- [ ] **P1 告警推送加 ext 通道 fallback（2026-10-08）。** Baileys 主通道失败（群名解析不到 JID / 凭据过期 / WhatsApp 流控 428）时，自动把同一批 `messages` 投到 `data/tt_alert_job.json`，由已登录的 WhatsApp Web 扩展兜底。改动已落到 `Task\my_app\backend\services\tt_alarm_whatsapp_service.py`（新增 `try_ext_fallback`、在两个失败分支调用） + 4 条 stub 用例 + `architecture.md` 8.x ADR；**待验证**：① 重启 `m` 组 worker 后第一次跑 0 候选 → 任务历史页面要能看到新字段 `ext_fallback` 为空（`attempted: false`）；② 手动制造一次 Baileys 失败（把 `GROUPS` 临时改成一个不存在的群名跑一次）→ ext 通道应兜住（前提：Chrome 开着 + 扩展已登录）→ `out.success=True` + `warnings` 含"兜住 N/M 单"。**回滚手段**：revert 三个文件即可。
+  **待办**：把"远端 4G 可用率偏高约 14%"作为**上游数据问题**反馈（本条不再阻塞本站点可用率看板）；`apps\my_app\docs\manual\` 的站点可用率口径说明如需同步为"PG 与 UME 一致"，一并更新。**观察点**：PG 的 4G 当天值有增量同步滞后（当天可能尚未吸收终值，如 `2026-10-14` 有 27 条残差），看板若要求当天实时终值需另评估。
+- [ ] **P1 告警推送加 ext 通道 fallback（2026-10-08）。** Baileys 主通道失败（群名解析不到 JID / 凭据过期 / WhatsApp 流控 428）时，自动把同一批 `messages` 投到 `data/tt_alert_job.json`，由已登录的 WhatsApp Web 扩展兜底。改动已落到 `apps\my_app\backend\services\tt_alarm_whatsapp_service.py`（新增 `try_ext_fallback`、在两个失败分支调用） + 4 条 stub 用例 + `architecture.md` 8.x ADR；**待验证**：① 重启 `m` 组 worker 后第一次跑 0 候选 → 任务历史页面要能看到新字段 `ext_fallback` 为空（`attempted: false`）；② 手动制造一次 Baileys 失败（把 `GROUPS` 临时改成一个不存在的群名跑一次）→ ext 通道应兜住（前提：Chrome 开着 + 扩展已登录）→ `out.success=True` + `warnings` 含"兜住 N/M 单"。**回滚手段**：revert 三个文件即可。
 - [ ] **数据层裸连接治理（前置调研，非立即改造）。** 运行期已知存在绕过 `get_raw_connection` 的裸 `sqlite3.connect`（如 `ipran_chart_service.py:233`、`fw_kpi_services.py:488`），是**图表数据源**，改造会静默坏图。当前动作：**不再新增**裸连接，并把已有点位登记成清单。
 - [ ] **`eflow_tt` 双库归属固化。** 明确"同步只写 `app.db`、`eflow.sqlite3` 副本仅作只读快照"，避免后续有人读错库。结论已在 `PROJECT_DOCS.md` §2 Phase 0.5 闭环，待落到代码注释与手册。
-- [ ] **五个关键进程的巡检常态化。** 确认 worker 分组 + 双看门狗在异常退出后确实自愈（步骤见 `docs\manual\13-operations.md`）。
+- [ ] **五个关键进程的巡检常态化。** 确认 worker 分组 + 双看门狗在异常退出后确实自愈（步骤见 `apps\my_app\docs\manual\13-operations.md`）。
 
 ### P2 —— 体验与工程规范
 
-- [ ] **数字悬浮说明铺开（2026-11-03 立，规则见 `Task\my_app\AGENTS.md` 三.3c / 根 `AGENTS.md` 四.10b）。**
+- [ ] **数字悬浮说明铺开（2026-11-03 立，规则见 `apps\my_app\AGENTS.md` 三.3c / `../AGENTS.md` 四.10b）。**
       **实现已全部铺开完毕（2026-11-05，①—⑥d 全批）**：53 个自研页里 51 页有数字级气泡或已判定豁免，
       仅剩并发会话手里的 `email_reports` / `ipt_power` 两页未动。**残留两件**：
       ① 四处实机悬浮还没触发过（`upload` 要真实上传文件、`vmax_user_query` 要真实号码打上游、
@@ -50,7 +50,7 @@
       `analyzeVoice` 的 badCount 重复计数（**会改变界面上「超时/失败」的数字**）、`ap_center` 的 `?? 0` 与空 progress。
       新约定：收起的 `CalcChainNote`（这页整体怎么算）之外，**每个数字还要能悬浮问到「这个数怎么算」**
       （列头/标题用 `MetricExplain::ExplainIcon`，数字本身用 `ExplainPopover` 列出该格构成）。
-      **实测盘子**（`Task\my_app\frontend\src\pages\*.tsx`，72 个顶层文件，2026-11-03 数）：
+      **实测盘子**（`apps\my_app\frontend\src\pages\*.tsx`，72 个顶层文件，2026-11-03 数）：
       iframe 页 11 个（`LegacyToolFrame`，数字不在我们 DOM 里 → **不适用**）；
       非 iframe 61 个里已用 `CalcChainNote` 或 `MetricExplain` 的 14 个、两者都没用的 47 个；
       **`ExplainPopover`（数字本身）全站只有 2 页有** —— `PacketLossDashboard`（自写气泡，5 处）与
@@ -171,7 +171,7 @@
       页面无控制台报错，tooltip 末行没能在实机触发**（隐藏视口里跑不出一张图），下个会话打开任一分析结果时顺手核一眼。
       教训：**「做完」的判据是扫出来的，不是印象** —— 复扫 `<ExplainPopover` / `explainText=` 才算数，
       别拿「我改过这页」当覆盖证明。
-      **2026-11-05 二次复盘**（复扫脚本 `Task\my_app\TMP\_ne_scan.py`，沿 `pages/` 内的 import 做闭包，可复跑）：
+      **2026-11-05 二次复盘**（复扫脚本 `apps\my_app\TMP\_ne_scan.py`，沿 `pages/` 内的 import 做闭包，可复跑）：
       53 个非 iframe 页里 38 个扫到数字级气泡 —— 其中 `gis` / `realtime_alarm` 的命中**全部来自对方未提交**的
       `pages/gismap/RatKpiTab.tsx`（HEAD 里计数为 0），故**我自己已提交的达标 = 37**；`dashboard` 按脚本判据扫不出
       （数字在 ECharts canvas 里，走 tooltip 末行），`Dashboard.tsx:150-155` + i18n `dashboard.tip.*` 中英六条**确认在 HEAD**。
@@ -204,7 +204,7 @@
       ⑤ 报表族（`Sp*Report` / `ComReport` / `BpReport` / `Warehouse*` / `CrChangeAnalysis` / `PmExecutionAnalysis`）；
       ⑥ 其余（`BmSpeedtest` / `BmMeta` / `BatteryDashboard` / `FmeRanking` / `GISMap` / `Dashboard` / `Overview` 补数字级）。
       **不做**：设置/凭据/上传/帮助/登录等无数字页（约 14 个，见上表 note=icon=pop=0 的 Settings 类）。
-      **实施规格已固化**：`Task\my_app\docs\number-explain-rollout-spec-2026-11-03.md`
+      **实施规格已固化**：`apps\my_app\docs\number-explain-rollout-spec-2026-11-03.md`
       —— ②③④⑤ 四批共 28 页的「数字清单 / 后端算法与 `文件:行号` 证据 / 已有说明 / 可疑点」全部写好，
       后续会话照该文档实施即可，**不必重做调研**（四份调研实读后端代码，成本约 1700 万 token）。
       该文档同时登记了调研顺手挖出的**实现级问题**（不是文案缺口）：前端重算违反三.3c 的 5 处
@@ -231,7 +231,7 @@
       取消选中/点地图空白/抽屉 × 三条清除路径符合手册 11a、控制台零错误；手册 11a 文件指针已同步。
       **未提交**：工作区有他人在途改动（EmailReports / GISMap / 凭据等），提交需择干净窗口、只提 personmap 相关文件。
 - [ ] **地图页「点别处取消选中」还剩两处未收口（2026-10-21 立）。** `?page=person` 已修
-      （`Task\my_app\frontend\src\useClearOnOutsideClick.ts`，实测点 KPI 卡/表格/筛选条/页面背景均取消、
+      （`apps\my_app\frontend\src\useClearOnOutsideClick.ts`，实测点 KPI 卡/表格/筛选条/页面背景均取消、
       点抽屉内部与表格行不误取消）。盘点其余带地图的页面后剩两处：
   1. **`?page=gis` / `?page=realtime_alarm` 的人员图层。** `gismap/PersonnelLayer.tsx:187-220` 的
      `clearSelection` 只挂在 `map.on('click')` 上，所以选中人后点右侧卡片/表格，
@@ -293,10 +293,10 @@
   1. **结论卡片正文还是旧文案** —— `> The AI model was unavailable…` 加末行
      `*Model failure reason: 程序化先行（/tt-ai-fast）…*`。磁盘代码是干净的（离线渲染已确认会输出
      `No model is involved` / `无模型参与`），旧文案只来自进程内的旧字节码。
-  2. **`provider` 已从 `openwebui` 改成 `both`**（写在 `Task\my_app\backend\services\ai_model_config.json`），
+  2. **`provider` 已从 `openwebui` 改成 `both`**（写在 `apps\my_app\backend\services\ai_model_config.json`），
      但 `ai_model_config._cached` 是进程内缓存，所以 `GET /api/ai-model-settings/chain` 仍回 `openwebui`。
      改这一项的原因：Open WebUI（.27，0.12.0）启用了 trusted-header SSO，邮箱密码登录被服务端**永久**关死
-     （带真实账密试遍 11 个头名 + 3 组双头全是同一个 400，明细见 `Task\my_app\backend\services\openwebui_client.md`），
+     （带真实账密试遍 11 个头名 + 3 组双头全是同一个 400，明细见 `apps\my_app\backend\services\openwebui_client.md`），
      而 `provider=openwebui` 时候选链里只有云端一档、本地 WorkBuddy 档根本不进链，一次 400 就整条失败；
      `both` 让 WorkBuddy 先进链（实测在线、一次对话约 2 秒）。
      **执行**（PowerShell 不支持 `&&`，逐行跑）：
@@ -308,25 +308,25 @@
      界面不受这两项影响：`?page=eflow_qa` 已只调 `/tt-ai-fast`，线上包 `index-BQiCP-wf.js` 里查不到 `/tt-ai`；
      回归守卫 `tests\test_engineering_guards.py::test_tt_quick_analysis_is_programmatic_only` 已就位（1 passed）。
 
-- [ ] **本 8 份文档体系的落地与首轮校验。** 根目录、门户 `docs\`、`Task\my_app\` 三处已建立；待办：确认三处文件名一致、互链可达，并把索引页接进门户导航。
+- [ ] **本 8 份文档体系的落地与首轮校验。** 根 `docs\workspace\`、门户 `apps\portal\docs\`、`apps\my_app\` 三处已建立；待办：确认三处文件名一致、互链可达，并把索引页接进门户导航。
 - [ ] **门户移动端体验复查。** 二维码扫码要求同网段 WiFi，需确认现场网络条件下可用。
 - [ ] **根目录过程产物清理。** 根目录残留大量 `tmp_qc*.txt`（76 个）、`_*` 探针与切片文件，属一次性产物。历史教训见 `7b1d33b`（98 个探针脚本误入库）。**清理前先确认无脚本引用。**
   > 2026-09-30 复核并扩范围：实测三处都有，`development.md` 自检 ⑥ 已给出可直接跑的命令与基线。
-  > 根目录 78 个 / 359KB（其中 `tmp_qc*` 76 个，与上面一致）；`Task\my_app\` 根目录 4 个
+  > 根目录 78 个 / 359KB（其中 `tmp_qc*` 76 个，与上面一致）；`apps\my_app\` 根目录 4 个
   > （`_p.py` `_s.py` `_slice1.txt` `_tmp_view.txt` —— 落在 venv 根，正是第四节第 7 条禁止的位置）；
-  > `Task\my_app\log\` 另有 7 个 `_probe_*.txt` / `_procs*.txt`（09-13/09-16）。门户侧已归零。
+  > `apps\my_app\log\` 另有 7 个 `_probe_*.txt` / `_procs*.txt`（09-13/09-16）。门户侧已归零。
   > 计数时**必须排除** `Lib\site-packages\`（numpy/playwright 自己的 `_*` 模块 700+ 个）和
   > `backend\services\_playwright_utils.py`、`src\pages\_TemplatePage.tsx` 这类带下划线的真源码，
   > 否则数字全是假的。按既有约定同盘挪进 `_quarantine_*/`，不做删除。
 
 - [ ] **版本库整洁收口（2026-09-30）。** 本条已提交为独立 chore 提交 `3eaecdb3`（只提索引，没夹带任何在途功能改动），保留在此是为了对照下一次的验收数字。
-  1. **39 个运行时文件已退跟踪。** 明细：12 个 SQLite 边车（`Task\RAN\*`、`Task\ip_ran\`、`ticket_export_rpa\` 的 `.sqlite3-shm/-wal`）、`Task\my_app\backend\services\battary_kpi_fetch\output_socket\.email_send.lock`、门户 `scripts\whatsapp_analysis\reports\` 的 26 份日报。忽略规则同时补好（根 `.gitignore` 的 `*.sqlite3-shm/wal` + `*-journal`，门户 `.gitignore` 的 `scripts/whatsapp_analysis/reports/`），**磁盘一个文件都没删**（边车与 27 份报告仍在原位）。教训见 `development.md` 自检 ⑦：本会话第一次做完就被并发会话的 `git reset` 复原过一次，所以**只动索引的改动必须当次提交掉**。
+  1. **39 个运行时文件已退跟踪。** 明细：12 个 SQLite 边车（`Task\RAN\*`、`Task\ip_ran\`、`ticket_export_rpa\` 的 `.sqlite3-shm/-wal`）、`apps\my_app\backend\services\battary_kpi_fetch\output_socket\.email_send.lock`、门户 `apps\portal\scripts\whatsapp_analysis\reports\` 的 26 份日报。忽略规则同时补好（根 `.gitignore` 的 `*.sqlite3-shm/wal` + `*-journal`，门户 `.gitignore` 的 `scripts/whatsapp_analysis/reports/`），**磁盘一个文件都没删**（边车与 27 份报告仍在原位）。教训见 `development.md` 自检 ⑦：本会话第一次做完就被并发会话的 `git reset` 复原过一次，所以**只动索引的改动必须当次提交掉**。
      验收标准（`3eaecdb3` 之后）：`git ls-files -i -c --exclude-standard` 总数应 = **32**（全是真源码基线，一条都不许动），`_myapp_trash_20260913` 与 `git ls-files` 里的 `sqlite3-shm/wal`、`.email_send.lock`、`whatsapp_analysis/reports/` 均为 0；索引总文件数 **1498**。
   2. **`_myapp_trash_20260913` 的 3419 条跟踪 —— 已 `git rm --cached -r` 并随 `3eaecdb3` 提交，HEAD 里现在为 0。** 内容实测 3378 个在 `B_portal_profiles\`（Chrome profile 的 woff/ttf、`.tflite`、`.pb`），其余 41 个是 `A_root_junk`/`B_tmp`/`B_outputs` 的转储，没有一个是源码。退跟踪后索引从 4917 降到 **1498**，磁盘 21253 个文件原样不动（该路径是 09-25 建的符号链接，指向 `_quarantine_20260925\_myapp_trash_20260913`，**链接本身要留着** —— 它让历史记忆里记录的还原路径继续可解析）。⚠️ 顺序教训（本次验证过）：必须先 `git rm --cached -r`，再动这个链接；反了的话 git 会把它当普通目录，3419 条变成工作区删除噪声。
-  3. **`Task\_fe_dist` 剪枝 —— 2026-09-30 已清完「月龄 ≥ 8 天」那一档，剩下两档待做。** 首次执行挪走 2741 个孤儿 chunk / 61.9MB 到 `_quarantine_20260930\fe_dist_stale\`（同盘 `rename`，**一个都没删**；清单 `_MANIFEST.tsv`、说明与还原命令 `_RESTORE.md`）。产物目录 12955 → **10214** 个文件、336 → **269 MB**。复跑审计在用集不变（14 HTML / 79 可达 chunk），14 个在用页面与入口引用的 7 个资源逐个 200，git 零影响（`_fe_dist/` 与 `/_quarantine_*/` 本来都在忽略清单里）。脚本已升级出 `--apply` / `--min-age-days` / `--dest`，默认仍是只读 dry-run，登记在 `development.md` 的可复用脚本表。
+  3. **`apps\_fe_dist` 剪枝 —— 2026-09-30 已清完「月龄 ≥ 8 天」那一档，剩下两档待做。** 首次执行挪走 2741 个孤儿 chunk / 61.9MB 到 `_quarantine_20260930\fe_dist_stale\`（同盘 `rename`，**一个都没删**；清单 `_MANIFEST.tsv`、说明与还原命令 `_RESTORE.md`）。产物目录 12955 → **10214** 个文件、336 → **269 MB**。复跑审计在用集不变（14 HTML / 79 可达 chunk），14 个在用页面与入口引用的 7 个资源逐个 200，git 零影响（`_fe_dist/` 与 `/_quarantine_*/` 本来都在忽略清单里）。脚本已升级出 `--apply` / `--min-age-days` / `--dest`，默认仍是只读 dry-run，登记在 `development.md` 的可复用脚本表。
      ⚠️ 该目录是**线上服务目录**（7090 由 vite preview 读它，`nginx.conf` 里没有它的 alias），只能同盘挪、不能删；`emptyOutDir:false` 是实测约束（安全删除钩子会中断 vite 的 `prepare-out-dir`），**不许**改成 true —— 所以这件事**要周期性重跑，不会自己好**。剩余不可达 **10074 个 / 224.2MB**（0-1 天 4017、2-7 天 5991）。下一轮 `--min-age-days=2` 之前注意两点：a) 阈值参数拿不到默认值会变成 NaN，而 `age >= NaN` 恒假 → 候选归零（失败方向是安全的，但会让人误以为清过了；本次实测踩过，脚本已加显式校验）；b) 0-1 天那批里混着**当天正在被人验证的构建**，清它等于赌没人持有旧 `index.html` 的缓存，要挑没人看页面的时段做。
-- [ ] **开源许可合规收尾（2026-09-28 核查后的剩余项）。** 已完成：`react-leaflet`（Hippocratic-2.1，非 OSI）连同 `@react-leaflet/core` 一并移除，改为 `Task\my_app\frontend\src\components\LeafletMap.tsx` 的原生 leaflet 封装；`@google/genai`（未使用）与 `@turf/*`（无依赖方）清理；`requirements.lock.txt` 补齐 8 个声明却缺失的运行时依赖。剩余：
-  1. `Task\my_app\docs\THIRD-PARTY-NOTICES.md` 需补全 Apache-2.0 / MIT 的署名与许可全文义务，并核对 `xlsx`（SheetJS CDN 版）、`psycopg2-binary`（LGPL，动态链接）两项的表述；
+- [ ] **开源许可合规收尾（2026-09-28 核查后的剩余项）。** 已完成：`react-leaflet`（Hippocratic-2.1，非 OSI）连同 `@react-leaflet/core` 一并移除，改为 `apps\my_app\frontend\src\components\LeafletMap.tsx` 的原生 leaflet 封装；`@google/genai`（未使用）与 `@turf/*`（无依赖方）清理；`requirements.lock.txt` 补齐 8 个声明却缺失的运行时依赖。剩余：
+  1. `apps\my_app\docs\THIRD-PARTY-NOTICES.md` 需补全 Apache-2.0 / MIT 的署名与许可全文义务，并核对 `xlsx`（SheetJS CDN 版）、`psycopg2-binary`（LGPL，动态链接）两项的表述；
   2. 把许可检查接进 lint / CI，避免再次引入非 OSI 许可（本次即为人工核查才发现）；
   3. **团队约定待写入手册**：`pymupdf`（AGPL-3.0/商业双许可）虽当前零引用，仍应明令 my_app 禁止 `import fitz`，改用 `pypdf`（BSD）；
   4. `GeoLite2-City.mmdb` 尚未落盘，将来下载时需接受 MaxMind EULA（见 `backend/services/ip_trace_service.py:55`）。
@@ -359,13 +359,13 @@
 
 - [ ] **TT 分析「先快后准」备灾（2026-10-08）→ 已转正为纯程序化（2026-10-19）。** 本地规则引擎 + 毫秒级 `GET /api/eflow-qa/tt-ai-fast`
   + `TT_AI_LOCAL_ONLY=1` env 开关，三层兜底详见
-  `Task\my_app\backend\routers\eflow_qa.py:564-719`、`backend\services\eflow_rules\tt_rule_evidence.py:858`。
+  `apps\my_app\backend\routers\eflow_qa.py:564-719`、`backend\services\eflow_rules\tt_rule_evidence.py:858`。
   前端 `EflowQa.tsx` 原先是「fast 立即显示 → 原端点 AI 替换」模式；**2026-10-19 用户要求不再用 AI**，
   页面已改为**只调 `/tt-ai-fast`**，结论文案与徽标统一为「判定结论（本地规则引擎）/ 程序化判定，无模型参与」，
   模型路径 `/tt-ai` 保留但界面不再依赖（`openwebui_client` 仍服务「系统设置 → AI 模型」连通性测试）。
   **待办**：(1) `git status --porcelain` 复查
-  `Task\my_app\frontend\src\pages\EflowQa.tsx`、`i18n.tsx`、`backend\routers\eflow_qa.py`
-  改动在版本控制下；(2) 提交（`docs\manual\11-feature-guide.md` 14e / 14e-1 与
+  `apps\my_app\frontend\src\pages\EflowQa.tsx`、`i18n.tsx`、`backend\routers\eflow_qa.py`
+  改动在版本控制下；(2) 提交（`apps\my_app\docs\manual\11-feature-guide.md` 14e / 14e-1 与
   `17-rule-engine-vs-llm.md` 17.2.2 已于 2026-10-19 改写为「页面只走程序化」；
   `04-task-system.md` 并没有「TT AI 兜底」一节，无需再等它）。
   回滚手段：`git revert` 本次提交；env `TT_AI_LOCAL_ONLY` 对本页已无作用。
@@ -394,10 +394,10 @@
 | 内容 | 去哪里 |
 | --- | --- |
 | 完整提交历史 | `git log --oneline` |
-| my_app 历史规划与复盘 | `Task\my_app\PROJECT_DOCS.md` |
-| my_app 待清理残留清单 | `Task\my_app\docs\manual\90-appendix.md` |
-| 商用就绪度整改 | `liberia-noc_soc-数据看板统一门户\MsPortal 商用就绪度检测 —— 结论与整改方案.md` |
-| 迁移专项 | `Task\my_app\docs\FINEBI_MIGRATION.md` |
+| my_app 历史规划与复盘 | `apps\my_app\PROJECT_DOCS.md` |
+| my_app 待清理残留清单 | `apps\my_app\docs\manual\90-appendix.md` |
+| 商用就绪度整改 | `apps\portal\MsPortal 商用就绪度检测 —— 结论与整改方案.md` |
+| 迁移专项 | `apps\my_app\docs\FINEBI_MIGRATION.md` |
 | 架构与已知风险 | `architecture.md` |
 | 开发与回归清单 | `development.md` |
 

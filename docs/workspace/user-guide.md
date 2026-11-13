@@ -1,9 +1,9 @@
 # 06 user-guide.md —— 面向使用者的功能说明
 
-> 基准日期：2026-09-22　|　适用：`D:\01_RPA` 工作区根目录
+> 基准日期：2026-09-22　|　适用：`D:\02_olbr_portal` 工作区根目录
 > **本文是入口导航**，不是功能大全。逐页说明书在：
-> - my_app：`Task\my_app\docs\manual\11-feature-guide.md`（83 个页面）与 `15-user-help.md`（**一站式使用者帮助**，含 84 个任务工作流、66 个页面指南、FAQ；英文版 `15-user-help-en.md`）
-> - 门户：`liberia-noc_soc-数据看板统一门户\README.md` 的「功能概览」
+> - my_app：`apps\my_app\docs\manual\11-feature-guide.md`（83 个页面）与 `15-user-help.md`（**一站式使用者帮助**，含 84 个任务工作流、66 个页面指南、FAQ；英文版 `15-user-help-en.md`）
+> - 门户：`apps\portal\README.md` 的「功能概览」
 
 ## 一、我该从哪进去
 
@@ -65,13 +65,13 @@
 
 ## 四、my_app 怎么用
 
-完整逐页说明见 `Task\my_app\docs\manual\11-feature-guide.md`（按界面导航顺序写的）。页面覆盖：
+完整逐页说明见 `apps\my_app\docs\manual\11-feature-guide.md`（按界面导航顺序写的）。页面覆盖：
 
 `sync` / `alarm` / `ttwo` / `nur` / `ms_sla` / `cxoDashboard` / `gis` / `realtime_alarm` / `alarmManagement` / `packet_loss` / `battery` / `ip_trace` / `incident_overview` / `warehouse` / `overview` / `tables` / `upload` / `archive` / `dashboard` / `settings` 等。
 
-- **参数怎么配**：`Task\my_app\docs\manual\12-configuration.md`
+- **参数怎么配**：`apps\my_app\docs\manual\12-configuration.md`
 - **一键帮助**：站内「使用帮助」页，与 `15-user-help.md` **同源生成**（改内容改 TS 源文件后重新生成，见该手册）
-- **常见问题 / 排障**：`Task\my_app\docs\manual\13-operations.md` 的 FAQ
+- **常见问题 / 排障**：`apps\my_app\docs\manual\13-operations.md` 的 FAQ
 
 ## 五、出问题了怎么办
 
@@ -93,10 +93,10 @@
 
 | 内容 | 去哪里 |
 | --- | --- |
-| my_app 逐页使用手册 | `Task\my_app\docs\manual\11-feature-guide.md` |
-| my_app 一站式帮助（含 FAQ） | `Task\my_app\docs\manual\15-user-help.md` |
-| my_app 运维排障 | `Task\my_app\docs\manual\13-operations.md` |
-| 门户功能概览 | `liberia-noc_soc-数据看板统一门户\README.md` |
+| my_app 逐页使用手册 | `apps\my_app\docs\manual\11-feature-guide.md` |
+| my_app 一站式帮助（含 FAQ） | `apps\my_app\docs\manual\15-user-help.md` |
+| my_app 运维排障 | `apps\my_app\docs\manual\13-operations.md` |
+| 门户功能概览 | `apps\portal\README.md` |
 | 整体架构 | `architecture.md` |
 | 系统全景 | `project-overview.md` |
 

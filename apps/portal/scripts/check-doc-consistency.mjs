@@ -125,17 +125,17 @@ check('看板描述里的定时任务数与 my_app 一致', () => {
   }
 })
 
-check('根 component-api.md 的门户组件数与 src/components 一致', () => {
+check('docs/workspace/component-api.md 的门户组件数与 src/components 一致', () => {
   const n = componentCount()
-  // 根目录的 component-api.md 是**工作区级**文档（两个子系统共用一份索引）
-  const rootDoc = join(ROOT, '..', '..', 'component-api.md')
+  // docs/workspace/component-api.md 是**工作区级**文档（两个子系统共用一份索引）
+  const rootDoc = join(ROOT, '..', '..', 'docs', 'workspace', 'component-api.md')
   if (!existsSync(rootDoc)) return
   const doc = readFileSync(rootDoc, 'utf8')
   const m = doc.match(/统一门户[^\n]*?\|\s*(\d+)\s*个\s*`\.tsx`/)
-  if (!m) throw new Error('根 component-api.md 里找不到门户组件数（守卫本身失效了？）')
+  if (!m) throw new Error('docs/workspace/component-api.md 里找不到门户组件数（守卫本身失效了？）')
   const claimed = Number(m[1])
   if (claimed !== n) {
-    throw new Error(`根 component-api.md 写 ${claimed} 个门户组件，实际 ${n} 个`)
+    throw new Error(`docs/workspace/component-api.md 写 ${claimed} 个门户组件，实际 ${n} 个`)
   }
 })
 

@@ -1,9 +1,9 @@
 # 02 DESIGN.md —— 整个工作区的视觉规则
 
-> 基准日期：2026-09-22　|　适用：`D:\01_RPA` 全域
+> 基准日期：2026-09-22　|　适用：`D:\02_olbr_portal` 全域
 > 本文是**总则**。具体组件的样式细节以各子系统的 `DESIGN.md` 与源码为准：
-> - 门户：`liberia-noc_soc-数据看板统一门户\DESIGN.md`
-> - my_app：`Task\my_app\DESIGN.md`
+> - 门户：`apps\portal\DESIGN.md`
+> - my_app：`apps\my_app\DESIGN.md`
 
 ## 一、总原则
 
@@ -109,6 +109,6 @@
 1. **先找既定需求，再动手。** 例如"卡片数字居中"是需求原话，不能被后来的重构顺手改掉。
 2. **改样式就只改样式。** 不要在同一次改动里顺带调数据口径或接口。
 3. **改完必须看深浅两套。** 只验证一套是漏测的一半。
-4. **导出/截图类产出**（Excel、报告图表）遵循 `Task\my_app\docs\EXCEL_EXPORT_STANDARD.md`，不适用本文的 UI 规则。
+4. **导出/截图类产出**（Excel、报告图表）遵循 `apps\my_app\docs\EXCEL_EXPORT_STANDARD.md`，不适用本文的 UI 规则。
 
 > **工具负责整理，人与 AI 负责协作执行。**

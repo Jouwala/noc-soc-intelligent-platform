@@ -77,7 +77,7 @@ export default defineConfig({
     // 本机 IDE（QoderCN/WorkBuddy）的文件监视器以「只读共享」持有 frontend/dist、
     // frontend/dist2 下 public 复制产物（alarm-management.html 等）的句柄，导致
     // vite 覆盖写 public->outDir 时 EPERM、构建失败；../_fe_dist 会被解析到 my_app 内，
-    // 仍受监视，故基于本配置文件定位 my_app 之上的 Task/_fe_dist。preview 自动
+    // 仍受监视，故基于本配置文件定位 my_app 之上的 apps/_fe_dist。preview 自动
     // 服务 build.outDir，URL（/myapp/）与用户无感。start.bat 用 `npm run preview` 读取此 outDir。
     // 远程开发机（非应用服务器，如 .27）构建时须设 FE_DIST_OUT 指向共享盘上的服务器 dist，
     // 例：FE_DIST_OUT=Y:/Task/_fe_dist vite build —— 否则产物会落到本机、服务器不更新。
