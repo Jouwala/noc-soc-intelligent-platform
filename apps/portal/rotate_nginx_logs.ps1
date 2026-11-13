@@ -31,7 +31,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File rotate_nginx_logs.ps1
 #   powershell -NoProfile -ExecutionPolicy Bypass -File rotate_nginx_logs.ps1 -DryRun
 param(
-    [string]$Prefix = 'D:\01_olbr_portal\nginx-1.28.0\',
+    [string]$Prefix = 'D:\02_olbr_portal\nginx-1.28.0\',
     [int]$MinSizeMB = 20,
     [int]$KeepDays = 14,
     [switch]$DryRun
