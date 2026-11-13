@@ -56,6 +56,11 @@ from typing import Any, Dict, List, Optional
 from backend.services import auth_manager
 from backend.services.rsa_util import rsa_encrypt_pem
 
+# 外部系统客户端共享基础（第二轮重构接入 ext_client）：本客户端的超时
+# 在传输层 auth_manager 里（可调，见该模块），401 重登重试已有；本轮补
+# 它缺的两项——统一错误类型与结构化健康检查。见 ext_client.py 收敛策略。
+from backend.services.ext_client import ExtClientError, run_health_check
+
 logger = logging.getLogger("ume_alarm_client")
 
 # ========== 上游坐标（换环境只改这里 / 环境变量） ==========
@@ -79,6 +84,18 @@ _UNSCOPE_PLACEHOLDER = "#UNSCOPETOKEN#"
 # 单页默认条数 / 最多翻多少页（防静默截断：翻页到取满 total 或空页为止）
 DEFAULT_PAGE_SIZE = 50
 DEFAULT_MAX_PAGES = 40
+
+
+class UmeAlarmError(ExtClientError):
+    """UME 告警客户端的统一错误（仍是 RuntimeError，既有捕获不受影响）。
+
+    接入前本模块的失败一律是裸 RuntimeError，上层分不清是 UME 的问题
+    还是 eFlow 的问题；现在带 system="ume_alarm"，且与其它外部系统
+    客户端共用 ext_client 的基类，可被统一捕获与归类。"""
+
+    def __init__(self, message: str = "", **kwargs) -> None:
+        kwargs.setdefault("system", "ume_alarm")
+        super().__init__(message, **kwargs)
 
 
 def _runtime_credentials():
@@ -129,7 +146,7 @@ def _list_projects(cookie: str, unscoped_token: str) -> List[Dict[str, Any]]:
     status, _, _, body = auth_manager._http_request(
         HOST, PORT, "GET", PROJECTS_PATH, headers_extra=headers)
     if "200" not in status:
-        raise RuntimeError(f"列项目失败：{status} {body[:200]!r}")
+        raise UmeAlarmError(f"列项目失败：{status} {body[:200]!r}")
     return json.loads(body.decode("utf-8")).get("projects", [])
 
 
@@ -142,7 +159,7 @@ def _resolve_project_id(cookie: str, unscoped_token: str,
     """
     projects = _list_projects(cookie, unscoped_token)
     if not projects:
-        raise RuntimeError("上游项目列表为空，无法解析 Project-Id")
+        raise UmeAlarmError("上游项目列表为空，无法解析 Project-Id")
     for p in projects:
         if str(p.get("name", "")).strip() == project_name.strip():
             return str(p["id"])
@@ -166,12 +183,12 @@ def _keystone_login(user: str, pwd: str) -> Dict[str, str]:
     status, _, raw, body = auth_manager._http_request(
         HOST, PORT, "GET", RSA_KEY_PATH)
     if "200" not in status:
-        raise RuntimeError(f"取 RSA 公钥失败：{status}")
+        raise UmeAlarmError(f"取 RSA 公钥失败：{status}")
     cookie = _collect_set_cookies(raw)
     pem = json.loads(body.decode("utf-8")).get("key", "")
     pem_b64 = _pem_body(pem)
     if not pem_b64:
-        raise RuntimeError("RSA 公钥为空")
+        raise UmeAlarmError("RSA 公钥为空")
 
     # Step 2: 整体加密 Keystone 请求体
     keystone = {
@@ -191,10 +208,10 @@ def _keystone_login(user: str, pwd: str) -> Dict[str, str]:
         HOST, PORT, "POST", TOKEN_PATH, headers_extra=headers,
         body=json.dumps({"cipher": cipher}))
     if "200" not in status and "201" not in status:
-        raise RuntimeError(f"Keystone 登录失败：{status} {resp[:200]!r}")
+        raise UmeAlarmError(f"Keystone 登录失败：{status} {resp[:200]!r}")
     token = _header_get(raw, "X-Subject-Token")
     if not token:
-        raise RuntimeError("登录成功但响应无 X-Subject-Token")
+        raise UmeAlarmError("登录成功但响应无 X-Subject-Token")
     # 合并登录过程中新下发的 cookie（如 tpSID-*）
     cookie = _merge_cookie(cookie, _collect_set_cookies(raw))
     return {"cookie": cookie, "unscoped_token": token}
@@ -292,6 +309,30 @@ def _clear_session_cache() -> None:
     _SESSION_CACHE.clear()
 
 
+def health_check(project_name: Optional[str] = None) -> Dict[str, Any]:
+    """结构化健康检查（ext_client.HealthResult 的 dict 形态，永不抛错）。
+
+    探法分两档，都不产生副作用：
+    - 有缓存会话：复用 `_session_usable` 探业务端点（探活本来就是
+      为会话可用性准备的，与模块 docstring 里 probe 的约束一致）；
+    - 无缓存会话：只探 HOST:PORT 的 TCP 可达性。**不触发登录**——
+      登录有文件锁与缓存落盘，拿它做探针会让巡检本身变成故障源。
+    因此 ok=True 且 detail 是「TCP 可达」时，只证明网络通，
+    不证明凭据与业务端点可用，这一点 detail 里写明，不要过度解读。
+    """
+    project_name = project_name or DEFAULT_PROJECT_NAME
+
+    def _probe():
+        cached = _SESSION_CACHE.get(project_name)
+        if cached:
+            return _session_usable(cached), "以缓存会话探业务端点"
+        import socket
+        with socket.create_connection((HOST, PORT), timeout=5):
+            return True, "TCP 可达（无缓存会话，未触发登录，不代表业务可用）"
+
+    return run_health_check("ume_alarm", _probe, timeout=10).to_dict()
+
+
 def _fetch_project_token(cookie: str, unscoped_token: str,
                          project_id: str) -> str:
     """用未 scoped token 换项目 token（`#UNSCOPETOKEN#` 占位符，见 docstring）。
@@ -314,9 +355,9 @@ def _fetch_project_token(cookie: str, unscoped_token: str,
         HOST, PORT, "POST", PROJECT_TOKEN_PATH, headers_extra=headers, body=body)
     token = _header_get(raw, "X-Subject-Token")
     if "201" not in status and "200" not in status:
-        raise RuntimeError(f"换项目 token 失败：{status} {resp[:200]!r}")
+        raise UmeAlarmError(f"换项目 token 失败：{status} {resp[:200]!r}")
     if not token:
-        raise RuntimeError("换项目 token 成功但响应无 X-Subject-Token")
+        raise UmeAlarmError("换项目 token 成功但响应无 X-Subject-Token")
     return token
 
 
@@ -346,7 +387,7 @@ def fetch_alarms(page_size: int = DEFAULT_PAGE_SIZE,
                 raise
             logger.info("[UMEAlarm] 业务调用 401，重登后重试（project=%s）", project_name)
             session = login(project_name, force_refresh=True)
-    raise RuntimeError("不可达")  # pragma: no cover
+    raise UmeAlarmError("不可达")  # pragma: no cover
 
 
 class _AuthExpired(Exception):
@@ -369,7 +410,7 @@ def _fetch_pages(session: Dict[str, str], page_size: int,
         if "401" in status:
             raise _AuthExpired(f"401 {resp[:120]!r}")
         if "200" not in status:
-            raise RuntimeError(
+            raise UmeAlarmError(
                 f"拉告警失败（第 {page} 页）：{status} {resp[:200]!r}")
         data = json.loads(resp.decode("utf-8"))
         total = int(data.get("total") or 0)

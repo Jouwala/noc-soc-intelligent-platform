@@ -26,6 +26,15 @@ import traceback
 import importlib.util
 from datetime import datetime, timezone, timedelta
 
+# live 标记（重构方案 §11.1）：本文件真实登录 UME、建历史查询、轮询、导出 xlsx，
+# CI 离线集 `pytest -m "not live"` 不跑它；跑法见文件头注释。
+# try/except 是因为本脚本也要能在没装 pytest 的 python 下直接跑。
+try:
+    import pytest
+    pytestmark = pytest.mark.live
+except ImportError:  # noqa: BLE001
+    pass
+
 # --- locate and import the module under test ---
 SERVICES_DIR = r"D:/01_RPA/Task/my_app/backend/services"
 TASK_DIR = r"D:/01_RPA/Task"  # needed for auth_manager import

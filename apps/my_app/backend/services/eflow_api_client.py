@@ -26,7 +26,24 @@ import pandas as pd
 import ftplib
 from backend.database import get_raw_connection
 
+# 外部系统客户端共享基础（第二轮重构接入 ext_client）：本客户端原已有
+# 可调超时与有界重试，缺的是错误类型与对外健康检查。本轮只补这两项，
+# 传输与重试逻辑保持原样。见 backend/services/ext_client.py 的收敛策略。
+from backend.services.ext_client import ExtClientError, run_health_check
+
 logger = logging.getLogger("eflow_api")
+
+
+class EflowApiError(ExtClientError):
+    """eFlow 客户端的统一错误（仍是 RuntimeError，既有捕获不受影响）。
+
+    接入前模块里的失败有裸 Exception、ConnectionError、RuntimeError
+    三种形态混用，上层只能一律当「取不到」。带 system="eflow" 后，
+    与其它外部系统的失败可按同一套类型区分与统计。"""
+
+    def __init__(self, message: str = "", **kwargs) -> None:
+        kwargs.setdefault("system", "eflow")
+        super().__init__(message, **kwargs)
 
 # ========== 连接配置 ==========
 HOST = os.environ.get("EFLOW_HOST", "10.100.20.8")
@@ -218,6 +235,22 @@ def _close_thread_socket():
         except OSError:
             logging.getLogger(__name__).warning("[SILENT-EXCEPT] _close_thread_socket: exception swallowed", exc_info=True)
             pass
+
+
+def health_check() -> dict:
+    """结构化健康检查（ext_client.HealthResult 的 dict 形态，永不抛错）。
+
+    探法：新建一条 TLS 连接后立即关闭——不登录、不发业务请求，
+    对上游零副作用。**不要**用 `_get_thread_socket()`：那是线程复用的
+    业务连接，探针关掉它会扰动正在跑的取数。ok=True 只证明
+    「网络 + TLS 可达」，不证明凭据与业务接口可用。
+    """
+    def _probe():
+        with _create_ssl_socket():
+            return True, f"TLS 可达 {HOST}:{PORT}（未登录，不代表业务可用）"
+
+    return run_health_check(
+        "eflow", _probe, timeout=HTTP_CONNECT_TIMEOUT + 5).to_dict()
 
 
 def _rebuild_auth_headers(headers_extra):
@@ -415,7 +448,7 @@ def _http_request(method, path, headers_extra=None, body=None, retry=0,
             time.sleep(delay)
             return _http_request(method, path, headers_extra=headers_extra, body=body,
                                  retry=retry + 1, max_retries=max_retries)
-        raise Exception("Cannot parse HTTP response")
+        raise EflowApiError("Cannot parse HTTP response")
 
     header_part = response_data[:header_end].decode('utf-8', errors='replace')
     resp_body = response_data[header_end + 4:]
@@ -867,7 +900,7 @@ def _download_export_zip(download_path, referer, file_name, ftp_file_path, table
     status, hdrs, raw_hdrs, resp_body = _http_request("POST", download_path, headers_extra=headers_extra, body=body)
 
     if "200" not in status:
-        raise Exception(f"{label} download failed: {status}")
+        raise EflowApiError(f"{label} download failed: {status}")
 
     filename = file_name if file_name.endswith(".zip") else f"{file_name}.zip"
     cd = hdrs.get("content-disposition", "")
@@ -899,7 +932,7 @@ def _read_export_zip(zip_path, label):
 
     data_files = [f for f in files if f.lower().endswith((".xlsx", ".xls", ".csv"))]
     if not data_files:
-        raise Exception(f"No data file found in {label} ZIP")
+        raise EflowApiError(f"No data file found in {label} ZIP")
 
     read_start = time.time()
     dfs = []

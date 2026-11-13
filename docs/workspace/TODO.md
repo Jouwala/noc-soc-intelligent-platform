@@ -35,7 +35,8 @@
 - [ ] **P1 告警推送加 ext 通道 fallback（2026-10-08）。** Baileys 主通道失败（群名解析不到 JID / 凭据过期 / WhatsApp 流控 428）时，自动把同一批 `messages` 投到 `data/tt_alert_job.json`，由已登录的 WhatsApp Web 扩展兜底。改动已落到 `apps\my_app\backend\services\tt_alarm_whatsapp_service.py`（新增 `try_ext_fallback`、在两个失败分支调用） + 4 条 stub 用例 + `architecture.md` 8.x ADR；**待验证**：① 重启 `m` 组 worker 后第一次跑 0 候选 → 任务历史页面要能看到新字段 `ext_fallback` 为空（`attempted: false`）；② 手动制造一次 Baileys 失败（把 `GROUPS` 临时改成一个不存在的群名跑一次）→ ext 通道应兜住（前提：Chrome 开着 + 扩展已登录）→ `out.success=True` + `warnings` 含"兜住 N/M 单"。**回滚手段**：revert 三个文件即可。
 - [ ] **数据层裸连接治理（前置调研，非立即改造）。** 运行期已知存在绕过 `get_raw_connection` 的裸 `sqlite3.connect`（如 `ipran_chart_service.py:233`、`fw_kpi_services.py:488`），是**图表数据源**，改造会静默坏图。当前动作：**不再新增**裸连接，并把已有点位登记成清单。
   - **2026-11-13 登记完成**：全量扫描的 53 处实际调用已分类登记到 `apps\my_app\docs\manual\03-data-layer.md`「裸 sqlite3.connect 点位清单」一节（A 本地权威故意 6 / B 独立工具 2 / C 独立文件只读 10 / D 独立文件读写 19 / E 临时产物 5 / F 快照重建 1 / G 迁移与离线工具 10）。核查结论：`ipran_chart_service` 已改走 `get_raw_connection`（现 `:239-240`），原文点名已过时；`fw_kpi` 点位还在，行号已由 488 漂移至 520。运行期直连 `app.db` 的只有本地权威类（A/B），全部有据；其余均为独立数据文件，PG 模式下本就不适用 `get_raw_connection` 的路径映射。剩余动作：纪律执行（新增裸连先登记）与 7 处无 timeout 点位的治理排期，改造仍按「会静默坏图」的前提逐个验证，本条保持未勾选。
-- [ ] **`eflow_tt` 双库归属固化。** 明确"同步只写 `app.db`、`eflow.sqlite3` 副本仅作只读快照"，避免后续有人读错库。结论已在 `PROJECT_DOCS.md` §2 Phase 0.5 闭环，待落到代码注释与手册。
+- [x] **`eflow_tt` 双库归属固化。** 明确"同步只写 `app.db`、`eflow.sqlite3` 副本仅作只读快照"，避免后续有人读错库。结论已在 `PROJECT_DOCS.md` §2 Phase 0.5 闭环，待落到代码注释与手册。
+  - **2026-11-13 已落地**：代码注释——`sync_from_eflow_api.py` 文件头双库归属段、`eflow_data_mapper.save_to_sqlite` docstring；手册——`apps\my_app\docs\manual\03-data-layer.md`「eflow 双库归属」一节。核查中确认原文表述需修正一处：eflow.sqlite3 并非纯只读快照——sqlite 模式下报告中间库仍整表写入（PG 模式已跳过），且告警两表双写（页面只读主库）；固化文本已按代码现状写明这两条例外。
 - [ ] **五个关键进程的巡检常态化。** 确认 worker 分组 + 双看门狗在异常退出后确实自愈（步骤见 `apps\my_app\docs\manual\13-operations.md`）。
 
 ### P2 —— 体验与工程规范

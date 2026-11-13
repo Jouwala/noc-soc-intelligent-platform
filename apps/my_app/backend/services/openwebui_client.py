@@ -52,6 +52,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# 外部系统客户端共享基础（第二轮重构接入 ext_client）：统一错误基类、
+# 有界重试与结构化健康检查。见 backend/services/ext_client.py 的收敛策略。
+from backend.services.ext_client import (  # noqa: E402
+    ExtClientError, ExtUnavailableError, RetryPolicy, call_with_retry,
+    run_health_check,
+)
+
 try:
     from dotenv import load_dotenv
     for _env in (Path(__file__).resolve().parent.parent / ".env",
@@ -114,19 +121,26 @@ _OWU_DOWN_UNTIL = 0.0
 _OWU_DOWN_WINDOW = 120
 
 
-class ModelError(RuntimeError):
-    """模型本身不可用（下线/404/上游 5xx/结构异常）——应换下一候选重试。"""
+class ModelError(ExtClientError):
+    """模型本身不可用（下线/404/上游 5xx/结构异常）——应换下一候选重试。
+
+    第二轮重构起改挂 ext_client 的统一基类（其本身仍是 RuntimeError，
+    既有 except 不受影响），上层从此能把本客户端的失败与其它外部系统
+    的失败按同一套错误类型处理。"""
 
 
-class UnreachableError(RuntimeError):
-    """对端连不上（DNS 失败/端口拒绝/超时）——区别于 HTTP 状态码错误。"""
+class UnreachableError(ExtUnavailableError):
+    """对端连不上（DNS 失败/端口拒绝/超时）——区别于 HTTP 状态码错误。
+
+    挂在 ExtUnavailableError 下，ext_client 的重试判定才认得出它属于
+    「暂时性、连不上」这一类（见 _META_RETRY_POLICY）。"""
 
 
 class _ShortCircuit(RuntimeError):
     """短路窗口内的快速失败：不去延长窗口本身，否则永远没机会再探测一次。"""
 
 
-class CustomApiKeyError(RuntimeError):
+class CustomApiKeyError(ExtClientError):
     """自定义 Provider 缺少 API Key。"""
 
 
@@ -142,9 +156,9 @@ def _owu_down() -> bool:
     return time.time() < _OWU_DOWN_UNTIL
 
 
-def _http(method: str, path: str, body: Optional[Dict] = None,
-          token: str = "", timeout: int = _TIMEOUT, base: str = ""):
-    """urllib 版 JSON 请求，返回 (status, dict|list|str)。base 为空走 OPENWEBUI_BASE_URL。"""
+def _http_once(method: str, path: str, body: Optional[Dict] = None,
+               token: str = "", timeout: int = _TIMEOUT, base: str = ""):
+    """单次 urllib JSON 请求（不重试），返回 (status, dict|list|str)。"""
     url = f"{base or BASE_URL}{path}"
     data = json.dumps(body).encode("utf-8") if body is not None else None
     headers = {"Content-Type": "application/json",
@@ -167,6 +181,48 @@ def _http(method: str, path: str, body: Optional[Dict] = None,
             return e.code, raw
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise UnreachableError(f"请求 {method} {url} 失败: {e}") from e
+
+
+# 元数据 GET 的重试策略：只在「没拿到响应」的暂时性失败时重试
+# （UnreachableError），HTTP 状态码是正常返回、不在本层重试——
+# 状态如何处置由各调用方按既有逻辑决定。POST 不重试：登录与对话
+# 都不是无副作用的幂等请求，对话的失败转移已有 model_chain 负责。
+_META_RETRY_POLICY = RetryPolicy(max_retries=2, base_delay=0.5)
+
+
+def _http(method: str, path: str, body: Optional[Dict] = None,
+          token: str = "", timeout: int = _TIMEOUT, base: str = ""):
+    """urllib 版 JSON 请求，返回 (status, dict|list|str)。base 为空走 OPENWEBUI_BASE_URL。
+
+    GET（元数据类，幂等）走 ext_client 的有界重试；其余方法单次执行，
+    签名与返回值与接入前完全一致。
+    """
+    if method.upper() == "GET":
+        return call_with_retry(
+            lambda: _http_once(method, path, body, token=token,
+                               timeout=timeout, base=base),
+            policy=_META_RETRY_POLICY, system="openwebui",
+            operation=f"{method} {path}")
+    return _http_once(method, path, body, token=token,
+                      timeout=timeout, base=base)
+
+
+def health_check(base: str = "") -> Dict[str, Any]:
+    """结构化健康检查（ext_client.HealthResult 的 dict 形态，永不抛错）。
+
+    探 `GET /api/config`（无需登录、响应轻），短路窗口内直接判不健康，
+    不再去付一次注定超时的连接。base 为空走 OPENWEBUI_BASE_URL；
+    运行时配置改了地址时由调用方把实际地址传进来。
+    """
+    def _probe():
+        if _owu_down():
+            return False, "处于不可达短路窗口内，跳过探测"
+        status, _ = _http("GET", "/api/config",
+                          timeout=_META_TIMEOUT, base=base)
+        return status == 200, f"HTTP {status}"
+
+    return run_health_check("openwebui", _probe,
+                            timeout=_META_TIMEOUT + 2).to_dict()
 
 
 # 2026-10-19 实测：.27 的 Open WebUI 升到 0.12.0 并启用了 trusted-header 单点登录

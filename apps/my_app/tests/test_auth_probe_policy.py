@@ -288,7 +288,7 @@ def test_auth_info_freshness_is_time_based_only():
     assert "max_age_hours" in src
 
 
-def test_auth_info_fresh_window_has_single_source_of_truth():
+def test_auth_info_fresh_window_has_single_source_of_truth(monkeypatch):
     """钉住新鲜度窗口**不再自己写死数字**，必须来自 `auth_manager._resolve_ttl`。
 
     2026-10-06 之前的写法是 `max_age_hours: float = 1.0` —— 与 auth_manager 的
@@ -299,6 +299,12 @@ def test_auth_info_fresh_window_has_single_source_of_truth():
 
     from backend.services import auth_manager as am
     from backend.services.battary_kpi_fetch import battary_kpi_fetch_socket as sock
+
+    # 本机 / CI 没有 backend/.env 里的 AUTH_TTL_OVERRIDES 时，两个主机都回落到
+    # DEFAULT_TTL（0.5h），第 4 步「不同主机的窗口应不同」必然失败 —— 那测的是
+    # 环境有没有配 overrides，不是接线本身。这里直接给两个不同的值，接线照旧验证。
+    monkeypatch.setattr(am, "AUTH_TTL_OVERRIDES",
+                        {"192.168.170.2:443": 1800, "10.100.20.8:28001": 3600})
 
     # 1) 窗口函数必须真的去问 auth_manager，而不是返回常量
     fsrc = inspect.getsource(sock._fresh_window_hours)

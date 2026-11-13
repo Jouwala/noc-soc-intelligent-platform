@@ -406,7 +406,12 @@ class TestEnsureColumnsBackfill:
 def _pg_probe_conn():
     """取一个 PG 连接；不可用（无 .env / 连不上）时返回 None 让用例 skip。"""
     try:
-        from backend.database import get_raw_connection
+        from backend.database import DB_MODE, get_raw_connection
+        if DB_MODE != "pg":
+            # sqlite 连接也能连上并通过 SELECT 1，但 pg_constraint 是 PG 系统
+            # 目录表 —— 不在这里拦下，测试会在 sqlite 上报
+            # "no such table: pg_constraint" 而不是 skip。
+            return None
         conn = get_raw_connection()
         conn.execute("SELECT 1")
         return conn
@@ -502,12 +507,13 @@ class TestEnsurePkConstraint:
 # 四、服务层：触发点（首次通报 / 结束汇总）
 # ==========================================================
 class TestServiceMailTriggers:
-    def test_summary_scan_uses_log_table_not_realtime(self, monkeypatch):
+    def test_summary_scan_uses_log_table_not_realtime(self, monkeypatch, tmp_path):
         """⚠️ 核心设计断言：汇总候选来自**日志表**，而非 realtime_alarm。
 
         告警清除后该单会从 realtime_alarm 消失（实测 0 命中），若把汇总挂在
         活跃告警循环上，一封都发不出去。
         """
+        _use_db(monkeypatch, tmp_path)
         used = {}
 
         def fake_pending(conn, limit=200, table=None):
@@ -548,8 +554,9 @@ class TestServiceMailTriggers:
                             lambda *a, **k: pytest.fail("没配收件人还在扫"))
         S.run_summary_mail_scan({"errors": [], "warnings": []})
 
-    def test_uncleared_ticket_gets_no_summary(self, monkeypatch):
+    def test_uncleared_ticket_gets_no_summary(self, monkeypatch, tmp_path):
         """`cleared_rows` 只返回已清除的单 —— 未清除的单不发汇总。"""
+        _use_db(monkeypatch, tmp_path)
         monkeypatch.setattr(S, "MAIL_ENABLED", True)
         monkeypatch.setattr(S, "_mail_recipients", lambda: ("a@x.com", ""))
         monkeypatch.setattr(S.store, "pending_summary_mail",
@@ -563,8 +570,9 @@ class TestServiceMailTriggers:
         assert sent == []
         assert out.get("mail_summary_sent") is None
 
-    def test_first_notification_uses_settings_recipients(self, monkeypatch):
+    def test_first_notification_uses_settings_recipients(self, monkeypatch, tmp_path):
         """收件人必须来自 Settings 的 `tt_alarm_p1_email`，不写死在服务里。"""
+        _use_db(monkeypatch, tmp_path)
         asked = {}
         monkeypatch.setattr(S, "_mail_recipients",
                             lambda: asked.setdefault("k", ("to@x.com", "cc@x.com"))
@@ -576,8 +584,9 @@ class TestServiceMailTriggers:
         assert ok is True
         assert asked.get("k"), "没有走 Settings 收件人读取"
 
-    def test_first_notification_marks_idempotency(self, monkeypatch):
+    def test_first_notification_marks_idempotency(self, monkeypatch, tmp_path):
         """发成功要置位 mail_notified_time，否则汇总永远等不到前置条件。"""
+        _use_db(monkeypatch, tmp_path)
         marked = []
         monkeypatch.setattr(S, "MAIL_ENABLED", True)
         monkeypatch.setattr(S, "_mail_recipients", lambda: ("a@x.com", ""))

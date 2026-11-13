@@ -295,6 +295,14 @@ WHERE n.nspname = '<schema>' AND cl.relname = '<表>' AND c.contype IN ('p','u')
 返回空就说明**缺约束**，要么在 `CREATE TABLE` 里补上，要么在 upsert 前按上表的
 「三件套」显式建唯一索引。别只跑 SQLite 测试就认为没事。
 
+### eflow 双库归属：`eflow_tt` 只认主库
+
+- **唯一活写源**：`backend/services/sync_from_eflow_api.py` 的 `sync_from_eflow_api()` 经 `get_raw_connection(str(DB_PATH))`（`:665`）只写主库（sqlite 模式 = `db/app.db`，PG 模式 = `app` schema），覆盖 `eflow_tt` / `eflow_wo` / `eflow_cr` / `eflow_pm` / `eflow_site` / `person`；文件头已声明「不再依赖外部 eflow.sqlite3 中间文件」（`:1-4`）。**读这些表一律读主库。**
+- **`data/eflow/eflow.sqlite3` 的同名表不是同步结果**：它是旧流水线遗留快照 + 报告中间库。`eflow_data_mapper.save_to_sqlite()`（`backend/services/eflow_data_mapper.py:827`）在 sqlite 模式下仍会整表 `replace` 写入（报告生成副产品），PG 模式下已明确跳过。新代码**不得**把 eflow.sqlite3 当作 `eflow_tt` 的数据源——读到的是某次报告生成时的快照，会静默过期。
+- **告警两表是例外**：`realtime_alarm` / `history_alarm` 由 `eflow_alarm_service` 双写主库与 eflow 副本，页面只读主库；双 schema 下的换表风险与落地写法见上文「新增 upsert 目标前的自检」中的告警段。
+- **物理文件仍有合法读者**（sqlite 模式）：`packet_loss_service` 读其中站点信息（`backend/services/packet_loss_service.py:64`；PG 模式经 `get_raw_connection` 映射到 `eflow` schema），`apps/eflow_Q&A/tools/gen_datadict.py` 用它生成数据字典。删文件或停掉中间库写入前，先处理这两处。
+- 结论出处：`PROJECT_DOCS.md` §2 Phase 0.5 / 0.7（2026-08 查代码闭环，历史档案）；本节是现状固化，后续以本节为准。
+
 ## 运行时目录
 
 | 目录 | 内容 | 备注 |
