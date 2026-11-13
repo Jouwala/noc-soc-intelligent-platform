@@ -256,7 +256,7 @@ node ops\deploy\agent-done-check.mjs --full
 - 改了**帮助内容源**（`helpContent.ts` / `helpTaskDocs.ts`）→ `npm run docs` 重生成
 - 改了**表结构** → `alembic upgrade head` 并核对回滚
 - 新增**外部副作用**（发信/投递/调外部 API）→ 按 `docs\workspace\development.md` A0 用「地雷」证伪一次
-- **改完即合入主线并推送**（2026-11-12 用户定，长期有效）：自检通过后，把工作分支合入主线 **`master`** 并 `git push origin master`，**不要**只留在特性分支上等人合并。注意本仓库主线叫 `master`（没有 `main`）；合之前先 `git fetch`，用 `git merge --ff-only` 保持线性。
+- **改完即走 PR 合入主线，不要只留在分支上**（2026-11-12 用户定，长期有效；2026-11-13 按新仓库流程改写）：自检通过后，把工作分支推到远程并开 PR 到主线 **`main`**，CI 与 review 通过后再合并；**禁止**直接推 `main`。注意本仓库主线叫 `main`（没有 `master` 分支）；开 PR 之前先 `git fetch`，确认分支已 rebase 到最新 `main`。
 
 ### 3. 唯一允许停下来的三种情况
 
