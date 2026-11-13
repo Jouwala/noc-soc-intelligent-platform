@@ -52,6 +52,16 @@ except Exception:
 # ============================================================
 from backend.config.remote_host import get_api_host  # 远程主机统一来源（FTP/API/SMB 共用）
 
+# 外部系统客户端共享基础（第二轮重构接入 ext_client）：本客户端原已有
+# 超时/重试/健康检查，缺的是错误类型——最终失败原先一律抛 builtin
+# ConnectionError，上层分不清 HTTP 错误与连不上。现改为 ext_client 的
+# 统一错误类型（ExtUnavailableError 本身仍是 ConnectionError，兼容）。
+# 见 backend/services/ext_client.py 的收敛策略。
+from backend.services.ext_client import (
+    ExtAuthError, ExtHttpError, ExtTimeoutError, ExtUnavailableError,
+    run_health_check,
+)
+
 DEFAULT_API_PORT = 8765  # 端口可经 DB_WRITER_PORT 覆盖
 DEFAULT_TIMEOUT = 900  # 秒（大数据写入可能较慢）
 MAX_RETRIES = 3
@@ -101,6 +111,8 @@ class DbWriterClient:
         """
         url = f"{self.base_url}{path}"
         last_error = None
+        last_status = None
+        last_exc = None
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -115,6 +127,8 @@ class DbWriterClient:
                 logging.getLogger(__name__).warning("[SILENT-EXCEPT] _request: exception swallowed", exc_info=True)
                 body = e.read().decode('utf-8', errors='replace')
                 last_error = f"HTTP {e.code}: {body[:500]}"
+                last_status = e.code
+                last_exc = e
                 # 4xx 一律不重试；connect_stage_only 策略下连 5xx 也不重试
                 # （服务端已经响应，说明请求已送达，可能已提交）。
                 if e.code < 500 or retry_policy == CONNECT_STAGE_ONLY:
@@ -122,6 +136,7 @@ class DbWriterClient:
             except Exception as e:
                 logging.getLogger(__name__).warning("[SILENT-EXCEPT] _request: exception swallowed", exc_info=True)
                 last_error = str(e)
+                last_exc = e
                 if (retry_policy == CONNECT_STAGE_ONLY
                         and not _is_connect_stage_error(e)):
                     break
@@ -131,11 +146,37 @@ class DbWriterClient:
                 print(f"[DbWriter] 请求失败 ({last_error})，{wait}s 后重试 ({attempt}/{max_retries})...")
                 time.sleep(wait)
 
-        raise ConnectionError(f"[DbWriter] 请求失败: {url} -> {last_error}")
+        # 最终失败按类型上抛（文案与接入前保持一致，日志检索不受影响）：
+        # HTTP 状态 → ExtHttpError（401/403 为 ExtAuthError）；超时 →
+        # ExtTimeoutError；其余（连接阶段失败为主）→ ExtUnavailableError，
+        # 它同时是 builtin ConnectionError，既有 except ConnectionError 不变。
+        message = f"[DbWriter] 请求失败: {url} -> {last_error}"
+        if last_status is not None:
+            if last_status in (401, 403):
+                raise ExtAuthError(message, status_code=last_status,
+                                   system="db_writer") from last_exc
+            raise ExtHttpError(message, status_code=last_status,
+                               system="db_writer") from last_exc
+        if isinstance(last_exc, TimeoutError):
+            raise ExtTimeoutError(message, system="db_writer") from last_exc
+        raise ExtUnavailableError(message, system="db_writer") from last_exc
 
     def health(self) -> dict:
-        """健康检查。"""
+        """健康检查（返回服务端 /health 的原始 dict，失败抛错）。"""
         return self._request("GET", "/health")
+
+    def health_check(self) -> dict:
+        """结构化健康检查（ext_client.HealthResult 的 dict 形态，永不抛错）。
+
+        与 health() 的区别：health() 是业务调用（要原始响应、失败要抛），
+        本方法是巡检口径（只要 ok/延迟/错误类型）。探针只重试 1 次、
+        等待上限 15 秒，不沿用写入级的 900 秒超时与 3 次重试。
+        """
+        def _probe():
+            result = self._request("GET", "/health", max_retries=1)
+            return True, str(result)[:120]
+
+        return run_health_check("db_writer", _probe, timeout=15).to_dict()
 
     def write_data(self, db: str, table: str, columns: list, rows: list,
                    mode: str = "upsert", pk_columns: list = None,
