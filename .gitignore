@@ -469,8 +469,10 @@ apps/my_app/backup/
 # 拿到别人的副本时怎么补齐：跑 D:/01_RPA/scripts/build_olbr_portable.ps1
 # 的 -Stage runtimes，或按 scripts\start_all.ps1 的报错提示逐个装。
 # 首次启动时 start_all.ps1 会对缺失的 runtime 自动 initdb 建库。
-# ─────────────────────────────────────────────────────────────────────────────
-/runtime/
+# 例外（第一轮重构批 E）：runtime/README.md 说明本目录应有什么、从哪里补，
+# 必须入库；/runtime/* 只忽略目录内容、不忽略目录本身，否定规则才能生效。
+/runtime/*
+!/runtime/README.md
 
 # ─────────────────────────────────────────────────────────────────────────────
 # nginx 发行包（37 MB）

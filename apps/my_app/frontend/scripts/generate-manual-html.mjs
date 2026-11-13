@@ -228,7 +228,7 @@ footer.colophon { text-align: center; color: var(--muted); font-size: 12px; marg
     <div class="logo">📘</div>
     <h1>my_app 项目手册</h1>
     <div class="sub">网络运维数据平台 · 设计手册 + 使用手册</div>
-    <div class="meta">基准日期 2026-08-27　|　适用版本 master 当前代码　|　HTML 合成生成 ${genDate}<br>含 ${CHAPTERS.length} 章 · ${totalSections} 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
+    <div class="meta">基准日期 2026-08-27　|　适用版本 main 当前代码　|　HTML 合成生成 ${genDate}<br>含 ${CHAPTERS.length} 章 · ${totalSections} 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
     <ul class="parts">${chapterMeta.map(c => `<li><a href="#${c.id}">${PART_LABELS[c.part]} · ${esc(c.chTitle)}</a></li>`).join('')}</ul>
   </section>
   <section class="toc-section">
