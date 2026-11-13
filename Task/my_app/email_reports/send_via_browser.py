@@ -17,6 +17,7 @@ OWA 浏览器自动化发送邮件 - 兜底方案
 - 速度比 EWS 慢，但稳定性最高
 """
 
+import json
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -144,17 +145,18 @@ def send_owa_browser_email(
             
             # 8. 填充正文（使用页面内容注入）
             # OWA 使用 ContentEditable，需要模拟真实编辑行为
-            body_js = body.replace('{', '{{').replace('}', '}}')
-            page.evaluate(f'''
-                const editor = document.querySelector('[contenteditable="true"]') || 
-                              document.querySelector('div.owaMsgBody') || 
+            # 正文用 json.dumps 注入：普通三引号字符串里不再有 f-string 花括号，
+            # JS 的 { bubbles: true } 等花括号不会再被 Python 当成插值。
+            page.evaluate('''
+                const editor = document.querySelector('[contenteditable="true"]') ||
+                              document.querySelector('div.owaMsgBody') ||
                               document.body;
                 if (editor) {
-                    editor.innerHTML = `{body}`;
+                    editor.innerHTML = __BODY_JSON__;
                     // 触发 contentchange 事件
                     editor.dispatchEvent(new Event('input', { bubbles: true }));
                 }
-            '''.format(body=body))
+            '''.replace('__BODY_JSON__', json.dumps(body)))
             print("[PLAYWRIGHT] 已填充正文")
             
             # 9. 添加附件（支持普通附件和内嵌图片）
@@ -277,13 +279,7 @@ def send_owa_browser_email(
                     "message": "通过浏览器发送成功",
                     "method": "browser"
                 }
-            else:
-                browser.close()
-                return {
-                    "success": False,
-                    "error": f"发送后 URL 异常：{page.url}"
-                }
-                
+
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
