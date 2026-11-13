@@ -179,14 +179,16 @@ class AvailMsError(Exception):
 # 只读访问
 # ----------------------------------------------------------------------
 def _connect() -> sqlite3.Connection:
-    """只读打开派生库（与 dashboard_service._query_local 同一写法：file:...?mode=ro）。
+    """只读打开派生库（走 get_sqlite_readonly_connection 本地只读入口，
+    与 dashboard_service._query_local 同一语义：file:...?mode=ro）。
 
     这是 my_app **自持派生库**，不是主库 —— 主库的 PG/SQLite 双模（MY_APP_DB_MODE）
-    与它无关，因此不存在「裸 sqlite3.connect 在 pg 模式下必然失败」的问题。
+    与它无关，因此不存在「双模入口在 pg 模式下把它误映射成 schema」的问题。
     """
+    from backend.database import get_sqlite_readonly_connection
     if not AVAIL_DB.is_file():
         raise AvailMsError(f"可用率派生库不存在: {AVAIL_DB}（先跑定时任务 avail_recon_sync 重建）")
-    con = sqlite3.connect(f"file:{AVAIL_DB}?mode=ro", uri=True, timeout=30)
+    con = get_sqlite_readonly_connection(AVAIL_DB, timeout=30)
     con.execute("PRAGMA query_only=ON")
     return con
 
