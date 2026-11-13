@@ -550,8 +550,7 @@ def test_render_still_runs_when_snapshot_unavailable(monkeypatch):
 # 首推（--brief）消息内容：2026-10-28 用户反馈的三处不准确
 # ==========================================================
 
-@pytest.mark.skipif(not R.engine_available(),
-                    reason="分析引擎不在本机（部署环境可能没有 whatsapp-kb-bot）")
+@requires_engine
 def test_brief_message_shows_codename_site_ip_and_impact_sites(tmp_path, monkeypatch):
     """首推消息必须带：告警码的 codename、站点 IP、受影响站点清单。
 
@@ -597,8 +596,7 @@ def test_brief_message_shows_codename_site_ip_and_impact_sites(tmp_path, monkeyp
             in text), text
 
 
-@pytest.mark.skipif(not R.engine_available(),
-                    reason="分析引擎不在本机（部署环境可能没有 whatsapp-kb-bot）")
+@requires_engine
 def test_brief_message_omits_impact_line_when_no_list(tmp_path, monkeypatch):
     """没有清单时整行不输出 —— 空的「Total 0 impact sites」是噪音。"""
     db_path = tmp_path / "raw.db"
