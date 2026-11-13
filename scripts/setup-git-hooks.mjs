@@ -5,7 +5,7 @@
  * 为什么需要这个（2026-11-10）：
  *   本仓库的 `.githooks/post-checkout` 与 `.githooks/post-merge` 负责在检出 /
  *   合并之后把两个脚本里的**本机绝对路径**改成本机副本根目录：
- *       Task/my_app/monitor_fixes/nginx_monitor.ps1  (NginxExe/NginxDir/Port/Log/State)
+ *       apps/my_app/monitor_fixes/nginx_monitor.ps1  (NginxExe/NginxDir/Port/Log/State)
  *       <门户>\rotate_nginx_logs.ps1                   ($Prefix)
  *
  *   这两个文件是**入库**的，而路径必须因机器而异 —— 所以换一台机器 clone 后，

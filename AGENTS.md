@@ -25,9 +25,10 @@
 
 | 目录 | 是什么 | 技术栈 | 该处文档入口 |
 | --- | --- | --- | --- |
-| `Task\my_app\` | **Data Insight MVP**（网络运维数据平台，自研主系统） | FastAPI + SQLite/PG + React | `Task\my_app\AGENTS.md`、`Task\my_app\docs\manual\` |
+| `apps\my_app\` | **Data Insight MVP**（网络运维数据平台，自研主系统） | FastAPI + SQLite/PG + React | `apps\my_app\AGENTS.md`、`apps\my_app\docs\manual\` |
 | `liberia-noc_soc-数据看板统一门户\` | **Liberia NOC/SOC 数据看板统一门户**（聚合 FineBI 与 my_app 看板） | React 19 + Vite + Tailwind v4 | `...\AGENTS.md`、`...\README.md` |
-| `Task\` | 各类交付任务（eflow_Q&A、RAN、ORANGE、MTN_Comsal、Monthly_Report 等） | 混合 | 各任务目录内的 `README.md` |
+| `apps\whatsapp-kb-bot\` | **WhatsApp 知识库问答 bot**（与 my_app 同级，叶子名不改） | Node | `apps\whatsapp-kb-bot\docs\` |
+| `apps\eflow_Q&A\` | **eFlow 知识库**（问答/排障文档，含 `tools\inspect_tt.py`） | Markdown + Python | `apps\eflow_Q&A\README.md` |
 | `LBR_Tools\`、`Unified_Tools\`、`openclaw_api_selector\`、`ticket_export_rpa\` | 工具与 RPA 脚本集 | Python / 混合 | 各自目录 |
 | `chrome-win\`、`whatsapp*\`、`scheduler_logs\`、`report\` | 运行时依赖与产出 | — | 一般不直接改。nginx 也在运行时依赖之列：本机 (.20) 生效目录是 `D:\01_RPA\nginx-1.28.0\`（2026-10-01 从 Y: 网络映射盘搬回本地，已加入 `.gitignore`）；`Y:\01_RPA\nginx-1.28.0\` 是 **.19 那台**在用的，不要动（见第四节第 6b 条） |
 

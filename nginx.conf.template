@@ -121,7 +121,7 @@ http {
         # 高峰到过 5.5s。文件名带内容 hash，可缓存一年。index.html 仍走上面的
         # /myapp/ → vite，必须 no-cache，否则重新构建后白屏。
         location ~ ^/myapp/assets/(.+\.(?:js|css|woff2?|ttf|otf|svg|png|jpe?g|gif|webp))$ {
-            alias              "{{ROOT}}/Task/_fe_dist/assets/$1";
+            alias              "{{ROOT}}/apps/_fe_dist/assets/$1";
             add_header        Cache-Control "public, max-age=31536000, immutable";
         }
 

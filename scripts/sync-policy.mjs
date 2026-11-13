@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 export const PORTAL = 'liberia-noc_soc-数据看板统一门户';
-export const APP = 'Task/my_app';
+export const APP = 'apps/my_app';
 export const EMS = `${APP}/backend/services/cn_ems`;
 export const STATE = 'TMP/_sync_state.json';
 export const FIX_TARGETS = [`${APP}/monitor_fixes/nginx_monitor.ps1`, `${PORTAL}/rotate_nginx_logs.ps1`];
@@ -19,18 +19,18 @@ export const ROOT_FILES = [
   'DESIGN.md',
   'component-api.md',
 ];
-// 只同步源码；构建产物（Task/_fe_dist、门户 dist）由副本自行构建，绝不从生产拷贝。
+// 只同步源码；构建产物（apps/_fe_dist、门户 dist）由副本自行构建，绝不从生产拷贝。
 export const GROUPS = [
   { root: APP, dirs: ['backend', 'frontend', 'alembic', 'docs', 'tests', 'tools', 'email_reports', 'monitor_fixes', 'portal_login_extension', 'whatsapp_sender_extension'] },
-  { root: 'Task/whatsapp-kb-bot', dirs: ['src', 'scripts', 'docs', 'knowledge', 'evals', 'certs'] },
-  { root: 'Task/eflow_Q&A', dirs: null },
+  { root: 'apps/whatsapp-kb-bot', dirs: ['src', 'scripts', 'docs', 'knowledge', 'evals', 'certs'] },
+  { root: 'apps/eflow_Q&A', dirs: null },
   { root: PORTAL, dirs: ['src', 'server', 'public', 'scripts', 'docs', 'tests', 'MsPortal', 'OlrPortal', 'olbrportal', 'v1', 'v2', 'v3'] },
 ];
 const sourceExt = new Set('.py .pyi .pyw .js .jsx .mjs .cjs .ts .tsx .vue .svelte .html .htm .css .scss .less .json .geojson .md .yml .yaml .toml .ini .cfg .conf .sql .ps1 .bat .vbs .sh .proto .graphql .svg .png .jpg .jpeg .gif .ico .woff .woff2 .ttf .eot .map .webp'.split(' '));
 const deniedDirs = new Set('node_modules __pycache__ .git .idea .vscode .claude .qoder .cursor .trae .pytest_cache .ruff_cache .mypy_cache auth_cache auth-data native_board_cache portal_profiles _pmcache session_bak outputs output backup backups runtime log logs tmp temp cache caches coverage test-results playwright-report .venv venv pyvenv db dist dist2 build whatsapp_session sessions credentials jab_setup'.split(' '));
 const resources = new Set([
   `${EMS}/Query_Template.xml`,
-  'Task/whatsapp-kb-bot/certs/liberia-noc-ca.pem',
+  'apps/whatsapp-kb-bot/certs/liberia-noc-ca.pem',
   ...['eflow_TT_rules.xlsx', 'eflow_push_rules.xlsx', 'eflow_alarm_rules.xlsx'].map(n => `${APP}/backend/services/eflow_rules/${n}`),
 ].map(x => x.toLowerCase()));
 // 副本定时任务会重写这些文件。源上那份只是上次落盘的快照：
@@ -105,8 +105,8 @@ export function portableContent(rel, bytes, root, httpPort) {
   const defaults = rel === FIX_TARGETS[0] ? {
     NginxExe: path.join(root, 'nginx-1.28.0', 'nginx.exe'),
     NginxDir: path.join(root, 'nginx-1.28.0'), NginxPort: httpPort,
-    LogPath: path.join(root, 'Task', 'nginx_monitor.log'),
-    StatePath: path.join(root, 'Task', 'nginx_monitor.state'),
+    LogPath: path.join(root, 'apps', 'nginx_monitor.log'),
+    StatePath: path.join(root, 'apps', 'nginx_monitor.state'),
   } : { Prefix: path.join(root, 'nginx-1.28.0') + path.sep };
   for (const [key, value] of Object.entries(defaults)) {
     const pattern = new RegExp(`(\\[(?:string|int)\\]\\s*\\$${key}\\s*=\\s*)(?:'[^']*'|"[^"]*"|\\d+)`, 'gi');

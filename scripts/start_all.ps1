@@ -49,18 +49,18 @@ $NodeExe = Join-Path $RuntimeDir 'node\node.exe'
 $PgBin = Join-Path $RuntimeDir 'postgresql16\bin'
 $NginxDir = Join-Path $Root 'nginx-1.28.0'
 $NginxExe = Join-Path $NginxDir 'nginx.exe'
-$MyAppDir = Join-Path $Root 'Task\my_app'
+$MyAppDir = Join-Path $Root 'apps\my_app'
 $FeDir = Join-Path $MyAppDir 'frontend'
-$BotDir = Join-Path $Root 'Task\whatsapp-kb-bot'
+$BotDir = Join-Path $Root 'apps\whatsapp-kb-bot'
 $PortalDir = Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -like 'liberia-noc_soc-*' } | Select-Object -First 1
 $PortalRoot = if ($PortalDir) { $PortalDir.FullName } else { $null }
 
-# 防误跑：本脚本只应在 build 出来的副本里执行。主仓库同样有 Task\my_app，
+# 防误跑：本脚本只应在 build 出来的副本里执行。主仓库同样有 apps\my_app，
 # 但没有 runtime\node\node.exe —— 少了这道检查，误在主仓库跑会往源码树写 .env。
 if (-not (Test-Path -LiteralPath $NodeExe) -or
     -not (Test-Path -LiteralPath (Join-Path $MyAppDir 'backend\main.py'))) {
-    throw "当前目录不是有效副本（缺 runtime\node\node.exe 或 Task\my_app\backend\main.py）：$Root`n本脚本只能在 build_olbr_portable.ps1 生成的副本里运行。"
+    throw "当前目录不是有效副本（缺 runtime\node\node.exe 或 apps\my_app\backend\main.py）：$Root`n本脚本只能在 build_olbr_portable.ps1 生成的副本里运行。"
 }
 
 function Write-Step { param([string]$m) Write-Host "[*] $m" }
@@ -139,7 +139,7 @@ if ($dupPorts) { throw "副本端口配置有重复: $(($dupPorts | ForEach-Obje
 
 # ------------------------------------------------------- 派生变量（盘符无关）
 $PgData = Join-Path $RuntimeDir 'pgdata'
-$FeDist = (Join-Path $Root 'Task\_fe_dist').Replace('\', '/')
+$FeDist = (Join-Path $Root 'apps\_fe_dist').Replace('\', '/')
 $AuthDir = Join-Path $RuntimeDir 'portal-auth-data'
 if (-not $DryRun -and -not (Test-Path -LiteralPath $AuthDir)) {
     New-Item -ItemType Directory -Path $AuthDir -Force | Out-Null
@@ -171,7 +171,7 @@ $derived = [ordered]@{
     'MY_APP_PROXY_PY' = $PyExe
     'MY_APP_REPORT_PY' = $PyExe
     # eflow 问答知识库：指向副本同级目录（inspect_tt 等工具据此定位 app.db）。
-    'EFLOW_QA_DIR' = (Join-Path $Root 'Task\eflow_Q&A')
+    'EFLOW_QA_DIR' = (Join-Path $Root 'apps\eflow_Q&A')
 }
 # 无条件覆盖：派生值必须由副本根推导，不能被父进程残留的生产值顶掉。
 foreach ($k in $derived.Keys) { Set-Cfg $k $derived[$k] }

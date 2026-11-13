@@ -3,7 +3,7 @@
 ## 为什么是子进程而不是 import
 
 完整的 TT 分析（里程碑时间轴、派单依据、SLA 时效）由
-`Task/whatsapp-kb-bot/scripts/tt-analyze.py` 实现（2175 行，纯标准库 + openpyxl）。
+`apps/whatsapp-kb-bot/scripts/tt-analyze.py` 实现（2175 行，纯标准库 + openpyxl）。
 它是**已经在跑的机器人**在用的引擎，本任务只是复用它的输出，不重写一份 ——
 两份分析逻辑并存必然会分叉，而「群里看到的分析」与「告警推送里的分析」不一致
 是最难排查的那类问题。
@@ -22,7 +22,7 @@
 
 | 变量 | 指向 |
 | --- | --- |
-| `MY_APP_DIR` | 本仓库的 `Task/my_app` 根 |
+| `MY_APP_DIR` | 本仓库的 `apps/my_app` 根 |
 | `MY_APP_DB` | `db/app.db`（SQLite 副本，引擎按 sqlite3 只读打开） |
 | `MY_APP_TT_RULES` / `MY_APP_PUSH_RULES` | 规则表 xlsx |
 
@@ -58,10 +58,10 @@ from typing import Optional
 
 logger = logging.getLogger("tt_alarm_render")
 
-# my_app 根：本文件在 backend/services/ 下，向上三级即仓库里的 Task/my_app
+# my_app 根：本文件在 backend/services/ 下，向上三级即仓库里的 apps/my_app
 _MY_APP_DIR = Path(__file__).resolve().parents[2]
 
-# 引擎脚本：与 my_app 同级的兄弟目录（Task/whatsapp-kb-bot/scripts/tt-analyze.py）
+# 引擎脚本：与 my_app 同级的兄弟目录（apps/whatsapp-kb-bot/scripts/tt-analyze.py）
 _ENGINE = _MY_APP_DIR.parent / "whatsapp-kb-bot" / "scripts" / "tt-analyze.py"
 
 # 分析一次的现实耗时：要读 36k 行的 SQLite + 两张 xlsx 规则表。**实测 0.3~0.5 秒**

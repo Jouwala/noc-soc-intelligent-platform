@@ -22,8 +22,8 @@
 #    1-start-nginx   1-start_nginx.lnk   pop up start_nginx.bat (skips if already up)
 #    2-stop-nginx    2-stop_nginx.lnk    pop up stop_nginx.bat  (signals from nginx's own dir)
 #    3-reload-nginx  3-reload_nginx.lnk  pop up reload_nginx.bat (nginx -t first, reload only if valid)
-#    4-start-myapp   4-start_myapp.lnk   run Task\my_app\start.bat
-#    5-stop-myapp    5-stop_myapp.lnk    run Task\my_app\stop.bat (writes stopped.flag)
+#    4-start-myapp   4-start_myapp.lnk   run apps\my_app\start.bat
+#    5-stop-myapp    5-stop_myapp.lnk    run apps\my_app\stop.bat (writes stopped.flag)
 #    6-start-portal  6-start_portal.lnk  run <portal>\start.bat
 #    7-stop-portal   7-stop_portal.lnk   run <portal>\stop.bat
 #    8-start-all     8-start_all.lnk     my_app -> portal -> nginx (nginx silent)
@@ -63,9 +63,9 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 # Workspace root. The script lives at the root today; fall back to a search so
 # the shortcut keeps working if the file is ever moved one level down.
 $Root = $ScriptDir
-if (-not (Test-Path (Join-Path $Root 'Task\my_app'))) {
+if (-not (Test-Path (Join-Path $Root 'apps\my_app'))) {
     foreach ($candidate in @((Split-Path -Parent $ScriptDir), 'D:\01_olbr_portal')) {
-        if ($candidate -and (Test-Path (Join-Path $candidate 'Task\my_app'))) {
+        if ($candidate -and (Test-Path (Join-Path $candidate 'apps\my_app'))) {
             $Root = $candidate
             break
         }
@@ -84,10 +84,10 @@ if ((Test-Path -LiteralPath (Join-Path $Root 'ISOLATED_COPY.flag')) -and $Comman
     exit 1
 }
 
-$MyAppDir  = Join-Path $Root 'Task\my_app'
+$MyAppDir  = Join-Path $Root 'apps\my_app'
 $NginxDir  = Join-Path $Root 'nginx-1.28.0'
 $NginxExe  = Join-Path $NginxDir 'nginx.exe'
-$BotDir    = Join-Path $Root 'Task\whatsapp-kb-bot'
+$BotDir    = Join-Path $Root 'apps\whatsapp-kb-bot'
 
 # Portal directory: name is non-ASCII, so match it by wildcard. The distinctive
 # ASCII prefix/suffix avoids hardcoding Chinese text in this file at all.

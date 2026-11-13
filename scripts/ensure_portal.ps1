@@ -3,7 +3,7 @@
 # 门户目录名含中文，任务用的 ANSI/VBS 写不进路径，所以在这里按前缀查找。
 $ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent $PSScriptRoot
-if (-not (Test-Path -LiteralPath (Join-Path $root 'Task\my_app'))) {
+if (-not (Test-Path -LiteralPath (Join-Path $root 'apps\my_app'))) {
     $root = 'D:\01_olbr_portal'
 }
 $hit = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |

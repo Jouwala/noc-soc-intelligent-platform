@@ -56,7 +56,7 @@ function componentCount() {
  *  **静默跳过**，守卫显示 PASS 但实际什么都没查。教训：守卫取不到真相源时
  *  必须显式失败，不能当成「不适用」。 */
 function myAppTaskCount() {
-  const p = join(ROOT, '..', 'Task', 'my_app', 'backend', 'task_registry.py')
+  const p = join(ROOT, '..', 'apps', 'my_app', 'backend', 'task_registry.py')
   if (!existsSync(p)) return null
   const src = readFileSync(p, 'utf8')
   const start = src.indexOf('TASK_SPECS')

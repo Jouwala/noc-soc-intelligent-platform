@@ -5,11 +5,11 @@
 # Do not edit D:\01_olbr_portal\scripts\post_sync_fix_paths.ps1 by hand --
 # it is overwritten on every config stage. Edit the one in the main repo.
 #
-# Why: `build_olbr_portable.ps1 -Stage source` copies Task/my_app and the portal
+# Why: `build_olbr_portable.ps1 -Stage source` copies apps/my_app and the portal
 # subtree verbatim from D:\01_RPA, so two scripts that were hand-fixed for the
 # isolated copy get reverted to D:\01_RPA paths on every sync:
 #
-#   1) Task\my_app\monitor_fixes\nginx_monitor.ps1   (NginxExe/NginxDir/Port/Log/State)
+#   1) apps\my_app\monitor_fixes\nginx_monitor.ps1   (NginxExe/NginxDir/Port/Log/State)
 #   2) <portal>\rotate_nginx_logs.ps1                ($Prefix)
 #
 # Reverting them is not fatal while the copy is idle, but at cutover the nginx
@@ -173,12 +173,12 @@ function Set-ParamDefault {
 $httpPort = Read-EnvPort -Key 'NGINX_HTTP_PORT' -Default 8080
 $nginxDir = Join-Path $CopyRoot 'nginx-1.28.0'
 $nginxExe = Join-Path $nginxDir 'nginx.exe'
-$logPath = Join-Path $CopyRoot 'Task\nginx_monitor.log'
-$statePath = Join-Path $CopyRoot 'Task\nginx_monitor.state'
+$logPath = Join-Path $CopyRoot 'apps\nginx_monitor.log'
+$statePath = Join-Path $CopyRoot 'apps\nginx_monitor.state'
 $changed = 0
 
 # ---------------------------------------------------------------- 1) nginx_monitor
-$mon = Join-Path $CopyRoot 'Task\my_app\monitor_fixes\nginx_monitor.ps1'
+$mon = Join-Path $CopyRoot 'apps\my_app\monitor_fixes\nginx_monitor.ps1'
 if (Test-Path -LiteralPath $mon) {
     $state = Get-TextPreserving -Path $mon
     $text = $state.Text

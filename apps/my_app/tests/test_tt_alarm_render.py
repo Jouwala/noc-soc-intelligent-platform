@@ -142,8 +142,8 @@ def test_engine_env_points_at_my_app_paths():
     不覆盖这三个变量，子进程一启动就找不到库和规则表。
     """
     env = R._engine_env()
-    assert env["MY_APP_DIR"].replace("\\", "/").endswith("Task/my_app")
-    assert env["MY_APP_DB"].replace("\\", "/").endswith("Task/my_app/db/app.db")
+    assert env["MY_APP_DIR"].replace("\\", "/").endswith("apps/my_app")
+    assert env["MY_APP_DB"].replace("\\", "/").endswith("apps/my_app/db/app.db")
     assert env["MY_APP_TT_RULES"].replace("\\", "/").endswith("eflow_TT_rules.xlsx")
     assert env["MY_APP_PUSH_RULES"].replace("\\", "/").endswith("eflow_push_rules.xlsx")
     assert env["PYTHONIOENCODING"] == "utf-8"
