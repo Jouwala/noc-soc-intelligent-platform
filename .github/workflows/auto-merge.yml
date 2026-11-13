@@ -79,9 +79,14 @@ jobs:
             if [ "$Q_BAD" != "0" ]; then echo "quality 未全绿，跳过"; continue; fi
 
             # head 提交上的全部检查都必须完成，且结论为 success / skipped / neutral。
+            # 注意：排除本工作流自身的检查运行（name 为 auto-merge）——它在评估
+            # 进行时正处于 in_progress，若算进去，labeled 触发的运行会永远因
+            # “自己没跑完”而跳过（2026-11-13 PR #14 实测：run #37/#39 均因此
+            # 跳过，而提交页上其余检查全绿）。合并的安全性仍由 quality 全绿
+            # 与 smoke-passed 标签保证，不依赖本工作流自身的检查结论。
             CHECKS="$(curl -sS "${AUTH[@]}" "$API/commits/$HEAD_SHA/check-runs?per_page=100")"
             C_TOTAL="$(echo "$CHECKS" | jq -r '.total_count')"
-            C_BAD="$(echo "$CHECKS" | jq -r '[.check_runs[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')"
+            C_BAD="$(echo "$CHECKS" | jq -r '[.check_runs[] | select(.name != "auto-merge") | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')"
             if [ "$C_TOTAL" = "0" ]; then echo "没有任何检查记录，跳过"; continue; fi
             if [ "$C_BAD" != "0" ]; then echo "有检查未通过或未完成，跳过"; continue; fi
 
