@@ -1453,7 +1453,7 @@ UME 侧 KPI 的采集结果：业务量、成功率、失败分因（系统侧 /
 站点类型 × 2G/3G/4G），三个维度其实是**同一张 (制式 × 站点类型) 表的三种切法**。
 
 - **数据源**：本机派生库 `data/avail_recon.sqlite3` 的 `availability_daily`
-  （`backend/services/avail_ms_service.py` 只读整表读入 + 300s 缓存，不发远端、不写主库）。
+  （`backend/services/avail/avail_ms_service.py` 只读整表读入 + 300s 缓存，不发远端、不写主库）。
   该表由任务 `avail_recon_sync` 每天 06:10 重建（`backend/task_registry.py` 的 `TASK_SPECS`），
   页面顶部显示 `MAX(Begin_Time)` 作为「数据截至」—— 2026-09-21 发生过派生表静默停更两周的事故，
   这一行就是给那次事故留的观测口。
@@ -1479,7 +1479,7 @@ UME 侧 KPI 的采集结果：业务量、成功率、失败分因（系统侧 /
   ⚠️ 性能坑（已修）：`avail_ms_service.get_drilldown()` 过滤上一期时，必须先把
   `_prev_value(period, value)` **算进变量**再写列表推导 —— 直接写进推导条件会被 Python 按行
   重新求值，每行都触发一次全表 distinct，实测单请求 8~13 秒、6600 万次函数调用；提出后 0.2 秒
-  （`backend/services/avail_ms_service.py:519` 有注释）。
+  （`backend/services/avail/avail_ms_service.py:519` 有注释）。
 - **曲线图**：三张矩阵上方各配一张多序列趋势图（`frontend/src/pages/AvailTrend.tsx`，
   2026-09-28 由 `AvailMsTrend.tsx` 改名提上来，现在与 14n 的 FLM 页共用），
   每张图 = 该维度各取值在窗口内的加权可用率，窗口按档位取默认期数
@@ -1528,7 +1528,7 @@ UME 侧 KPI 的采集结果：业务量、成功率、失败分因（系统侧 /
 > 环境变量 `AVAIL_REGION_ORDER="North,South"`（只是排序提示，不是白名单）。
 
 - **数据源与口径**：与 14m **同源同实现** —— 同一个派生库 `data/avail_recon.sqlite3`、
-  同一套 `SUM(分子)/SUM(分母)` 加权口径。后端 `backend/services/avail_flm_service.py`
+  同一套 `SUM(分子)/SUM(分母)` 加权口径。后端 `backend/services/avail/avail_flm_service.py`
   **不重写任何聚合**，改为调用 `avail_ms_service` 文件末尾新增的**公开门面**
   （`fetch_all` / `cell` / `warnings_for` / `period_of` …）：直接 import 下划线私有函数也能跑，
   但那让"口径的实现者"与"调用者"之间没有契约，第二个人接手时不知道哪些能改。
@@ -1628,9 +1628,9 @@ UME 侧 KPI 的采集结果：业务量、成功率、失败分因（系统侧 /
   4G `..._FDD1day_SITE` 的 `[FDD]Cell Availability[SDR_ITBBU]`；
   站点主数据取主库 `eflow_site`（830 行，字段 `province_county` / `region` / `site_type` …）。
   后端**分三层**（每层单一职责，见下）：
-  `backend/services/avail_county_data.py`（取数：PG 只读 + 缓存 + 周期边界）、
-  `backend/services/avail_county_aggregate.py`（**聚合口径的唯一真相源**，纯计算不碰 PG）、
-  `backend/services/avail_county_service.py`（对外接口编排）；
+  `backend/services/avail/avail_county_data.py`（取数：PG 只读 + 缓存 + 周期边界）、
+  `backend/services/avail/avail_county_aggregate.py`（**聚合口径的唯一真相源**，纯计算不碰 PG）、
+  `backend/services/avail/avail_county_service.py`（对外接口编排）；
   HTTP 层 `backend/routers/avail_county.py`，接口
   `/api/avail-county/options|matrix|trend|drilldown`。
 - **站点关联按「站点名」而不是 `site_id`**：实测 PG 侧 `site_id` 与 `eflow_site.site_id`

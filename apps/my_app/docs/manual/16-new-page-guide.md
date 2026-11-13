@@ -174,7 +174,7 @@ title={<>{t('xxx.col.avail')} <ExplainIcon text={t('xxx.explain.col', { metric: 
 ```
 
 - **气泡内容一律取接口既有字段**（样本数、未达标数、区间、上一期、环比都是后端算好的），**禁止在前端重算** —— 重算会造出「气泡和表里的数对不上」。把拼装放在页面目录的 `xxxHelpers.tsx` 里（参考 `pages/availCounty/availCountyHelpers.tsx::cellExplainText()`），页面主体只负责接线。
-- **口径文字先从代码核实**。照抄手册会抄到错的：2026-11-03 给 `avail_county` 写说明时，手册写「全网汇总**不是**县等权平均」，而 `backend/services/avail_county_aggregate.py::summary_by_tech()` 是把各县县值取算术平均 —— 实测 `/api/avail-county/matrix` 的 `2G=0.9270144172370779` 与 15 个县值的平均**逐位相等**，手册写反了，已更正。
+- **口径文字先从代码核实**。照抄手册会抄到错的：2026-11-03 给 `avail_county` 写说明时，手册写「全网汇总**不是**县等权平均」，而 `backend/services/avail/avail_county_aggregate.py::summary_by_tech()` 是把各县县值取算术平均 —— 实测 `/api/avail-county/matrix` 的 `2G=0.9270144172370779` 与 15 个县值的平均**逐位相等**，手册写反了，已更正。
 - **不要用 `title=` 原生提示**：不可复制、不受主题管、移动端读不到。`ExplainIcon` / `ExplainPopover` 自带复制按钮与 `renderRich`（`**强调**` 会渲染，不会露星号）。
 - `ExplainIcon` 自带 `stopPropagation`：挂在**可下钻的卡片标题**上时点 ⓘ 不会顺带打开下钻弹窗（`ExplainCorner` 早就是这个行为）。
 - **不适用**：`LegacyToolFrame` 的 iframe 页（数字不在我们 DOM 里）；纯明细列表没有「算出来的数字」的不硬凑。

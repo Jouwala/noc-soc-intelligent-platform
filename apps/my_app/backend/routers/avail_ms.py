@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """可用率多维矩阵（avail_ms）API。
 
-数据源与口径见 `backend/services/avail_ms_service.py` 顶部说明 —— 它读的是
+数据源与口径见 `backend/services/avail/avail_ms_service.py` 顶部说明 —— 它读的是
 my_app 自持派生库 `data/avail_recon.sqlite3`（由任务 avail_recon_sync 每天重建），
 不查主库、不发远端。
 
@@ -33,7 +33,7 @@ import logging
 
 from fastapi import APIRouter, Query
 
-from backend.services import avail_ms_service as svc
+from backend.services.avail import avail_ms_service as svc
 
 logger = logging.getLogger("avail_ms")
 

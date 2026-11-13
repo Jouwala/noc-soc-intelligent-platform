@@ -1115,7 +1115,7 @@ _SIMPLE_CARDS = [
      "MS 合同 KPI / SLA 全量同步：UME 主机端口、入库批量、上传与源 FTP 目录"
      "（三套 FTP/UME 账号密码都在「凭据管理」，不在配置文件）"),
     ("avail_recon_sync", "avail_recon_config.json",
-     "backend.services.avail_recon_sync",
+     "backend.services.avail.avail_recon_sync",
      {"src_db": _txt("源库逻辑名（远端 DbWriter）"),
       "master_db": _txt("主站点库逻辑名"),
       "master_table": _txt("主站点表名"),

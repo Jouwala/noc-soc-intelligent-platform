@@ -154,7 +154,7 @@ DERIVED_CHECKS = [
          table="availability_daily", column="Begin_Time",
          granularity="daily", run_by="06:10",
          task_id="avail_recon_sync", task_cron="10 6 * * *",
-         service="backend/services/avail_recon_sync.py::run_avail_recon_sync",
+         service="backend/services/avail/avail_recon_sync.py::run_avail_recon_sync",
          write_path="远端只读 API 聚合 → 原子替换本机 data/avail_recon.sqlite3（不发远端）"),
     dict(label="mttr_tt MTTR/TT 宽表",
          path=str(MY_APP_DIR / "data" / "mttr_tt.sqlite3"),

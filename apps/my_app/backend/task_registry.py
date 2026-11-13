@@ -413,7 +413,7 @@ TASK_SPECS = [
     #      main_kpi_sync(04:00) 写入，同组串行 + 排队先后即可保证「先写后读」，
     #      也避免与写入方并发。整表只有 ~8k 行、实测 3s 跑完。
     dict(task_id="avail_recon_sync", name="可用率核对宽表重建", name_en="Availability Recon Rebuild",
-         loader=("backend.services.avail_recon_sync", "run_avail_recon_sync"),
+         loader=("backend.services.avail.avail_recon_sync", "run_avail_recon_sync"),
          description="重建 avail_recon 可用率核对宽表（读远端 Site_Daily × Master_Site_Database Region 近似聚合），写本机 data/avail_recon.sqlite3，供 Daily Availability KPI / Availability(TT) 看板",
          description_en="Rebuild the avail_recon availability reconciliation table (approx. aggregate of remote Site_Daily x Master_Site_Database region) into local data/avail_recon.sqlite3 for the Daily Availability KPI / Availability(TT) boards",
          default_cron="10 6 * * *", category="availability"),

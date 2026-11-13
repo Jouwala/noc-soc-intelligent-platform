@@ -8,7 +8,7 @@
   Numerator, Denominator, Cell_Availability, WK, Month）
 
 它不是任何业务系统的原生表，由定时任务 `avail_recon_sync`（每天 06:10，
-见 `backend/services/avail_recon_sync.py` 顶部说明）从远端
+见 `backend/services/avail/avail_recon_sync.py` 顶部说明）从远端
 `2G/3G/4G_Main_Kpi_Site_Daily` × `Master_Site_Database_.Region` **近似重建**，
 近 300 天 / 8000 行量级。本页每次请求直接只读查它（整表读入 + 300s 缓存），
 不做任何二次落库。

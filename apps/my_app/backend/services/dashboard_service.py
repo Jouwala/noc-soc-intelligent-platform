@@ -186,7 +186,7 @@ LOCAL_APP_DB = "__local_app_db__"
 # 2026-09-13，`?page=finebi_daily_availability` 静默停更（2026-09-21 发现）。
 #
 # 现在改由 my_app 自己的定时任务重建到本机，看板直读本机文件：
-#   __local_avail_recon__  ← backend/services/avail_recon_sync.py（任务 avail_recon_sync）
+#   __local_avail_recon__  ← backend/services/avail/avail_recon_sync.py（任务 avail_recon_sync）
 #   __local_mttr_tt__      ← backend/services/mttr_tt_sync.py   （任务 mttr_tt_sync）
 #   __local_progress__     ← backend/services/progress_sync.py  （任务 progress_sync）
 LOCAL_SQLITE_FILES: Dict[str, Path] = {

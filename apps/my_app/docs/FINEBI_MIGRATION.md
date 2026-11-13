@@ -334,7 +334,7 @@ SELECT * FROM ( <原 SQL> ) WHERE substr("<日期列>",1,10) BETWEEN '...' AND '
 | `backend/services/_gen_native_catalog.py` | 目录生成器 |
 | `backend/services/_verify_native_catalog.py` | SQL 预检工具 |
 | `backend/services/_native_catalog_raw.json` | 生成器的中间产物 |
-| `backend/services/avail_recon_sync.py` | 可用率核对宽表重建（§4.1，任务 `avail_recon_sync`） |
+| `backend/services/avail/avail_recon_sync.py` | 可用率核对宽表重建（§4.1，任务 `avail_recon_sync`） |
 | `backend/services/mttr_tt_sync.py` | MTTR/TT 宽表重建（§4.1，任务 `mttr_tt_sync`） |
 | `backend/services/progress_sync.py` | Progress 宽表重建（§4.1，任务 `progress_sync`） |
 | `backend/services/remote_readonly.py` | 远端只读 SQL API 客户端（上面三个 ETL 共用） |

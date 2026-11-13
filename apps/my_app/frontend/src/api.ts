@@ -366,7 +366,7 @@ export function getSiteAvailabilityTickets(params?: Record<string, string>) {
 
 // MS Availability（page=avail_ms，可用率多维矩阵）：区域/制式/站点类型 × 日/周/月
 // 数据源：本机派生库 data/avail_recon.sqlite3（任务 avail_recon_sync 每天 06:10 重建），
-// 口径 = SUM(Numerator)/SUM(Denominator)，见 backend/services/avail_ms_service.py
+// 口径 = SUM(Numerator)/SUM(Denominator)，见 backend/services/avail/avail_ms_service.py
 export function getAvailMsOptions() {
   return api.get('/avail-ms/options')
 }
@@ -391,7 +391,7 @@ export function getAvailMsDrilldown(params: Record<string, string | number>) {
 
 // FLM 可用率（page=avail_flm）：区域为行、制式/站点类型为列 + 页面级 TT 列表
 // 与 avail_ms 同库同口径（后端复用同一套聚合），差别只在行列摆法与那张 TT 列表，
-// 两条已确认的口径（站点类型不做范围限制、TT 不做影响判定）见 backend/services/avail_flm_service.py
+// 两条已确认的口径（站点类型不做范围限制、TT 不做影响判定）见 backend/services/avail/avail_flm_service.py
 export function getAvailFlmOptions() {
   return api.get('/avail-flm/options')
 }
@@ -424,7 +424,7 @@ export function getAvailFlmDrilldown(params: Record<string, string | number>) {
 // 县维度可用率（page=avail_county）：按 eflow_site.province_county（县）聚合，
 // 行=县、列=2G/3G/4G，日/周用页签切粒度。
 // 口径与 avail_ms / avail_flm **不同**（本页是站点级比率等权平均，不是 SUM(分子)/SUM(分母)），
-// 详见 backend/services/avail_county_service.py 顶部说明。
+// 详见 backend/services/avail/avail_county_service.py 顶部说明。
 export function getAvailCountyOptions() {
   return api.get('/avail-county/options')
 }

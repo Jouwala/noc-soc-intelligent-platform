@@ -3042,7 +3042,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'availFlm.warn.readFailed': '明细下钻或工单读取失败（TT 表不可用属常见原因），可用率数字本身不受影响。',
 
     /* ---- 县维度可用率（AvailCounty.tsx，page=avail_county）----
-     * 口径见 backend/services/avail_county_service.py 顶部：
+     * 口径见 backend/services/avail/avail_county_service.py 顶部：
      * 行=县（eflow_site.province_county）、列=2G/3G/4G，日/周用页签切粒度。
      * ⚠️ 与 avail_ms / avail_flm 口径**不同**（本页站点等权平均，不是 SUM(分子)/SUM(分母)），
      *    故 calibNote 要说清楚，避免运维把两页数字对不上当成 bug。 */
@@ -9615,7 +9615,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'availFlm.warn.readFailed': 'Drill-down or ticket read failed (unavailable TT table is the usual cause); the availability figures themselves are unaffected.',
 
     /* ---- County-level availability (AvailCounty.tsx, page=avail_county) ----
-     * See backend/services/avail_county_service.py: rows = county
+     * See backend/services/avail/avail_county_service.py: rows = county
      * (eflow_site.province_county), columns = 2G/3G/4G, day/week on tabs.
      * ⚠️ The measure differs from avail_ms / avail_flm (site-weighted average
      *    here, SUM(numerator)/SUM(denominator) there) — hence the explicit note. */

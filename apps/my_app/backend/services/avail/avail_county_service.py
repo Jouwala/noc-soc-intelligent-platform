@@ -34,8 +34,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from backend.database import get_raw_connection
-from backend.services import avail_county_aggregate as agg
-from backend.services import avail_county_data as data
+from backend.services.avail import avail_county_aggregate as agg
+from backend.services.avail import avail_county_data as data
 from backend.services.site_availability_service import month_days, month_weeks
 
 logger = logging.getLogger("avail_county")

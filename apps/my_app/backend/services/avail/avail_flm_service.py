@@ -52,7 +52,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from backend.services import avail_ms_service as ms
+from backend.services.avail import avail_ms_service as ms
 
 logger = logging.getLogger("avail_flm")
 
