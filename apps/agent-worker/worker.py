@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 import time
 import uuid
@@ -131,7 +132,13 @@ class AgentWorker:
                 in_block = True
                 continue
             if in_section and in_block and stripped:
-                return stripped.split()
+                # shlex 而非 str.split：命令里带引号的参数（如 python3 -c "..."）
+                # 用 split 会把引号内的空格也切开，导致 SyntaxError。
+                # 引号不成对时 shlex 抛 ValueError，退回 split 保底。
+                try:
+                    return shlex.split(stripped)
+                except ValueError:
+                    return stripped.split()
         return None
 
     # -- 主流程 ---------------------------------------------------------------------
