@@ -13,6 +13,7 @@
 | 看板操作 | `DashboardModal`、`PreviewDrawer`、`QRCodeModal`、`EndpointSettingsModal`、`GroupManagerModal` |
 | 鉴权与用户 | `LoginView`、`ChangePasswordModal`、`PasswordInput`、`UserManagementModal`、`AuthSwitchModal` |
 | 数据与状态 | `TaskSyncWidget`、`WhatsAppTasksView` |
+| Agent 控制台 | `AgentNodesView`、`AgentTasksView`、`ApprovalsView`（在 `components\agent\` 子目录） |
 | 工具 | `DynamicIcon`、`DesignGuideModal`、`DocsIndexModal` |
 
 路径统一为 `src\components\<名字>.tsx`（`AuthContext` 例外，在 `src\auth\`）。
@@ -222,6 +223,18 @@ interface TaskItem {   // 内部归一化后的模型
 ### `WhatsAppTasksView`
 
 WhatsApp 任务视图，功能较独立（17KB）。
+
+### Agent 控制台三件（`components\agent\`，TASK-08）
+
+路径为例外的子目录：`src\components\agent\`。三个视图共用数据层 hook
+`agent\hooks\useAgentEvents.ts`（快照 + SSE 增量订阅，接口走
+`PORTAL_API/agent-console/*`，后端未部署时只显示空态、不展示假数据）；
+视图 props 均为可选的 `data?: UseAgentEventsResult` —— 不传则各自调 hook
+独立挂载，传入则由页面统一供数。
+
+- `AgentNodesView`：节点卡片（在线/失联/离线由心跳新鲜度推导）、连接状态徽标。
+- `AgentTasksView`：任务列表（状态/进度/认领关系/分支/PR/更新时间）+ 执行日志流。
+- `ApprovalsView`：异常（blocked / qa-failed 常驻可见）+ 审批队列（批准/驳回，提交后记 `APPROVAL_DECIDED` 事件）。
 
 ## 七、工具组件
 
