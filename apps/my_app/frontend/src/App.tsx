@@ -172,7 +172,7 @@ const { Header, Sider, Content } = Layout
 
 /**
  * 原生看板（原 my-finebi 看板迁移）—— 除两个示例页外的全部看板。
- * key 形如 finebi_<slug>，slug 与后端 backend/services/native_catalog.py 一一对应。
+ * key 形如 finebi_<slug>，slug 与后端 backend/services/native/native_catalog.py 一一对应。
  * 顺序 = 侧栏展示顺序；labelKey 在 i18n.tsx 的 nav.* 下。
  */
 const FINEBI_BOARDS: { slug: string; icon: React.ReactNode; labelKey: string }[] = [

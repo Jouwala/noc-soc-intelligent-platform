@@ -2,7 +2,7 @@
  * Speedtest 竞对分析（ORANGE vs MTN）—— `?page=bm_speedtest`
  * ----------------------------------------------------------------------------
  * 数据源：`speedtest_data`（Speedtest.xlsx 导入，854 行，2025-07-16 ~ 2026-09-24）。
- * 口径的唯一真相源是 `backend/services/bm_speedtest_caliber.py`，本页**不含任何业务口径**。
+ * 口径的唯一真相源是 `backend/services/bm/bm_speedtest_caliber.py`，本页**不含任何业务口径**。
  *
  * 四个分析区块（对应需求里的四类维度）：
  *   ① 综合竞争力评分 + 关键指标汇总卡（谁强、强多少）

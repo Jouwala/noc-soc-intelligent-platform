@@ -2,7 +2,7 @@
  * Meta 基准报告（ORANGE vs MTN 速率 PK + FDD 网络侧 KPI）—— `?page=bm_meta`
  * ----------------------------------------------------------------------------
  * 数据源：`meta_data`（Meta_20260923.xlsx 导入，612 行，2025-01-18 ~ 2026-09-23）。
- * 口径的唯一真相源是 `backend/services/bm_meta_caliber.py`，本页**不含任何业务口径**。
+ * 口径的唯一真相源是 `backend/services/bm/bm_meta_caliber.py`，本页**不含任何业务口径**。
  *
  * ⚠️ 与 `bm_speedtest` 是**两张不同的表、两套口径**，不要合并：
  *   · speedtest_data —— 实测网速，有 provider 列，靠 LIKE 归一成两家；

@@ -1277,7 +1277,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'eflowFlow.kpi.rulesTotal': '流程规则',
     'eflowFlow.kpi.rulesHint': '本单命中 {{n}} 条',
     // ---- eFlow 全流程：数字悬浮说明（AGENTS.md 三.3c）----
-    // 口径逐条从 backend/services/eflow_flow.py 核实：_load_rules / _build_graph /
+    // 口径逐条从 backend/services/eflow/eflow_flow.py 核实：_load_rules / _build_graph /
     // _actual_path / _wo_path / rule_hits 拼装段。
     'eflowFlow.explain.steps': '数的是该单**实际走过的流程节点数**（去重后按规范顺序排列），不是操作次数。\n告警发生与 TT 建单**无条件打点** —— 只要查到单，起点就是 2 步。\n只统计 TT 主流程，WO 现场子流程另有一条泳道，不计进这个数。\n全程分母 {{n}} = 主流程节点数（不含 WO 泳道）。',
     'eflowFlow.tip.steps': '本单走过 **{{reached}}** 个主流程节点 / 全程 {{total}} 个\n告警发生、TT 建单为无条件打点\nWO 子流程另计：走过 {{wo}} 个节点（不进上面的数）\n点卡片清除节点选中',
@@ -1687,7 +1687,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'nav.crAnalysis': 'CR 变更分析',
 
     /* ---- CR 变更分析（CrChangeAnalysis.tsx）----
-     * 口径见 backend/services/cr_analysis_service.py 的模块 docstring：
+     * 口径见 backend/services/cr/cr_analysis_service.py 的模块 docstring：
      * 「已排期」= planned_start_time 非空；「已执行」= actual_start_time 非空；
      * 「按时/延期」分母是**已执行**而非全部 CR，故 *Hint 键必须带分母。 */
     'cr.filter.range': '统计区间',
@@ -1835,7 +1835,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'cr.flow.drill.title': '流程步骤明细',
 
     /* ---- PM 执行分析（PmExecutionAnalysis.tsx）----
-       数据源 eflow_pm；口径见 backend/services/pm_caliber.py。
+       数据源 eflow_pm；口径见 backend/services/pm/pm_caliber.py。
        注意：流程步骤按**真实时序**（创建→排期→受理→PM经理审批→执行→FLM审批），
        不按后端字段名字母序。 */
     'nav.pmAnalysis': 'PM 执行分析',
@@ -1895,7 +1895,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'pm.kpi.startRate': '已启动率',
     'pm.kpi.startRateHint': '{started} ÷ {total}（条目完成数 > 0 的工单占比）',
     // ---- PM 执行分析：计数卡与比率卡的数字悬浮说明（AGENTS.md 三.3c）----
-    // 判据都在 backend/services/pm_caliber.py 的 SQL 片段里，这里只转述；数字全部取接口 summary 字段。
+    // 判据都在 backend/services/pm/pm_caliber.py 的 SQL 片段里，这里只转述；数字全部取接口 summary 字段。
     // 特别注意：「超期」用的是源表 pmt_overdue 的原判定，页面**不自己按日期算**。
     'pm.explain.total': '总数 = 时间窗口内该数据源的 PM 工单行数（一条工单一行）。时间列与窗口由后端 base_where 统一决定，下钻与概览同一份。',
     'pm.explain.closed': '已关闭 = `UPPER(TRIM(status)) = \'CLOSED\'`。状态列在动态建表的 eflow_pm 里有大小写两种写法，所以先归一再比。',
@@ -2520,7 +2520,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'spDet.hint.materials': 'Material No. 去重',
     'spDet.hint.openTickets': 'Status 非 Closed（入库 + 出库）',
     // ---- SP 明细报表数字悬浮说明（AGENTS.md 三.3c）----
-    // 口径对过 backend/services/sp_details_service.py 的 get_summary() / _sheet_stats()。
+    // 口径对过 backend/services/sp/sp_details_service.py 的 get_summary() / _sheet_stats()。
     // ⚠ 本页读的是 **任何过滤之前**的 *_source.xlsx 快照，而 sp_report / com_report 读过滤后的汇总工作簿 ——
     // 同一个同名指标本页系统性偏大，两页数字对不上是口径不同，不是丢数或重计。
     'spDet.explain.records': '记录数 = 各 sheet **数据行数之和**（后端 Σ len(rows)），跨表不去重 —— 同一物料在入库和出库各出现一次就计两行。',
@@ -2581,7 +2581,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'spRep.latestTime': '最新业务时间',
     'spRep.qtyTip': '数量列合计；前面是当前筛选结果，斜杠后是该表全量',
     // ---- SP / 耗材报表顶部八卡与分表卡的数字悬浮说明（AGENTS.md 三.3c）----
-    // 口径对过 backend/services/sp_report_service.py：_summary_current_stats() / _sheet_stats() /
+    // 口径对过 backend/services/sp/sp_report_service.py：_summary_current_stats() / _sheet_stats() /
     // _count_open_docs() / _overlay_db_open_counts()。数据源是 05:15 SFTP 下载、05:55 生成的**汇总工作簿**，不是数据库。
     'spRep.explain.materials': '物料数 = Summary-Current 这张表的**数据行数**（后端 len(rows)），**不是按物料号去重后的个数**。',
     'spRep.tip.materials': '本表共 {n} 行（同一物料在一行里只出现一次，行数与物料条数此刻相等；若生成端改了表结构就会分叉）',
@@ -2781,7 +2781,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'spMat.detailFailed': '明细加载失败',
     'spMat.clickHint': '点击查看明细',
     // ---- SP 物料汇总数字悬浮说明（AGENTS.md 三.3c）----
-    // 口径对过 backend/services/sp_material_summary_service.py 的 _build_row() / 分桶与消耗推导。
+    // 口径对过 backend/services/sp/sp_material_summary_service.py 的 _build_row() / 分桶与消耗推导。
     'spMat.explainCol.anchor': '期初这一组 = **锚点快照日**（anchor_date）当天各分组库存的两列拆分。\n分桶规则：状态为 damage 的进「待修」；否则物料类型含 spare 的进「备件良品」、含 consum 的进「耗材」。\n库存取自 inventory_details 按快照日 SUM(Stock Qty)；归组是 Warehouse Id 精确/前缀 **或** Warehouse Name 含关键词，命中一条即进该组，每组另带排除词（如 1st WH 排除名里含 "2nd floor" 的仓），全都不落才进 Others。',
     'spMat.explainCol.current': '当前这一组 = **当前快照日**（current_date）同一分组、同一分桶规则的库存。\n「消耗」= 某一期初 − 本列当前，所以这一组是三个消耗窗口的公共减数。',
     'spMat.tip.anchor': '{label}：期初快照库存 **{v}**\n归组按 Warehouse Id 精确/前缀 **或** Warehouse Name 含关键词（每组另有排除词），全都不命中才落 Others',
@@ -5775,7 +5775,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'cnkpi5.vsDay1Hint': '截至 {{time}} 的均值对比：今天 vs 昨天同一时段（昨天截到同一时刻），已剔除「当天还没过完」的影响；波动在 ±10% 内视为正常，超出则以橙色提示。',
     'cnkpi5.vsDay1NoBase': 'vs 昨日 —',
     // ---- CN KPI 5 分钟：组件卡与页头统计的数字悬浮说明（AGENTS.md 三.3c）----
-    // 每条与 services/cn_kpi_5mins_service.py 的 WIDGETS value_expr 逐条对过；改 SQL 必须同步改这里。
+    // 每条与 services/cn/cn_kpi_5mins_service.py 的 WIDGETS value_expr 逐条对过；改 SQL 必须同步改这里。
     'cnkpi5.explain.common': '三条线的日切与 x 轴都取 `substr("End Time", …)`（不是 Begin Time）：Day0 = 今天、Day1 = 昨天、Day7 = 7 天前（同一个星期几）。\n窗口只取这**三个日子**，不是连续 7 天；聚合是 GROUP BY (HH:MM, Day)。\nDay7 有没有线取决于库里攒够 8 天没有，与本页无关。',
     'cnkpi5.explain.emptyCard': '这张卡没有曲线，是因为接口给该组件下发 empty（不是报错）。原因：{reason}',
     'cnkpi5.explain.vlr': '值 = SUM("Number of Subscribers in VLR") —— 同一 5 分钟窗口内的 VLR 用户数求和，单位「个」。',
@@ -5911,7 +5911,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'cnkpi.degradedWhy': '原因：上游 _EMS 表由人工从网管导出（选择的时间区间会决定表的粒度），未导出时数据即停更。',
 
     // ===== Meta 基准报告（ORANGE vs MTN 速率 PK + FDD 网络侧 KPI）=====
-    // 数据源 meta_data；口径见 backend/services/bm_meta_caliber.py
+    // 数据源 meta_data；口径见 backend/services/bm/bm_meta_caliber.py
     'nav.bmMeta': 'Meta 基准报告',
     'bmm.brand.orange': 'Orange',
     'bmm.brand.mtn': 'MTN',
@@ -6010,7 +6010,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'bmm.empty': '暂无数据',
 
     // ===== Speedtest 竞对分析（ORANGE vs MTN）=====
-    // 数据源 speedtest_data；口径见 backend/services/bm_speedtest_caliber.py
+    // 数据源 speedtest_data；口径见 backend/services/bm/bm_speedtest_caliber.py
     'nav.bmSpeedtest': 'Speedtest 基准报告',
     'bms.brand.orange': 'Orange',
     'bms.brand.mtn': 'MTN',
@@ -6146,7 +6146,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'rck.roster': '小区名册',
     'rck.daysWithData': '有数据天数',
     // ---- RAN 小区 KPI：数字悬浮说明（AGENTS.md 三.3c）----
-    // 口径逐条对过 backend/services/ran_cells_kpi_service.py 的 compute_tech() / _read_tech_month()。
+    // 口径逐条对过 backend/services/ran/ran_cells_kpi_service.py 的 compute_tech() / _read_tech_month()。
     'rck.explain.monthAvail': '月均可用率 = **各有效日可用率的算术平均（日等权）**，不按当天小区数加权 —— 只有 3 个小区的那天与有 300 个小区的那天一样重。\n有效日 = 当天至少有 1 个小区能算出可用率的日子。\n该制式单小区可用率的算法：{desc}。\n阈值 {thr}%，低于则整卡染色。',
     'rck.tip.monthAvail': '本月 {days} 个有效日的等权平均 = **{avail}%**\n小区-日观测数 {total}（达标 {meeting} / 未达标 {below}）\n小区名册 {roster} 个 = 当月该制式出现过的全部小区并集\n判据：≥ 阈值 {thr}%',
     'rck.tip.source': '数据源：{source}',
@@ -6457,7 +6457,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'rsd.calcNote.ruleMissing': '接口未下发 counting_rule；本页按「一行 site_outage=Yes 的 TT = 一次中断」统计。',
 
     // ---- BP Cells Report（page=bp_report）----
-    // 口径：忙时三值 / 周 4/7 天 / 月 3/4 个完整周，见 backend/services/bp_caliber.py
+    // 口径：忙时三值 / 周 4/7 天 / 月 3/4 个完整周，见 backend/services/bp/bp_caliber.py
     // 页面名按用户 2026-09-30 要求统一为 "BP Cells Report"（中英同值）——
     // 与门户 MS View 里同栏的 "MS Contract KPIs" / "Availability For MS" 一致，
     // 都是产品名，不翻译。
@@ -6538,7 +6538,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'bp.tip.noDetail': '该期在 Excel 的 BP Cells List 中没有明细（2023 年全无、2024 年部分缺天），只能看汇总值',
     'bp.col.ratio': '占比',
     // ---- BP Cells Report 数字悬浮说明（AGENTS.md 三.3c）----
-    // 判据在 backend/services/bp_caliber.py（吞吐 <3Mbps、PRB >0.80、周 4/7 天、月 3/4 个完整周，口径版本 bp-v3），
+    // 判据在 backend/services/bp/bp_caliber.py（吞吐 <3Mbps、PRB >0.80、周 4/7 天、月 3/4 个完整周，口径版本 bp-v3），
     // 展示值一律直取汇总表列，页面不重算。
     'bp.explain.ratioCol': '该期占比 = 汇总表里**该期自己的** bp_ratio 列（后端算好落表），页面不拿 bp_cells ÷ total_cells 重算一遍。\n分子 = 该期判为 BP 的小区数，分母 = 该期统计到的全网小区数。',
     'bp.tip.ratioCell': '{period}：BP {bp} ÷ 全网 {total} = **{pct}**\n明细侧该期有 {detail} 行，与展示值差 {diff}（差非 0 = 上游两张 sheet 本就不一致）\n占比是汇总表原值，不是这一行现算的',
@@ -6617,7 +6617,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'whSum.kpi.materials': '物料种类',
     'whSum.kpi.urgent': '需补货',
     // ---- 仓库汇总六卡数字悬浮说明（AGENTS.md 三.3c）----
-    // 口径对过 backend/services/sp_report_service.py 的 _warehouse_summary() / _frequent_materials()。
+    // 口径对过 backend/services/sp/sp_report_service.py 的 _warehouse_summary() / _frequent_materials()。
     'whSum.explain.inventory': '当前库存 = **Inventory 表** 的 Stock Qty 逐行求和（按仓库累计后取 Total 行）。\n仓库集合取 Outbound ∪ Inventory 的**并集**：只在一边出现的仓库也出行，缺失一侧计 0 —— 直接丢弃会让 Total 与各仓之和对不上。',
     'whSum.tip.inventory': 'Total 行的 current_inventory = {v}\n来自 Inventory 表原值求和，本页不重算；只出现在出库表里的仓库在这一列是 0',
     'whSum.explain.totalConsumption': '总消耗 = **Outbound 表全表** 的 Outbound Qty 逐行求和，不带时间窗 —— 所以它是工作簿里所有出库记录的合计，不是"今年"或"这 30 天"。',
@@ -8293,7 +8293,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'nav.crAnalysis': 'CR Change Analysis',
 
     /* ---- CR change analysis (CrChangeAnalysis.tsx) ----
-     * Caliber documented in backend/services/cr_analysis_service.py docstring. */
+     * Caliber documented in backend/services/cr/cr_analysis_service.py docstring. */
     'cr.filter.range': 'Date Range',
     'cr.filter.to': 'to',
     'cr.filter.refresh': 'Refresh',
@@ -8438,7 +8438,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'cr.flow.drill.title': 'Workflow Step Detail',
 
     /* ---- PM 执行分析（PmExecutionAnalysis.tsx）----
-       Data source: eflow_pm; caliber rules in backend/services/pm_caliber.py.
+       Data source: eflow_pm; caliber rules in backend/services/pm/pm_caliber.py.
        NOTE: workflow steps follow the REAL chronological order
        (created → scheduled → accepted → PM Manager approve → processed →
        FLM Leader approve), NOT the alphabetical order of the source columns. */
@@ -9107,7 +9107,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'spDet.hint.materials': 'Distinct Material No.',
     'spDet.hint.openTickets': 'Status not Closed (inbound + outbound)',
     // ---- SP details report: number hover explain (AGENTS.md 3.3c) ----
-    // Calibers re-read from get_summary() / _sheet_stats() in backend/services/sp_details_service.py.
+    // Calibers re-read from get_summary() / _sheet_stats() in backend/services/sp/sp_details_service.py.
     // ⚠ This page reads the *_source.xlsx snapshots taken **before any filtering**, while sp_report / com_report
     //   read the filtered consolidated workbook — same-named metrics are systematically larger here by design.
     'spDet.explain.records': 'Records = the **sum of data rows across sheets** (backend Σ len(rows)), no de-duplication across sheets — a material appearing in both inbound and outbound counts twice.',
@@ -12422,7 +12422,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'cnkpi.degradedWhy': 'Cause: upstream _EMS tables are exported manually from the NMS (the chosen range determines the table granularity), so data stalls whenever no export runs.',
 
     // ===== Meta Benchmark Report (ORANGE vs MTN speed PK + FDD network KPIs) =====
-    // Source: meta_data; semantics in backend/services/bm_meta_caliber.py
+    // Source: meta_data; semantics in backend/services/bm/bm_meta_caliber.py
     'nav.bmMeta': 'Meta Benchmark Report',
     'bmm.brand.orange': 'Orange',
     'bmm.brand.mtn': 'MTN',
@@ -12521,7 +12521,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'bmm.empty': 'No data',
 
     // ===== Speedtest competitor analysis (ORANGE vs MTN) =====
-    // Source: speedtest_data; semantics in backend/services/bm_speedtest_caliber.py
+    // Source: speedtest_data; semantics in backend/services/bm/bm_speedtest_caliber.py
     'nav.bmSpeedtest': 'Speedtest Benchmark Report',
     'bms.brand.orange': 'Orange',
     'bms.brand.mtn': 'MTN',
@@ -12966,7 +12966,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // ---- BP Report (page=bp_report) ----
     // Caliber: daily three conditions / weekly 4-of-7 days / monthly 3-of-4 full weeks;
-    // see backend/services/bp_caliber.py
+    // see backend/services/bp/bp_caliber.py
     'nav.bpReport': 'BP Cells Report',
     'bp.title': 'BP Cells Report',
     'bp.to': 'to',

@@ -28,7 +28,7 @@ import { ExplainIcon } from './MetricExplain'
 
 const { TextArea } = Input
 
-/** AI provider 列表：与 backend/services/incident_ai_service.py 的 PROVIDERS 保持一致 */
+/** AI provider 列表：与 backend/services/incident/incident_ai_service.py 的 PROVIDERS 保持一致 */
 const PROVIDERS = [
   'openai', 'deepseek', 'qianwen', 'glm-coding', 'doubao', 'agnes', 'gemini',
 ]
