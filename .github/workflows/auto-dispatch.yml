@@ -24,12 +24,28 @@
 #     不合并、不关闭 Issue、不改代码。
 #   - 分派评论的机器可读头 from 记为 github-actions（自动化执行者），
 #     与 pr-merged-writeback.yml 的口径一致。
+#
+# 触发（两条路，同一套逻辑）：
+#   - PR 关闭且 merged == true、base 为 main（手动在网页上合并时走这条）；
+#   - auto-merge 合并成功后显式 workflow_dispatch（填 PR 号）。
+#   第二条是必需的：auto-merge 用默认 GITHUB_TOKEN 合并，GitHub 不会为
+#   该 token 触发的事件再启动新工作流，pull_request closed 事件被抑制
+#   （2026-11-14 实测：PR #31 合入后本工作流 0 次运行）。workflow_dispatch
+#   明确豁免这条限制，所以由 auto-merge 显式触发。
+#   workflow_dispatch 路径下 PR 编号取 inputs.pr_number，并从 API 取 PR
+#   校验它确实已合入 main（防误触发）。
 
 name: auto-dispatch
 
 on:
   pull_request:
     types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: '已合入 main 的 PR 编号'
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -38,15 +54,17 @@ permissions:
 
 jobs:
   dispatch-next:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: 找下一个就绪任务并分派
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER_EVENT: ${{ github.event.pull_request.number }}
+          PR_NUMBER_INPUT: ${{ inputs.pr_number }}
+          MERGE_SHA_EVENT: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           python3 - <<'PY'
           import json
@@ -58,8 +76,10 @@ jobs:
 
           REPO = os.environ["REPO"]
           TOKEN = os.environ["GH_TOKEN"]
-          PR_NUMBER = int(os.environ["PR_NUMBER"])
-          MERGE_SHA = os.environ.get("MERGE_SHA") or ""
+          # 两条触发路径取 PR 编号：pull_request 事件取事件里的编号，
+          # workflow_dispatch 取 inputs.pr_number（事件里没有 pull_request 对象）。
+          PR_NUMBER = int(os.environ.get("PR_NUMBER_EVENT") or os.environ.get("PR_NUMBER_INPUT") or "0")
+          MERGE_SHA = os.environ.get("MERGE_SHA_EVENT") or ""
           API = f"https://api.github.com/repos/{REPO}"
 
           BUILDERS = ("agent:muse-2", "agent:muse-3")
@@ -177,9 +197,18 @@ jobs:
 
 
           def main():
+              if PR_NUMBER <= 0:
+                  print("未取到 PR 编号，跳过")
+                  return
               pr = api(f"/pulls/{PR_NUMBER}")
+              # workflow_dispatch 路径的校验（pull_request 路径已由作业 if 把关，
+              # 这里再校验一次防误触发）：PR 必须确实已合入 main。
+              if pr.get("merged") is not True or (pr.get("base") or {}).get("ref") != "main":
+                  print(f"PR #{PR_NUMBER} 未合入 main（merged={pr.get('merged')}，base={(pr.get('base') or {}).get('ref')}），跳过")
+                  return
+              merge_sha = MERGE_SHA or pr.get("merge_commit_sha") or ""
               freed = freed_builder(pr)
-              print(f"PR #{PR_NUMBER} 已合入（{MERGE_SHA}），空闲 builder：{freed or '未知'}")
+              print(f"PR #{PR_NUMBER} 已合入（{merge_sha}），空闲 builder：{freed or '未知'}")
 
               candidates = api("/issues?state=open&labels=state:todo&per_page=100")
               ready = []
