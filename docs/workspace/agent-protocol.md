@@ -107,3 +107,13 @@ state:todo ──(TASK_ACCEPTED)──▶ state:claimed ──(TASK_COMPLETED + 
 - PR 合并后自动回写任务状态：第 12 类 PR_MERGED 评论由
   `pr-merged-writeback.yml` 发出（机器可读头 `from: github-actions`），
   同时打 `state:merged` 并关闭 Issue；Muse 1 只做最终汇总。
+- quality 全绿自动请 Grok 冒烟（2026-11-14 新增）：`agent-orchestrator.yml`
+  在 `quality` 工作流跑完且结论为 success 时自动 POST webhook，不再
+  需要人工打 `state:qa-ready` 标签；打标签与手动 dispatch 仍可用。
+  同一 head SHA 只触发一次（去重见 `docs/workspace/github-automation.md`）。
+- PR 合并后自动分派下一个任务（2026-11-14 新增）：`auto-dispatch.yml`
+  在 PR 合入 main 后找下一个就绪任务（`state:todo` + `agent:muse-2/3` +
+  依赖全关 + 无认领/分派评论），发第 1 类 TASK_ASSIGNED 评论
+  （机器可读头 `from: github-actions`），优先派给本次合并空闲出来的
+  builder；不再等每小时巡逻（`dispatch-check.yml` 只做检查与标签，
+  不分派任务）。
