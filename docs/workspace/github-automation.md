@@ -20,7 +20,9 @@ Worker 在分支上提交代码，草稿 PR 转正式
 │ quality.yml：5 个 job 检查（compileall / ruff / 门户 / 文档守卫 / pytest）
 │ 失败 → ci-failure-notify.yml：到 PR 与 Issue 通知 builder
 ▼
-打 state:qa-ready → agent-orchestrator.yml：POST webhook 请 Grok 冒烟
+quality 全绿 → agent-orchestrator.yml 自动 POST webhook 请 Grok 冒烟
+（2026-11-14 新增：CI 变绿即自动触发，不再需要人工打 state:qa-ready；
+打标签与手动 dispatch 仍可用作补救；同一 head SHA 只触发一次去重）
 │ Grok 通过 → 打 smoke-passed（+ state:qa-passed）
 ▼
 auto-merge.yml：quality 全绿 + smoke-passed + 无 do-not-merge → 自动合并
@@ -29,6 +31,10 @@ auto-merge.yml：quality 全绿 + smoke-passed + 无 do-not-merge → 自动合�
 ▼
 pr-merged-writeback.yml：给 Issue 打 state:merged、摘其余
 state: 标签、发 PR_MERGED 评论、关闭 Issue
+│
+▼
+auto-dispatch.yml：PR 合入后自动把下一个就绪任务派给空闲的 builder
+（TASK_ASSIGNED 评论，from: github-actions），不再等每小时巡逻
 │
 ▼
 Muse 1 按 dispatch-rules.md 第四节做最终汇总（人工/Agent 环节，不自动化）
@@ -42,11 +48,16 @@ Muse 1 按 dispatch-rules.md 第四节做最终汇总（人工/Agent 环节，�
 | `auto-merge.yml` 的 `update-branches` 作业 | push 到 main；或手动 dispatch | 对落后的 `agent/*` 分支 PR 调 `PUT /pulls/{n}/update-branch` | 只动 `agent/*` 分支、非草稿、`mergeable_state == behind` 才更新；冲突只记录不处理（开发 Agent 自行 rebase） |
 | `ci-failure-notify.yml` | `quality` 工作流跑完且结论 failure / timed_out | 按 head SHA 定位 open PR，评论通知 builder（失败 job、运行链接、SHA），关联 Issue 同步一份 | 同一 run 只通知一次（`ci-failure-notice` 标记去重）；只通知不改代码/标签 |
 | `pr-merged-writeback.yml` | PR 关闭且 `merged == true`、base 为 main | 解析关联 Issue → 打 `state:merged`、摘其余 `state:` 标签 → 发 PR_MERGED 评论 → 关闭 Issue | 解析不到关联 Issue 就跳过；已回写过的重复触发跳过 |
+| `agent-orchestrator.yml`（2026-11-14 扩展） | `quality` 跑完且结论 success；或 PR 打 `state:qa-ready` 标签；或手动 dispatch | 按 head SHA 定位 open PR → POST webhook 请 Grok 冒烟 | 只认 success 结论；草稿 PR 跳过；已有 `state:qa-ready` 的跳过（打标签路径会触发）；同一 head SHA 只触发一次（查本工作流按 head SHA 的运行记录去重，失败的运行不算、可重试）；无对应 open PR 只记日志 |
+| `auto-dispatch.yml`（2026-11-14 新增） | PR 关闭且 `merged == true`、base 为 main | 找下一个就绪任务（`state:todo` + `agent:muse-2/3` + 依赖全关 + 无认领/分派评论）→ 发 TASK_ASSIGNED 评论（from: github-actions）→ 补 `state:todo` 标签 | 优先派给本次合并空闲的 builder；依赖未满足的绝不分派；已认领 / 已分派的任务不动；无就绪任务只记日志；每次只派一个任务 |
+| `dispatch-check.yml`（2026-11-14 修 404） | Issue 新建 / 编辑 / 关闭 / 标签变化；每小时定时巡检 | 缺字段提醒、依赖阻塞打 `state:blocked`、依赖解除摘标签 | 只做提醒与标签，不合并、不关闭 Issue；依赖方搜索改走 REST Search API（`gh api search/issues` 在 runner 里报 HTTP 404，见第五节备忘） |
 
-既有 workflow 不在 TASK-07 改动范围：`quality.yml`（检查本体）、
-`agent-orchestrator.yml`（Grok 冒烟触发）、`dispatch-check.yml`（分派检查）；
+既有 workflow 不在 TASK-07 改动范围：`quality.yml`（检查本体）；
 `auto-merge.yml` 只加了 `update-branches` 作业与 push / dispatch 触发，
 原合并评估逻辑未动（push 触发时合并评估作业等更新作业跑完再执行）。
+`agent-orchestrator.yml`、`dispatch-check.yml` 与新增的
+`auto-dispatch.yml` 是 2026-11-14 的后续自动化（见上表），不在 TASK-07
+的原始范围里。
 
 ## 三、几个容易误解的口径
 
@@ -70,6 +81,15 @@ PR_MERGED 评论。解析不到 `Closes` 时回写工作流按消息头/分支�
 5. **CI 失败通知不是 QA 失败**：`state:qa-failed` 是 Grok 冒烟失败的标签，
 CI 失败只发通知评论、不打任何标签（标签只用 labels.yml 已定义的，
 不为 CI 失败新造标签）。
+6. **CI 变绿自动触发 Grok，不等于“每次 quality 跑完都触发”**：只有结论
+为 success 才触发；quality 对同一 head SHA 会跑两次（push +
+pull_request），去重靠查本工作流按 head SHA 的运行记录，同一 SHA
+只触发一次；失败重跑（结论 failure）不触发，ci-failure-notify
+负责通知。PR 已有 `state:qa-ready` 时也不重复触发（打标签路径已覆盖）。
+7. **合入后自动分派只派一个任务**：`auto-dispatch.yml` 每次合并只找
+编号最小的就绪任务，优先给本次空闲的 builder；没有就绪任务时只记
+日志，不报错、不派错。已被分派过（有 TASK_ASSIGNED 评论）的任务不
+重复分派；48 小时无人认领的走协议升级流程，不由本工作流重派。
 
 ## 四、分支保护（main）核实清单
 
@@ -103,7 +123,15 @@ main、force push 在 GitHub 侧均不被拦截，此前的合并纪律全靠流
 
 - 四个自动化 workflow 都只用 `GITHUB_TOKEN` + REST API（curl/jq），不引入
 第三方 Action；权限按最小化声明在各文件头 `permissions:`。
+（`dispatch-check.yml` 与新增的 `auto-dispatch.yml` 内嵌 Python
+脚本只用标准库 urllib，不引入第三方依赖，与守卫的零依赖要求一致。）
 - 手动补救入口：`issue-to-pr`、`auto-merge` 均支持 `workflow_dispatch`，
 在 Actions 页选对应 workflow 填参数即可重跑（幂等，不会重复建）。
+`agent-orchestrator` 也支持 `workflow_dispatch`（填 PR 号）手动补触发。
 - 出问题先看对应 workflow 的运行日志：每个跳过分支都写了原因
 （无标签 / 非 behind / 解析不到 Issue 等），按日志定位即可。
+- `dispatch-check.yml` 的依赖方搜索（2026-11-14 修）：原先用
+`gh api search/issues -f q=...`，在 runner 里两次报 HTTP 404
+（#18/#22 关闭触发的运行），依赖方因此未被解封。已改走 REST
+Search API（`GET /search/issues?q=...`，q 参数 urlencode 编码），
+同一查询实测返回 HTTP 200；其余 `gh api repos/...` 调用未动。

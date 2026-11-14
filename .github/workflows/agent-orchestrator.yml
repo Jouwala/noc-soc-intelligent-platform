@@ -1,9 +1,15 @@
 # Agent orchestrator：只做机械触发，不做判断。
 #
-# PR 被打上 QA 就绪标签（`state:qa-ready`），或手动 dispatch 本工作流时，
-# 向 Grok Routine 的 webhook POST 一次冒烟测试请求。Grok 读 Issue/PR、
-# 在 D:\02 上跑 §8.2–8.4 冒烟 + 离线 pytest，结果发到用户与 Grok 的聊天里；
-# 它不在 GitHub 上回帖。
+# 三种触发方式，都会向 Grok Routine 的 webhook POST 一次冒烟测试请求：
+#   1. PR 被打上 QA 就绪标签（`state:qa-ready`）——人工 / 协调员触发；
+#   2. 手动 dispatch 本工作流（填 PR 号）——人工补救；
+#   3. quality 工作流跑完且结论为 success——CI 变绿自动触发（2026-11-14
+#      新增，不再需要人工打标签）。quality 对同一 head SHA 会跑两次
+#      （push + pull_request），且失败重跑也会再触发，所以自动触发路径
+#      有去重：同一 head SHA 只触发一次（见下文“去重”）。
+#
+# Grok 读 Issue/PR、在 D:\02 上跑 §8.2–8.4 冒烟 + 离线 pytest，结果发到
+# 用户与 Grok 的聊天里；它不在 GitHub 上回帖。
 #
 # webhook 地址和 sender key 放在仓库 secret 里（绝不写进代码）：
 #   GROK_ROUTINE_WEBHOOK_URL
@@ -15,6 +21,9 @@ name: agent-orchestrator
 on:
   pull_request:
     types: [labeled]
+  workflow_run:
+    workflows: ["quality"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -29,35 +38,137 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  actions: read
 
 jobs:
   trigger-grok-smoke:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'state:qa-ready'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.label.name == 'state:qa-ready') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve PR head SHA
+      - name: 解析 PR 并决定是否触发
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER_EVENT: ${{ github.event.pull_request.number }}
+          PR_NUMBER_INPUT: ${{ inputs.pr_number }}
+          ISSUE_NUMBER_INPUT: ${{ inputs.issue_number }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/$REPO"
+          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')
+
+          # 关联 Issue 解析（与 ci-failure-notify / pr-merged-writeback 同一套顺序）：
+          # 先 PR 正文 Closes/Fixes/Resolves #N，再消息头 task: #N，最后分支名 agent/task-<N>-…。
+          resolve_issue() {
+            local body="$1" head_ref="$2"
+            local n=""
+            n="$(echo "$body" | grep -ioE '(closes|fixes|resolves)[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' | head -n 1 || true)"
+            if [ -z "$n" ]; then
+              n="$(echo "$body" | grep -oE 'task:[[:space:]]*#[0-9]+' | grep -oE '[0-9]+' | head -n 1 || true)"
+            fi
+            if [ -z "$n" ]; then
+              n="$(echo "$head_ref" | sed -nE 's#^agent/task-([0-9]+)(-|$).*#\1#p' | head -n 1 || true)"
+            fi
+            echo "$n"
+          }
+
+          # 去重：本工作流此前是否已针对这个 head SHA 触发过 Grok。
+          # 查本工作流按 head SHA 索引的运行记录（排除本次运行）：
+          # 有结论 success 的（已触发且 POST 成功），或状态还在跑
+          # （in_progress/queued/waiting，触发进行中）的，都算“已触发”。
+          # 结论为 failure 的不算——POST 失败应当重试，不跳过。
+          # 这也是 smoke-passed 标签与 head SHA 的绑定依据：标签本身不记
+          # SHA，只有“此前为这个 SHA 触发过”才能说明标签是针对这个 SHA 的；
+          # 若标签在但此前没触发过这个 SHA，说明 head 已变、标签是旧的，
+          # 不跳过，重新冒烟。
+          already_triggered_for_sha() {
+            local sha="$1"
+            local runs
+            runs="$(curl -sS "${AUTH[@]}" "$API/actions/workflows/agent-orchestrator.yml/runs?head_sha=$sha&per_page=30")"
+            echo "$runs" | jq -r --argjson self "$RUN_ID" \
+              '[.workflow_runs[] | select(.id != $self) | select(.conclusion == "success" or .status == "in_progress" or .status == "queued" or .status == "waiting" or .status == "requested" or .status == "pending")] | length'
+          }
+
+          PROCEED="true"
+          SKIP_REASON=""
+          PR_NUMBER=""
+          HEAD_SHA=""
+          ISSUE_NUMBER=""
+
+          if [ "$EVENT" = "workflow_run" ]; then
+            HEAD_SHA="$RUN_HEAD_SHA"
+            echo "quality 已成功，head SHA：$HEAD_SHA"
+            PRS_JSON="$(curl -sS "${AUTH[@]}" "$API/pulls?state=open&per_page=100")"
+            PR_NUMBER="$(echo "$PRS_JSON" | jq -r --arg sha "$HEAD_SHA" '.[] | select(.head.sha == $sha and .base.ref == "main") | .number' | head -n 1)"
+            if [ -z "$PR_NUMBER" ]; then
+              PROCEED="false"
+              SKIP_REASON="head $HEAD_SHA 没有对应的 open PR（base 为 main），跳过"
+            else
+              PR_JSON="$(echo "$PRS_JSON" | jq -c --argjson n "$PR_NUMBER" '.[] | select(.number == $n)')"
+              DRAFT="$(echo "$PR_JSON" | jq -r '.draft')"
+              LABELS="$(echo "$PR_JSON" | jq -r '.labels[].name')"
+              PR_BODY="$(echo "$PR_JSON" | jq -r '.body // ""')"
+              HEAD_REF="$(echo "$PR_JSON" | jq -r '.head.ref')"
+              ISSUE_NUMBER="$(resolve_issue "$PR_BODY" "$HEAD_REF")"
+              has_label() { echo "$LABELS" | grep -qx "$1"; }
+              if [ "$DRAFT" = "true" ]; then
+                PROCEED="false"
+                SKIP_REASON="PR #$PR_NUMBER 是草稿，跳过"
+              elif has_label 'state:qa-ready'; then
+                PROCEED="false"
+                SKIP_REASON="PR #$PR_NUMBER 已有 state:qa-ready 标签，打标签路径会触发，跳过防重复"
+              else
+                PRIOR="$(already_triggered_for_sha "$HEAD_SHA")"
+                if has_label 'smoke-passed' && [ "$PRIOR" != "0" ]; then
+                  PROCEED="false"
+                  SKIP_REASON="PR #$PR_NUMBER 已有 smoke-passed 标签，且此前已为这个 head SHA 触发过，冒烟已针对这个 SHA 通过，跳过"
+                elif [ "$PRIOR" != "0" ]; then
+                  PROCEED="false"
+                  SKIP_REASON="此前已为这个 head SHA 触发过 Grok（quality push/pull_request 各跑一次会触发两次），跳过防重复"
+                fi
+              fi
+            fi
+          else
+            # pull_request labeled / workflow_dispatch：沿用原有逻辑（人工触发，不去重）。
+            if [ "$EVENT" = "pull_request" ]; then
+              PR_NUMBER="$PR_NUMBER_EVENT"
+            else
+              PR_NUMBER="$PR_NUMBER_INPUT"
+              ISSUE_NUMBER="$ISSUE_NUMBER_INPUT"
+            fi
+            PR_JSON="$(curl -sS "${AUTH[@]}" "$API/pulls/$PR_NUMBER")"
+            HEAD_SHA="$(echo "$PR_JSON" | jq -r '.head.sha')"
+            test -n "$HEAD_SHA" && test "$HEAD_SHA" != 'null' || { echo "cannot resolve head SHA for PR ${PR_NUMBER}"; exit 1; }
+            if [ -z "$ISSUE_NUMBER" ]; then
+              PR_BODY="$(echo "$PR_JSON" | jq -r '.body // ""')"
+              HEAD_REF="$(echo "$PR_JSON" | jq -r '.head.ref')"
+              ISSUE_NUMBER="$(resolve_issue "$PR_BODY" "$HEAD_REF")"
+            fi
+          fi
+
           echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          HEAD_SHA="$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}" | jq -r '.head.sha')"
-          test -n "$HEAD_SHA" && test "$HEAD_SHA" != 'null' || { echo "cannot resolve head SHA for PR ${PR_NUMBER}"; exit 1; }
           echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "PR #${PR_NUMBER} head: ${HEAD_SHA}"
+          echo "issue_number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "proceed=${PROCEED}" >> "$GITHUB_OUTPUT"
+          if [ "$PROCEED" = "true" ]; then
+            echo "PR #${PR_NUMBER} head: ${HEAD_SHA}，关联 Issue：${ISSUE_NUMBER:-无}，触发 Grok。"
+          else
+            echo "跳过：${SKIP_REASON}"
+          fi
 
       - name: POST smoke request to Grok Routine webhook
+        if: steps.pr.outputs.proceed == 'true'
         env:
           WEBHOOK_URL: ${{ secrets.GROK_ROUTINE_WEBHOOK_URL }}
           WEBHOOK_KEY: ${{ secrets.GROK_ROUTINE_WEBHOOK_KEY }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_NUMBER: ${{ steps.pr.outputs.issue_number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           test -n "$WEBHOOK_URL" || { echo 'GROK_ROUTINE_WEBHOOK_URL secret is missing'; exit 1; }

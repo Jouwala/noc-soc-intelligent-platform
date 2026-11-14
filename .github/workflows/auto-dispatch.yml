@@ -1,0 +1,232 @@
+# 合并后自动分派下一个任务：PR 合入 main 后，把下一个就绪任务自动
+# 派给空闲的 builder，不再等每小时巡逻（dispatch-check.yml 只做检查
+# 与标签，不分派任务——见其文件头注释）。
+#
+# 就绪任务 = 同时满足以下四条的 OPEN Issue：
+#   1. 带 `state:todo` 标签；
+#   2. 带 `agent:muse-2` 或 `agent:muse-3` 标签；
+#   3. 正文里 `depends on #N` 所指依赖全部已关闭；
+#   4. 没有认领评论（无 `agent-claim:` / TASK_ACCEPTED 消息头），
+#      且没有已发出的 TASK_ASSIGNED 分派评论（已被分派过的任务不再
+#      重复分派；48 小时无人认领的走协议升级流程，不由本工作流重派）。
+#
+# 分派顺序：优先派给本次合并空闲出来的 builder（从合入 PR 的
+# agent: 标签、关联 Issue 的 agent: 标签、分支名依次判定），
+# 该 builder 无就绪任务时，退而取编号最小的就绪任务（任意 builder）。
+# 每次只派一个任务；没有就绪任务时只记日志，不报错。
+#
+# 安全阀：
+#   - 只处理 merged == true 且 base 为 main 的 PR；
+#   - 依赖未满足的任务绝不分派；已认领 / 已分派的任务不动；
+#   - 只发一条 TASK_ASSIGNED 评论 + 补 state:todo 标签（若缺失），
+#     并摘掉已满足依赖任务上残留的 state:blocked 标签（dispatch-check
+#     的解封路径曾因搜索 404 未生效，残留标签由本工作流顺手清理）；
+#     不合并、不关闭 Issue、不改代码。
+#   - 分派评论的机器可读头 from 记为 github-actions（自动化执行者），
+#     与 pr-merged-writeback.yml 的口径一致。
+
+name: auto-dispatch
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  dispatch-next:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 找下一个就绪任务并分派
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone
+
+          REPO = os.environ["REPO"]
+          TOKEN = os.environ["GH_TOKEN"]
+          PR_NUMBER = int(os.environ["PR_NUMBER"])
+          MERGE_SHA = os.environ.get("MERGE_SHA") or ""
+          API = f"https://api.github.com/repos/{REPO}"
+
+          BUILDERS = ("agent:muse-2", "agent:muse-3")
+          CLAIM_MARKERS = ("agent-claim:", "agent-msg: TASK_ACCEPTED")
+          ASSIGNED_MARKER = "agent-msg: TASK_ASSIGNED"
+
+
+          def api(path, method="GET", payload=None):
+              url = API + path
+              data = None
+              headers = {
+                  "Authorization": f"Bearer {TOKEN}",
+                  "Accept": "application/vnd.github+json",
+              }
+              if payload is not None:
+                  data = json.dumps(payload).encode()
+                  headers["Content-Type"] = "application/json"
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req) as resp:
+                  raw = resp.read().decode()
+              return json.loads(raw) if raw else {}
+
+
+          def get_issue(number):
+              return api(f"/issues/{number}")
+
+
+          def list_comments(number):
+              return api(f"/issues/{number}/comments?per_page=100")
+
+
+          def strip_html_comments(text):
+              return re.sub(r"<!--.*?-->", "", text or "", flags=re.S)
+
+
+          def parse_dependencies(body):
+              plain = strip_html_comments(body)
+              return sorted({int(n) for n in re.findall(r"depends on #(\d+)", plain, flags=re.I)})
+
+
+          def resolve_issue_number(body, head_ref):
+              n = ""
+              m = re.search(r"(closes|fixes|resolves)\s+#(\d+)", body or "", flags=re.I)
+              if m:
+                  n = m.group(2)
+              if not n:
+                  m = re.search(r"task:\s*#(\d+)", body or "")
+                  if m:
+                      n = m.group(1)
+              if not n:
+                  m = re.match(r"agent/task-(\d+)(-|$)", head_ref or "")
+                  if m:
+                      n = m.group(1)
+              return int(n) if n else None
+
+
+          def agent_of(labels):
+              for lb in labels:
+                  if lb in BUILDERS:
+                      return lb
+              return ""
+
+
+          def freed_builder(pr):
+              """判定本次合并空闲出来的 builder：PR 标签 → 关联 Issue 标签。"""
+              labels = [lb["name"] for lb in pr.get("labels", [])]
+              agent = agent_of(labels)
+              if agent:
+                  return agent
+              issue_no = resolve_issue_number(pr.get("body") or "",
+                                               (pr.get("head") or {}).get("ref") or "")
+              if issue_no:
+                  try:
+                      issue = get_issue(issue_no)
+                      agent = agent_of([lb["name"] for lb in issue.get("labels", [])])
+                      if agent:
+                          print(f"合入 PR 关联 Issue #{issue_no}，负责人 {agent}")
+                          return agent
+                  except Exception as e:
+                      print(f"关联 Issue #{issue_no} 查询失败：{e}")
+              return ""
+
+
+          def is_ready(issue):
+              """四条就绪条件（见文件头），缺一不可；返回 (是否就绪, 原因)。"""
+              number = issue["number"]
+              labels = [lb["name"] for lb in issue.get("labels", [])]
+              if "state:todo" not in labels:
+                  return False, "无 state:todo 标签"
+              other_states = [lb for lb in labels
+                              if lb.startswith("state:") and lb not in ("state:todo", "state:blocked")]
+              if other_states:
+                  return False, f"已有其他状态标签 {other_states}"
+              agent = agent_of(labels)
+              if not agent:
+                  return False, "无 agent:muse-2/3 标签"
+              deps = parse_dependencies(issue.get("body") or "")
+              for dep in deps:
+                  try:
+                      dep_issue = get_issue(dep)
+                  except Exception as e:
+                      return False, f"依赖 #{dep} 查询失败：{e}"
+                  if dep_issue.get("state") != "closed":
+                      return False, f"依赖 #{dep} 未完成"
+              try:
+                  comments = list_comments(number)
+              except Exception as e:
+                  return False, f"评论查询失败：{e}"
+              bodies = [c.get("body") or "" for c in comments]
+              if any(m in b for b in bodies for m in CLAIM_MARKERS):
+                  return False, "已有认领评论"
+              if any(ASSIGNED_MARKER in b for b in bodies):
+                  return False, "已有 TASK_ASSIGNED 分派评论"
+              return True, ""
+
+
+          def main():
+              pr = api(f"/pulls/{PR_NUMBER}")
+              freed = freed_builder(pr)
+              print(f"PR #{PR_NUMBER} 已合入（{MERGE_SHA}），空闲 builder：{freed or '未知'}")
+
+              candidates = api("/issues?state=open&labels=state:todo&per_page=100")
+              ready = []
+              for issue in candidates:
+                  if "pull_request" in issue:
+                      continue
+                  ok, reason = is_ready(issue)
+                  if ok:
+                      agent = agent_of([lb["name"] for lb in issue.get("labels", [])])
+                      ready.append((issue, agent))
+                      print(f"#{issue['number']} 就绪（{agent}）")
+                  else:
+                      print(f"#{issue['number']} 不就绪：{reason}")
+              if not ready:
+                  print("没有可分派的就绪任务，只记日志。")
+                  return
+
+              # 优先派给本次空闲的 builder，其次按编号从小到大。
+              def sort_key(item):
+                  issue, agent = item
+                  return (0 if agent == freed else 1, issue["number"])
+              ready.sort(key=sort_key)
+              issue, agent = ready[0]
+              number = issue["number"]
+              labels = [lb["name"] for lb in issue.get("labels", [])]
+
+              now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+              agent_name = agent.split(":", 1)[1]
+              body = (
+                  f"<!-- agent-msg: TASK_ASSIGNED, task: #{number}, "
+                  f"from: github-actions, to: {agent_name}, at: {now} -->\n"
+                  f"任务已自动分派：PR #{PR_NUMBER} 合并后，{agent_name} 空闲，"
+                  f"本任务自动派给 {agent_name}。\n\n"
+                  f"请按协议认领：发认领评论并打 `state:claimed` 标签。"
+                  f"任务说明与验收标准见本 Issue 正文；依赖已全部满足，可以认领。\n"
+              )
+              api(f"/issues/{number}/comments", method="POST", payload={"body": body})
+              print(f"Issue #{number}：已发 TASK_ASSIGNED 评论（{agent}）")
+              if "state:todo" not in labels:
+                  api(f"/issues/{number}/labels", method="POST", payload={"labels": ["state:todo"]})
+                  print(f"Issue #{number}：已补 state:todo 标签")
+              if "state:blocked" in labels:
+                  enc = urllib.parse.quote("state:blocked", safe="")
+                  api(f"/issues/{number}/labels/{enc}", method="DELETE")
+                  print(f"Issue #{number}：已摘残留 state:blocked 标签")
+              print(f"已分派 Issue #{number} 给 {agent}。")
+
+
+          main()
+          PY
