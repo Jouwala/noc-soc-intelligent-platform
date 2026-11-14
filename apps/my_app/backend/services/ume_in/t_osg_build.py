@@ -48,7 +48,10 @@ sheet6/9/10（CAPS / SMS Traffic）的数据源不在 Customer Service KPI Sync 
 """
 from __future__ import annotations
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 import re
 import sys
 import zipfile
@@ -96,8 +99,8 @@ def _load_rows() -> list[dict]:
     finally:
         try:
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("关闭连接失败: %s", exc)
     for r in rows:
         r["_day"] = str(r.get("Begin Time") or "")[:10]
     return rows
@@ -405,8 +408,8 @@ def _prune_old_reports(outdir: str, keep: int) -> int:
         try:
             p.unlink()
             removed += 1
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("删除旧报表失败: %s", exc)
     return removed
 
 

@@ -107,8 +107,8 @@ def parse_description_table(desc):
                 out[cells[0].strip().lower()] = cells[1:]
         if out:
             return out
-    except ET.ParseError:
-        pass
+    except ET.ParseError as exc:
+        logger.debug("解析描述表片段失败: %s", exc)
 
     # 2) 正则兜底：直接抓 <tr>...</tr> 里的 <td>
     out = {}

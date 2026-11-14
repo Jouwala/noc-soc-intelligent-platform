@@ -85,8 +85,8 @@ def get_location(ip, fallback=None):
             return resp.city.name
         if resp.country and resp.country.name:
             return resp.country.name
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("IP 归属地查询失败: %s", exc)
     return fallback or "未知"
 
 

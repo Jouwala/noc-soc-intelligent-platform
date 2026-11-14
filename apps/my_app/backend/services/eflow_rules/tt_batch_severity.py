@@ -192,8 +192,8 @@ def _s(v) -> str:
                 return ""
             if v.is_integer():
                 return str(int(v))
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("pandas 不可用，时间处理走兜底: %s", exc)
     s = str(v).strip()
     return "" if s.lower() in ("nan", "none", "nat") else s
 

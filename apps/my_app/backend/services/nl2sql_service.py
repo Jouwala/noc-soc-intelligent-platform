@@ -1009,8 +1009,8 @@ def execute_readonly(sql: str, limit: int = DEFAULT_LIMIT) -> Dict[str, Any]:
             # 只读事务（PG）：SQLite 分支忽略该语句也不应报错，故做容错
             try:
                 conn.execute("SET TRANSACTION READ ONLY")
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("设置只读事务失败（方言不支持时忽略）: %s", exc)
             cur = conn.execute(sql)
             columns = [d[0] for d in cur.description] if cur.description else []
             rows = cur.fetchall()

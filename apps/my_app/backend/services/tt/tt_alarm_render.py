@@ -296,8 +296,8 @@ def _cleanup_snapshot(path: Optional[Path]) -> None:
     try:
         path.unlink(missing_ok=True)
         path.parent.rmdir()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("清理告警快照失败: %s", exc)
 
 
 def render_tt_analysis(tt_no: str, lang: str = "en") -> Optional[str]:

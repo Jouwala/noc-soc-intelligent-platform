@@ -119,8 +119,8 @@ def parse_ts(s: Any) -> Optional[datetime]:
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
         try:
             return datetime.strptime(s[:19], fmt)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("时间戳解析失败: %s", exc)
     return None
 
 
@@ -423,8 +423,8 @@ if __name__ == "__main__":
     import json
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("设置 stdout 编码失败: %s", exc)
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     r = run_progress_sync(Path(sys.argv[1]) if len(sys.argv) > 1 else OUT_DB)

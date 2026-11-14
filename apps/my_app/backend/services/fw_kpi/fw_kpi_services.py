@@ -28,6 +28,9 @@ FW 整机吞吐 KPI 数据获取脚本（DPtech/ZTE UMC @ 10.100.2.101/UMC）
 """
 
 import gc
+import logging
+
+logger = logging.getLogger(__name__)
 import io
 import os
 import re
@@ -50,8 +53,8 @@ from pathlib import Path
 try:
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 # ============================================================
 # 配置
@@ -529,8 +532,8 @@ def _open_db():
             try:
                 if conn:
                     conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("关闭连接失败: %s", exc)
             msg = str(exc).lower()
             if "locked" in msg or "unable to open" in msg or "database is locked" in msg:
                 idx += 1

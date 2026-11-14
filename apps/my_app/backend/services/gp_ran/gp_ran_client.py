@@ -404,8 +404,8 @@ class GpRanClient:
                 if chan.recv_stderr_ready():
                     err.extend(chan.recv_stderr(65536))
                     continue
-            except socket.timeout:
-                pass
+            except socket.timeout as exc:
+                logger.debug("读取 SSH 通道数据失败: %s", exc)
             # 退出码就绪 **且** 两个缓冲都排空了才算完 —— 只看退出码会截掉尾部输出
             if chan.exit_status_ready() and not chan.recv_ready() \
                     and not chan.recv_stderr_ready():

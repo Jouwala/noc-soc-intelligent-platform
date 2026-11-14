@@ -117,8 +117,8 @@ def parse_ts(s: Any) -> Optional[datetime]:
                      ("%Y-%m-%d", 10)):
         try:
             return datetime.strptime(s[:cut], fmt)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("时间戳解析失败: %s", exc)
     try:
         return datetime.fromisoformat(s)
     except ValueError:
@@ -270,8 +270,8 @@ if __name__ == "__main__":
     import json
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("设置 stdout 编码失败: %s", exc)
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     r = run_mttr_tt_sync(Path(sys.argv[1]) if len(sys.argv) > 1 else OUT_DB)

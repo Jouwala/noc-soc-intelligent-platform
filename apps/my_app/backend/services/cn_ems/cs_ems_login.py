@@ -31,6 +31,9 @@ cs_ems_login.py — ZTE NetNumen U31 EMS 桌面客户端 通用登录脚本（�
 """
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
 import ctypes
 import json
 import os
@@ -129,8 +132,8 @@ def find_main_window(cfg):
                         t = (candidate.window_text() or "").strip()
                         if re.search(title_re, t, re.IGNORECASE) and candidate.is_visible():
                             return candidate
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("枚举桌面窗口查找主窗口失败: %s", exc)
             continue
     return None
 
@@ -142,16 +145,16 @@ def activate_window(win):
         # 导致后续键盘导航时窗口状态被改变（用户反馈：登录后最大化窗口被改小）。
         if ctypes.windll.user32.IsIconic(win.handle):
             ctypes.windll.user32.ShowWindow(win.handle, 9)  # SW_RESTORE=9
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("恢复窗口状态失败: %s", exc)
     try:
         ctypes.windll.user32.SetForegroundWindow(win.handle)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("窗口置前失败: %s", exc)
     try:
         win.set_focus()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("窗口聚焦失败: %s", exc)
     time.sleep(0.5)
     r = win.rectangle()
     return (r.left, r.top, r.right, r.bottom)
@@ -190,8 +193,8 @@ def _switch_to_english_ime():
         hkl = user32.LoadKeyboardLayoutW("00000409", 0x00000001)
         if hkl:
             user32.ActivateKeyboardLayout(hkl, 0)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("切换英文输入法失败: %s", exc)
 
 
 def _brute_clear_field(max_chars=50):

@@ -252,8 +252,8 @@ if __name__ == "__main__":
     sys_out = __import__("sys")
     try:
         sys_out.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("设置 stdout 编码失败: %s", exc)
     from backend.services.ms.ms_sla_report import _load_kpi_list_datasets  # noqa: E402
 
     t_start = time.time()

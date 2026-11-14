@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -75,6 +76,8 @@ _APP_ROOT = _SCRIPT_DIR.parent.parent.parent
 # 需把 my_app 根塞进 sys.path 才能 import backend.* —— 同 generate_sp_online_report.py 的写法。
 sys.path.insert(0, str(_APP_ROOT))
 from backend.database import get_sqlite_readonly_connection  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR = _APP_ROOT / "data" / "sp_email" / "data"
 DEFAULT_OUT_DIR = _APP_ROOT / "data" / "sp_weekly"
@@ -817,8 +820,8 @@ def _save_workbook(wb: Workbook, path: Path, attempts: int = 4, wait_seconds: fl
         if tmp.exists():
             try:
                 tmp.unlink()
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("清理工作簿临时文件失败: %s", exc)
 
 
 def build(out_dir: Path, week_end: date, days: int = 7) -> Dict[str, Any]:

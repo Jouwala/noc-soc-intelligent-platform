@@ -27,6 +27,9 @@
 from __future__ import annotations
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
 import sys
 import time
 from pathlib import Path
@@ -34,8 +37,8 @@ from pathlib import Path
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("设置 stdout 编码失败: %s", exc)
 
 try:
     from backend.services.gp_ran import (

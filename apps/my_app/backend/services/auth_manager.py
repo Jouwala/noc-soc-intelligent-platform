@@ -385,8 +385,8 @@ def _login_lock(host: str, port: int, username: str = ""):
                     msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
                 else:
                     fcntl.flock(f, fcntl.LOCK_UN)
-            except (IOError, OSError):
-                pass
+            except (IOError, OSError) as exc:
+                logger.debug("登录锁释放失败: %s", exc)
             f.close()
 
 
@@ -413,8 +413,8 @@ def _create_ssl_socket(host: str, port: int):
         # 关掉半开的 socket，避免泄漏（连接失败时 wrap_socket 出来的对象仍需显式关闭）
         try:
             ssock.close()
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("关闭 SSL socket 失败: %s", exc)
         raise ConnectionError(
             f"连接 {host}:{port} 失败（超时上限 {AUTH_CONNECT_TIMEOUT:g}s）：{e}"
             f"——疑似网络/上游不可达，与凭据无关，可稍后重试"
@@ -645,8 +645,8 @@ def _write_cache(host: str, port: int, cookie: str, forgery_token: str,
         try:
             if tmp.exists():
                 tmp.unlink()
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("清理登录缓存临时文件失败: %s", exc)
 
 
 def invalidate_cache(host: str, port: int, username: str = ""):
@@ -901,8 +901,8 @@ def _describe_login_failure(status: str, body: bytes) -> str:
             if msg:
                 # 解析出结构化 message 时以它为准（比整段 JSON 更可读）
                 raw_detail = f"{msg} (code={code})" if code else msg
-    except Exception:
-        pass  # 非 JSON：沿用上面的 body_text 兜底
+    except Exception as exc:
+        logger.debug("解析登录失败响应体失败: %s", exc)  # 非 JSON：沿用上面的 body_text 兜底
 
     lowered = raw_detail.lower()
     # ⚠ 分支顺序至关重要（2026-10-14 修正）：

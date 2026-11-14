@@ -457,8 +457,8 @@ def save_to_db(table, headers, records, key_col="woId", reconcile_keys=None):
                 if h not in exist:
                     try:
                         cursor.execute(f'ALTER TABLE "{table}" ADD COLUMN {_q(h)} TEXT')
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("补列失败（列已存在时忽略）: %s", exc)
 
             # 清历史重复行，再重建唯一索引，upsert 才能真正覆盖
             pk_q = _q(key_col)
@@ -502,8 +502,8 @@ def save_to_db(table, headers, records, key_col="woId", reconcile_keys=None):
             if is_pg and lock_key is not None:
                 try:
                     cursor.execute("SELECT pg_advisory_unlock(?)", (lock_key,))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("释放 advisory 锁失败: %s", exc)
 
     logger.info(f"[SP-ONLINE] {table}: upsert {len(records)} 行（pk={key_col}）")
     return len(records), deleted

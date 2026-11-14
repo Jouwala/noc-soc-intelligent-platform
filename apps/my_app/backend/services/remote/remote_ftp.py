@@ -90,8 +90,8 @@ def _prune_stale_siblings(local, keep=None):
             try:
                 if f.is_file() and f != keep:
                     f.unlink()
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("清理同批残留文件失败: %s", exc)
     except Exception:
         logging.getLogger(__name__).warning("[SILENT-EXCEPT] _prune_stale_siblings: exception swallowed", exc_info=True)
         pass

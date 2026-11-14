@@ -911,5 +911,5 @@ def run_fiber_assign() -> Dict[str, Any]:
     finally:
         try:
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("关闭连接失败: %s", exc)

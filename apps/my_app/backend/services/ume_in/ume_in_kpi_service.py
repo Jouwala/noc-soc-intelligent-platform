@@ -47,8 +47,8 @@ logger = logging.getLogger("ume_in_kpi_service")
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-except Exception:  # noqa: BLE001 - 非 Windows / 已被重定向时忽略
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 # ============================================================
 # 门户连接配置（可用环境变量覆盖）
@@ -623,8 +623,8 @@ class UMEPortalClient:
                         _msg_l = _msg.lower()
                         detail = (f" (服务端原因: {_msg} (code={_code}))"
                                   if _code else f" (服务端原因: {_msg})")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("解析登录错误详情失败: %s", exc)
             advice = ""
             if ("password" in _msg_l and ("expire" in _msg_l or "about to" in _msg_l)) \
                     or "到期" in detail or "过期" in detail:

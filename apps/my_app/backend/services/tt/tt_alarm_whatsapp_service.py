@@ -854,8 +854,8 @@ if __name__ == "__main__":
     import sys
     try:
         sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("设置 stdout 编码失败: %s", exc)
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     print("群组:", GROUPS or "(未配置)")

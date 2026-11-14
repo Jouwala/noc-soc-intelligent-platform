@@ -20,6 +20,9 @@ cs_ems_jab.py — 基于 Java Access Bridge (JAB) 的 U31 EMS 精准控件定位
 """
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
 import re
 import sys
 import time
@@ -86,8 +89,8 @@ def dump_tree(d, filter_re=None, max_depth=6, max_nodes=4000):
         try:
             for child in el.get_child_jabelements():
                 walk(child, depth + 1)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("遍历 JAB 控件树子节点失败: %s", exc)
 
     print("[*] 遍历控件树...")
     try:

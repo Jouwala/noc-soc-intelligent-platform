@@ -49,6 +49,8 @@ import threading
 from pathlib import Path
 from typing import List, Optional
 
+logger = logging.getLogger(__name__)
+
 _SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 # .../Task/my_app
@@ -1749,8 +1751,8 @@ def run_ran_availability(to: str = None, cc: str = None) -> dict:
         try:
             if body_file.exists():
                 body_file.unlink()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("清理邮件正文临时文件失败: %s", exc)
 
 
 # =====================================================================
@@ -1786,10 +1788,10 @@ def _capture_packet_loss_screenshot() -> Path:
             if _old != out and _old.name != "_dashboard_screenshot.png":
                 try:
                     _old.unlink()
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                except Exception as exc:
+                    logger.debug("清理旧截图失败: %s", exc)
+    except Exception as exc:
+        logger.debug("清理旧截图失败: %s", exc)
     url = _PL_DASHBOARD_URL
 
     with sync_playwright() as p:
@@ -1808,8 +1810,8 @@ def _capture_packet_loss_screenshot() -> Path:
         # 2) 等数据真正加载（spinner 消失 + 关键指标出现）
         try:
             page.wait_for_selector("text=加载中...", state="hidden", timeout=15000)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("等待页面加载完成失败: %s", exc)
         # 硬性渲染校验：看板必须出现关键指标文本，否则视为未渲染（白屏/数据缺失）
         rendered = False
         for kw in ("Total Sites", "Affected Sites", "Critical", "Major"):

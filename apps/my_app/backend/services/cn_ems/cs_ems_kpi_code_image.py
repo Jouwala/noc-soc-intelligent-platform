@@ -26,7 +26,10 @@ End time = target_month
 Author: Qoder
 Date: 2026-08-25
 """
+import logging
 import sys
+
+logger = logging.getLogger(__name__)
 import os
 import time
 import argparse
@@ -320,8 +323,8 @@ def process_template_with_dates(template_name, month_date_str):
     try:
         input()
         log("Confirmed, proceeding...")
-    except:
-        pass
+    except (EOFError, KeyboardInterrupt) as exc:
+        logger.debug("交互暂停被中断，继续执行: %s", exc)
     
     # Main workflow (will proceed step by step with confirmations)
     try:
@@ -337,8 +340,8 @@ def process_template_with_dates(template_name, month_date_str):
         try:
             input()
             log("Confirmed, continuing...")
-        except:
-            pass
+        except (EOFError, KeyboardInterrupt) as exc:
+            logger.debug("交互暂停被中断，继续执行: %s", exc)
         
         # Step 3: Click "Query by Template" button
         log("Step 3: Clicking Query by Template...")
@@ -351,8 +354,8 @@ def process_template_with_dates(template_name, month_date_str):
         try:
             input()
             log("Confirmed, continuing...")
-        except:
-            pass
+        except (EOFError, KeyboardInterrupt) as exc:
+            logger.debug("交互暂停被中断，继续执行: %s", exc)
         
         # Step 4: Handle Time Selection dialog
         log("Step 3: Activating Time Selection tab...")

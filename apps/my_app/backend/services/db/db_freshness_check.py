@@ -47,8 +47,8 @@ logger = logging.getLogger(__name__)
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 # ============================================================
 # 配置

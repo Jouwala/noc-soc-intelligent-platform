@@ -270,13 +270,13 @@ def _fetch_root_meta(alarm_id: str) -> dict:
             if sv:
                 try:
                     meta["servertime"] = int(float(sv))
-                except (TypeError, ValueError):
-                    pass
+                except (TypeError, ValueError) as exc:
+                    logger.debug("解析服务器时间失败: %s", exc)
             if row.get("relationflag") is not None:
                 try:
                     meta["relationflag"] = int(row.get("relationflag"))
-                except (TypeError, ValueError):
-                    pass
+                except (TypeError, ValueError) as exc:
+                    logger.debug("解析 relationflag 失败: %s", exc)
     except Exception:  # noqa: BLE001
         logger.debug("_fetch_root_meta 失败（忽略）", exc_info=True)
     return meta

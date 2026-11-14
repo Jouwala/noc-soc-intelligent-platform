@@ -90,8 +90,8 @@ def _load_site_attrs(conn, site_id: str) -> Dict[str, Any]:
         if row:
             try:
                 out["downstreamSites"] = int(row[0])
-            except (TypeError, ValueError):
-                pass
+            except (TypeError, ValueError) as exc:
+                logger.debug("解析站点下游数失败: %s", exc)
     except Exception:
         logger.debug("[eflow_flow_rules] master_site_db 查询失败", exc_info=True)
 
@@ -191,8 +191,8 @@ def annotate_graph_with_frame(
         try:
             meta["rules_file_mtime"] = time.strftime(
                 "%Y-%m-%d %H:%M:%S", time.localtime(E._push_rules_xlsx().stat().st_mtime))
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("格式化规则文件时间失败: %s", exc)
 
         evaluated = undecidable = 0
         for n in graph.get("nodes", []):

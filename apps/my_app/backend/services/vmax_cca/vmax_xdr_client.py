@@ -273,8 +273,8 @@ class VmaxXdrClient:
         if isinstance(outer, dict) and isinstance(outer.get("result"), str):
             try:
                 outer = json.loads(outer["result"])
-            except ValueError:
-                pass
+            except ValueError as exc:
+                logger.debug("解析 XDR 内层 result 失败: %s", exc)
         return outer if isinstance(outer, dict) else {"raw": outer}
 
     # ---------- 分表清单 ----------

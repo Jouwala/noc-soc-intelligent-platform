@@ -365,8 +365,8 @@ def load_config(path: Optional[Path] = None) -> Dict[str, Any]:
     if os.environ.get("OLIB_SOC_WORKERS"):
         try:
             cfg["workers"] = max(1, int(os.environ["OLIB_SOC_WORKERS"]))
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("OLIB worker 数环境变量解析失败，用默认值: %s", exc)
     return cfg
 
 
@@ -1614,8 +1614,8 @@ def run_olib_soc_kpi_sync(days_back: Optional[int] = None, only_missing: bool = 
             if owned_probe is not None:
                 try:
                     owned_probe.close()
-                except Exception:                                        # noqa: BLE001
-                    pass
+                except Exception as exc:
+                    logger.debug("关闭探测连接失败: %s", exc)
     # 历史残留（窗口之外）：按 min~max 区间单独跑一次 —— 这些天通常极少（多为 0），
     # 且彼此可能相隔很远，用区间而非逐天是为了复用现成的 run_olib_soc_report 入口。
     hist_summary: Dict[str, Any] = {}

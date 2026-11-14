@@ -33,19 +33,19 @@ from typing import List, Optional, Tuple
 
 _SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
+logger = logging.getLogger("ipran_chart_service")
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-
-logger = logging.getLogger("ipran_chart_service")
 
 # ===== 路径配置 =====
 MY_APP_DIR = Path(__file__).resolve().parent.parent.parent.parent

@@ -238,10 +238,10 @@ class EflowAlarmRuleCollector:
                 for old in files[:-keep]:
                     try:
                         os.remove(os.path.join(dir_path, old))
-                    except OSError:
-                        pass
-        except OSError:
-            pass
+                    except OSError as exc:
+                        logger.debug("删除旧版本规则文件失败: %s", exc)
+        except OSError as exc:
+            logger.debug("删除旧版本规则文件失败: %s", exc)
 
     def _format_params(self, param_str):
         """格式化 param JSON 为可读文本: label(name=value)"""

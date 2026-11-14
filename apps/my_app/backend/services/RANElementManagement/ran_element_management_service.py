@@ -66,8 +66,8 @@ logger = logging.getLogger("ran_element_management_service")
 try:  # 关闭自签名证书告警（上游是内网 HTTPS 自签证书，对应抓包的 --insecure）
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-except Exception:  # noqa: BLE001
-    pass
+except Exception as exc:
+    logger.debug("关闭 urllib3 警告失败: %s", exc)
 
 # ---------------------------------------------------------------- 配置
 HOST = os.environ.get("RAN_EM_HOST", "10.100.28.27")
@@ -395,8 +395,8 @@ def _persist(records: list, snapshot_date: date, fetched_at: datetime) -> dict:
         except Exception:
             try:
                 cur.execute("ROLLBACK")
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.warning("回滚失败，事务可能悬挂: %s", exc)
             raise
         cur.execute(f"SELECT count(*) AS n FROM {CURRENT_TABLE}")
         current_rows = cur.fetchone()["n"]

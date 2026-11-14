@@ -32,6 +32,8 @@ import threading
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 import ftplib
 from backend.database import DB_MODE, get_raw_connection
 from backend.dialect_helpers import list_table_names
@@ -1341,8 +1343,8 @@ def _normalize_fb_nulls(df, table_name: str):
         try:
             if pd.isna(v):                            # NaT / None / np.nan
                 return None
-        except (TypeError, ValueError):
-            pass                                      # 数组类值：isna 会抛，跳过
+        except (TypeError, ValueError) as exc:
+            logger.debug("数值归一化判定失败: %s", exc)  # 数组类值：isna 会抛，跳过
         if isinstance(v, str) and v.strip() in _FB_NULLISH:
             return None
         return v

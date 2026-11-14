@@ -1126,8 +1126,8 @@ def build_tt_postmortem(tt_no: str) -> Dict[str, Any]:
                 ).fetchone()
                 if w:
                     wo_record = dict(w)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("查询工单记录失败，跳过该段: %s", exc)
 
         # 派单规则地图
         rules_meta = _load_push_rules(conn)
@@ -1142,8 +1142,8 @@ def build_tt_postmortem(tt_no: str) -> Dict[str, Any]:
                     (str(t["site_id"]),),
                 ).fetchone()[0]
                 history_match = f"该站 history_alarm 共 {cnt} 条告警指纹"
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("统计同站历史告警失败，跳过: %s", exc)
 
         conn.close()
 
@@ -1558,8 +1558,8 @@ def _parse_dt(s) -> Optional[datetime]:
             return datetime.fromisoformat(s[:-1])
         if "+" in s[10:] or re.search(r"\d{2}:\d{2}:\d{2}", s):
             return datetime.fromisoformat(norm)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("时间解析失败: %s", exc)
     logger.warning("[tt_postmortem] 无法解析时间串: %r（将按缺失处理）", s)
     return None
 

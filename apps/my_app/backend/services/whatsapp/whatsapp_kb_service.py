@@ -71,8 +71,8 @@ def _prune_stale_temp() -> None:
             if os.path.getmtime(path) >= cutoff:
                 continue
             os.unlink(path)
-        except OSError:
-            pass  # 仍被常驻进程占着 / 已被别人清掉 —— 都不影响本轮同步
+        except OSError as exc:
+            logger.debug("检查临时文件时间失败: %s", exc)  # 仍被常驻进程占着 / 已被别人清掉 —— 都不影响本轮同步
 
 
 def _bot_root() -> str:
@@ -148,12 +148,12 @@ def sync_knowledge_base(force: bool = False) -> Dict[str, Any]:
         for f in (out_f, err_f):
             try:
                 f.close()
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("关闭知识库同步文件失败: %s", exc)
             try:
                 os.unlink(f.name)
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("删除知识库同步临时文件失败: %s", exc)
 
     tail = _tail(stdout_text, stderr_text)
     if proc.returncode != 0:

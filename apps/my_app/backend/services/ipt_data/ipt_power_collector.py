@@ -225,8 +225,8 @@ def load_watch() -> List[str]:
             return [str(x) for x in data]
         if isinstance(data, dict):
             return [str(x) for x in data.get("sites", [])]
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        logger.debug("读取 IPT 观察名单失败: %s", exc)
     return []
 
 

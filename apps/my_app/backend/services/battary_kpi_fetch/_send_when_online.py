@@ -9,7 +9,10 @@
 """
 from __future__ import annotations
 
+import logging
 import socket
+
+logger = logging.getLogger(__name__)
 import sys
 import time
 from pathlib import Path
@@ -32,8 +35,8 @@ def ews_reachable(timeout: int = 6) -> bool:
     finally:
         try:
             s.close()
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("关闭探测 socket 失败: %s", exc)
 
 
 def main() -> int:

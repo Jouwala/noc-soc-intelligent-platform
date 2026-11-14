@@ -451,8 +451,8 @@ def _load_meta(conn: sqlite3.Connection) -> dict:
         if k in meta:
             try:
                 out[k] = float(meta[k])
-            except (TypeError, ValueError):
-                pass
+            except (TypeError, ValueError) as exc:
+                logger.debug("解析电池元数据数值失败: %s", exc)
     out["last_sync_ts"] = meta.get("last_sync_ts")
     return out
 
@@ -478,8 +478,8 @@ def cleanup_output_socket(keep_xlsx: int = 1, keep_png: int = 1,
             p = Path(p)
             if p.exists():
                 keep_set.add(p.resolve())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("清理输出路径失败: %s", exc)
 
     def _in_keep(f: Path) -> bool:
         return f.resolve() in keep_set or f.name.startswith(".")
@@ -498,8 +498,8 @@ def cleanup_output_socket(keep_xlsx: int = 1, keep_png: int = 1,
             try:
                 f.unlink()
                 removed += 1
-            except FileNotFoundError:
-                pass
+            except FileNotFoundError as exc:
+                logger.debug("删除池文件失败: %s", exc)
             except OSError as e:
                 logger.warning(f"[Battery] 清理 output_socket 失败 {f}: {e}")
 
@@ -511,8 +511,8 @@ def cleanup_output_socket(keep_xlsx: int = 1, keep_png: int = 1,
             try:
                 f.unlink()
                 removed += 1
-            except FileNotFoundError:
-                pass
+            except FileNotFoundError as exc:
+                logger.debug("删除输出文件失败: %s", exc)
             except OSError as e:
                 logger.warning(f"[Battery] 清理 output_socket 失败 {f}: {e}")
     if removed:
@@ -1062,12 +1062,12 @@ def _battery_email_lock(timeout: float = 90.0):
                 if acquired and msvcrt is not None:
                     f.seek(0)
                     msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("释放电池邮件锁失败: %s", exc)
             try:
                 f.close()
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("关闭锁文件失败: %s", exc)
 
 
 def run_battery_email(to: str | None = None, cc: str | None = None) -> dict:

@@ -394,8 +394,8 @@ def run_avail_recon_sync(target: Path = OUT_DB) -> Dict[str, Any]:
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("设置 stdout 编码失败: %s", exc)
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     tgt = Path(sys.argv[1]) if len(sys.argv) > 1 else OUT_DB

@@ -181,8 +181,8 @@ def _load_cache():
             cache = json.load(f)
         if isinstance(cache, dict) and isinstance(cache.get("keys"), dict):
             return cache
-    except FileNotFoundError:
-        pass
+    except FileNotFoundError as exc:
+        logger.debug("CXO 缓存文件不存在，用空缓存: %s", exc)
     except Exception as e:
         logger.warning("[cxo_cache] 旧缓存读取失败，重建: %s", e)
     return {"version": 1, "updated_at": None, "keys": {}}

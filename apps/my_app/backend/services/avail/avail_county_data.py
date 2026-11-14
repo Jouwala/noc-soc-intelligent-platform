@@ -109,8 +109,8 @@ def cache_set(key: str, value, ttl: int = CACHE_TTL):
         return value
     try:
         _cache.set(key, value, ttl)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("写入可用率缓存失败: %s", exc)
     return value
 
 

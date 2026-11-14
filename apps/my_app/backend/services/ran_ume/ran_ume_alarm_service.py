@@ -537,8 +537,8 @@ def _local_alarm_by_aid(aid: Any) -> Optional[dict]:
     finally:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("关闭连接失败: %s", exc)
 
 
 def _local_site_info(site_id: Any, site_name: Any) -> Optional[dict]:
@@ -580,8 +580,8 @@ def _local_site_info(site_id: Any, site_name: Any) -> Optional[dict]:
                 cats.add(str(r[6]))
             try:
                 ncells = max(ncells, int(r[2] or 0))
-            except (TypeError, ValueError):
-                pass
+            except (TypeError, ValueError) as exc:
+                logger.debug("解析小区数失败: %s", exc)
         cells: List[str] = []
         for sql in (
             'SELECT "Cell_Name","Tech" FROM cm_cell_data WHERE "Site_ID"=? OR upper("Site_Name")=upper(?) LIMIT 300',
@@ -613,8 +613,8 @@ def _local_site_info(site_id: Any, site_name: Any) -> Optional[dict]:
     finally:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("关闭连接失败: %s", exc)
 
 
 # ------------------------- 组装 -------------------------

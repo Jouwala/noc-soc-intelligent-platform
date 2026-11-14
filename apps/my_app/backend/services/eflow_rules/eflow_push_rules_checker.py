@@ -70,8 +70,8 @@ def _s(v: Any) -> str:
             return ""
         if isinstance(v, float) and pd.isna(v):
             return ""
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("pandas 不可用，时间处理走兜底: %s", exc)
     s = str(v).strip()
     return "" if s.lower() in ("nan", "none", "nat") else s
 

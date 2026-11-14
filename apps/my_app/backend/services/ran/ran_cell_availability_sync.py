@@ -32,8 +32,8 @@ except Exception:  # pragma: no cover - 兜底直接 import
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 
 # ============================================================
@@ -453,8 +453,8 @@ def upload_to_ftp(local_path, remote_dir, filename, max_retries=2):
             if ftp:
                 try:
                     ftp.close()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("关闭 FTP 连接失败: %s", exc)
     return False
 
 

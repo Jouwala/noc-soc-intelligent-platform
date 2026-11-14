@@ -91,8 +91,8 @@ def _entry_size(p: Path) -> int:
         for name in files:
             try:
                 total += Path(root, name).stat().st_size
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("统计临时文件大小失败: %s", exc)
     return total
 
 
@@ -136,8 +136,8 @@ def _quarantine_stale(now: datetime) -> tuple:
                 qdir = TMP_DIR / _quarantine_dir_name(now)
                 if qdir.is_dir() and not any(qdir.iterdir()):
                     qdir.rmdir()
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("隔离过期临时文件失败: %s", exc)
     return moved, freed, detail
 
 
@@ -215,8 +215,8 @@ if __name__ == "__main__":
     import sys
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("设置 stdout 编码失败: %s", exc)
     t0 = time.time()
     print(json.dumps(run_tmp_cleanup(), ensure_ascii=False, indent=2))
     print(f"总运行时间: {time.time() - t0:.2f} 秒")

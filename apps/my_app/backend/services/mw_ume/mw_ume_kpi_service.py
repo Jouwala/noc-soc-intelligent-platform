@@ -44,8 +44,8 @@ logger = logging.getLogger("mw_ume_kpi_service")
 try:
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
@@ -829,8 +829,8 @@ def save_to_db(table_name: str, headers: list, data: list, key_cols: list) -> in
                 if h not in exist_cols:
                     try:
                         cursor.execute(f'ALTER TABLE "{table_name}" ADD COLUMN {_q(h)} TEXT')
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("补列失败（列已存在时忽略）: %s", exc)
 
             # 清理历史重复行，再重建唯一索引，upsert 才能生效。
             # 去重统一走 dialect_helpers.dedupe_rows：先探查（无重复则完全不写），
@@ -858,8 +858,8 @@ def save_to_db(table_name: str, headers: list, data: list, key_cols: list) -> in
             if is_pg and lock_key is not None:
                 try:
                     cursor.execute("SELECT pg_advisory_unlock(?)", (lock_key,))
-                except Exception:  # noqa: BLE001 - 连接可能已关闭，解锁失败忽略
-                    pass
+                except Exception as exc:
+                    logger.debug("释放 advisory 锁失败: %s", exc)
 
     logger.info(f"  [DB] {table_name}: Upserted {len(records)} rows (pk={key_cols})")
     return len(records)

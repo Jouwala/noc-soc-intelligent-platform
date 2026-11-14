@@ -74,8 +74,8 @@ logger = logging.getLogger("ume_in_screen_service")
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-except Exception:  # noqa: BLE001 - 非 Windows / 已被重定向时忽略
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 # ============================================================
 # 接口配置（可用环境变量覆盖）
