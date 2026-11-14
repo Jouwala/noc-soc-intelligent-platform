@@ -49,11 +49,14 @@ import sys
 import time
 import urllib.parse
 import warnings
+import logging
 import zipfile
 from datetime import datetime
 
 import openpyxl
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # rsa_util 在 services 包根，不在本子包内：用 `..rsa_util`，
 # 与下面后续的 `from backend.services.credential.credential_store import ...` 同一目标。
@@ -68,8 +71,8 @@ try:
     # 改行缓冲后每次 print 立即落日志。
     sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
     sys.stderr.reconfigure(encoding='utf-8', line_buffering=True)
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码/行缓冲失败: %s", exc)
 
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -325,8 +328,8 @@ def _http_request_once(method, path, headers_extra=None, body=None):
     finally:
         try:
             ssock.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("关闭 SSL socket 失败: %s", exc)
 
     header_end = response_data.find(b"\r\n\r\n")
     if header_end == -1:
@@ -1062,8 +1065,8 @@ def execute_moquery(cookie, forgery_token, flow, retries_log=None):
                 try:
                     _auth = login()
                     cookie, forgery_token = _auth["cookie"], _auth["forgery_token"]
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("401 后重新登录失败，继续重试: %s", exc)
                 continue
             if attempt >= MOQUERY_RETRY_MAX or not _is_transient_failure(e):
                 raise
@@ -1790,8 +1793,8 @@ def _auto_column_width(ws):
                 val_len = len(str(cell.value)) if cell.value else 0
                 if val_len > max_length:
                     max_length = val_len
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("计算列宽读取单元格失败: %s", exc)
         ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
 
 
@@ -2144,8 +2147,8 @@ def _run_exportvermo_flow(cookie, forgery_token, flow, save_dir, idx, retries_lo
                 try:
                     _auth = login()
                     cookie, forgery_token = _auth["cookie"], _auth["forgery_token"]
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("会话失效后重新登录失败，继续重试: %s", exc)
                 continue
             if attempt >= EXPORT_FLOW_RETRY_MAX or not _is_transient_failure(e):
                 raise

@@ -313,8 +313,8 @@ def _query_remote(sql: str, db: str, limit: int) -> Dict[str, Any]:
         detail = ""
         try:
             detail = e.read().decode("utf-8", "replace")[:300]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("读取远端错误响应体失败: %s", exc)
         raise RuntimeError(
             f"远端数据源返回 HTTP {e.code}: {detail or e.reason}") from e
     except urllib.error.URLError as e:
@@ -884,8 +884,8 @@ def _disk_save(key: str, data: Dict[str, Any]) -> None:
         logger.warning("磁盘缓存写入失败: %s", path, exc_info=True)
         try:
             tmp.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("清理缓存落盘临时文件失败: %s", exc)
 
 
 def _mem_get(key: str) -> Optional[Dict[str, Any]]:
@@ -1121,10 +1121,10 @@ def cache_stats() -> Dict[str, Any]:
                 files.append({"file": p.name,
                               "size_kb": round(st.st_size / 1024, 1),
                               "age_s": round(now - st.st_mtime, 1)})
-            except OSError:
-                pass
-    except OSError:
-        pass
+            except OSError as exc:
+                logger.debug("统计缓存文件失败: %s", exc)
+    except OSError as exc:
+        logger.debug("统计缓存文件失败: %s", exc)
     return {
         "ttl_s": CACHE_TTL,
         "mem_max": MEM_MAX,
@@ -1149,10 +1149,10 @@ def clear_cache(disk: bool = True) -> Dict[str, Any]:
                 try:
                     p.unlink()
                     n_disk += 1
-                except OSError:
-                    pass
-        except OSError:
-            pass
+                except OSError as exc:
+                    logger.debug("删除缓存文件失败: %s", exc)
+        except OSError as exc:
+            logger.debug("删除缓存文件失败: %s", exc)
     return {"mem_cleared": n_mem, "disk_cleared": n_disk}
 
 

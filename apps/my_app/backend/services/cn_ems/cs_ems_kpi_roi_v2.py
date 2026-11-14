@@ -4,7 +4,10 @@
 CS EMS KPI Code - Improved Template Matching with ROI Search
 Uses region-of-interest (ROI) searching for reliable UI element detection
 """
+import logging
 import sys
+
+logger = logging.getLogger(__name__)
 import os
 import time
 import argparse
@@ -193,8 +196,8 @@ def click_at_position(x, y, label=""):
         log("Position verified. Press ENTER to click...")
         try:
             input()
-        except:
-            pass
+        except (EOFError, KeyboardInterrupt) as exc:
+            logger.debug("交互暂停被中断，继续执行: %s", exc)
     
     try:
         pyautogui.click(x, y)

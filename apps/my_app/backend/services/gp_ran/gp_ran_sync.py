@@ -19,21 +19,21 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+logger = logging.getLogger("gp_ran.sync")
+
 # 本机 stdout 默认 cp1252，打印中文会抛 UnicodeEncodeError（.qoder/rules/shell_safe.md §2）。
 # worker 把任务日志重定向到文件时同样会踩，所以放在模块导入期而不是 __main__ 里。
 # 同 backend/services/sp/get_sp_table.py:54-58 的做法。
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("设置 stdout 编码失败: %s", exc)
 
 from . import gp_ran_store as store  # noqa: E402
 from .gp_ran_client import (  # noqa: E402
     GpRanClient, GpRanError, GpRanUnavailable, sql_n78_users, sql_volte_users,
 )
-
-logger = logging.getLogger("gp_ran.sync")
 
 DEFAULT_DAYS = 7
 KINDS = {                      # kind -> (中文名, SQL 生成器)

@@ -123,8 +123,8 @@ def build_local_mirror_db(tables_data: dict, db_path: str,
     for sidecar in (db_path + "-wal", db_path + "-shm", db_path + "-journal"):
         try:
             os.remove(sidecar)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("删除镜像 sidecar 文件失败: %s", exc)
 
     result: dict = {}
     con = get_sqlite_connection(db_path)

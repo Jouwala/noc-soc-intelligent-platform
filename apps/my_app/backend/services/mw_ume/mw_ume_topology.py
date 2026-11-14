@@ -401,8 +401,8 @@ def _clean_id(val):
         f = float(val)
         if f == int(f):
             return str(int(f))
-    except (TypeError, ValueError):
-        pass
+    except (TypeError, ValueError) as exc:
+        logger.debug("ID 数值化清洗失败: %s", exc)
     return str(val).strip()
 
 

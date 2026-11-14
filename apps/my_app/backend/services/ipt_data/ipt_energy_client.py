@@ -158,8 +158,8 @@ class IptEnergyClient:
             os.makedirs(os.path.dirname(self.token_cache), exist_ok=True)
             with open(self.token_cache, "w", encoding="utf-8") as f:
                 json.dump(self._token, f)
-        except OSError:
-            pass  # 缓存写失败不致命，每次重登即可
+        except OSError as exc:
+            logger.debug("保存 IPT token 缓存失败: %s", exc)  # 缓存写失败不致命，每次重登即可
 
     def token(self):
         now = int(time.time())
@@ -172,8 +172,8 @@ class IptEnergyClient:
                 if cached.get("expires_at", 0) - TOKEN_TTL_MARGIN > now:
                     self._token = cached
                     return self._token["access_token"]
-            except (OSError, ValueError):
-                pass
+            except (OSError, ValueError) as exc:
+                logger.debug("读取 IPT token 缓存失败，重新登录: %s", exc)
         self._login()
         return self._token["access_token"]
 
@@ -193,8 +193,8 @@ class IptEnergyClient:
                 self._token = None
                 try:
                     os.remove(self.token_cache)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.debug("删除失效 token 缓存失败: %s", exc)
                 continue
             if r.status_code != 200:
                 raise IptEnergyError("GET %s -> HTTP %s: %s" % (path, r.status_code, r.text[:200]))
@@ -246,8 +246,8 @@ class IptEnergyClient:
                 self._token = None
                 try:
                     os.remove(self.token_cache)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.debug("删除失效 token 缓存失败: %s", exc)
                 continue
             if r.status_code == 408 or r.status_code >= 500:
                 if attempt < attempts:
@@ -297,8 +297,8 @@ class IptEnergyClient:
                 self._token = None
                 try:
                     os.remove(self.token_cache)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.debug("删除失效 token 缓存失败: %s", exc)
                 continue
             if r.status_code != 200:
                 raise IptEnergyError("POST %s -> HTTP %s: %s"

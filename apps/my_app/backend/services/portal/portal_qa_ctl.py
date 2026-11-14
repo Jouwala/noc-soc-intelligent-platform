@@ -81,8 +81,8 @@ def _kill_port(port: int = PORT) -> None:
             out = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True).stdout
             for pid in out.split():
                 subprocess.run(["kill", "-9", pid], capture_output=True)
-        except Exception:  # noqa: BLE001 - 清理失败不阻断后续拉起
-            pass
+        except Exception as exc:
+            logger.debug("lsof 查询端口占用失败: %s", exc)
         return
     try:
         out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True,

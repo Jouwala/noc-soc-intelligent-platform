@@ -17,6 +17,9 @@
 """
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 import os
 import re
 import subprocess
@@ -127,8 +130,8 @@ def _cleanup_pmcache(keep_days=PMCACHE_KEEP_DAYS, dry_run=False):
                     fp = os.path.join(cache_dir, name)
                     freed += os.path.getsize(fp)
                     os.remove(fp)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.debug("清理 PM 缓存文件失败: %s", exc)
             deleted += 1
         else:
             kept += 1

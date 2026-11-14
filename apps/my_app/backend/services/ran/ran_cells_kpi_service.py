@@ -62,8 +62,8 @@ def _connect_ro(path: str) -> sqlite3.Connection:
     conn = get_sqlite_connection(path, timeout=60)
     try:
         conn.execute("PRAGMA query_only=ON")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("设置只读 PRAGMA 失败: %s", exc)
     return conn
 
 DEFAULT_THRESHOLD = 0.9965  # 99.65%
@@ -162,8 +162,8 @@ def _cache_set(key: str, value):
         return value
     try:
         _cache.set(key, value, _CACHE_TTL)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("写入缓存失败: %s", exc)
     return value
 
 
@@ -285,8 +285,8 @@ def _read_tech_month(tech: str, month: str) -> Dict[str, Dict[str, Optional[floa
         if conn is not None:
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("关闭连接失败: %s", exc)
     return out
 
 
@@ -353,8 +353,8 @@ def _read_tech_meta(tech: str, month: str) -> Dict[str, Dict[str, str]]:
         if conn is not None:
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("关闭连接失败: %s", exc)
     return _cache_set(ck, out)
 
 

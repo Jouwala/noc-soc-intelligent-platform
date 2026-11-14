@@ -170,8 +170,8 @@ def load_rows(start: str, end: str) -> tuple[list[dict], list[str]]:
     finally:
         try:
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("关闭连接失败: %s", exc)
 
     rows = []
     for r in raw:

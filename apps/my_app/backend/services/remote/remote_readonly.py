@@ -64,8 +64,8 @@ def query_rows(db: str, sql: str, limit: int = MAX_LIMIT,
         detail = ""
         try:
             detail = e.read().decode("utf-8", "replace")[:300]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("读取远端错误响应体失败: %s", exc)
         raise RemoteQueryError(
             f"{db} 返回 HTTP {e.code}: {detail or e.reason}") from e
     except urllib.error.URLError as e:

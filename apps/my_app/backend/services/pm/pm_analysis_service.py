@@ -195,8 +195,8 @@ def build_overview(start: str, end: str) -> dict:
     finally:
         try:
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("关闭连接失败: %s", exc)
 
     # 汇总：各计划按字段相加，比再打一次库更一致（同一份行数据算出来）
     summary = {f: sum(r[f] for r in rows) for f in _COUNT_FIELDS}
@@ -341,8 +341,8 @@ def build_drilldown(start: str, end: str, metric: str, pmp_no: str = "",
     finally:
         try:
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("关闭连接失败: %s", exc)
 
     truncated = total > len(rows)
     warnings: list[str] = []
@@ -425,6 +425,6 @@ def get_filters() -> dict:
     finally:
         try:
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("关闭连接失败: %s", exc)
     return out

@@ -454,8 +454,8 @@ def _load_store() -> dict:
             store.setdefault("granularity", GRANULARITY)
             store.setdefault("retention_days", RETENTION_DAYS)
             return store
-    except FileNotFoundError:
-        pass
+    except FileNotFoundError as exc:
+        logger.debug("CXO 日缓存文件不存在，用空缓存: %s", exc)
     except Exception as exc:                                  # noqa: BLE001
         logger.warning("[vmax_daily] 旧日存读取失败，重建: %s", exc)
     return _empty_store()

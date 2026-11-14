@@ -24,10 +24,13 @@ openwebui_password: str       Open WebUI 登录密码
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------ #
 # 路径
@@ -67,8 +70,8 @@ def _load_from_file() -> dict:
             with open(_CONFIG_FILE, encoding="utf-8") as f:
                 d = json.load(f)
             return d if isinstance(d, dict) else {}
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.warning("读取 AI 模型配置失败，使用默认值: %s", exc)
     return {}
 
 

@@ -141,8 +141,8 @@ def _norm_str(s) -> str:
     try:
         if pd.isna(s):
             return ""
-    except (TypeError, ValueError):
-        pass
+    except (TypeError, ValueError) as exc:
+        logger.debug("NUR 字符串归一化判定失败: %s", exc)
     return str(s).strip()
 
 
@@ -346,8 +346,8 @@ def _fetch_exclude_xlsx_bytes() -> bytes:
     finally:
         try:
             ftp.quit()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("关闭 FTP 连接失败: %s", exc)
     return bytes(buf)
 
 

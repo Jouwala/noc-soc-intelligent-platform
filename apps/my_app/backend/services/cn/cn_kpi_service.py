@@ -565,8 +565,8 @@ def query_remote(sql: str, db: str = REMOTE_DB, limit: int = 5000) -> Dict[str, 
         detail = ""
         try:
             detail = e.read().decode("utf-8", "replace")[:300]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("读取远端错误响应体失败: %s", exc)
         raise RuntimeError(f"远端数据源返回 HTTP {e.code}: {detail or e.reason}") from e
     except urllib.error.URLError as e:
         raise RuntimeError(

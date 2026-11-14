@@ -15,7 +15,10 @@ Pipeline:
 import pandas as pd
 import numpy as np
 import paramiko
+import logging
 import stat
+
+logger = logging.getLogger(__name__)
 import os
 import shutil
 import math
@@ -422,8 +425,8 @@ def _find_latest_ocrule_csv_recursive(sftp, folder_path):
                     scan(full)
                 elif "ocrule" in f.filename.lower() and f.filename.lower().endswith(".csv"):
                     all_csv.append((f, full))
-        except IOError:
-            pass
+        except IOError as exc:
+            logger.debug("扫描 SFTP 目录失败，跳过: %s", exc)
 
     scan(folder_path)
     if not all_csv:
@@ -444,8 +447,8 @@ def _find_latest_transfer_xlsx_recursive(sftp, folder_path):
                     scan(full)
                 elif "sp-wh_transfer" in f.filename.lower() and f.filename.lower().endswith(('.xlsx', '.xls')):
                     all_xlsx.append((f, full))
-        except IOError:
-            pass
+        except IOError as exc:
+            logger.debug("扫描 SFTP 目录失败，跳过: %s", exc)
 
     scan(folder_path)
     if not all_xlsx:
@@ -701,8 +704,8 @@ def _save_detail_xlsx(df, path):
         try:
             if os.path.isfile(tmp):
                 os.remove(tmp)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("清理明细临时文件失败: %s", exc)
         return False
 
 
@@ -732,8 +735,8 @@ def snapshot_raw_details():
             try:
                 if os.path.isfile(tmp):
                     os.remove(tmp)
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("清理快照临时文件失败: %s", exc)
 
 
 # ==============================================================================

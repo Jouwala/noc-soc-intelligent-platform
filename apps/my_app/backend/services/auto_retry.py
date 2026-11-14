@@ -485,8 +485,8 @@ def _scan_interval_min(registry) -> int:
         minute_field = cron.split()[0]
         if minute_field.startswith("*/"):
             return max(1, int(minute_field[2:]))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("读取自动重试扫描间隔失败，用默认值: %s", exc)
     return 10
 
 

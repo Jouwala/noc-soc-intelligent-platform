@@ -519,8 +519,8 @@ def _get_runtime_config() -> dict:
     try:
         from backend.services import ai_model_config
         return ai_model_config.get_config()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.warning("读取 AI 模型运行时配置失败，用内置默认值: %s", exc)
     # 兜底：环境变量常量（保持向后兼容，CLI 测试 / 无配置时仍可跑）
     return {
         "provider": "both",

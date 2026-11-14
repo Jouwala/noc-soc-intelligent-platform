@@ -71,8 +71,8 @@ def _safe_close(obj: Any) -> None:
         close = getattr(obj, "close", None)
         if callable(close):
             close()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("关闭测试连接对象失败: %s", exc)
 
 
 # ==================================================================
@@ -98,8 +98,8 @@ def _test_vmax_cxo(group: dict, user: str, pwd: str, en: bool) -> Tuple[bool, st
     try:
         import urllib3
         urllib3.disable_warnings()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("关闭 urllib3 警告失败: %s", exc)
 
     sess = requests.Session()
     sess.headers.update({"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
@@ -130,8 +130,8 @@ def _test_vmax_cxo(group: dict, user: str, pwd: str, en: bool) -> Tuple[bool, st
     finally:
         try:
             sess.get(base + "/rdk/service/app/portal/server/logout", timeout=8, verify=False)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("VMAX 会话登出失败: %s", exc)
 
     if j.get("result") == 1:
         return True, _disp(en, f"登录成功（账号 {user} @ {host}:{port}）",
@@ -316,8 +316,8 @@ def _sftp_host_port() -> Tuple[str, int]:
             Path(__file__).resolve().parent.parent / "sp_sftp_config.json") or {}
         host = conf.get("sftp_host") or host
         port = int(conf.get("sftp_port") or port)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("读取 SFTP 配置失败，用默认地址: %s", exc)
     return host, port
 
 
@@ -526,8 +526,8 @@ def _test_rais(group: dict, user: str, pwd: str, en: bool) -> Tuple[bool, str]:
     try:
         import urllib3
         urllib3.disable_warnings()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("关闭 urllib3 警告失败: %s", exc)
 
     sess = requests.Session()
     # my_app 主机上可能配了 http_proxy，内网直连必须绕过代理

@@ -47,8 +47,8 @@ def _refresh_rules() -> dict:
     timeout = 180
     try:
         timeout = max(30, int(os.environ.get("EFLOW_RULES_COLLECT_TIMEOUT", "180")))
-    except ValueError:
-        pass
+    except ValueError as exc:
+        logger.debug("采集超时环境变量解析失败，用默认值: %s", exc)
     try:
         proc = subprocess.run(
             [sys.executable, str(COLLECTOR_SCRIPT)],

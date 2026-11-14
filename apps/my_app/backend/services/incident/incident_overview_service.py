@@ -91,14 +91,14 @@ def _pointer_key():
         ]
         if cands:
             return ("scan", max(os.path.getmtime(c) for c in cands))
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("解析指针键候选失败: %s", exc)
     try:
         if os.path.exists(POINTER_FILE):
             st = os.stat(POINTER_FILE)
             return ("pointer", st.st_mtime, st.st_size)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("读取指针文件失败: %s", exc)
     return ("legacy",)
 
 
@@ -446,8 +446,8 @@ def get_incident_log_data(force=False):
                         try:
                             nv = float(vs)
                             result[i][col_name] = int(nv) if nv.is_integer() else nv
-                        except ValueError:
-                            pass
+                        except ValueError as exc:
+                            logger.debug("解析数值失败: %s", exc)
 
     _cached_incident_log = {"data": result, "columns": columns}
     _last_excel_mtime = mtime

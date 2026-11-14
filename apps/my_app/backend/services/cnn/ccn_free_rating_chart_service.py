@@ -33,18 +33,18 @@ from typing import List, Optional, Tuple
 
 _SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
+logger = logging.getLogger("ccn_free_rating_chart_service")
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
-
-logger = logging.getLogger("ccn_free_rating_chart_service")
 
 # ===== 路径配置 =====
 MY_APP_DIR = Path(__file__).resolve().parent.parent.parent.parent
@@ -313,8 +313,8 @@ def _cleanup_old_run_dirs(keep_days: int = 14) -> None:
         for d in OUTPUT_DIR.iterdir():
             if d.is_dir() and d.stat().st_mtime < cutoff:
                 shutil.rmtree(d, ignore_errors=True)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("清理旧运行目录失败: %s", exc)
 
 
 def generate_line_chart(df: pd.DataFrame, mo: str, output_path: Path) -> "bool | Path":

@@ -272,8 +272,8 @@ def _close_live(system_key: str):
         try:
             import shutil
             shutil.rmtree(pd, ignore_errors=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("清理浏览器 profile 目录失败（忽略）: %s", exc)
 
 
 # ============ 默认浏览器探测 ============
@@ -372,8 +372,8 @@ def _fill_and_submit(page, user, pwd):
         return False, "未找到用户名输入框（页面可能未加载或表单结构不同）"
     try:
         page.locator(user_sel).wait_for(state="visible", timeout=10000)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("等待用户名输入框出现失败: %s", exc)
     page.locator(user_sel).fill(user)
 
     pwd_sel = _detect(page, PASSWORD_CANDIDATES)
@@ -417,13 +417,13 @@ def _wait_success(page, spec, timeout=30000):
                     "() => !document.querySelector('[ng-cloak],[data-ng-cloak]')",
                     timeout=8000,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("等待登录成功标志失败: %s", exc)
             # 3) 再额外等 2 秒，让剩余的 click handler 绑定 / 动画 / 懒加载跑完
             try:
                 page.wait_for_timeout(2000)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("等待页面稳定失败: %s", exc)
             # 4) 诊断日志：记录页面状态、内容区尺寸、iframe，帮助排查
             try:
                 diag = page.evaluate("""() => {
@@ -447,8 +447,8 @@ def _wait_success(page, spec, timeout=30000):
                     };
                 }""")
                 logger.info(f"[PORTAL] 登录后页面诊断: {diag}")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("读取页面内容判断登录状态失败: %s", exc)
             return True, f"已跳转至门户主页 ({page.url})"
         except Exception:
             return False, "未在超时内跳转到门户主页（可能账号密码错误 / 需验证码 / 表单结构变化）"
@@ -468,8 +468,8 @@ def _wait_success(page, spec, timeout=30000):
             txt = page.content().lower()
             if any(k in txt for k in fail_kw):
                 return False, "页面出现登录失败提示，请检查凭据或验证码"
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("检测登录失败提示时读取页面失败: %s", exc)
         time.sleep(1.0)
     return False, "登录结果不确定：URL 未明显变化，请在已打开的浏览器中确认登录状态"
 
@@ -572,8 +572,8 @@ def _win32_maximize_by_exe(exe: str):
                     user32.ShowWindow(hwnd, SW_MAXIMIZE)
                     try:
                         user32.SetForegroundWindow(hwnd)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("窗口置前失败: %s", exc)
                     found += 1
         finally:
             kernel32.CloseHandle(h)
@@ -810,8 +810,8 @@ async def _cdp_login(port, login_url, user, pwd, spec, job_id):
                 diag = (d.get("result", {}).get("result", {}) or {}).get("value", "")
                 logger.warning(f"[PORTAL] 未找到登录表单，页面诊断: {diag}")
                 _job_update(job_id, log=[f"未找到登录表单输入框。诊断: {diag}"])
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("读取 CDP 诊断信息失败: %s", exc)
             return "failed", "未在超时内找到登录表单输入框（页面可能未加载/证书拦截/表单结构变化）"
 
         # 填充用户名/密码（此时表单已就绪；_build_fill_js 只填不提交）
@@ -819,8 +819,8 @@ async def _cdp_login(port, login_url, user, pwd, spec, job_id):
         info = ""
         try:
             info = res.get("result", {}).get("result", {}).get("value", "")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("解析 CDP 返回结构失败: %s", exc)
         _job_update(job_id, log=[f"填充结果: {info}"])
         logger.info(f"[PORTAL] CDP 填表结果: {info}")
 
@@ -901,8 +901,8 @@ async def _cdp_login(port, login_url, user, pwd, spec, job_id):
                 diag = (d.get("result", {}).get("result", {}) or {}).get("value", "")
                 logger.warning(f"[PORTAL] 登录未成功，页面诊断: {diag}")
                 _job_update(job_id, log=[f"登录未成功诊断: {diag}"])
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("读取 CDP 诊断信息失败: %s", exc)
         return ("success" if ok else "failed"), sinfo
     # async with 退出时仅关闭 WebSocket，不发送 Browser.close → 浏览器继续作为正常浏览器运行
 
@@ -923,8 +923,8 @@ def launch_and_login(system_key: str, browser: str | None = None, job_id: str | 
     # 先关掉该系统已有的会话，避免多开
     try:
         _close_live(system_key)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("启动前关闭已有会话失败，继续启动: %s", exc)
 
     login_url = build_login_url(spec)
     user, pwd = _creds(spec["cred_key"])
@@ -944,8 +944,8 @@ def launch_and_login(system_key: str, browser: str | None = None, job_id: str | 
             try:
                 if stale.exists():
                     shutil.rmtree(stale, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("清理残留文件失败: %s", exc)
         profile_dir = str(PROFILE_ROOT / f"_tmp_{system_key}_{uuid.uuid4().hex[:10]}")
         Path(profile_dir).mkdir(parents=True, exist_ok=True)
         logger.info(f"[PORTAL] 用普通子进程启动 Chrome（无 --enable-automation，navigator.webdriver=false）: {profile_dir}")
@@ -978,8 +978,8 @@ def launch_and_login(system_key: str, browser: str | None = None, job_id: str | 
                     with open(devtools_file, "r", encoding="utf-8") as f:
                         port = int(f.readline().strip())
                     break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("读取 DevTools 端口文件失败: %s", exc)
             time.sleep(0.1)
         if not port:
             try:
@@ -987,8 +987,8 @@ def launch_and_login(system_key: str, browser: str | None = None, job_id: str | 
                 m = re.search(r"127\.0\.0\.1:(\d+)", line)
                 if m:
                     port = int(m.group(1))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("读取浏览器进程 stderr 失败: %s", exc)
         if not port:
             raise RuntimeError("无法获取 Chrome 远程调试端口（浏览器可能启动失败）")
 
@@ -1011,14 +1011,14 @@ def launch_and_login(system_key: str, browser: str | None = None, job_id: str | 
         if proc is not None and proc.poll() is None:
             try:
                 proc.kill()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("结束浏览器进程失败: %s", exc)
         if profile_dir and os.path.exists(profile_dir):
             try:
                 import shutil
                 shutil.rmtree(profile_dir, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("清理浏览器 profile 目录失败（忽略）: %s", exc)
         _job_update(job_id, state="failed", message=f"异常: {type(e).__name__}: {e}", end=time.time())
         return _job_result(job_id, False, f"异常: {type(e).__name__}: {e}")
 
@@ -1420,8 +1420,8 @@ def launch_and_login_eflow_direct(system_key: str, browser: str | None = None,
 
     try:
         _close_live(system_key)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("启动前关闭已有会话失败，继续启动: %s", exc)
 
     proc = None
     profile_dir = None
@@ -1440,8 +1440,8 @@ def launch_and_login_eflow_direct(system_key: str, browser: str | None = None,
             try:
                 if stale.exists():
                     shutil.rmtree(stale, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("清理残留文件失败: %s", exc)
         profile_dir = str(PROFILE_ROOT / f"_tmp_{system_key}_{uuid.uuid4().hex[:10]}")
         Path(profile_dir).mkdir(parents=True, exist_ok=True)
 
@@ -1468,8 +1468,8 @@ def launch_and_login_eflow_direct(system_key: str, browser: str | None = None,
                     with open(devtools_file, "r", encoding="utf-8") as f:
                         dport = int(f.readline().strip())
                     break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("读取 DevTools 端口文件失败: %s", exc)
             time.sleep(0.1)
         if not dport:
             raise RuntimeError("无法获取 Chrome 远程调试端口（浏览器可能启动失败）")
@@ -1499,14 +1499,14 @@ def launch_and_login_eflow_direct(system_key: str, browser: str | None = None,
         if proc is not None and proc.poll() is None:
             try:
                 proc.kill()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("结束浏览器进程失败: %s", exc)
         if profile_dir and os.path.exists(profile_dir):
             try:
                 import shutil
                 shutil.rmtree(profile_dir, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("清理浏览器 profile 目录失败（忽略）: %s", exc)
         _job_update(job_id, state="failed", message=f"异常: {type(e).__name__}: {e}", end=time.time())
         return _job_result(job_id, False, f"异常: {type(e).__name__}: {e}")
 
@@ -1697,8 +1697,8 @@ def _keep_alive(system_key, proc, profile_dir=None):
             try:
                 import shutil
                 shutil.rmtree(profile_dir, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("看门狗清理 profile 目录失败（忽略）: %s", exc)
 
     threading.Thread(target=_watch, daemon=True).start()
 

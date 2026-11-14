@@ -35,6 +35,9 @@ ems_kpi_query.py — ZTE U31 EMS KPI 查询统一入口 (2026-08-25 版)
 """
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
 import json
 import os
 import subprocess
@@ -76,8 +79,8 @@ def run_daily(host, start, end, counters=None):
     for line in p.stdout:
         try:
             sys.stdout.write(line.decode("utf-8", errors="replace"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("转发子进程输出失败: %s", exc)
     rc = p.wait()
     raw_path = os.path.join(HERE, "daily_raw.json")
     if rc != 0 or not os.path.exists(raw_path):
@@ -105,8 +108,8 @@ def run_direct(host, user, pwd, start, end, strategy="hybrid"):
     for line in p.stdout:
         try:
             sys.stdout.write(line.decode("utf-8", errors="replace"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("转发子进程输出失败: %s", exc)
     rc = p.wait()
 
     # 检查结果: 可能输出到 kpi_result.json 或 daily_raw.json
@@ -137,8 +140,8 @@ def run_protocol(host, user, pwd, start, end):
     for line in p.stdout:
         try:
             sys.stdout.write(line.decode("utf-8", errors="replace"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("转发子进程输出失败: %s", exc)
     rc = p.wait()
     dst = os.path.join(HERE, "kpi_result.json")
     if os.path.exists(dst):

@@ -40,6 +40,9 @@ auth_info.json 回退说明（2026-09-23）：
 from __future__ import annotations
 
 import gzip
+import logging
+
+logger = logging.getLogger(__name__)
 import importlib.util
 import json
 import math
@@ -57,8 +60,8 @@ from urllib.parse import urlencode
 try:
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
@@ -184,8 +187,8 @@ def load_credentials(args=None) -> dict:
             port = creds["port"]
             username = creds["username"]
             password = creds["password"]
-        except Exception:
-            pass  # url.txt 解析失败不阻断，继续用默认值
+        except Exception as exc:
+            logger.warning("解析凭据文件失败，走兜底凭据: %s", exc)  # url.txt 解析失败不阻断，继续用默认值
 
     # 3. 环境变量
     host = os.environ.get("BATT_HOST", host)
@@ -711,8 +714,8 @@ def save_auth_info(cookie: str, forgery_token: str, host: str, port: int,
         try:
             if tmp.exists():
                 tmp.unlink()
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("清理认证临时文件失败: %s", exc)
         return False
 
 

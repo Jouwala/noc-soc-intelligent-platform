@@ -159,8 +159,8 @@ _PL_EXT = _load_external_pl_config()
 if _PL_EXT is not None:
     try:
         PL_DAYS_BACK = int(_PL_EXT.get("days_back", PL_DAYS_BACK))
-    except (TypeError, ValueError):
-        pass
+    except (TypeError, ValueError) as exc:
+        logger.debug("解析丢包扩展配置 days_back 失败，用默认值: %s", exc)
     ext_cfgs = _PL_EXT.get("query_configs")
     if isinstance(ext_cfgs, list) and ext_cfgs:
         # 配置里可能缺 keep_columns/rename_columns（内部字段），用内置默认补齐

@@ -180,8 +180,8 @@ def _rules_file_block() -> Dict[str, Any]:
         st = xlsx.stat()
         block["rules_updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime))
         block["rules_updated_ts"] = int(st.st_mtime)
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.debug("读取规则文件状态失败: %s", exc)
     try:
         summary = json.loads(_summary_json().read_text(encoding="utf-8"))
         block["collected_at"] = _s(summary.get("generated_at"))
@@ -443,8 +443,8 @@ def build_push_rule_evidence(tt_no: str) -> Dict[str, Any]:
         try:
             out["rules_file"]["mtime_text"] = time.strftime(
                 "%Y-%m-%d %H:%M:%S", time.localtime(path.stat().st_mtime))
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("格式化规则文件时间失败: %s", exc)
 
         rows = [r for r in _load_push_rule_rows()
                 if _s(r.get("规则类型")) == "ttPushOrderRule"
@@ -607,8 +607,8 @@ def build_rule_evidence(tt_no: str, handler: Optional[Dict[str, str]] = None) ->
         if out["rules_file"] and out["rules_file"].get("rules_count") is None:
             try:
                 out["rules_file"]["rules_count"] = len(_load_rule_rows())
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("统计规则条数失败: %s", exc)
         return out
     except Exception as e:  # noqa: BLE001
         out["error"] = out["error"] or f"规则匹配失败：{type(e).__name__}: {e}"

@@ -183,8 +183,8 @@ def _on_job_missed(event) -> None:
                    "event": "schedule_misfire",
                    "scheduled_run_time": str(getattr(event, "scheduled_run_time", ""))},
         )
-    except Exception:  # noqa: BLE001 - 监听器绝不能反过来把调度器搞崩
-        pass
+    except Exception as exc:
+        logger.debug("处理任务错过事件失败: %s", exc)
 
 
 def get_scheduler() -> BackgroundScheduler:
@@ -1543,8 +1543,8 @@ def _next_run_plus_grace(next_run_str: str, cron: str) -> datetime:
                 nxt = datetime.fromisoformat(next_run_str.replace("Z", "+00:00")).replace(tzinfo=None) \
                     if "+" in next_run_str else datetime.fromisoformat(next_run_str)
                 return nxt + interval
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("计算下次运行时间失败: %s", exc)
     return datetime.now() + timedelta(hours=1)
 
 

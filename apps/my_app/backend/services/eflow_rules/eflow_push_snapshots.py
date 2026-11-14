@@ -70,10 +70,10 @@ def _prune() -> None:
         for old in files[:-SNAPSHOT_KEEP]:
             try:
                 old.unlink()
-            except OSError:
-                pass
-    except OSError:
-        pass
+            except OSError as exc:
+                logger.debug("删除过期快照失败: %s", exc)
+    except OSError as exc:
+        logger.debug("删除过期快照失败: %s", exc)
 
 
 def list_snapshots() -> List[Dict[str, Any]]:

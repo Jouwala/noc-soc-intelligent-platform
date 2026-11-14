@@ -22,15 +22,18 @@ backfill_new_group_history.py — 回补远程 ran_kpi_daily.sqlite3 新区域 G
     python backfill_new_group_history.py            # 正式回补
     python backfill_new_group_history.py --dry-run  # 只统计不写入
 """
+import logging
 import sys
+
+logger = logging.getLogger(__name__)
 import os
 import time
 import sqlite3
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))

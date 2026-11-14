@@ -274,8 +274,8 @@ def save_to_db(headers, records, reconcile_keys=None):
                 if h not in exist:
                     try:
                         cursor.execute(f'ALTER TABLE "{TABLE}" ADD COLUMN {_q(h)} TEXT')
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("补列失败（列已存在时忽略）: %s", exc)
 
             # 建唯一索引前必须先清掉历史重复行，否则 CREATE UNIQUE INDEX 直接报错
             pk_q = _q(KEY_COL)
@@ -318,8 +318,8 @@ def save_to_db(headers, records, reconcile_keys=None):
             if is_pg and lock_key is not None:
                 try:
                     cursor.execute("SELECT pg_advisory_unlock(?)", (lock_key,))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("释放 advisory 锁失败: %s", exc)
 
     logger.info(f"[SP-MAT] upsert {len(records)} 行（pk={KEY_COL}）")
     return len(records), dropped, deleted

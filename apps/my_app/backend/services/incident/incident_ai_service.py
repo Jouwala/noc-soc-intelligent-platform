@@ -28,7 +28,11 @@ import time
 import traceback
 from typing import Any, Dict, Iterator, List, Tuple
 
+import logging
+
 import requests
+
+logger = logging.getLogger(__name__)
 
 logger_prefix = "[incident-ai]"
 
@@ -330,8 +334,8 @@ def _deepseek_error(e: Exception) -> Result:
             detail = e.response.json()
             if "error" in detail:
                 error_msg = detail.get("error", {}).get("message", error_msg)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("解析 AI 服务错误详情失败: %s", exc)
     trace = traceback.format_exc()
     return {"error": error_msg, "detail": trace[:500]}, 500
 

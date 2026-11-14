@@ -244,7 +244,8 @@ class EflowTTRuleCollector:
         try:
             data = json.loads(json_str)
             return data.get(field_name, '')
-        except:
+        except Exception as exc:
+            logger.debug("解析 JSON 字段 %s 失败: %s", field_name, exc)
             return ''
     
     def _format_conditions(self, conditions):
@@ -284,7 +285,8 @@ class EflowTTRuleCollector:
         try:
             dt = datetime.fromtimestamp(ms_timestamp / 1000)
             return dt.strftime('%Y-%m-%d %H:%M:%S')
-        except:
+        except Exception as exc:
+            logger.debug("毫秒时间戳格式化失败: %s", exc)
             return ''
 
 

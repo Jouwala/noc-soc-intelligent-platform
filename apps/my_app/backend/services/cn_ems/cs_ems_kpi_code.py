@@ -15,6 +15,9 @@ cs_ems_kpi_code.py — CS 域 KPI 模板 GUI 自动查询 (pywinauto 版)
 """
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
 import datetime
 import os
 import sys
@@ -85,32 +88,32 @@ def _find_element(parent, selector, timeout=10):
             ctrl = parent.child_window(automation_id=keyword, found_index=0)
             if ctrl.exists():
                 return ctrl
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("按 automation_id 查找控件失败，尝试下一种方式: %s", exc)
 
         # 尝试 title 精确匹配
         try:
             ctrl = parent.child_window(title=keyword, found_index=0)
             if ctrl.exists():
                 return ctrl
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("按标题查找控件失败，尝试下一种方式: %s", exc)
 
         # 尝试 title 包含匹配 (递归搜索子控件)
         try:
             ctrls = parent.descendants(title=keyword)
             if ctrls:
                 return ctrls[0]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("按标题枚举查找控件失败，尝试下一种方式: %s", exc)
 
         # 尝试 title_re 模糊匹配
         try:
             ctrl = parent.child_window(title_re=f".*{keyword}.*", found_index=0)
             if ctrl.exists():
                 return ctrl
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("按标题正则查找控件失败: %s", exc)
 
         time.sleep(0.5)
 
@@ -132,8 +135,8 @@ def _find_filter_box(win, timeout=10):
                      if "keyword to filter" in (c.window_text() or "").lower()]
             if boxes:
                 return max(boxes, key=lambda c: c.rectangle().left)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("枚举筛选框失败，尝试下一种方式: %s", exc)
         # 方式2: 以 NE Type 组合框为锚点, 取其右侧的 Edit
         try:
             ne = win.child_window(title_re=".*All NE Type.*", found_index=0)
@@ -145,8 +148,8 @@ def _find_filter_box(win, timeout=10):
                          and abs(c.rectangle().top - nr.top) < 30]
                 if cands:
                     return min(cands, key=lambda c: c.rectangle().left)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("按 NE Type 定位筛选框失败: %s", exc)
         time.sleep(0.5)
     raise TimeoutError("找不到过滤输入框 (Template Management 工具栏)")
 
@@ -211,13 +214,13 @@ def inspect_window():
             if auto_id:
                 line += f" auto_id={auto_id!r}"
             print(line)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("读取控件文本失败: %s", exc)
         try:
             for child in ctrl.children():
                 _print_tree(child, depth + 1, max_depth)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("遍历控件子节点失败: %s", exc)
 
     print("=== 控件树 (depth=4) ===")
     _print_tree(win)

@@ -156,8 +156,8 @@ def _resolve_sync_stale_threshold(conn, env: Optional[Dict[str, str]] = None) ->
     if env_val:
         try:
             return int(env_val)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("同步陈旧阈值环境变量解析失败，用默认值: %s", exc)
     cron = None
     local = None
     try:
