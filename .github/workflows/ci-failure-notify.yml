@@ -1,0 +1,121 @@
+# CI 失败通知 builder：quality 工作流跑完且结论为失败时，主动到对应 PR
+# （以及它关联的任务 Issue）下留通知评论，开发 Agent 轮询 GitHub 时第一
+# 时间看到，不再等人工转告（agent-protocol.md 第五节轮询规则的自动补位）。
+#
+# 通知内容：失败的工作流与 job 名、运行链接、head SHA、builder 是谁
+# （按 PR / Issue 上的 agent: 标签判定，取不到时写 PR 作者账号）。
+#
+# 安全阀：
+#   - 只通知、不改代码、不改标签、不重跑——修复由开发 Agent 按协议走
+#     FIX 流程（QA/CI 失败返工见 agent-protocol.md 第四节）。
+#   - 去重：同一运行（run id）在同一 PR / Issue 只通知一次，评论里带
+#     <!-- ci-failure-notice: run-<id> --> 标记，重跑工作流不会刷屏。
+#   - 找不到 open PR（如直接推 main 的运行）只记日志，不报错。
+#   - 结论只认 failure / timed_out / cancelled 中的 failure 与 timed_out；
+#     cancelled 多为人工取消，不通知。
+
+name: ci-failure-notify
+
+on:
+  workflow_run:
+    workflows: ["quality"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+
+jobs:
+  notify:
+    if: github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 定位 PR 并通知 builder
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/$REPO"
+          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')
+          MARKER="<!-- ci-failure-notice: run-$RUN_ID -->"
+
+          # 失败 job 名单（供 builder 直接定位，不用点开日志逐个找）。
+          FAILED_JOBS="$(curl -sS "${AUTH[@]}" "$API/actions/runs/$RUN_ID/jobs?per_page=100" \
+            | jq -r '[.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name] | join("、")')"
+          if [ -z "$FAILED_JOBS" ]; then FAILED_JOBS="（未能列出，以运行日志为准）"; fi
+
+          # 找 head SHA 相同的 open PR（push 与 pull_request 两种运行都覆盖）。
+          PRS_JSON="$(curl -sS "${AUTH[@]}" "$API/pulls?state=open&per_page=100")"
+          PR_NUMBERS="$(echo "$PRS_JSON" | jq -r --arg sha "$HEAD_SHA" '.[] | select(.head.sha == $sha) | .number')"
+          if [ -z "$PR_NUMBERS" ]; then
+            echo "head $HEAD_SHA 没有对应的 open PR（分支：$HEAD_BRANCH），只记日志，不通知"; exit 0
+          fi
+
+          for PR in $PR_NUMBERS; do
+            echo "=== PR #$PR ==="
+            PR_JSON="$(echo "$PRS_JSON" | jq -c --argjson n "$PR" '.[] | select(.number == $n)')"
+            PR_BODY="$(echo "$PR_JSON" | jq -r '.body // ""')"
+            PR_AUTHOR="$(echo "$PR_JSON" | jq -r '.user.login')"
+            PR_LABELS="$(echo "$PR_JSON" | jq -r '.labels[].name')"
+
+            # 关联 Issue：先 Closes/Fixes/Resolves #N，再 agent 消息头 task: #N，
+            # 最后分支名 agent/task-<N>-…。
+            ISSUE_NUMBER="$(echo "$PR_BODY" | grep -ioE '(closes|fixes|resolves)[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' | head -n 1 || true)"
+            if [ -z "$ISSUE_NUMBER" ]; then
+              ISSUE_NUMBER="$(echo "$PR_BODY" | grep -oE 'task:[[:space:]]*#[0-9]+' | grep -oE '[0-9]+' | head -n 1 || true)"
+            fi
+            if [ -z "$ISSUE_NUMBER" ]; then
+              HEAD_REF="$(echo "$PR_JSON" | jq -r '.head.ref')"
+              ISSUE_NUMBER="$(echo "$HEAD_REF" | sed -nE 's#^agent/task-([0-9]+)(-|$).*#\1#p' | head -n 1 || true)"
+            fi
+
+            # builder：PR 标签 → Issue 标签 → PR 作者。
+            BUILDER="$(echo "$PR_LABELS" | grep -E '^agent:muse-[0-9]$' | head -n 1 || true)"
+            if [ -z "$BUILDER" ] && [ -n "$ISSUE_NUMBER" ]; then
+              BUILDER="$(curl -sS "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER" | jq -r '.labels[].name' | grep -E '^agent:muse-[0-9]$' | head -n 1 || true)"
+            fi
+            if [ -z "$BUILDER" ]; then BUILDER="@$PR_AUTHOR"; fi
+
+            {
+              echo "$MARKER"
+              echo "CI 失败通知（ci-failure-notify 自动）：请 builder（$BUILDER）处理。"
+              echo
+              echo "- 工作流：quality（结论：$CONCLUSION）"
+              echo "- 失败 job：$FAILED_JOBS"
+              echo "- head SHA：\`$HEAD_SHA\`"
+              echo "- 运行日志：$RUN_URL"
+              echo
+              echo "修复后推送新提交即可，CI 会自动重跑；同一运行不会重复通知。"
+            } > /tmp/notice.md
+
+            # PR 评论（去重后发送）。
+            PR_COMMENTS="$(curl -sS "${AUTH[@]}" "$API/issues/$PR/comments?per_page=100")"
+            if echo "$PR_COMMENTS" | jq -r '.[].body // ""' | grep -qF "$MARKER"; then
+              echo "PR #$PR 已通知过，跳过"
+            else
+              jq -n --rawfile body /tmp/notice.md '{body: $body}' \
+                | curl -sS -X POST "${AUTH[@]}" "$API/issues/$PR/comments" --data-binary @- > /dev/null
+              echo "已通知 PR #$PR"
+            fi
+
+            # 关联 Issue 也留一份（builder 的轮询入口是 Issue）。
+            if [ -n "$ISSUE_NUMBER" ]; then
+              ISSUE_COMMENTS="$(curl -sS "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER/comments?per_page=100")"
+              if echo "$ISSUE_COMMENTS" | jq -r '.[].body // ""' | grep -qF "$MARKER"; then
+                echo "Issue #$ISSUE_NUMBER 已通知过，跳过"
+              else
+                jq -n --rawfile body /tmp/notice.md '{body: $body}' \
+                  | curl -sS -X POST "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER/comments" --data-binary @- > /dev/null
+                echo "已通知 Issue #$ISSUE_NUMBER"
+              fi
+            fi
+          done
+          echo "通知完成。"

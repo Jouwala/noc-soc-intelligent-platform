@@ -1,0 +1,185 @@
+# Issue 自动建分支开 PR：任务被认领（打上 state:claimed 标签）时，机械地把
+# 「建分支 + 第一个提交 + 开 PR」三步做掉，开发 Agent 不再手工起分支。
+#
+# 做什么：
+#   1. 解析分支名：优先用 Issue 正文「所属分支」里的 agent/<任务>；
+#      没有时按 agent/task-<编号>-<标题 ASCII slug> 生成（标题无 ASCII 时
+#      退化为 agent/task-<编号>）。
+#   2. 分支不存在 → 从最新 main 用 Git Data API 建一条脚手架提交（只新增
+#      .agent-work/tasks/active/task-<编号>.md 进度文件，见根 AGENTS.md
+#      第五节第 3 条），再建分支引用。这是本工作流的「自动 Commit」：
+#      PR 必须至少领先 base 一个提交才能开，脚手架提交就是这个提交；
+#      后续业务提交仍由开发 Agent 在自己的 VM 上完成。
+#   3. 该分支没有 open PR → 开一个草稿 PR，描述自动生成（任务说明摘录、
+#      验收要点、自检清单），并带 Closes #<编号>，合并时 GitHub 自动关
+#      Issue；状态回写（state:merged 标签 + PR_MERGED 评论）由
+#      pr-merged-writeback.yml 补齐。
+#   4. 在 Issue 下留一条自动化评论（带 issue-to-pr 标记），写明分支与 PR。
+#
+# 安全阀：
+#   - 只处理 open 状态、且带 agent:muse-2 / agent:muse-3 标签的 Issue
+#     （开发任务才需要分支；Grok 的 QA 任务、Muse 1 的协调任务跳过）。
+#   - 幂等：分支已存在不重建，PR 已存在不开第二个，Issue 下已有本工作流
+#     的完成标记评论时整体跳过——重复打标签、手动重跑都不会重复建。
+#   - 分支名必须通过 ^agent/[A-Za-z0-9._/-]+$ 校验且不含 ..，防注入。
+#   - 只做脚手架，不碰任何业务文件；PR 是草稿，auto-merge 不会合草稿。
+
+name: issue-to-pr
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to scaffold (branch + draft PR)'
+        required: true
+        type: number
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  issue-to-pr:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'state:claimed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 建分支、脚手架提交并开草稿 PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/$REPO"
+          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')
+
+          ISSUE_JSON="$(curl -sS "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER")"
+          STATE="$(echo "$ISSUE_JSON" | jq -r '.state')"
+          TITLE="$(echo "$ISSUE_JSON" | jq -r '.title')"
+          LABELS="$(echo "$ISSUE_JSON" | jq -r '.labels[].name')"
+          echo "$ISSUE_JSON" | jq -r '.body // ""' > /tmp/issue-body.md
+          # 去掉 HTML 注释再解析/摘录：Issue 模板的注释里有示例分支名
+          # （agent/task-12-data-access），不去掉会被当成真分支名抓走，
+          # 摘录进 PR 描述也同样不该带模板注释。
+          python3 -c "import re,sys; sys.stdout.write(re.sub(r'<!--.*?-->', '', open('/tmp/issue-body.md', encoding='utf-8').read(), flags=re.S))" > /tmp/issue-body-clean.md
+          mv /tmp/issue-body-clean.md /tmp/issue-body.md
+
+          if [ "$STATE" != "open" ]; then echo "Issue #$ISSUE_NUMBER 已关闭，跳过"; exit 0; fi
+          if ! echo "$LABELS" | grep -qE '^agent:muse-[23]$'; then
+            echo "没有 agent:muse-2 / agent:muse-3 标签（非开发任务），跳过"; exit 0
+          fi
+
+          # 幂等：Issue 下已有本工作流的完成标记则整体跳过。
+          COMMENTS="$(curl -sS "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER/comments?per_page=100")"
+          if echo "$COMMENTS" | jq -r '.[].body // ""' | grep -q '<!-- issue-to-pr: done -->'; then
+            echo "已处理过（有 issue-to-pr 完成标记），跳过"; exit 0
+          fi
+
+          # ---- 1. 解析分支名 ----
+          BRANCH="$(grep -oE 'agent/[A-Za-z0-9._/-]+' /tmp/issue-body.md | head -n 1 || true)"
+          if [ -z "$BRANCH" ]; then
+            SLUG="$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')"
+            if [ -n "$SLUG" ]; then BRANCH="agent/task-$ISSUE_NUMBER-$SLUG"; else BRANCH="agent/task-$ISSUE_NUMBER"; fi
+          fi
+          if ! echo "$BRANCH" | grep -qE '^agent/[A-Za-z0-9._/-]+$' || echo "$BRANCH" | grep -q '\.\.'; then
+            echo "分支名不合法：$BRANCH，跳过"; exit 0
+          fi
+          echo "目标分支：$BRANCH"
+
+          # ---- 2. 分支不存在则建脚手架提交 + 分支 ----
+          REF_CODE="$(curl -sS -o /dev/null -w '%{http_code}' "${AUTH[@]}" "$API/git/ref/heads/$BRANCH")"
+          if [ "$REF_CODE" = "404" ]; then
+            MAIN_SHA="$(curl -sS "${AUTH[@]}" "$API/git/ref/heads/main" | jq -r '.object.sha')"
+            MAIN_TREE="$(curl -sS "${AUTH[@]}" "$API/git/commits/$MAIN_SHA" | jq -r '.tree.sha')"
+            STUB_PATH=".agent-work/tasks/active/task-$ISSUE_NUMBER.md"
+            {
+              echo "# 任务 #$ISSUE_NUMBER：$TITLE"
+              echo
+              echo "- Issue：https://github.com/$REPO/issues/$ISSUE_NUMBER"
+              echo "- 分支：\`$BRANCH\`"
+              echo "- 状态：已认领（state:claimed），脚手架由 issue-to-pr 工作流自动生成"
+              echo
+              echo "## 目标"
+              echo
+              head -c 2000 /tmp/issue-body.md
+              echo
+              echo "## 已完成"
+              echo
+              echo "- [x] 认领任务、建分支与草稿 PR（自动化）"
+              echo
+              echo "## 未完成"
+              echo
+              echo "- [ ] 按 Issue 验收标准实现"
+              echo "- [ ] agent-done-check 自检并把命令与结果贴到 Issue 评论"
+              echo
+              echo "## 下一步"
+              echo
+              echo "在本分支提交代码，草稿 PR 转正式后按 agent-protocol 发 TASK_COMPLETED / PR_CREATED 评论。"
+            } > /tmp/stub.md
+            BLOB_SHA="$(jq -n --arg content "$(base64 -w 0 /tmp/stub.md)" '{content: $content, encoding: "base64"}' \
+              | curl -sS -X POST "${AUTH[@]}" "$API/git/blobs" --data-binary @- | jq -r '.sha')"
+            TREE_SHA="$(jq -n --arg base "$MAIN_TREE" --arg path "$STUB_PATH" --arg sha "$BLOB_SHA" \
+              '{base_tree: $base, tree: [{path: $path, mode: "100644", type: "blob", sha: $sha}]}' \
+              | curl -sS -X POST "${AUTH[@]}" "$API/git/trees" --data-binary @- | jq -r '.sha')"
+            COMMIT_SHA="$(jq -n --arg msg "chore(agent): 任务 #$ISSUE_NUMBER 脚手架——进度文件（issue-to-pr 自动生成）" --arg tree "$TREE_SHA" --arg parent "$MAIN_SHA" \
+              '{message: $msg, tree: $tree, parents: [$parent]}' \
+              | curl -sS -X POST "${AUTH[@]}" "$API/git/commits" --data-binary @- | jq -r '.sha')"
+            curl -sS -X POST "${AUTH[@]}" "$API/git/refs" \
+              --data-binary "$(jq -n --arg ref "refs/heads/$BRANCH" --arg sha "$COMMIT_SHA" '{ref: $ref, sha: $sha}')" > /dev/null
+            echo "已建分支 $BRANCH（脚手架提交 $COMMIT_SHA）"
+          else
+            echo "分支 $BRANCH 已存在（HTTP $REF_CODE），不重建"
+          fi
+
+          # ---- 3. 没有 open PR 则开草稿 PR ----
+          OWNER="${REPO%%/*}"
+          EXISTING_PR="$(curl -sS "${AUTH[@]}" "$API/pulls?state=open&head=$OWNER:$BRANCH" | jq -r '.[0].number // empty')"
+          if [ -n "$EXISTING_PR" ]; then
+            PR_NUMBER="$EXISTING_PR"
+            echo "已有 open PR #$PR_NUMBER，不重复开"
+          else
+            {
+              echo "## 任务"
+              echo
+              echo "对应 Issue #$ISSUE_NUMBER：$TITLE"
+              echo
+              echo "Closes #$ISSUE_NUMBER"
+              echo
+              echo "## 任务说明（摘自 Issue）"
+              echo
+              head -c 3000 /tmp/issue-body.md
+              echo
+              echo "## 自检清单（开发 Agent 完成时处理）"
+              echo
+              echo "- [ ] \`node ops/deploy/agent-done-check.mjs\` 通过（改过前端/后端代码加 \`--full\`），命令与结果贴到 Issue 评论（TASK_COMPLETED）"
+              echo "- [ ] quality.yml 全部 job 绿"
+              echo "- [ ] 本 PR 描述补齐改动摘要与测试结果（PR_CREATED 的自动汇总口径，见 agent-protocol.md）"
+              echo
+              echo "---"
+              echo "本 PR 由 issue-to-pr 工作流在任务被认领时自动创建（草稿）。开发 Agent 在本分支提交代码；转正式 PR 后走 CI → Grok 冒烟（smoke-passed）→ auto-merge 合并，合并后 pr-merged-writeback 自动回写任务状态并关闭 Issue。"
+            } > /tmp/pr-body.md
+            PR_NUMBER="$(jq -n --arg title "$TITLE" --arg head "$BRANCH" --rawfile body /tmp/pr-body.md \
+              '{title: $title, head: $head, base: "main", body: $body, draft: true}' \
+              | curl -sS -X POST "${AUTH[@]}" "$API/pulls" --data-binary @- | jq -r '.number')"
+            if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+              echo "开 PR 失败，退出"; exit 1
+            fi
+            echo "已开草稿 PR #$PR_NUMBER"
+          fi
+
+          # ---- 4. Issue 下留自动化评论 ----
+          {
+            echo '<!-- issue-to-pr: done -->'
+            echo "自动化（issue-to-pr）：任务脚手架已就绪。"
+            echo
+            echo "- 分支：\`$BRANCH\`（从最新 main 建，含脚手架提交：进度文件 \`.agent-work/tasks/active/task-$ISSUE_NUMBER.md\`）"
+            echo "- 草稿 PR：#$PR_NUMBER（描述已按 Issue 自动生成，含 Closes #$ISSUE_NUMBER）"
+            echo
+            echo "开发 Agent 在该分支提交代码即可；草稿转正式后走 CI → 冒烟 → 自动合并。"
+          } > /tmp/comment.md
+          jq -n --rawfile body /tmp/comment.md '{body: $body}' \
+            | curl -sS -X POST "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER/comments" --data-binary @- > /dev/null
+          echo "完成：Issue #$ISSUE_NUMBER → 分支 $BRANCH + PR #$PR_NUMBER"

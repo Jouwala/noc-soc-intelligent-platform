@@ -15,6 +15,12 @@
 #   - 合并失败（冲突、分支不是最新、保护规则拦截）只记日志，不让本次运行变红。
 #
 # 合并方式：默认 merge 提交；带 merge-squash 标签的用 squash。
+#
+# TASK-07 扩展（2026-11-14）：新增 update-branches 作业——main 有新提交
+# （push）或手动 dispatch 时，把落后的 agent/* 任务分支自动更新到最新
+# main（PUT /pulls/{n}/update-branch，协议第六节定的机械动作）；有冲突
+# 的分支不自动处理，由开发 Agent 自己 rebase。auto-merge 作业等它跑完
+# 再评估（push 触发时），其余触发路径行为不变。
 
 name: auto-merge
 
@@ -24,13 +30,56 @@ on:
   workflow_run:
     workflows: ["quality"]
     types: [completed]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
+  update-branches:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 自动更新落后的 agent 任务分支
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/$REPO"
+          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')
+
+          PRS="$(curl -sS "${AUTH[@]}" "$API/pulls?state=open&base=main&per_page=100" | jq -r '.[].number')"
+          for PR in $PRS; do
+            PR_JSON="$(curl -sS "${AUTH[@]}" "$API/pulls/$PR")"
+            HEAD_REF="$(echo "$PR_JSON" | jq -r '.head.ref')"
+            DRAFT="$(echo "$PR_JSON" | jq -r '.draft')"
+            MERGEABLE_STATE="$(echo "$PR_JSON" | jq -r '.mergeable_state')"
+
+            case "$HEAD_REF" in
+              agent/*) ;;
+              *) echo "PR #$PR（$HEAD_REF）：非 agent/* 分支，作者自行更新，跳过"; continue ;;
+            esac
+            if [ "$DRAFT" = "true" ]; then echo "PR #$PR：草稿，跳过"; continue; fi
+            if [ "$MERGEABLE_STATE" != "behind" ]; then
+              echo "PR #$PR：mergeable_state=$MERGEABLE_STATE，非 behind，跳过"; continue
+            fi
+
+            echo "PR #$PR 落后于 main，调用 update-branch"
+            HTTP_CODE="$(curl -sS -o /tmp/update.json -w '%{http_code}' -X PUT "${AUTH[@]}" "$API/pulls/$PR/update-branch")"
+            case "$HTTP_CODE" in
+              202) echo "PR #$PR 已更新（合并最新 main 进分支），CI 将自动重跑" ;;
+              *) echo "PR #$PR 更新未成功（HTTP $HTTP_CODE）："; cat /tmp/update.json; echo; echo "只记录不报错——多为已有冲突，留给开发 Agent rebase。" ;;
+            esac
+          done
+          echo "分支更新检查完成。"
+
   auto-merge:
+    needs: update-branches
+    if: always() && (needs.update-branches.result == 'success' || needs.update-branches.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: 评估并自动合并符合条件的 PR
