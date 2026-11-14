@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 import openpyxl  # noqa: E402
 from openpyxl.styles import Font, PatternFill  # noqa: E402
 
-from backend.services.ms_sla_report import (  # noqa: E402
+from backend.services.ms.ms_sla_report import (  # noqa: E402
     TARGET_FILE,
     TARGET_SHEET,
     _copy_row_style,

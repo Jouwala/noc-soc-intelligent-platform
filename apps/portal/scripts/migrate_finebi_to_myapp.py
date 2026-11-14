@@ -16,7 +16,7 @@ uniplam（http://localhost/uniplam/）
 · my_app 侧栏分组 grp_finebi（i18n: nav.grp.finebi = "FineBI 看板" / "FineBI Boards"）
   共 16 个 `?page=finebi_<slug>` 页面，由 pages/NativeBoard 渲染，
   后端 GET /api/native-boards/{slug} 驱动（routers/native_boards.py）。
-· 映射不是猜的：backend/services/native_catalog.py 每条 desc 里直接写着原 FineBI 链接码，
+· 映射不是猜的：backend/services/native/native_catalog.py 每条 desc 里直接写着原 FineBI 链接码，
   例如 mttr 的 desc 以 "NGk1 原生重建" 开头，cn_kpi 的 desc 写 "公开链接 iYiQ"。
 · iYiQ（CN KPI _V2）的原生重建页是 `?page=cn_kpi`（该页不在 grp_finebi 组内，
   挂在监控组）—— 已与需求方确认采用此映射。

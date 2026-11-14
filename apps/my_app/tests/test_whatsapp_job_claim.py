@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """扩展作业交接契约单测：TT 告警文本作业如何经统一认领口送到 Chrome 扩展。
 
-对应 `backend/services/whatsapp_job_claim.py` 与 `backend/routers/whatsapp_outbox.py`。
+对应 `backend/services/whatsapp/whatsapp_job_claim.py` 与 `backend/routers/whatsapp_outbox.py`。
 
 ## 为什么值得单独锁一层
 
@@ -22,9 +22,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from backend.services import tt_alarm_job as TJ
-from backend.services import whatsapp_ext_service as EX
-from backend.services import whatsapp_job_claim as C
+from backend.services.tt import tt_alarm_job as TJ
+from backend.services.whatsapp import whatsapp_ext_service as EX
+from backend.services.whatsapp import whatsapp_job_claim as C
 
 
 @pytest.fixture

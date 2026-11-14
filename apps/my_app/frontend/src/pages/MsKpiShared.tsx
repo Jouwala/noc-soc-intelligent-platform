@@ -2,7 +2,7 @@
  * MS Contract KPIs / WOs SLA 报表 —— 两个页面（?page=ms_wo_sla / ?page=ms_contract_kpi）
  * 共用的类型、格式化与 KPI 矩阵渲染件。
  *
- * 数据源与口径见 backend/services/ms_kpi_report_service.py 顶部 docstring：
+ * 数据源与口径见 backend/services/ms/ms_kpi_report_service.py 顶部 docstring：
  * 页面读的是任务产出的工作簿本体（多层合并表头 + 目标行 + Month 行），
  * 所有数字原样来自 Excel，不做二次加工；达标判定用「月值 vs 目标值 + 方向」。
  * ========================================================================== */

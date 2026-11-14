@@ -40,13 +40,13 @@ class TestMsSlaGetDbValueDoesNotSwallow:
         return c
 
     def test_normal_read_still_works(self):
-        from backend.services.ms_sla_report import get_db_value, get_persite_ratio
+        from backend.services.ms.ms_sla_report import get_db_value, get_persite_ratio
         c = self._conn()
         assert get_db_value(c, "T", "V", "2026-10-01") == 5.0
         assert get_persite_ratio(c, "T", "V", "2026-10-01", ">=", 1.0) == 1.0
 
     def test_sql_error_raises_instead_of_returning_none(self):
-        from backend.services.ms_sla_report import get_db_value, get_persite_ratio
+        from backend.services.ms.ms_sla_report import get_db_value, get_persite_ratio
         c = self._conn()
         c.close()  # 关闭后任何查询必然失败
         with pytest.raises(Exception):
@@ -56,7 +56,7 @@ class TestMsSlaGetDbValueDoesNotSwallow:
 
     def test_source_has_no_silent_except_marker(self):
         """源码级兜底：这两个函数里不得再出现被吞掉的标记。"""
-        src = (_ROOT / "backend" / "services" / "ms_sla_report.py").read_text(encoding="utf-8")
+        src = (_ROOT / "backend" / "services" / "ms" / "ms_sla_report.py").read_text(encoding="utf-8")
         assert "get_db_value: exception swallowed" not in src
         assert "get_persite_ratio: exception swallowed" not in src
 
@@ -102,7 +102,7 @@ class TestSiteAvailabilityFailureVisibility:
     """取数失败必须可区分于"确实没有数据"，且失败结果不得进缓存。"""
 
     def test_load_error_registered_and_not_cached(self):
-        from backend.services import site_availability_service as svc
+        from backend.services.site import site_availability_service as svc
         svc._load_errors.clear()
         try:
             with mk.patch.object(svc, "get_raw_connection",
@@ -117,7 +117,7 @@ class TestSiteAvailabilityFailureVisibility:
 
     def test_warning_text_distinguishes_failure_from_empty(self):
         """空月 + 登记失败 → 文案必须与纯空态不同，否则运维无法判断是故障还是没数据。"""
-        from backend.services import site_availability_service as svc
+        from backend.services.site import site_availability_service as svc
         month = "1990-01"  # 必然无数据
         try:
             svc._load_errors.clear()
@@ -141,7 +141,7 @@ class TestEmailRecipientReadFailsLoudly:
     """
 
     def test_read_db_map_raises(self):
-        from backend.services import email_recipient_store as st
+        from backend.services.email import email_recipient_store as st
         with mk.patch.object(st, "_get_conn", side_effect=RuntimeError("模拟配置库损坏")):
             with pytest.raises(RuntimeError):
                 st._read_db_map()
@@ -150,7 +150,7 @@ class TestEmailRecipientReadFailsLoudly:
 
     def test_send_path_still_degrades_gracefully(self):
         """发送主流程不得因读配置库失败而发不出邮件（回退默认名单）。"""
-        from backend.services import email_recipient_store as st
+        from backend.services.email import email_recipient_store as st
         key = st.EMAIL_RECIPIENT_GROUPS[0]["key"]
         with mk.patch.object(st, "_get_conn", side_effect=RuntimeError("模拟配置库损坏")):
             result = st.get_effective_recipients(key)  # 不应抛
@@ -158,7 +158,7 @@ class TestEmailRecipientReadFailsLoudly:
 
     def test_normal_read_returns_saved_rows(self):
         """真实库上仍能读出已保存记录（没把正常路径改坏）。"""
-        from backend.services import email_recipient_store as st
+        from backend.services.email import email_recipient_store as st
         rows = st._read_db_map()
         assert isinstance(rows, dict)
 
@@ -168,16 +168,16 @@ class TestAstCacheDoesNotPoisonOnFailure:
     """解析失败不得把 None 固化进缓存，否则该任务提示在进程存活期内永久为空。"""
 
     def test_failure_not_cached(self):
-        from backend.services import task_introspect as ti
+        from backend.services.task import task_introspect as ti
         ti._AST_CACHE.clear()
         bad = "C:/__no_such_file_zzz__.py"
         assert ti._parse_file(bad) is None
         assert bad not in ti._AST_CACHE, "失败被缓存，后续永远不再重试"
 
     def test_success_is_cached(self):
-        from backend.services import task_introspect as ti
+        from backend.services.task import task_introspect as ti
         ti._AST_CACHE.clear()
-        p = str(_ROOT / "backend" / "services" / "task_introspect.py")
+        p = str(_ROOT / "backend" / "services" / "task" / "task_introspect.py")
         first = ti._parse_file(p)
         assert first is not None
         assert ti._AST_CACHE.get(p) is first, "成功结果未被缓存（会重复解析）"
@@ -185,7 +185,7 @@ class TestAstCacheDoesNotPoisonOnFailure:
 
 class TestDbWriterFailureRecovery:
     def test_upsert_timeout_is_not_blindly_retried(self):
-        from backend.services.db_writer_client import DbWriterClient
+        from backend.services.db.db_writer_client import DbWriterClient
         client = DbWriterClient(host="127.0.0.1")
         with mk.patch.object(client, "_request", return_value={"rows_written": 1}) as req:
             client.write_data(
@@ -195,7 +195,7 @@ class TestDbWriterFailureRecovery:
         assert req.call_args.kwargs["max_retries"] == 1
 
     def test_latest_value_uses_remote_read_endpoint(self):
-        from backend.services.db_writer_client import DbWriterClient
+        from backend.services.db.db_writer_client import DbWriterClient
         client = DbWriterClient(host="127.0.0.1")
         with mk.patch.object(
             client, "_request",
@@ -212,7 +212,7 @@ class TestDbWriterFailureRecovery:
         assert payload["order_by"] == '"Begin Time" DESC', payload
 
     def test_ipran_watermark_comes_from_remote_not_local_fallback(self, monkeypatch):
-        from backend.services import ipran_ume_kpi_service as svc
+        from backend.services.ipran import ipran_ume_kpi_service as svc
 
         class Remote:
             @staticmethod

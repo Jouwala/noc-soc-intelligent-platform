@@ -6,7 +6,7 @@
     1. **跨平台**：`backend/worker_watchdog.py` 顶层 `import ctypes.wintypes`
        —— 在 Linux/macOS 上直接 ImportError。守卫一旦依赖它，CI 只能在
        Windows runner 上跑。
-    2. **零第三方依赖**：`backend/worker.py` → `services/task_runner.py` →
+    2. **零第三方依赖**：`backend/worker.py` → `services/task/task_runner.py` →
        `apscheduler` / `sqlalchemy` / `backend.database`。守卫为了数几个条目
        而拖进整套运行时依赖，等于要求每台机器先装好整个后端环境才能跑
        一次「文档有没有过期」的检查 —— 这正是「跑不起来的守卫等于没有」。
@@ -155,10 +155,10 @@ def group_task_map() -> dict[str, list[str]]:
 def task_retention_days() -> int:
     """队列任务日志的保留天数（代码默认值）。
 
-    真相源是 `backend/services/task_runner.py` 里 `getenv("TASK_LOG_RETENTION_DAYS", "7")`
+    真相源是 `backend/services/task/task_runner.py` 里 `getenv("TASK_LOG_RETENTION_DAYS", "7")`
     的默认值。取不到就报错 —— 曾经文档写 3 天、代码是 7 天，正是这类漂移。
     """
-    src = (MYAPP_ROOT / "backend" / "services" / "task_runner.py").read_text(
+    src = (MYAPP_ROOT / "backend" / "services" / "task" / "task_runner.py").read_text(
         encoding="utf-8", errors="replace"
     )
     m = re.search(r'TASK_LOG_RETENTION_DAYS"\s*,\s*"(\d+)"', src)
@@ -207,12 +207,12 @@ def pushdown_scope() -> tuple[list[str], int]:
 def pg_freshness_scope() -> list[tuple[list[str], int]]:
     """本机 PG 巡检清单里每条配了什么：`[(表清单, lookback_days), ...]`。
 
-    真相源 `backend/services/pg_schema_freshness.py` 的 `PG_SCHEMA_CHECKS`。
+    真相源 `backend/services/db/pg_schema_freshness.py` 的 `PG_SCHEMA_CHECKS`。
     条目写成 `dict(tables=(...), lookback_days=31, ...)` —— 是 **Call 不是字面量
     dict**，所以 literal_eval 整个清单会失败，改成遍历关键字参数
     （与 `task_ids()` 处理 `TASK_SPECS` 的办法一致）。
     """
-    tree = _parse("backend/services/pg_schema_freshness.py")
+    tree = _parse("backend/services/db/pg_schema_freshness.py")
     value = _assigned_node(tree, "PG_SCHEMA_CHECKS")
     if not isinstance(value, (ast.List, ast.Tuple)):
         raise TruthSourceError(

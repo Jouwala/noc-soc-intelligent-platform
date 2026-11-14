@@ -21,7 +21,7 @@
    全表 21 万行，但每个 update_date 各存一份当日快照；
    **只有 update_date = max(update_date) 的那一份才是当前库存**（约 2100 行）。
    直接 SUM 全表会得到 90 万这种离谱数字。my_app 的
-   backend/services/native_catalog.py:1952 用的是同一口径。
+   backend/services/native/native_catalog.py:1952 用的是同一口径。
 
 2. **sp_* 是主单，*_details 是明细**，两者行数量级完全不同
    （sp_outbound 746 vs outband_details 2573）。主单回答「有多少张单」，
@@ -219,7 +219,7 @@ def export_dictionary(conn: sqlite3.Connection) -> str:
         '每个 `update_date` 各存一份当日快照，全表累积到二十万行以上。',
         '**只有 `update_date` 等于全表最大值的那一份才是当前库存。**',
         '',
-        '正确口径（与 my_app `backend/services/native_catalog.py` 一致）：',
+        '正确口径（与 my_app `backend/services/native/native_catalog.py` 一致）：',
         '',
         '```sql',
         'SELECT "Warehouse Name", SUM("Stock Qty")',

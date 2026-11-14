@@ -6,7 +6,7 @@ import { useI18n } from '../i18n';
  *
  * 该页面完整复用 Unified_Tools/WareHouseDashBoard/templates/index.html 的参考实现，
  * 以保证与原始看板「完全一样」。参考 HTML 通过 /api/data、/api/warehouses、/api/details
- * 三个接口获取数据（计算逻辑见 backend/services/sp_dashboard.py，对齐 app_sp_optimized.py）。
+ * 三个接口获取数据（计算逻辑见 backend/services/sp/sp_dashboard.py，对齐 app_sp_optimized.py）。
  *
  * 这里用 <iframe> 直接加载 public/warehouse-dashboard.html（同源，开发期由 Vite 提供，
  * 生产期由后端 dist 提供），从而 100% 保留原始布局 / 配色 / 图表 / 交互。

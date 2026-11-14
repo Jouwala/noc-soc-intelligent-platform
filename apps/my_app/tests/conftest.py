@@ -76,14 +76,14 @@ def _block_real_email(monkeypatch):
         return True
 
     try:
-        from backend.services import tt_alarm_mailer as _mailer
+        from backend.services.tt import tt_alarm_mailer as _mailer
         monkeypatch.setattr(_mailer, "send_mail", _fake_send_mail, raising=False)
     except Exception:  # noqa: BLE001
         pass
 
     # 兼容老通道（126），同样封死，避免将来有人接回去又把测试变成真发信
     try:
-        from backend.services import email_notifier as _notifier
+        from backend.services.email import email_notifier as _notifier
         monkeypatch.setattr(_notifier, "send_status_email",
                             lambda *a, **k: sent.append({"legacy": True}), raising=False)
     except Exception:  # noqa: BLE001

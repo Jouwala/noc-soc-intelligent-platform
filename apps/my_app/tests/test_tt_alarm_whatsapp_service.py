@@ -13,8 +13,8 @@
 """
 from datetime import datetime
 
-from backend.services import tt_alarm_whatsapp_service as S
-from backend.services.tt_alarm_message import split_multi
+from backend.services.tt import tt_alarm_whatsapp_service as S
+from backend.services.tt.tt_alarm_message import split_multi
 
 
 # ---------------- 1. 告警码归一化 ----------------
@@ -320,7 +320,7 @@ def test_severity_filter_still_applies_when_set():
 # ---------------- 3c. 三层来源合并（tt_alarm_sources） ----------------
 
 def test_merged_render_row_live_wins_over_mirror_over_trigger():
-    from backend.services.tt_alarm_sources import merged_render_row
+    from backend.services.tt.tt_alarm_sources import merged_render_row
     trig = {"tt_no": "T1", "site_name": "触发行站", "status": "trig"}
     mirror = {"tt_no": "T1", "site_name": "镜像站", "status": "mirror", "vip_site": "Yes"}
     live = {"tt_no": "T1", "site_name": "实时站", "last_modified_time": "2026-10-05 10:00:00"}
@@ -332,14 +332,14 @@ def test_merged_render_row_live_wins_over_mirror_over_trigger():
 
 def test_merged_render_row_falls_back_to_raised_time():
     """实时/镜像都没有 alarm_occur_time 时，退回触发行的告警升起时间。"""
-    from backend.services.tt_alarm_sources import merged_render_row
+    from backend.services.tt.tt_alarm_sources import merged_render_row
     trig = {"tt_no": "T1", "alarm_raised_time": "2026-10-05 09:00:00"}
     row = merged_render_row(trig, {"site_name": "x"}, {"ticket_severity": "P1"})
     assert row["alarm_occur_time"] == "2026-10-05 09:00:00"
 
 
 def test_merged_render_row_live_occur_time_wins():
-    from backend.services.tt_alarm_sources import merged_render_row
+    from backend.services.tt.tt_alarm_sources import merged_render_row
     trig = {"tt_no": "T1", "alarm_raised_time": "2026-10-05 09:00:00"}
     row = merged_render_row(trig, None, {"alarm_occur_time": "2026-10-05 09:30:00"})
     assert row["alarm_occur_time"] == "2026-10-05 09:30:00"
@@ -352,7 +352,7 @@ def test_merged_render_row_empty_live_does_not_blank_mirror():
     裸 update() 会把镜像里的告警对象抹成空，群里就只剩
     「Alarm: 9995 | Communication Alarm」这种没有语义的行。
     """
-    from backend.services.tt_alarm_sources import merged_render_row
+    from backend.services.tt.tt_alarm_sources import merged_render_row
     trig = {"tt_no": "T1"}
     mirror = {"sub_alarm_name": "2G SITE DOWN", "specific_problem": "MW LINK DOWN",
               "down_site_list": "3299,4104"}
@@ -372,7 +372,7 @@ def test_merged_render_row_backfills_codename_and_impact_sites_from_trigger():
     没有这条回填，`Alarm:` 行就没有 codename（9995 = MW LINK DOWN），
     也没有「Total N impact sites」清单 —— 这正是用户 2026-10-28 反馈的问题。
     """
-    from backend.services.tt_alarm_sources import merged_render_row
+    from backend.services.tt.tt_alarm_sources import merged_render_row
     trig = {"tt_no": "T1", "codename": "MW LINK DOWN",
             "impact_site_list": "3299,4104,9167", "impact_site_number": "3",
             "neip": "129.0.1.1"}
@@ -386,7 +386,7 @@ def test_merged_render_row_backfills_codename_and_impact_sites_from_trigger():
 
 def test_merged_render_row_mirror_wins_over_trigger_backfill():
     """回填只在目标列仍为空时生效 —— 镜像/实时有值就以它们为准。"""
-    from backend.services.tt_alarm_sources import merged_render_row
+    from backend.services.tt.tt_alarm_sources import merged_render_row
     trig = {"tt_no": "T1", "codename": "MW LINK DOWN", "impact_site_list": "1,2"}
     mirror = {"specific_problem": "Fiber Break", "down_site_list": "9,8,7"}
     row = merged_render_row(trig, mirror, None)
@@ -430,7 +430,7 @@ def test_dispatch_refuses_empty_messages():
 
 def test_job_state_machine_roundtrip(tmp_path, monkeypatch):
     """pending → running → done 全链路；且认领后不可重复认领。"""
-    from backend.services import tt_alarm_job as J
+    from backend.services.tt import tt_alarm_job as J
     monkeypatch.setattr(J, "JOB_FILE", tmp_path / "job.json")
 
     assert J.claim_pending_job() is None          # 无作业
@@ -447,7 +447,7 @@ def test_job_state_machine_roundtrip(tmp_path, monkeypatch):
 
 
 def test_complete_job_rejects_stale_job_id(tmp_path, monkeypatch):
-    from backend.services import tt_alarm_job as J
+    from backend.services.tt import tt_alarm_job as J
     monkeypatch.setattr(J, "JOB_FILE", tmp_path / "job.json")
     J.dispatch([{"tt_no": "T1", "text": "hi"}], ["g1"])
     assert J.complete_job("bogus-id", {"ok": True, "sent": ["T1"]}) is False
@@ -455,7 +455,7 @@ def test_complete_job_rejects_stale_job_id(tmp_path, monkeypatch):
 
 def test_wait_for_job_result_times_out_unconfirmed(tmp_path, monkeypatch):
     """超时必须返回 confirmed=False —— 调用方据此不得置 'Y'。"""
-    from backend.services import tt_alarm_job as J
+    from backend.services.tt import tt_alarm_job as J
     monkeypatch.setattr(J, "JOB_FILE", tmp_path / "job.json")
     disp = J.dispatch([{"tt_no": "T1", "text": "hi"}], ["g1"])
     rep = J.wait_for_job_result(disp["job_id"], wait_seconds=1)
@@ -464,7 +464,7 @@ def test_wait_for_job_result_times_out_unconfirmed(tmp_path, monkeypatch):
 
 
 def test_wait_for_job_result_picks_up_report(tmp_path, monkeypatch):
-    from backend.services import tt_alarm_job as J
+    from backend.services.tt import tt_alarm_job as J
     monkeypatch.setattr(J, "JOB_FILE", tmp_path / "job.json")
     disp = J.dispatch([{"tt_no": "T1", "text": "hi"}], ["g1"])
     J.claim_pending_job()
@@ -475,7 +475,7 @@ def test_wait_for_job_result_picks_up_report(tmp_path, monkeypatch):
 
 def test_job_file_is_valid_utf8_json(tmp_path, monkeypatch):
     """中文消息要能往返（ensure_ascii=False，避免中文被转义成 \\uXXXX）。"""
-    from backend.services import tt_alarm_job as J
+    from backend.services.tt import tt_alarm_job as J
     monkeypatch.setattr(J, "JOB_FILE", tmp_path / "job.json")
     J.dispatch([{"tt_no": "T1", "text": "告警未清除 · 站点断站"}], ["群组"])
     raw = (tmp_path / "job.json").read_text(encoding="utf-8")
@@ -495,7 +495,7 @@ def test_store_ensure_log_table_adds_track_columns_to_legacy_table(tmp_path):
     """
     import sqlite3
 
-    from backend.services import tt_alarm_store as store
+    from backend.services.tt import tt_alarm_store as store
 
     db_path = tmp_path / "log.db"
     conn = sqlite3.connect(db_path)
@@ -533,7 +533,7 @@ def test_store_refresh_tracking_does_not_touch_send_fields(tmp_path):
     """refresh_tracking 只动跟踪列；记录不存在时不创建（不给日志表留垃圾行）。"""
     import sqlite3
 
-    from backend.services import tt_alarm_store as store
+    from backend.services.tt import tt_alarm_store as store
 
     conn = sqlite3.connect(":memory:")
     store.ensure_log_table(conn)
@@ -565,7 +565,7 @@ def test_store_send_count_counts_confirmed_sends_only(tmp_path):
     """send_status/send_count 就是「发没发过 / 发过几次」：失败不计数、不置 Y。"""
     import sqlite3
 
-    from backend.services import tt_alarm_store as store
+    from backend.services.tt import tt_alarm_store as store
 
     conn = sqlite3.connect(":memory:")
     store.ensure_log_table(conn)
@@ -603,19 +603,19 @@ def _fb_due():
 def test_ext_fallback_dispatch_fail_returns_false(monkeypatch):
     """Baileys 失败后 ext 通道连投递都失败 —— 整批仍 fail，不悄悄 'Y'。"""
     out = {"warnings": [], "errors": []}
-    monkeypatch.setattr("backend.services.tt_alarm_job.dispatch",
+    monkeypatch.setattr("backend.services.tt.tt_alarm_job.dispatch",
                         lambda messages, groups: {
                             "ok": False, "job_id": None, "dispatched": 0,
                             "errors": ["扩展未启动（连接失败）"],
                         })
-    monkeypatch.setattr("backend.services.tt_alarm_job.wait_for_job_result",
+    monkeypatch.setattr("backend.services.tt.tt_alarm_job.wait_for_job_result",
                         lambda *a, **k: {"confirmed": False, "ok": False,
                                           "sent": [], "errors": []})
     sent_log = []
 
     def _rec_stub(*a, **k):
         sent_log.append((a, k))
-    monkeypatch.setattr("backend.services.tt_alarm_whatsapp_service.record_result", _rec_stub)
+    monkeypatch.setattr("backend.services.tt.tt_alarm_whatsapp_service.record_result", _rec_stub)
 
     ok = S.try_ext_fallback(
         out, [{"tt_no": "TT_FB_1", "text": "t1"}, {"tt_no": "TT_FB_2", "text": "t2"}],
@@ -634,11 +634,11 @@ def test_ext_fallback_dispatch_fail_returns_false(monkeypatch):
 def test_ext_fallback_zero_confirmed_marks_n(monkeypatch):
     """扩展**收到了**作业但 0 确认（典型：扩展没在跑 / 超时）→ 全部 'N'，fallback 失败。"""
     out = {"warnings": [], "errors": []}
-    monkeypatch.setattr("backend.services.tt_alarm_job.dispatch",
+    monkeypatch.setattr("backend.services.tt.tt_alarm_job.dispatch",
                         lambda messages, groups: {
                             "ok": True, "job_id": "J-EXT-1", "dispatched": len(messages),
                             "errors": []})
-    monkeypatch.setattr("backend.services.tt_alarm_job.wait_for_job_result",
+    monkeypatch.setattr("backend.services.tt.tt_alarm_job.wait_for_job_result",
                         lambda *a, **k: {
                             "confirmed": True, "ok": False, "timed_out": True,
                             "sent": [], "errors": ["扩展未在 300s 内回报"],
@@ -647,7 +647,7 @@ def test_ext_fallback_zero_confirmed_marks_n(monkeypatch):
 
     def _rec_stub(row, ok, error="", existing=None, tracking=None):
         sent_log.append({"tt_no": row.get("tt_no"), "ok": ok, "error": error})
-    monkeypatch.setattr("backend.services.tt_alarm_whatsapp_service.record_result", _rec_stub)
+    monkeypatch.setattr("backend.services.tt.tt_alarm_whatsapp_service.record_result", _rec_stub)
 
     ok = S.try_ext_fallback(
         out, [{"tt_no": "TT_FB_1", "text": "t1"}, {"tt_no": "TT_FB_2", "text": "t2"}],
@@ -669,12 +669,12 @@ def test_ext_fallback_zero_confirmed_marks_n(monkeypatch):
 def test_ext_fallback_partial_confirmed_returns_true(monkeypatch):
     """扩展确认发出其中 1 单 → 该单 'Y'，未确认那单 'N'，fallback 整体 True。"""
     out = {"warnings": [], "errors": []}
-    monkeypatch.setattr("backend.services.tt_alarm_job.dispatch",
+    monkeypatch.setattr("backend.services.tt.tt_alarm_job.dispatch",
                         lambda messages, groups: {
                             "ok": True, "job_id": "J-EXT-2", "dispatched": len(messages),
                             "errors": []})
     # 扩展只回报了 TT_FB_1 发出；TT_FB_2 没出
-    monkeypatch.setattr("backend.services.tt_alarm_job.wait_for_job_result",
+    monkeypatch.setattr("backend.services.tt.tt_alarm_job.wait_for_job_result",
                         lambda *a, **k: {
                             "confirmed": True, "ok": True, "timed_out": False,
                             "sent": ["TT_FB_1"], "errors": [],
@@ -683,7 +683,7 @@ def test_ext_fallback_partial_confirmed_returns_true(monkeypatch):
 
     def _rec_stub(row, ok, error="", existing=None, tracking=None):
         sent_log.append({"tt_no": row.get("tt_no"), "ok": ok, "error": error})
-    monkeypatch.setattr("backend.services.tt_alarm_whatsapp_service.record_result", _rec_stub)
+    monkeypatch.setattr("backend.services.tt.tt_alarm_whatsapp_service.record_result", _rec_stub)
 
     ok = S.try_ext_fallback(
         out, [{"tt_no": "TT_FB_1", "text": "t1"}, {"tt_no": "TT_FB_2", "text": "t2"}],
@@ -707,7 +707,7 @@ def test_ext_fallback_empty_messages_short_circuits(monkeypatch):
     def _spy(*a, **k):
         dispatched["called"] = True
         return {"ok": True, "job_id": "J", "dispatched": 0, "errors": []}
-    monkeypatch.setattr("backend.services.tt_alarm_job.dispatch", _spy)
+    monkeypatch.setattr("backend.services.tt.tt_alarm_job.dispatch", _spy)
 
     ok = S.try_ext_fallback(out, [], ["P1 Group"], _fb_due(), {},
                             fallback_reason="baileys_dispatch_failed")

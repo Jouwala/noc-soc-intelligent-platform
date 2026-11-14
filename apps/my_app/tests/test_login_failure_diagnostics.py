@@ -156,7 +156,7 @@ def test_transient_errors_are_still_retryable():
 
 def _eval_with_attempts(error, attempts, last_retry_at=None):
     """在标准上下文里调用 _evaluate_candidate（network 层已 mock 掉，走回退路径）。"""
-    from backend.services import task_runner
+    from backend.services.task import task_runner
     registry = task_runner._task_registry
     return ar._evaluate_candidate(
         task_id="ran_ume_daily",

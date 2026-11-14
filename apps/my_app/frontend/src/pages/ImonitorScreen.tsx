@@ -26,7 +26,7 @@ import { useI18n } from '../i18n'
  *    （8088 已在 nginx 开启 TLS，见 portalBase() 的说明），
  *    于是「打开大屏」与「登录门户」变成同源，Cookie 天然可用。
  * 2) **自动登录**：反代在登录页注入 `/api/portals/inject.js?system=ume_in`
- *    （backend/services/portal_login_service.build_inject_js），自动填账号密码并点
+ *    （backend/services/portal/portal_login_service.build_inject_js），自动填账号密码并点
  *    登录按钮，会话 Cookie 落在**访问者自己的浏览器**里 —— 不需要用户做任何事。
  * 3) **两个上游「拦路虎」**（都在 nginx 里处理，实测确诊，详见该 conf 注释）：
  *    · 上游带 `Content-Security-Policy: frame-ancestors 'self'` → iframe 直接被

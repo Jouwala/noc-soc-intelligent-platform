@@ -19,8 +19,8 @@ tt_id/alarmraisedtime 列」，同时所有读该表的接口（如 ``/api/gis/s
 """
 import pytest
 
-from backend.services import tt_alarm_trigger as T
-from backend.services.eflow_alarm_service import _swap_table_sql
+from backend.services.tt import tt_alarm_trigger as T
+from backend.services.eflow.eflow_alarm_service import _swap_table_sql
 
 _TBL = "realtime_alarm"
 _STG = "realtime_alarm__staging"

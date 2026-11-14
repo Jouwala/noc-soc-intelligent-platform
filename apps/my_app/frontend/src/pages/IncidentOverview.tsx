@@ -8,7 +8,7 @@ import { useI18n } from '../i18n'
  * 由 TMP/patch_legacy_html.py 同步到 public/incident-overview.html，仅把
  * API_BASE_PATH 改写为 /api/incident-overview 指向本项目后端。
  *
- * 后端实现见 backend/services/incident_overview_service.py（Excel 七表解析、
+ * 后端实现见 backend/services/incident/incident_overview_service.py（Excel 七表解析、
  * mtime 缓存、GeoJSON、虚拟助理）与 incident_ai_service.py（6 家 AI 供应商代理），
  * 路由见 backend/routers/incident_overview.py。
  */

@@ -76,7 +76,7 @@ export const WORKER_GROUP_INFO: Record<string, { zh: string; en: string }> = {
 export const TASK_DOCS: TaskDoc[] = [
   {
     id: 'eflow_sync', group: 'n', cron: '22 * * * *',
-    script: 'services/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")',
+    script: 'services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")',
     zh: {
       name: 'eFlow 数据同步',
       desc: '从 ZTE eFlow API 增量同步 TT/WO/CR/PM/Site/Person 六类数据',
@@ -92,7 +92,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'eflow_sync_full', group: 'n', cron: '0 1 * * *',
-    script: 'services/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")',
+    script: 'services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")',
     zh: {
       name: 'eFlow 每日全量同步',
       desc: 'eFlow 全量兜底：拉全量窗口（默认自 2026-01-01），补齐增量遗漏并刷新报告。大窗口下 TT/WO 分段拉取，避免单次大导出失败；TT/WO 缺失即判任务失败',
@@ -108,7 +108,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'ran_ume_daily', group: 'u', cron: '0 2 * * *',
-    script: 'services/ran_ume_service.py → run_ran_ume_full_task',
+    script: 'services/ran/ran_ume_service.py → run_ran_ume_full_task',
     zh: {
       name: 'RAN UME 日报',
       desc: 'RAN UME PM 数据获取 + Daily Availability KPI 报表生成 + FTP 上传',
@@ -124,7 +124,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'site_outage_screenshot', group: 'm', cron: '0 1 * * *',
-    script: 'services/site_outage_service.py → run_site_outage_screenshot',
+    script: 'services/site/site_outage_service.py → run_site_outage_screenshot',
     zh: {
       name: 'Site Outage 截图',
       desc: '对告警管理看板（Site Outage Monitor）的 ERA/Regular/ALL 三个视图自动截图',
@@ -140,7 +140,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'whatsapp_send', group: 'm', cron: '0 3 * * *',
-    script: 'services/whatsapp_service.py → run_whatsapp_send',
+    script: 'services/whatsapp/whatsapp_service.py → run_whatsapp_send',
     zh: {
       name: 'WhatsApp 消息发送',
       desc: '发送 Site Outage 截图和文件到 WhatsApp 群组（Playwright 自动化）',
@@ -156,7 +156,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'whatsapp_send_ext', group: 'm', cron: '0 3 * * *',
-    script: 'services/whatsapp_ext_service.py → run_whatsapp_send_ext',
+    script: 'services/whatsapp/whatsapp_ext_service.py → run_whatsapp_send_ext',
     zh: {
       name: 'WhatsApp 消息发送（扩展）',
       desc: 'WhatsApp 发送（扩展版）：投递发送作业，由浏览器扩展在已登录的 WhatsApp Web 中发送，与 Playwright 版并存',
@@ -172,7 +172,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'whatsapp_send_baileys', group: 'm', cron: '0 4 * * *',
-    script: 'services/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys',
+    script: 'services/whatsapp/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys',
     zh: {
       name: 'WhatsApp 消息发送（Baileys）',
       desc: '第三种 WhatsApp 发图通道：走 Baileys 协议直发（不依赖浏览器/Playwright），与 Playwright/扩展版并存；默认禁用，必须在「任务管理」页手动启用（Baileys 违反 WhatsApp ToS，启用前须走人工审批）',
@@ -210,7 +210,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'tt_alarm_whatsapp_alert', group: 'm', cron: '2-59/5 * * * *',
-    script: 'services/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert',
+    script: 'services/tt/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert',
     zh: {
       name: 'eFlow P1 告警 WhatsApp 推送',
       desc: '触发制推送：每 5 分钟（相位 2-59/5，与上游同步错开 2 分钟）扫 realtime_alarm 实时告警表，发现「带 TT + 触发窗口内 + 告警码白名单」的 P1 告警后实时回 eFlow 查单，首推后按双档重报（无更新满 10 分钟催报、有更新满 30 分钟才报，均带 REMINDER 横幅），告警清除即止损。发送状态（是否已发/发了几次）落 eflow_tt_whatsapp_alert_log',
@@ -248,7 +248,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'ms_sla_full', group: 'n', cron: '0 5 * * *',
-    script: 'services/ms_sla_service.py → run_full_sync',
+    script: 'services/ms/ms_sla_service.py → run_full_sync',
     zh: {
       name: 'MS SLA 完整同步',
       desc: 'SLA 指标同步 + Contract KPIs 报表更新（项目自包含，无需外部文件）',
@@ -265,7 +265,7 @@ export const TASK_DOCS: TaskDoc[] = [
   {
     // 2026-10-16 注册、2026-10-17 补登本帮助（此前漏登，分组守卫 test_worker_group_coverage 因此一直红）
     id: 'ume_alarm_whatsapp_alert', group: 'm', cron: '* * * * *',
-    script: 'services/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp',
+    script: 'services/ume_alarm/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp',
     zh: {
       name: 'DC server 告警 WhatsApp 推送',
       desc: '每分钟直连 ZTE UME 网管（10.121.8.2）拉当前告警，命中精确「告警码:级别」对（默认 89029:major、89006:major）才推送到指定群；未清除告警按配置间隔催报（带 REMINDER 横幅），曾推送过的告警从上游消失则补发「已恢复」；首轮只登记不发送（防存量刷群），状态落 ume_alarm 相关表',
@@ -317,7 +317,7 @@ export const TASK_DOCS: TaskDoc[] = [
     // 2026-11-03 注册、2026-11-05 补登本帮助（此前漏登，分组守卫 test_worker_group_coverage 因此报缺）
     // 真相源：backend/task_registry.py 的 eflow_site_update（group m / cron 0 7 * * *）
     id: 'eflow_site_update', group: 'm', cron: '0 7 * * *',
-    script: 'services/eflow_site_update_task.py → run_eflow_site_update',
+    script: 'services/eflow/eflow_site_update_task.py → run_eflow_site_update',
     zh: {
       name: 'CMDB 站点同步比对',
       desc: '比对 CMDB 主数据（my_app/db 下最新的 ZTE OLR MS Master Site Database）与 eflow 基线、PG master_site_db 基线，生成带 A/M/D 标记与着色的差异文件（eflow_site_update.xlsx / master_site_db .xlsx / 导入副本 / 同步报告）。只生成文件供人工审查，不写入 eflow 与 PostgreSQL',
@@ -333,7 +333,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'eflow_active_alarm', group: 'x', cron: '*/1 * * * *',
-    script: 'services/eflow_api_client.py → fetch_and_save_active_alarm',
+    script: 'services/eflow/eflow_api_client.py → fetch_and_save_active_alarm',
     zh: {
       name: 'eFlow 实时告警同步',
       desc: '从 eFlow FM Active 接口获取实时告警，保存 CSV + SQLite（每分钟）',
@@ -349,7 +349,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'eflow_history_alarm', group: 'n', cron: '0 */3 * * *',
-    script: 'services/eflow_api_client.py → fetch_and_save_history_alarm',
+    script: 'services/eflow/eflow_api_client.py → fetch_and_save_history_alarm',
     zh: {
       name: 'eFlow 历史告警同步',
       desc: '从 eFlow FM History 接口获取近 7 天历史告警，过滤 TT ID，保存 CSV + SQLite',
@@ -381,7 +381,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'main_kpi_sync', group: 'u', cron: '0 4 * * *',
-    script: 'services/ran_ume_main_kpi.py → run_main_kpi_sync',
+    script: 'services/ran/ran_ume_main_kpi.py → run_main_kpi_sync',
     zh: {
       name: 'RAN Main KPI 同步',
       desc: 'RAN UME Main KPI 历史指标同步（2G/3G/4G × Cells/Sites/Group/NW），导出 Excel 并增量更新 SQLite + FTP 上传',
@@ -397,7 +397,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'cell_availability_sync', group: 'u', cron: '30 4 * * *',
-    script: 'services/ran_cell_availability_sync.py → run_cell_availability_sync',
+    script: 'services/ran/ran_cell_availability_sync.py → run_cell_availability_sync',
     zh: {
       name: 'RAN 小区可用性 1-Day 同步',
       desc: 'RAN UME 小区可用性天粒度 KPI 同步（FDD/UMTS/GSM/TDD 4 模板），写 ran_kpi_avalability_1day.sqlite3 + FTP 上传',
@@ -413,23 +413,23 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'cells_kpi_sync', group: 'u', cron: '50 4 * * *',
-    script: 'services/ran_cells_kpi_sync.py → run_cells_kpi_sync',
+    script: 'services/ran/ran_cells_kpi_sync.py → run_cells_kpi_sync',
     zh: {
       name: 'RAN Cells KPI 同步',
       desc: 'RAN UME 小区数据（2G/3G/4G）每日同步，聚合 Cells KPI（达标值 99.65%）物化写 ran_cells_kpi.sqlite3，只保留当月',
       flow: ['复用小区可用性同步的 UME 获取方法拉取 GSM/UMTS/FDD 小区数据', '按小区逐条折算可用率并统计达标/未达标/无数据', '物化写 data/ran_cells_kpi.sqlite3（表 cells_kpi_daily，只保留当月）'],
-      maintain: ['口径与达标值定义在 services/ran_cells_kpi_service.py 顶部；2G 用信道折算，3G/4G 用服务时长/86400', '看板 RAN 小区 KPI 优先读物化库，缺失时回退实时聚合 ran_kpi_avalability_1day.sqlite3'],
+      maintain: ['口径与达标值定义在 services/ran/ran_cells_kpi_service.py 顶部；2G 用信道折算，3G/4G 用服务时长/86400', '看板 RAN 小区 KPI 优先读物化库，缺失时回退实时聚合 ran_kpi_avalability_1day.sqlite3'],
     },
     en: {
       name: 'RAN Cells KPI Sync',
       desc: 'Daily RAN UME cell data sync (2G/3G/4G), aggregate Cells KPI (target 99.65%) into ran_cells_kpi.sqlite3, current month only',
       flow: ['Reuse the availability sync UME fetch to pull GSM/UMTS/FDD cell data', 'Derive per-cell availability and count meeting/below/blank', 'Materialize into data/ran_cells_kpi.sqlite3 (table cells_kpi_daily, current month only)'],
-      maintain: ['Definitions live at the top of services/ran_cells_kpi_service.py; 2G uses channel ratio, 3G/4G use service time / 86400', 'The RAN Cells KPI dashboard reads the materialized DB first, falling back to live aggregation of ran_kpi_avalability_1day.sqlite3'],
+      maintain: ['Definitions live at the top of services/ran/ran_cells_kpi_service.py; 2G uses channel ratio, 3G/4G use service time / 86400', 'The RAN Cells KPI dashboard reads the materialized DB first, falling back to live aggregation of ran_kpi_avalability_1day.sqlite3'],
     },
   },
   {
     id: 'network_kpi_sync', group: 'u', cron: '0 5 * * *',
-    script: 'services/ran_ume_network_kpi.py → run_network_kpi_sync',
+    script: 'services/ran/ran_ume_network_kpi.py → run_network_kpi_sync',
     zh: {
       name: 'RAN Network KPI 同步',
       desc: 'RAN UME Network KPI（Zeenshan）历史指标同步（2G/3G/4G × Group/NW），导出 Excel 并导入 SQLite + FTP 上传',
@@ -461,23 +461,23 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'bp_report_sync', group: 'u', cron: '20 6 * * *',
-    script: 'services/bp_report_sync.py → run_bp_report_sync',
+    script: 'services/bp/bp_report_sync.py → run_bp_report_sync',
     zh: {
       name: 'BP Cells Report 更新',
       desc: '从 RAN_UME 读取 4G 小区级 PRB/吞吐/流量与小时级活跃用户数，按 umlaut 忙时口径重算 BP 劣化小区（日/周/月），更新本机 data/bp_report.sqlite3 并与 Excel 真值对账',
       flow: ['按天从远端读 4G_Main_Kpi_Cell_Daily 的 PRB 利用率 / DL IP 吞吐 / DL+UL 流量（逐日一条 SQL，避免撞远端 5 万行上限被静默截断）', '经独立小时粒度通道取 Average DL Active User Number 与同小时的 PRB/吞吐（该指标日粒度不可用），按「活跃用户最大的那个小时」聚合出当天三值', '关联 bp_cell_dict 补上 Cluster/Layer（RAN_UME 无此维度，字典来自 Excel 的 BP Cells List）', '按口径重算每小区每日 is_bp，并重算日/周/月汇总（周 4/7 天、月 3/4 个完整周）；周/月为纯 INSERT（只写新周期，不动 Excel 既存行），判定列另由 backfill_period_verdicts 填空', '与 Excel 的 bp_cells_excel 逐日对账，差异与口径说明一并写入 bp_sync_meta'],
-      maintain: ['口径唯一真相源在 services/bp_caliber.py：日（忙时三值）、周 4/7、月 3/4', '⚠️ Average DL Active User Number 只在**小时粒度**可用：日粒度下 UME 返回 HTTP 200 + 合法 queryid 但**静默丢弃该列**、无任何报错，故走 services/bp_active_user.py 的独立通道（C373384373 + 1638004469342 + 1638004469332）。取不到时该日 is_bp=NULL（不可判定），**绝不当 0**', '⚠️ UME 返回的数值是字符串且 PRB 带百分号（如 "2.46%"），必须去 % 再 /100；且 itemsposition 必须全为 0，写成 [0,1,2] 会返回 0001619999 拒绝查询', '⚠️ PRB 利用率在源表里是**小数**（0~1，实测 max 0.9751），阈值是 0.80 不是 80；写成 80 会让条件永不成立且不报错', '⚠️ 源表列名 "E-UTRAN\\xa0FDD\\xa0Cell Name" 里的分隔符是**不换行空格**；写成普通空格时 SQLite 不报错，而是把双引号标识符当字符串字面量返回，整列变成列名文本（bp_caliber.assert_columns_exist / assert_no_literal_fallback 就是为此加的守卫）', 'Excel 的 BP Cells List 最后一天（2026-09-26）只有 53 行、远少于当日真值 486，属导出未完成；对账时不要把该日差异当实现缺陷', '⚠️ 周/月重算**必须是纯 INSERT**（先查该周期是否已存在，存在就跳过）：曾经按整月聚合 + ON CONFLICT DO UPDATE，把 Excel 的 2026-W39/W40/2026-09 三行覆盖成 bp_cells=0；既存 Excel 行的指标真值一律不动，判定列为 NULL 时由 backfill_period_verdicts 单独填空', '⚠️ 周/月判定需要的完整周数：week_days_in_month 实测 2026-09 只有 3 个完整周、而 MONTH_TOTAL_WEEKS=4，故该月 is_bp_month 恒为 NULL（口径与日历错配，非缺数据）；界面显示成因而非仅「不可判定」'],
+      maintain: ['口径唯一真相源在 services/bp/bp_caliber.py：日（忙时三值）、周 4/7、月 3/4', '⚠️ Average DL Active User Number 只在**小时粒度**可用：日粒度下 UME 返回 HTTP 200 + 合法 queryid 但**静默丢弃该列**、无任何报错，故走 services/bp/bp_active_user.py 的独立通道（C373384373 + 1638004469342 + 1638004469332）。取不到时该日 is_bp=NULL（不可判定），**绝不当 0**', '⚠️ UME 返回的数值是字符串且 PRB 带百分号（如 "2.46%"），必须去 % 再 /100；且 itemsposition 必须全为 0，写成 [0,1,2] 会返回 0001619999 拒绝查询', '⚠️ PRB 利用率在源表里是**小数**（0~1，实测 max 0.9751），阈值是 0.80 不是 80；写成 80 会让条件永不成立且不报错', '⚠️ 源表列名 "E-UTRAN\\xa0FDD\\xa0Cell Name" 里的分隔符是**不换行空格**；写成普通空格时 SQLite 不报错，而是把双引号标识符当字符串字面量返回，整列变成列名文本（bp_caliber.assert_columns_exist / assert_no_literal_fallback 就是为此加的守卫）', 'Excel 的 BP Cells List 最后一天（2026-09-26）只有 53 行、远少于当日真值 486，属导出未完成；对账时不要把该日差异当实现缺陷', '⚠️ 周/月重算**必须是纯 INSERT**（先查该周期是否已存在，存在就跳过）：曾经按整月聚合 + ON CONFLICT DO UPDATE，把 Excel 的 2026-W39/W40/2026-09 三行覆盖成 bp_cells=0；既存 Excel 行的指标真值一律不动，判定列为 NULL 时由 backfill_period_verdicts 单独填空', '⚠️ 周/月判定需要的完整周数：week_days_in_month 实测 2026-09 只有 3 个完整周、而 MONTH_TOTAL_WEEKS=4，故该月 is_bp_month 恒为 NULL（口径与日历错配，非缺数据）；界面显示成因而非仅「不可判定」'],
     },
     en: {
       name: 'BP Cells Report Sync',
       desc: 'Read per-cell 4G PRB/throughput/traffic plus hourly active users from RAN_UME, recompute Bad Performance cells by the umlaut busy-hour caliber (daily/weekly/monthly), refresh local data/bp_report.sqlite3 and reconcile against the Excel ground truth',
       flow: ['Read PRB utilization / DL IP throughput / DL+UL traffic from remote 4G_Main_Kpi_Cell_Daily one day per SQL (avoids hitting the remote 50k row cap and being silently truncated)', 'Fetch Average DL Active User Number together with the same hour\'s PRB/throughput over a dedicated hourly channel (that metric is unavailable at daily grain) and aggregate the day\'s three values from the hour with the highest active users', 'Join bp_cell_dict to attach Cluster/Layer (RAN_UME has no such dimension; the dictionary comes from the Excel BP Cells List sheet)', 'Recompute per-cell daily is_bp and the daily/weekly/monthly rollups (weekly 4/7 days, monthly 3/4 full weeks); weekly/monthly are INSERT-only (new periods only, existing Excel rows untouched), while the verdict columns are filled in separately by backfill_period_verdicts', 'Reconcile day by day against the Excel bp_cells_excel values; store differences and caliber notes in bp_sync_meta'],
-      maintain: ['The single source of truth for the caliber is services/bp_caliber.py: daily (busy-hour three values), weekly 4/7, monthly 3/4', 'WARNING: Average DL Active User Number is available ONLY at hourly granularity. At daily grain UME returns HTTP 200 with a valid queryid but SILENTLY DROPS that column and raises no error, hence the dedicated channel in services/bp_active_user.py (C373384373 + 1638004469342 + 1638004469332). When it cannot be fetched the day stays is_bp=NULL (undecidable) and is NEVER counted as 0', 'WARNING: UME returns numeric values as strings and PRB carries a percent sign (e.g. "2.46%"), so strip the % and divide by 100; also itemsposition must be all zeros -- using [0,1,2] makes UME reject the query with 0001619999', 'WARNING: PRB utilization is a FRACTION in the source table (0-1, observed max 0.9751), so the threshold is 0.80, not 80; using 80 makes the condition never fire and raises no error', 'WARNING: the source column name "E-UTRAN\\xa0FDD\\xa0Cell Name" uses NO-BREAK SPACEs; with plain spaces SQLite does not error but treats the double-quoted identifier as a string literal, turning the whole column into its own name text (bp_caliber.assert_columns_exist / assert_no_literal_fallback guard exactly this)', 'The Excel BP Cells List sheet holds only 53 rows for its final day (2026-09-26) versus a true 486, i.e. an incomplete export; do not treat that day\'s difference as an implementation defect', 'WARNING: weekly/monthly recomputation MUST be INSERT-only (skip a period that already exists). An earlier version aggregated a whole month with ON CONFLICT DO UPDATE and overwrote the Excel rows for 2026-W39/W40/2026-09 with bp_cells=0. Never touch the metric ground truth of existing Excel rows; when a verdict column is NULL, backfill_period_verdicts fills it in separately', 'WARNING: week_days_in_month yields only 3 full weeks for 2026-09 while MONTH_TOTAL_WEEKS=4, so is_bp_month is permanently NULL for that month (a caliber-vs-calendar mismatch, not missing data); the UI shows the cause instead of a bare "Undecidable"'],
+      maintain: ['The single source of truth for the caliber is services/bp/bp_caliber.py: daily (busy-hour three values), weekly 4/7, monthly 3/4', 'WARNING: Average DL Active User Number is available ONLY at hourly granularity. At daily grain UME returns HTTP 200 with a valid queryid but SILENTLY DROPS that column and raises no error, hence the dedicated channel in services/bp/bp_active_user.py (C373384373 + 1638004469342 + 1638004469332). When it cannot be fetched the day stays is_bp=NULL (undecidable) and is NEVER counted as 0', 'WARNING: UME returns numeric values as strings and PRB carries a percent sign (e.g. "2.46%"), so strip the % and divide by 100; also itemsposition must be all zeros -- using [0,1,2] makes UME reject the query with 0001619999', 'WARNING: PRB utilization is a FRACTION in the source table (0-1, observed max 0.9751), so the threshold is 0.80, not 80; using 80 makes the condition never fire and raises no error', 'WARNING: the source column name "E-UTRAN\\xa0FDD\\xa0Cell Name" uses NO-BREAK SPACEs; with plain spaces SQLite does not error but treats the double-quoted identifier as a string literal, turning the whole column into its own name text (bp_caliber.assert_columns_exist / assert_no_literal_fallback guard exactly this)', 'The Excel BP Cells List sheet holds only 53 rows for its final day (2026-09-26) versus a true 486, i.e. an incomplete export; do not treat that day\'s difference as an implementation defect', 'WARNING: weekly/monthly recomputation MUST be INSERT-only (skip a period that already exists). An earlier version aggregated a whole month with ON CONFLICT DO UPDATE and overwrote the Excel rows for 2026-W39/W40/2026-09 with bp_cells=0. Never touch the metric ground truth of existing Excel rows; when a verdict column is NULL, backfill_period_verdicts fills it in separately', 'WARNING: week_days_in_month yields only 3 full weeks for 2026-09 while MONTH_TOTAL_WEEKS=4, so is_bp_month is permanently NULL for that month (a caliber-vs-calendar mismatch, not missing data); the UI shows the cause instead of a bare "Undecidable"'],
     },
   },
   {
     id: 'cnn_kpi_sync', group: 'n', cron: '0 6 * * *',
-    script: 'services/ccn_ume_kpi_service.py → run_cnn_kpi_sync',
+    script: 'services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync',
     zh: {
       name: 'CNN UME KPI 同步',
       desc: 'CNN UME 核心网 KPI 同步（xGW License/CPU/Voice/VLR/Data/3G/4G/Free Rating），API 写入 DB CNN',
@@ -493,7 +493,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'cnn_kpi_sync_5mins', group: 'n', cron: '*/15 * * * *',
-    script: 'services/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins',
+    script: 'services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins',
     zh: {
       name: 'CNN UME KPI 5分钟同步',
       desc: '与「CNN UME KPI 同步」同源同账号，但取细粒度（5 个模板 5 分钟、3 个模板 15 分钟）、窗口为昨天 00:00 至现在，API 写入 DB CNN 的 5mins_* 新表，供「CN KPI 5分钟」看板做 Day0/Day1/Day7 叠画；日/月粒度表不受影响',
@@ -503,7 +503,7 @@ export const TASK_DOCS: TaskDoc[] = [
         '⚠ 本任务保留「0 行 → 跳过该表且不计失败」的兜底（原 cnn_kpi_sync 的逻辑是 0 行即报错，本任务刻意不同），上游再调整档位时不会让任务每 15 分钟失败一次',
         '⚠ 实测单轮约 105 秒（Free Rating 一天就有 1.4 万行）；若耗时逼近 15 分钟，需降低并发或放宽节拍',
         '与 cnn_kpi_sync 同在 n 组串行，避免两个任务各自登录同一账号互踢',
-        '页面为本任务的唯一消费方：?page=cn_kpi_5mins（services/cn_kpi_5mins_service.py 读 5mins_* 表）',
+        '页面为本任务的唯一消费方：?page=cn_kpi_5mins（services/cn/cn_kpi_5mins_service.py 读 5mins_* 表）',
       ],
     },
     en: {
@@ -515,13 +515,13 @@ export const TASK_DOCS: TaskDoc[] = [
         'WARNING: the task keeps a "0 rows → skip this table and do not fail" fallback (the original cnn_kpi_sync raises on 0 rows — this task deliberately differs) so an upstream tier change cannot make it fail every 15 minutes',
         'WARNING: one run takes about 105 s (Free Rating alone has 14k rows/day); if it approaches 15 minutes, lower the concurrency or widen the schedule',
         'Runs in group n alongside cnn_kpi_sync so the two never log into the same account and kick each other off',
-        'The only consumer is ?page=cn_kpi_5mins (services/cn_kpi_5mins_service.py reads the 5mins_* tables)',
+        'The only consumer is ?page=cn_kpi_5mins (services/cn/cn_kpi_5mins_service.py reads the 5mins_* tables)',
       ],
     },
   },
   {
     id: 'sp_data_sync', group: 's', cron: '10 * * * *',
-    script: 'services/get_sp_table.py → run_sp_data_sync',
+    script: 'services/sp/get_sp_table.py → run_sp_data_sync',
     zh: {
       name: 'SP 备件数据同步',
       desc: '从 SFTP 拉取 5 份备件报表（Inbound/Outbound/Inventory/OC Rule/Transfer）写入 app.db，并镜像写入 FineBI WareHouseDashBoard inventory.db',
@@ -537,7 +537,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'ipran_kpi_sync', group: 'u', cron: '0 * * * *',
-    script: 'services/ipran_ume_kpi_service.py → run_ipran_kpi_sync',
+    script: 'services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync',
     zh: {
       name: 'iPRAN UME KPI 同步',
       desc: 'iPRAN UME M6000 路由器 KPI 同步（HQ M6K-FW 等），导出 Excel 并导入 SQLite + FTP 上传',
@@ -553,7 +553,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'liberia_email_1h', group: 'm', cron: '15 * * * *',
-    script: 'services/liberia_email_report.py → run_1h_report',
+    script: 'services/email/liberia_email_report.py → run_1h_report',
     zh: {
       name: 'Liberia 宕站 1小时报告邮件',
       desc: '发送 Liberia Orange Site Down hourly Report（内嵌图 + Excel）到主送/抄送名单',
@@ -569,7 +569,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'liberia_email_8h', group: 'm', cron: '20 */8 * * *',
-    script: 'services/liberia_email_report.py → run_8h_report',
+    script: 'services/email/liberia_email_report.py → run_8h_report',
     zh: {
       name: 'Liberia 宕站 8小时报告邮件',
       desc: '发送 Liberia Orange Site Down 8 hours Report（内嵌图 + Excel）到主送/抄送名单',
@@ -585,7 +585,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'kpi_ms_contract', group: 'm', cron: '30 5 * * *',
-    script: 'services/kpi_email_report.py → run_ms_contract_kpi',
+    script: 'services/email/kpi_email_report.py → run_ms_contract_kpi',
     zh: {
       name: 'MS Contract KPIs 日报邮件',
       desc: '发送 MS Contract KPIs Achievements Daily Report（本地数据 + 远程名单）',
@@ -601,7 +601,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'kpi_ms_wo_sla', group: 'm', cron: '35 5 * * *',
-    script: 'services/kpi_email_report.py → run_ms_wo_sla',
+    script: 'services/email/kpi_email_report.py → run_ms_wo_sla',
     zh: {
       name: 'MS WOs SLA 日报邮件',
       desc: '发送 MS WOs SLA Achievements Daily Report（本地数据 + 远程名单）',
@@ -617,7 +617,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'kpi_sp_spareparts', group: 'm', cron: '45 9 * * *',
-    script: 'services/kpi_email_report.py → run_sp_spareparts',
+    script: 'services/email/kpi_email_report.py → run_sp_spareparts',
     zh: {
       name: 'SpareParts 备件报表邮件',
       desc: '发送 SpareParts 报表（本地 sp_email 数据 + 远程共享名单）',
@@ -633,7 +633,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'kpi_sp_consumables', group: 'm', cron: '50 9 * * *',
-    script: 'services/kpi_email_report.py → run_sp_consumables',
+    script: 'services/email/kpi_email_report.py → run_sp_consumables',
     zh: {
       name: 'Comsumables 耗材报表邮件',
       desc: '发送 Comsumables 报表（本地 sp_email 数据 + 远程共享名单）',
@@ -649,7 +649,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_report_generate', group: 'm', cron: '15 5 * * *',
-    script: 'services/kpi_email_report.py → run_sp_report_generate',
+    script: 'services/email/kpi_email_report.py → run_sp_report_generate',
     zh: {
       name: 'SP 备件报表生成',
       desc: '先从 eFlow 刷新物料主数据 sp_material，再从 SFTP 下载备件数据，生成 Comsumables & SpareParts Inbound&Outbound&Inventory 报表到本地 data/sp_email；明细与原始快照的 Material Name 一律按 Material No. 取主数据最新名',
@@ -665,7 +665,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_weekly_report', group: 'm', cron: '0 7 * * mon',
-    script: 'services/kpi_email_report.py → run_sp_weekly_report',
+    script: 'services/email/kpi_email_report.py → run_sp_weekly_report',
     zh: {
       name: 'SP 备件周报（上周一→上周日）',
       desc: '每周一 07:00 生成上一个完整自然周（上周一 00:00 → 上周日 23:59）的 SP 周报 xlsx 并邮件发送；文件名与邮件主题都带周期日期',
@@ -703,7 +703,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_email_details', group: 'm', cron: '5 7 * * *',
-    script: 'services/kpi_email_report.py → run_sp_details_email',
+    script: 'services/email/kpi_email_report.py → run_sp_details_email',
     zh: {
       name: 'SP 备件明细报表邮件',
       desc: '把 data/sp_email/data 下 4 份备件明细（inventory/inband/outband/transfer）合并为一个 Excel（sheet: Inventory/Inbound/Outbound/Transfer）发送邮件，邮件发出后把同一份 Excel 作为文档发到 WhatsApp 群 WH&SP Management',
@@ -737,7 +737,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_details_files_email', group: 'm', cron: '5 10 * * *',
-    script: 'services/kpi_email_report.py → run_sp_details_files_email',
+    script: 'services/email/kpi_email_report.py → run_sp_details_files_email',
     zh: {
       name: 'SP 备件明细分文件邮件',
       desc: '每天 10:05 把 data/sp_email/data 下的 6 份备件明细**一份文件一封邮件**逐个发给 NOC，主题 Liberia OLR W.H <文件名> <日期时间>',
@@ -781,7 +781,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_whatsapp_report', group: 'm', cron: '55 7 * * *',
-    script: 'services/kpi_email_report.py → run_sp_whatsapp_report',
+    script: 'services/email/kpi_email_report.py → run_sp_whatsapp_report',
     zh: {
       name: 'Comsumables&SpareParts Report Whatsapp',
       desc: '每天 07:55 把 Comsumables / SpareParts 两个邮件任务的同一批产物（合并总表 XLSX + 报表 PNG）发送到 WhatsApp 群 WH&SP Management',
@@ -797,7 +797,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_material_report', group: 'm', cron: '45 7 * * *',
-    script: 'services/kpi_email_report.py → run_sp_material_stock_consumption',
+    script: 'services/email/kpi_email_report.py → run_sp_material_stock_consumption',
     zh: {
       name: 'SP 物料库存与消耗报表邮件',
       desc: '每天 07:45 把 SP 物料库存与消耗汇总（同「SP 物料库存与消耗统计」页面 page=sp_material 的口径）导出为 UNIFIED_EXCEL_V1 版式 Excel 附件 + 同内容 PNG 内嵌正文并邮件发送',
@@ -813,7 +813,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'kpi_ran_availability', group: 'm', cron: '30 9 * * *',
-    script: 'services/kpi_email_report.py → run_ran_availability',
+    script: 'services/email/kpi_email_report.py → run_ran_availability',
     zh: {
       name: 'MS Network Availability 日报邮件',
       desc: '发送 MS Network Availability Daily Report（远程 FTP 图片 + 远程名单，无 Excel）',
@@ -829,7 +829,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'email_recovery', group: 'm', cron: '*/10 * * * *',
-    script: 'services/email_recovery.py → run_email_recovery_task',
+    script: 'services/email/email_recovery.py → run_email_recovery_task',
     zh: {
       name: 'EWS 恢复后邮件补发',
       desc: '每 10 分钟探测 EWS 是否恢复；恢复后自动补发近 3 小时内因 EWS 超时失败的邮件任务',
@@ -861,7 +861,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'packet_loss_email', group: 'u', cron: '45 6 * * *',
-    script: 'services/kpi_email_report.py → run_packet_loss_email',
+    script: 'services/email/kpi_email_report.py → run_packet_loss_email',
     zh: {
       name: 'Packet Loss 丢包日报邮件',
       desc: '发送 Packet Loss 丢包看板日报邮件（本地截图 + 最新报告 xlsx + 远程收件人清单），经 OWA 账户发送',
@@ -877,7 +877,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'ipran_m6k_chart_email', group: 'm', cron: '45 6 * * *',
-    script: 'services/ipran_chart_service.py → run_ipran_m6k_chart_email',
+    script: 'services/ipran/ipran_chart_service.py → run_ipran_m6k_chart_email',
     zh: {
       name: 'IP RAN M6K-FW 图表邮件',
       desc: '从 ipran_ume_kpi.sqlite3 查询 HQ_M6K_FW_bnctp_15mins，按 ME+SmartGroup 生成 3 张利用率折线图并发送',
@@ -893,7 +893,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'ccn_free_rating_chart_email', group: 'm', cron: '45 7 * * *',
-    script: 'services/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email',
+    script: 'services/cnn/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email',
     zh: {
       name: 'CNN Free Rating 图表邮件',
       desc: '从 db_ps_cs_cn.sqlite3 查询 FREE_RATING_GROUP_TEMPLATE_OSS_update_UME，按 MO 生成 4 张柱状图并发送',
@@ -973,7 +973,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'mailbox_cleanup', group: 'm', cron: '0 * * * *',
-    script: 'services/mailbox_cleanup.py → run_mailbox_cleanup',
+    script: 'services/cleanup/mailbox_cleanup.py → run_mailbox_cleanup',
     zh: {
       name: '邮箱空间清理',
       desc: '每小时检查 Exchange 邮箱：邮件数 >500 且空间 >70% 时，硬删除最旧 200 封邮件，避免 storage limit 告警',
@@ -989,7 +989,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'incident_overview_sync', group: 'm', cron: '20 * * * *',
-    script: 'services/incident_overview_sync.py → run_incident_overview_sync',
+    script: 'services/incident/incident_overview_sync.py → run_incident_overview_sync',
     zh: {
       name: 'Incident Overview 数据同步',
       desc: '每小时第 20 分钟从 FineBI FTP /webroot/WEB-INF/schedule/TT_WO/ 所有子目录取最新 incident_overview.xlsx，版本化落盘 + current.json 指针',
@@ -1006,7 +1006,7 @@ export const TASK_DOCS: TaskDoc[] = [
 
   {
     id: 'db_freshness_check', group: 'm', cron: '15 * * * *',
-    script: 'services/db_freshness_check.py → run_db_freshness_check',
+    script: 'services/db/db_freshness_check.py → run_db_freshness_check',
     zh: {
       name: '数据库数据新鲜度巡检',
       desc: '每小时巡检远程 DB（db_writer_api）、本地回退库各表最新数据日期，以及本机文件型数据源（FTP 落盘的 Excel）的落盘年龄，滞后时输出调用链路与检查方向',
@@ -1038,18 +1038,18 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'mttr_tt_sync', group: 'm', cron: '40 7 * * *',
-    script: 'services/mttr_tt_sync.py → run_mttr_tt_sync',
+    script: 'services/tt/mttr_tt_sync.py → run_mttr_tt_sync',
     zh: {
       name: 'MTTR/TT 宽表重建',
       desc: '重建 mttr_tt 宽表（Eflow_TT_FB + OLR_CELLS/Site_Maintainer_Category 参考库），写本机 data/mttr_tt.sqlite3，供 MTTR 看板（日/周/月）',
       flow: ['读本机参考库 data/excel_ds.sqlite3（Site ID→Site Category、Site Name→各制式小区数）', '经只读 API 读远端 Eflow_TT_FB 全量', '推导 Vender/MTTR1/MTTR2/MTTR_RANG_2H/Month/WK/Outage_Mins 后原子替换 data/mttr_tt.sqlite3'],
-      maintain: ['口径解析自 FineDB 数据集 4bc5a679，定义在 services/mttr_tt_sync.py 顶部；MTTR2 只在 0<MTTR1<48h 时非空', '参考库 excel_ds.sqlite3 是从 my-finebi 固化的静态文件（114KB，2026-08-31 后未变）；FineBI 侧 Excel 数据集若更新需重新导出覆盖', '2026-09-21 上线前该表由已退役 my-finebi 的手工 ETL 维护，无调度 → 冻结在 2026-08-31'],
+      maintain: ['口径解析自 FineDB 数据集 4bc5a679，定义在 services/tt/mttr_tt_sync.py 顶部；MTTR2 只在 0<MTTR1<48h 时非空', '参考库 excel_ds.sqlite3 是从 my-finebi 固化的静态文件（114KB，2026-08-31 后未变）；FineBI 侧 Excel 数据集若更新需重新导出覆盖', '2026-09-21 上线前该表由已退役 my-finebi 的手工 ETL 维护，无调度 → 冻结在 2026-08-31'],
     },
     en: {
       name: 'MTTR/TT Wide Table Rebuild',
       desc: 'Rebuild the mttr_tt wide table (Eflow_TT_FB + OLR_CELLS/Site_Maintainer_Category reference) into local data/mttr_tt.sqlite3 for the MTTR board (daily/weekly/monthly)',
       flow: ['Read local reference DB data/excel_ds.sqlite3 (Site ID->Site Category, Site Name->per-RAT cell counts)', 'Read the full remote Eflow_TT_FB via the read-only API', 'Derive Vender/MTTR1/MTTR2/MTTR_RANG_2H/Month/WK/Outage_Mins then atomically replace data/mttr_tt.sqlite3'],
-      maintain: ['Definitions parsed from FineDB dataset 4bc5a679, documented at the top of services/mttr_tt_sync.py; MTTR2 is non-null only when 0<MTTR1<48h', 'excel_ds.sqlite3 is a static 114KB reference frozen from my-finebi (unchanged since 2026-08-31); re-export it if the FineBI Excel datasets ever change', 'Before 2026-09-21 a manual ETL in the retired my-finebi project maintained this table; with no scheduler it froze at 2026-08-31'],
+      maintain: ['Definitions parsed from FineDB dataset 4bc5a679, documented at the top of services/tt/mttr_tt_sync.py; MTTR2 is non-null only when 0<MTTR1<48h', 'excel_ds.sqlite3 is a static 114KB reference frozen from my-finebi (unchanged since 2026-08-31); re-export it if the FineBI Excel datasets ever change', 'Before 2026-09-21 a manual ETL in the retired my-finebi project maintained this table; with no scheduler it froze at 2026-08-31'],
     },
   },
   {
@@ -1183,7 +1183,7 @@ export const TASK_DOCS: TaskDoc[] = [
   // ==================== 2026-09-18 补齐：注册表里有、本页此前缺失的 13 个任务 ====================
   {
     id: 'cxo_dashboard_cache_sync', group: 'v', cron: '*/10 * * * *',
-    script: 'services/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync',
+    script: 'services/cxo/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync',
     zh: {
       name: 'CXO 看板数据缓存同步',
       desc: '每 10 分钟经本机 8790 VMAX 代理拉取 CXO 看板全量接口，按接口粒度合并为 last-known-good 缓存（空值保留旧值），供看板兜底展示',
@@ -1207,7 +1207,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'vmax_cxo_daily_sync', group: 'v', cron: '15 * * * *',
-    script: 'services/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync',
+    script: 'services/cxo/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync',
     zh: {
       name: 'VMAX CXO 天粒度日值归档',
       desc: '每小时经 8790 VMAX 代理按监控批量拉取最近 8 天的 1hour 明细（50 个指标压成 8 个多列请求），聚合为日值落盘，供页签化天粒度看板累积回看约三周',
@@ -1375,7 +1375,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_online_sync', group: 'n', cron: '35 */6 * * *',
-    script: 'services/sp_online_sync.py → run_sp_online_sync',
+    script: 'services/sp/sp_online_sync.py → run_sp_online_sync',
     zh: {
       name: 'SP Online 工单同步',
       desc: '每 6 小时从 eFlow SP 接口拉在线工单（sp-outbound / sp-inbound / sp-transfer），写库表对应三张表。取「原始 filter」与「状态全集 filter」两份结果的并集，避免 filter 与其返回结果自相矛盾时静默取错数据。表语义=上游当前快照：全量重建，删除上游已消失的单据',
@@ -1401,7 +1401,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_material_sync', group: 'n', cron: '55 4 * * *',
-    script: 'services/sp_material_sync.py → run_sp_material_sync',
+    script: 'services/sp/sp_material_sync.py → run_sp_material_sync',
     zh: {
       name: 'SP 物料主数据同步',
       desc: '从 eFlow SP 物料接口（eflow-sp-material）拉全量物料主数据，按 materialNo 唯一键 upsert 写 app.db 表 sp_material。表语义=上游当前快照：全量重建，删除上游已消失的物料',
@@ -1423,7 +1423,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_online_report_generate', group: 'm', cron: '0 6 * * *',
-    script: 'services/kpi_email_report.py → run_sp_online_report_generate',
+    script: 'services/email/kpi_email_report.py → run_sp_online_report_generate',
     zh: {
       name: 'SP 在线未关闭单报表生成',
       desc: '生成 sp_online 下未关闭单报表（PNG+XLSX，Create Time 倒序）：Inbound 读明细 xlsx 未关闭单，Outbound 读库表 sp_outbound 跟踪 WaitingForUpdate / WaitingForReturn / WaitingForConfirm',
@@ -1445,7 +1445,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'sp_online_report_send', group: 'm', cron: '35 6 * * *',
-    script: 'services/kpi_email_report.py → run_sp_online_report',
+    script: 'services/email/kpi_email_report.py → run_sp_online_report',
     zh: {
       name: 'SP 在线未关闭单报表发送',
       desc: '发送 sp_online 未关闭单报表：邮件（PNG 内嵌 + XLSX 附件，默认复用 SP 报表远程名单）+ WhatsApp 群',
@@ -1553,7 +1553,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'whatsapp_kb_sync_push_rules', group: 'n', cron: '4 0 */3 * *',
-    script: 'services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs',
+    script: 'services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs',
     zh: {
       name: 'WhatsApp 知识库同步（推单规则）',
       desc: 'eFlow 推单规则收集完成后触发：比对规则 xlsx 指纹，有变化才重导知识文档、重建索引并重启 whatsapp-kb-bot',
@@ -1577,7 +1577,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'whatsapp_kb_sync_alarm_rules', group: 'n', cron: '4 0 */3 * *',
-    script: 'services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs',
+    script: 'services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs',
     zh: {
       name: 'WhatsApp 知识库同步（告警规则）',
       desc: 'eFlow 告警规则收集完成后触发知识库同步；告警压缩规则来自 eflow_alarm_rules.xlsx，无变化自动跳过',
@@ -1599,7 +1599,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'whatsapp_kb_sync_tt_rules', group: 'n', cron: '35 4 * * *',
-    script: 'services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs',
+    script: 'services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs',
     zh: {
       name: 'WhatsApp 知识库同步（TT 级别规则）',
       desc: 'eFlow TT 级别规则收集（每日 04:20）完成后触发知识库同步；级别规则来自 eflow_TT_rules.xlsx',
@@ -1621,7 +1621,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'log_cleanup', group: 'm', cron: '17 3 * * *',
-    script: 'services/log_cleanup.py → run_log_cleanup',
+    script: 'services/cleanup/log_cleanup.py → run_log_cleanup',
     zh: {
       name: '日志文件清理',
       desc: '每天清理 my_app/log 下超过保留期（默认 7 天，LOG_RETENTION_DAYS 可调）的日志，并把已无进程写入的旧命名日志补上日期后缀',
@@ -1643,7 +1643,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'tmp_cleanup', group: 'm', cron: '47 3 * * *',
-    script: 'services/tmp_cleanup.py → run_tmp_cleanup',
+    script: 'services/cleanup/tmp_cleanup.py → run_tmp_cleanup',
     zh: {
       name: 'TMP 目录清理',
       desc: '两段式回收 my_app/TMP 下超过保留期（默认 7 天）的临时产物：先同盘移进 TMP/_quarantine_YYYYMMDD/（可还原），隔离再满 7 天才真删',
@@ -1667,7 +1667,7 @@ export const TASK_DOCS: TaskDoc[] = [
   },
   {
     id: 'tt_mttr_report_generate', group: 'm', cron: '20 7 * * *',
-    script: 'services/tt_mttr_report.py → run_tt_mttr_report',
+    script: 'services/tt/tt_mttr_report.py → run_tt_mttr_report',
     zh: {
       name: 'TTs and MTTR 报表生成',
       desc: '从最新一份 Site Down hourly Report 生成 TTs and MTTR (Hour) 月粒度工作簿，供邮件报告页「TTs and MTTR」页签下载',

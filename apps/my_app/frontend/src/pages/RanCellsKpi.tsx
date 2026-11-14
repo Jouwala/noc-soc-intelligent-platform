@@ -13,7 +13,7 @@ import { useTheme, WH } from '../theme'
 import StatCard from '../components/StatCard'
 import DraggableClickModal from '../components/DraggableClickModal'
 // 数字悬浮口径说明（AGENTS.md 三.3c）：行头 ⓘ 讲这一行怎么算，单元格气泡讲这一天这一格。
-// 口径对过 backend/services/ran_cells_kpi_service.py 的 compute_tech() 与 _read_tech_month()。
+// 口径对过 backend/services/ran/ran_cells_kpi_service.py 的 compute_tech() 与 _read_tech_month()。
 import { ExplainIcon, ExplainLabel, ExplainPopover } from '../components/MetricExplain'
 
 const { Text } = Typography

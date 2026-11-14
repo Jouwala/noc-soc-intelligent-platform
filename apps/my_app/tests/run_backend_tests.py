@@ -24,7 +24,7 @@ if PROJECT_ROOT not in sys.path:
 
 # We intentionally let the app's scheduler start (so task registry + next_run_time
 # behave like production). We stop it at the end so the process can exit cleanly.
-import backend.services.task_runner as _tr  # noqa: E402
+import backend.services.task.task_runner as _tr  # noqa: E402
 
 from fastapi.testclient import TestClient  # noqa: E402
 from backend.main import app  # noqa: E402

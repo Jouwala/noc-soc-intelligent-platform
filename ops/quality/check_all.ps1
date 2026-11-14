@@ -96,7 +96,7 @@ Write-StepPass -Step 2 -Message ".env 端口不在生产端口集合里"
 # 3. 被跟踪文件里没有 .env、数据库、私钥、session
 # 用 git ls-files，只查已跟踪文件，不扫描工作区全部文件（工作区里有未跟踪的
 # 运行时产物，扫全量会误报）。注意刻意不用 "session" 子串匹配：
-# apps\my_app\backend\services\site_outage_session.py 与
+# apps\my_app\backend\services\site\site_outage_session.py 与
 # apps\portal\v3\team_portal\assets\team-session.js 是正常源码。
 $tracked = git ls-files
 if ($LASTEXITCODE -ne 0) { throw "git ls-files 失败" }

@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.routers import portals
-from backend.services import portal_login_service as svc
+from backend.services.portal import portal_login_service as svc
 
 
 def test_eflow_client_plan_contains_session_not_password(monkeypatch):

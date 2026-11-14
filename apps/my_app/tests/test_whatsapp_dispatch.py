@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""WhatsApp 双通道回退编排单测（backend/services/whatsapp_dispatch.py）。
+"""WhatsApp 双通道回退编排单测（backend/services/whatsapp/whatsapp_dispatch.py）。
 
 对应 2026-10-11 的架构改动：SP 系列报表任务从「Playwright 直发」改为
 「Baileys 主通道 → Playwright 回退」。这里锁住编排层的四个关键行为：
@@ -20,7 +20,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.services import whatsapp_dispatch as wd
+from backend.services.whatsapp import whatsapp_dispatch as wd
 
 
 @pytest.fixture

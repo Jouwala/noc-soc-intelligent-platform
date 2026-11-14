@@ -25,14 +25,14 @@
 
 ### P1 —— 数据正确性与稳定性
 
-- [ ] **站点可用率取数改走本地 PG（2026-10-15，已定性、待观察上游）。** 站点可用率已从远端 UME HTTP（`192.168.100.19:8765`）改为**本地 PG 优先、远端回退**，代码在 `apps\my_app\backend\services\site_availability_service.py`（`PG_SPEC` / `_load_pg_tech` / `_load_tech`，快照 `..._bak_20261015_PG双模前`）。
+- [ ] **站点可用率取数改走本地 PG（2026-10-15，已定性、待观察上游）。** 站点可用率已从远端 UME HTTP（`192.168.100.19:8765`）改为**本地 PG 优先、远端回退**，代码在 `apps\my_app\backend\services\site\site_availability_service.py`（`PG_SPEC` / `_load_pg_tech` / `_load_tech`，快照 `..._bak_20261015_PG双模前`）。
   - **2G / 3G 两源等价**：重叠键 100% 一致、零值差异；且 PG 严格超集（另有 47 个站点在 `master_site_db` 里但远端查不到 —— 切换后这些站从"空白"变为有数据）。同时去掉对 .19 HTTP API 的运行时依赖。
   - **4G 已定性（2026-10-15 实测 UME 直查）**：用 MS SLA 的 FDD 模板对 2026-10 整月直查 UME 自身（`10.100.28.27:28001`）当裁判，5342 条：
     - 只切换 `indexfillingtype`（`default` vs `zeroDenominator`）→ **5342/5342 逐行完全相同**，故**该设置不是差异根因**（原假设已证伪）。
     - **UME == PG = 99.4%**（排除最新一天的同步滞后后达 **99.9%**，仅 4 条残差）；**UME == 远端 = 85.8%**，且排除最新几天后仍卡在 ~86%。
     - **结论：PG 就是 UME 的值，4G 走 PG 正确，无需回退远端。** 远端 `4G_Main_Kpi_Site_Daily`（`FDD_KPIs_ZTE_OLR_FB` 模板 + `layer: Sites`）的 4G 可用率**系统性偏高约 14%**，是独立的上游数据质量问题。
   **待办**：把"远端 4G 可用率偏高约 14%"作为**上游数据问题**反馈（本条不再阻塞本站点可用率看板）；`apps\my_app\docs\manual\` 的站点可用率口径说明如需同步为"PG 与 UME 一致"，一并更新。**观察点**：PG 的 4G 当天值有增量同步滞后（当天可能尚未吸收终值，如 `2026-10-14` 有 27 条残差），看板若要求当天实时终值需另评估。
-- [ ] **P1 告警推送加 ext 通道 fallback（2026-10-08）。** Baileys 主通道失败（群名解析不到 JID / 凭据过期 / WhatsApp 流控 428）时，自动把同一批 `messages` 投到 `data/tt_alert_job.json`，由已登录的 WhatsApp Web 扩展兜底。改动已落到 `apps\my_app\backend\services\tt_alarm_whatsapp_service.py`（新增 `try_ext_fallback`、在两个失败分支调用） + 4 条 stub 用例 + `architecture.md` 8.x ADR；**待验证**：① 重启 `m` 组 worker 后第一次跑 0 候选 → 任务历史页面要能看到新字段 `ext_fallback` 为空（`attempted: false`）；② 手动制造一次 Baileys 失败（把 `GROUPS` 临时改成一个不存在的群名跑一次）→ ext 通道应兜住（前提：Chrome 开着 + 扩展已登录）→ `out.success=True` + `warnings` 含"兜住 N/M 单"。**回滚手段**：revert 三个文件即可。
+- [ ] **P1 告警推送加 ext 通道 fallback（2026-10-08）。** Baileys 主通道失败（群名解析不到 JID / 凭据过期 / WhatsApp 流控 428）时，自动把同一批 `messages` 投到 `data/tt_alert_job.json`，由已登录的 WhatsApp Web 扩展兜底。改动已落到 `apps\my_app\backend\services\tt\tt_alarm_whatsapp_service.py`（新增 `try_ext_fallback`、在两个失败分支调用） + 4 条 stub 用例 + `architecture.md` 8.x ADR；**待验证**：① 重启 `m` 组 worker 后第一次跑 0 候选 → 任务历史页面要能看到新字段 `ext_fallback` 为空（`attempted: false`）；② 手动制造一次 Baileys 失败（把 `GROUPS` 临时改成一个不存在的群名跑一次）→ ext 通道应兜住（前提：Chrome 开着 + 扩展已登录）→ `out.success=True` + `warnings` 含"兜住 N/M 单"。**回滚手段**：revert 三个文件即可。
 - [ ] **数据层裸连接治理（前置调研，非立即改造）。** 运行期已知存在绕过 `get_raw_connection` 的裸 `sqlite3.connect`（如 `ipran_chart_service.py:233`、`fw_kpi_services.py:488`），是**图表数据源**，改造会静默坏图。当前动作：**不再新增**裸连接，并把已有点位登记成清单。
   - **2026-11-13 登记完成**：全量扫描的 53 处实际调用已分类登记到 `apps\my_app\docs\manual\03-data-layer.md`「裸 sqlite3.connect 点位清单」一节（A 本地权威故意 6 / B 独立工具 2 / C 独立文件只读 10 / D 独立文件读写 19 / E 临时产物 5 / F 快照重建 1 / G 迁移与离线工具 10）。核查结论：`ipran_chart_service` 已改走 `get_raw_connection`（现 `:239-240`），原文点名已过时；`fw_kpi` 点位还在，行号已由 488 漂移至 520。运行期直连 `app.db` 的只有本地权威类（A/B），全部有据；其余均为独立数据文件，PG 模式下本就不适用 `get_raw_connection` 的路径映射。剩余动作：纪律执行（新增裸连先登记）与 7 处无 timeout 点位的治理排期，改造仍按「会静默坏图」的前提逐个验证，本条保持未勾选。
 - [x] **`eflow_tt` 双库归属固化。** 明确"同步只写 `app.db`、`eflow.sqlite3` 副本仅作只读快照"，避免后续有人读错库。结论已在 `PROJECT_DOCS.md` §2 Phase 0.5 闭环，待落到代码注释与手册。

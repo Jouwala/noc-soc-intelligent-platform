@@ -7,7 +7,7 @@ cause_type 关键词优先级 / LLM 降级路径。
 """
 import unittest
 
-from backend.services import gis_rca_service as svc
+from backend.services.gis import gis_rca_service as svc
 
 T0 = 1_700_000_000_000  # 固定基准时间（毫秒）
 

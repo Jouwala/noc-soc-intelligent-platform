@@ -1156,7 +1156,7 @@ export default function EmailReports() {
     try {
       // ⚠ 只判 HTTP 状态码会误报成功：/tasks/{id}/run 在「任务未找到 / 已禁用 /
       // 队列不可用」时同样返回 200，失败信号只在响应体的 accepted=false 里
-      // （见 backend/services/task_runner.py:632-648 的 run_task_async）。
+      // （见 backend/services/task/task_runner.py:632-648 的 run_task_async）。
       // 2026-10-05 事故：后端进程启动早于任务注册，注册表里没有本任务，
       // 页面弹「已提交生成任务」后干等 90 秒超时，目录里始终没有文件。
       const res = await api.post(`/tasks/${TT_MTTR_TASK}/run`)

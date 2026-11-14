@@ -175,7 +175,7 @@ uvicorn 后端 (:7038)
 （告警发生 → 值班群看到）平均 ~45 分钟、最坏 ~75 分钟；且重推是纯时间节流
 （工单毫无变化也每 ~30 分钟重发 30 行完整分析，有进展反而不推）。
 
-**决策。** 改为**触发制**（`backend/services/tt_alarm_trigger.py` +
+**决策。** 改为**触发制**（`backend/services/tt/tt_alarm_trigger.py` +
 `tt_alarm_sources.py`，编排重写于 `tt_alarm_whatsapp_service.py`）：
 
 1. **触发源换 `realtime_alarm`**（由 `eflow_active_alarm` 同步；注册表默认 `*/30`、
@@ -273,9 +273,9 @@ uvicorn 后端 (:7038)
 
 | 部件 | 文件 | 状态 |
 | --- | --- | --- |
-| 后端文本作业文件 | `backend/services/tt_alarm_job.py` | **已写好**（2026-09 之前是 P1 推送主通道，Baileys 化后无人调用） |
+| 后端文本作业文件 | `backend/services/tt/tt_alarm_job.py` | **已写好**（2026-09 之前是 P1 推送主通道，Baileys 化后无人调用） |
 | 后端等回报（最长 600s） | `tt_alarm_job.wait_for_job_result` | 同上 |
-| 统一认领口（按 kind 分流） | `backend/services/whatsapp_job_claim.py:39-65` | 2026-10-01 写好 |
+| 统一认领口（按 kind 分流） | `backend/services/whatsapp/whatsapp_job_claim.py:39-65` | 2026-10-01 写好 |
 | 扩展发纯文本主路径 | `extensions/whatsapp_sender_extension/background.js:1277-1373`（`simpleSendTextViaDebugger`） | 2026-09 已写好 |
 | 扩展按 kind 分发 | `background.js:1417-1445`（`claimAndRunJob`） | 同上 |
 

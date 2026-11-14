@@ -17,7 +17,7 @@ my_app è‡ªå·±é‚£å°æœºå™¨ã€‚
 import httpx
 import pytest
 
-from backend.services import portal_auth as pa
+from backend.services.portal import portal_auth as pa
 
 
 @pytest.fixture

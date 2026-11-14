@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.services import task_health_alert as tha  # noqa: E402
+from backend.services.task import task_health_alert as tha  # noqa: E402
 
 
 class FakeSenders:

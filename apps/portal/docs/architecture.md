@@ -184,7 +184,7 @@ types ← password ← store ← guard ← routes ← index
 | --- | --- | --- |
 | 门户内新 React 页 | `<RequireAuth>` 包住 + `useAuth()` 取身份 + `apiFetch(PORTAL_API+...)`；照抄 `src\pages\_TemplatePage.tsx` | 低 |
 | `MsPortal\` 静态壳 | 已各自实现（登录/`/me` 探针/用户管理）；再新增壳需照抄 `portal.js` 的验签流程 | 中 |
-| 远程系统深链 | 已实现：门户 token → `?t=` → 对方回调门户 `/me` 验签 → 签自己的会话（见 `Task\my_app\backend\services\portal_auth.py`） | 低（复用） |
+| 远程系统深链 | 已实现：门户 token → `?t=` → 对方回调门户 `/me` 验签 → 签自己的会话（见 `Task\my_app\backend\services\portal\portal_auth.py`） | 低（复用） |
 
 > **服务端才是强制点。** `allowedGroups` / `allowedCards` 目前只在前端
 > `App.tsx` 过滤（显示层），服务端不拒答——见 `auth-module-design.md` 第五节 S4。
@@ -1388,7 +1388,7 @@ WhatsApp 群里一致，不另建一套知识库、也不让浏览器直连模�
 → `127.0.0.1:9269`（whatsapp-kb-bot 的 `src/http-server.js`）
 → `src/answer.js:routeAnswer`（与群机器人**同一个**答题入口：查表 / 工单统计 / 单号分析 /
 站点告警 / VMAX CCA / 知识库 RAG）。
-9269 不常驻，由后端 `backend/services/portal_qa_ctl.py` 按需拉起（详见 my_app
+9269 不常驻，由后端 `backend/services/portal/portal_qa_ctl.py` 按需拉起（详见 my_app
 `docs/manual/13-operations.md` 的「网页问答助手」一节）。
 
 **两个文件，纯增量，不改 olbr.js。**
@@ -1947,7 +1947,7 @@ sub_filter '</head>' '<script src="/v3/team-gate.js"></script></head>';
 `/uniplam/`、`/v3/olbrportal/`、`/myapp/` 的 User Management 都调
 `/uniplam/api/auth/users` 与 `/uniplam/api/auth/users/profile` ——
 **同一个门户后端、同一份 `auth-data/portal-auth.db`**。
-my_app 虽有独立的会话表（`portal_sessions`，见 `backend/services/portal_auth.py`），
+my_app 虽有独立的会话表（`portal_sessions`，见 `backend/services/portal/portal_auth.py`），
 但**账号数据一律回调门户**，不落地第二份用户库。
 
 三处面板各有独立实现，需要**同步维护**：

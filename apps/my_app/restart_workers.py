@@ -19,7 +19,7 @@
     python restart_workers.py --tail 20
 
     # 只重启 worker 子进程（watchdog 会在 ≤2s 内自动拉起 → 重新 import 改动后的 service 代码）
-    python restart_workers.py --reason "重新加载 backend/services/whatsapp_service.py"
+    python restart_workers.py --reason "重新加载 backend/services/whatsapp/whatsapp_service.py"
 
     # 只重启部分组
     python restart_workers.py --groups m --reason "只重载 m 组的截图链路"

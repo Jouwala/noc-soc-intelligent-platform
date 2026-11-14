@@ -14,9 +14,9 @@
 
 这三张表与 ``MY_APP_DB_MODE`` 无关，由应用**固定写 SQLite**，PG 里那份只是镜像：
 
-    - credentials          ← backend/services/credential_store.py 硬编码 sqlite3.connect
-    - email_recipients     ← backend/services/email_recipient_store.py 同样硬编码
-    - task_schedule_config ← backend/services/task_runner.py::_save_schedule_config
+    - credentials          ← backend/services/credential/credential_store.py 硬编码 sqlite3.connect
+    - email_recipients     ← backend/services/email/email_recipient_store.py 同样硬编码
+    - task_schedule_config ← backend/services/task/task_runner.py::_save_schedule_config
 
 正因如此，``backend/scripts/sync_pg_to_sqlite.py`` 把它们列进 ``SKIP_TABLES``
 （否则 PG→SQLite 同步会把本地数据 DROP 掉，见该文件 61-85 行的两次事故记录）。

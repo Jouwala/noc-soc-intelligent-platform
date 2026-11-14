@@ -229,7 +229,7 @@ class _FakeResponse:
 
 
 def test_db_writer_typed_errors(monkeypatch):
-    from backend.services import db_writer_client as dw
+    from backend.services.db import db_writer_client as dw
     client = dw.DbWriterClient(host="127.0.0.1", port=9, timeout=1)
 
     def refused(req, timeout=None):
@@ -250,7 +250,7 @@ def test_db_writer_typed_errors(monkeypatch):
 
 
 def test_db_writer_health_check(monkeypatch):
-    from backend.services import db_writer_client as dw
+    from backend.services.db import db_writer_client as dw
     client = dw.DbWriterClient(host="127.0.0.1", port=9, timeout=1)
     monkeypatch.setattr(dw.urllib.request, "urlopen",
                         lambda req, timeout=None: _FakeResponse())
@@ -260,7 +260,7 @@ def test_db_writer_health_check(monkeypatch):
 
 # ---------------------------------------------------------------- 接入：ume_alarm_client
 def test_ume_error_type_and_health_check(monkeypatch):
-    from backend.services import ume_alarm_client as ume
+    from backend.services.ume_alarm import ume_alarm_client as ume
     assert issubclass(ume.UmeAlarmError, ExtClientError)
     assert ume.UmeAlarmError("x").system == "ume_alarm"
 
@@ -289,7 +289,7 @@ def test_ume_error_type_and_health_check(monkeypatch):
 
 # ---------------------------------------------------------------- 接入：eflow_api_client
 def test_eflow_error_type_and_health_check(monkeypatch):
-    from backend.services import eflow_api_client as eflow
+    from backend.services.eflow import eflow_api_client as eflow
     assert issubclass(eflow.EflowApiError, ExtClientError)
     assert eflow.EflowApiError("x").system == "eflow"
 

@@ -5,7 +5,7 @@
 -----------------
 `manually_stopped` 列由 alembic `0006_manual_stop_flag` 加入，语义是
 「用户手动关过这个任务」——主开关**双向**都跳过标记为 1 的任务
-（见 `backend/services/task_runner.py: toggle_all_tasks`）。
+（见 `backend/services/task/task_runner.py: toggle_all_tasks`）。
 
 加列时 `DEFAULT 0`，所以**存量数据一律是 0**：那些在加列之前就被用户手动关掉
 的任务，在库里同样是 `enabled=0 / manually_stopped=0`，看起来与「被主开关关掉的」

@@ -2,7 +2,7 @@
 """TT 告警推送的**配置项**单测：级别/告警码白名单、窗口、重报间隔、群组回退。
 
 拆自 `test_tt_alarm_whatsapp_service.py`（原文件超 500 行上限），
-对应 `backend/services/tt_alarm_config.py` 的职责边界。
+对应 `backend/services/tt/tt_alarm_config.py` 的职责边界。
 
 这里锁的是三类**真实发生过或极易踩**的错：
   1. env 与配置文件优先级验错（import 后再 setenv 不会重算常量）；
@@ -14,9 +14,9 @@
 """
 import os
 
-from backend.services import tt_alarm_config as C
-from backend.services import tt_alarm_whatsapp_service as S
-from backend.services.tt_alarm_message import norm_alarm_code
+from backend.services.tt import tt_alarm_config as C
+from backend.services.tt import tt_alarm_whatsapp_service as S
+from backend.services.tt.tt_alarm_message import norm_alarm_code
 
 
 # ---------------- parse_config 纯函数：优先级与归一化 ----------------
@@ -145,8 +145,8 @@ def test_env_wins_over_config_file_in_fresh_process(tmp_path):
     script = (
         "import sys, json, pathlib\n"
         f"sys.path.insert(0, r'{app_root}')\n"
-        "from backend.services import tt_alarm_config as C\n"
-        "from backend.services.tt_alarm_message import norm_alarm_code\n"
+        "from backend.services.tt import tt_alarm_config as C\n"
+        "from backend.services.tt.tt_alarm_message import norm_alarm_code\n"
         f"C.CONFIG_FILE = pathlib.Path(r'{cfg}')\n"
         "got = C.load_config(norm_alarm_code)\n"
         "print(json.dumps({'window': got['window_minutes'], 'groups': got['groups']}))\n"
@@ -174,7 +174,7 @@ def test_env_wins_over_config_file_in_fresh_process(tmp_path):
 
 def test_config_registered_in_task_config_page():
     """任务必须注册进 Settings「任务配置」页，且五个可配置项都在 schema 里。"""
-    from backend.services import task_config_files, task_configs_registry  # noqa: F401
+    from backend.services.task import task_config_files, task_configs_registry  # noqa: F401
 
     resource = task_config_files.get_resource("tt_alarm_whatsapp_alert")
     assert resource is not None, "tt_alarm_whatsapp_alert 未注册进任务配置页"

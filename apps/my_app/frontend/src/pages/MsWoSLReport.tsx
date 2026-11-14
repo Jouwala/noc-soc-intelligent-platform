@@ -3,7 +3,7 @@
  *
  * 数据源：data/ms_sla/ZTE OLR MS WOs SLA Achievements Daily Report_<日期>.xlsx
  * —— 任务 kpi_ms_wo_sla（MS WOs SLA 日报邮件）读的**同一份文件**，页面不做二次加工；
- * 解析口径见 backend/services/ms_kpi_report_service.py 顶部 docstring。
+ * 解析口径见 backend/services/ms/ms_kpi_report_service.py 顶部 docstring。
  *
  * 页面结构：总览卡片（月工单/达标/达成率/未达标指标）→ 5 个 TTR 指标卡 →
  * 达成率日趋势（含各自目标线）→ 每日明细矩阵（与 Excel 版式一致，点击列头看趋势）。

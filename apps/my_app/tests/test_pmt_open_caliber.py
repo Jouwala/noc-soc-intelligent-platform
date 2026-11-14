@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.routers.personnel import (  # noqa: E402
     _PMT_COLS, _handler_person_keys, _is_closed, _is_pmt_closed,
 )
-from backend.services import pm_caliber  # noqa: E402
+from backend.services.pm import pm_caliber  # noqa: E402
 
 
 def test_pmt_detail_select_is_valid_sql():

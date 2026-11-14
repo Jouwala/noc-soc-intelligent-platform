@@ -10,7 +10,7 @@ manually_stopped 读出来是随机的**：用户手动关掉的任务，主开�
 
 ## 根因
 
-`backend/services/task_runner.py::_save_schedule_config` 用
+`backend/services/task/task_runner.py::_save_schedule_config` 用
 `dialect_helpers.upsert()`，SQLite 分支是 `INSERT OR REPLACE`
 （`backend/dialect_helpers.py:126`）。`INSERT OR REPLACE` 依赖
 **唯一约束**决定替换目标；表上没有约束时它**不报错**，而是直接追加新行。

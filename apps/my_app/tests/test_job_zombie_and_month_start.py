@@ -22,9 +22,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from backend.services import job_staleness as JS
-from backend.services import tt_alarm_job as TJ
-from backend.services.ran_cells_kpi_sync import _is_month_start_pending
+from backend.services.task import job_staleness as JS
+from backend.services.tt import tt_alarm_job as TJ
+from backend.services.ran.ran_cells_kpi_sync import _is_month_start_pending
 
 
 @pytest.fixture

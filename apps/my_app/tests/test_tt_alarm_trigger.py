@@ -11,7 +11,7 @@
 import sqlite3
 from datetime import datetime, timedelta
 
-from backend.services import tt_alarm_trigger as T
+from backend.services.tt import tt_alarm_trigger as T
 
 
 def _ms(dt: datetime) -> int:
@@ -72,7 +72,7 @@ def _use_alarm_db(monkeypatch, tmp_path, rows, now: datetime,
             return False
 
     from backend import database as db
-    from backend.services import task_runner as _tr
+    from backend.services.task import task_runner as _tr
     monkeypatch.setattr(db, "get_raw_connection", lambda *a, **k: _Wrap())
     monkeypatch.setattr(db, "DB_MODE", "pg", raising=False)
     monkeypatch.setattr(_tr, "DB_PATH", tmp_path / "alarm.db")

@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.services import sp_common
+from backend.services.sp import sp_common
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -170,7 +170,7 @@ def test_portal_qc_spms_summary_equals_drill_total(monkeypatch):
 # ------------------------------------------- sp_report 走同一个去重函数（静态断言）
 def test_sp_report_service_uses_shared_dedup():
     """sp_report 卡片口径必须来自 sp_common，不得再自己数行。"""
-    src = (PROJECT_ROOT / "backend" / "services" / "sp_report_service.py").read_text(encoding="utf-8")
+    src = (PROJECT_ROOT / "backend" / "services" / "sp" / "sp_report_service.py").read_text(encoding="utf-8")
     assert "count_open_docs_rows" in src, "sp_report_service 应使用 sp_common.count_open_docs_rows"
     # 旧的「按行数」写法若复活，这里会命中
     assert not re.search(r"open_count\s*=\s*sum\(", src), \

@@ -259,7 +259,7 @@ FAILED test_get_task_history_by_task
 
 3. **两个内部函数被 Phase 4 拆分搬走了。**
    `_chain_from_file` / `_module_file` 已随拆分迁至
-   `backend\services\task_introspect.py:154` 与 `:63`；`task_runner.py:31-37`
+   `backend\services\task\task_introspect.py:154` 与 `:63`；`task_runner.py:31-37`
    只再导出了 `_auto_call_chain` / `_annotate_call_chain`。
    测试改为从 `task_introspect` 直接取（功能未变，只是位置变了）。
 
@@ -341,7 +341,7 @@ python -m pytest tests -m "not live"     # 离线集（CI 同款，见下）
   两条 brief 测试用的 skip 条件没含规则表 xlsx（2 例）；
   `test_table_exists_probe_works_on_live_db` 改打 live（1 例）。
   另补了一个依赖缺口：`requirements.txt` 漏了 `httpx`（只在 lock 文件里有），
-  `backend/services/portal_auth.py` 模块级就 import 它，新环境按清单装完会
+  `backend/services/portal/portal_auth.py` 模块级就 import 它，新环境按清单装完会
   `ModuleNotFoundError`。`test_tt_alarm_mail.py` 里 4 条服务层测试
   （`test_summary_scan_uses_log_table_not_realtime`、
   `test_uncleared_ticket_gets_no_summary`、

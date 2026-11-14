@@ -679,7 +679,7 @@ def test_recent_runs_provider(tmp):
     check("产物库不存在时返回空列表（不抛异常）", svc.recent_runs_for_task() == [])
 
     # task_stats 注册表已接入（task_registry 注册时注入）→ 兜底只在库内无记录时生效
-    from backend.services import task_stats as ts
+    from backend.services.task import task_stats as ts
     check("task_stats.register_recent_runs_provider 可用",
           callable(ts.register_recent_runs_provider))
     ts.register_recent_runs_provider("__t_provider_probe", lambda: [{"task_id": "x",
@@ -718,7 +718,7 @@ def test_registry():
                   "backend.services.olib_soc_report.olib_soc_report_service",
                   "recent_runs_for_task"),
               str(spec.get("recent_runs_provider")))
-    from backend.services import task_configs_registry as tcr
+    from backend.services.task import task_configs_registry as tcr
     check("配置资源已注册（设置页可改）", _has_config("olib_soc_vmax_report"))
     cfg = svc.load_config()
     check("配置默认值可用", cfg["gbase"]["port"] == 5258 and cfg["range_mode"] == "last_month")
@@ -731,7 +731,7 @@ def test_registry():
 def _has_config(task_id):
     """设置页的配置资源是否注册（task_config_files 的 _REGISTRY / get_resource）。"""
     try:
-        from backend.services.task_config_files import get_resource
+        from backend.services.task.task_config_files import get_resource
         return get_resource(task_id) is not None
     except Exception:                                                    # noqa: BLE001
         return False

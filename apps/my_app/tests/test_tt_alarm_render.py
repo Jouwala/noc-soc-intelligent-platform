@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """TT 告警消息渲染单测：复用 whatsapp-kb-bot 分析引擎 + 降级策略。
 
-对应 `backend/services/tt_alarm_render.py`。
+对应 `backend/services/tt/tt_alarm_render.py`。
 
 ## 这里锁的是什么
 
@@ -24,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from backend.services import tt_alarm_render as R
-from backend.services import tt_alarm_whatsapp_service as S
+from backend.services.tt import tt_alarm_render as R
+from backend.services.tt import tt_alarm_whatsapp_service as S
 
 # 本文件专用的建库/切库小工具（原与 test_tt_alarm_config 共用；2026-10-05 机制切换后
 # config 测试不再碰库，为避免"为复用而跨文件耦合"改为本文件自带）。
@@ -246,8 +246,8 @@ def test_task_result_surfaces_degradation(monkeypatch, tmp_path):
     降级**不报错、照样发得出去**，只是内容从 ~30 行缩成 7 行 ——
     没有这个字段，运维只能靠群里的人问「这次信息怎么这么少」才发现问题。
     """
-    from backend.services import tt_alarm_sources as src
-    from backend.services import tt_alarm_trigger as trig
+    from backend.services.tt import tt_alarm_sources as src
+    from backend.services.tt import tt_alarm_trigger as trig
 
     now = datetime.now()
     trig_row = {"tt_no": "TT1", "_alarm_code_norm": "9920",
@@ -291,8 +291,8 @@ def test_task_result_reports_due_count(monkeypatch, tmp_path):
     组合（due=0 却 dispatched=6），任务管理页永远显示「应发 0 单」，
     调参与排障时看不出本轮到底该发几单。
     """
-    from backend.services import tt_alarm_sources as src
-    from backend.services import tt_alarm_trigger as trig
+    from backend.services.tt import tt_alarm_sources as src
+    from backend.services.tt import tt_alarm_trigger as trig
 
     now = datetime.now()
     # 两单：都通过过滤，都应进入 due
