@@ -51,6 +51,41 @@ HWM_ROOT = "refs/heads/agent-hwm"
 LEASE_ROOT = "refs/heads/agent-lease"
 SCOPE_ROOT = "refs/heads/agent-scope"
 DISPATCH_ROOT = "refs/heads/agent-dispatch"
+REAP_ROOT = "refs/heads/agent-reap"
+
+#: Reaper 回收权 ref：先 CAS 认领（同一过期租约只允许一个 Reaper 处理）。
+_REAP_RE = re.compile(
+    r"^refs/heads/agent-reap/issue-(?P<issue>\d+)/(?P<token>\d{8})/"
+    r"(?P<reaper>[a-z0-9][a-z0-9-]{0,40})$"
+)
+
+
+def reap_ref(issue_number: int, token: int, reaper_instance: str) -> str:
+    """回收权 ref：issuetoken 唯一，并发 Reaper 只有一个能创建成功。"""
+    reaper = str(reaper_instance).lower()
+    if not _AGENT_RE.match(reaper):
+        raise ValueError(f"reaper_instance 不能安全放进 ref 名：{reaper_instance!r}")
+    return f"{REAP_ROOT}/issue-{int(issue_number)}/{fmt_token(token)}/{reaper}"
+
+
+def reap_prefix(issue_number: Optional[int] = None, token: Optional[int] = None) -> str:
+    if issue_number is None:
+        return f"{REAP_ROOT}/"
+    prefix = f"{REAP_ROOT}/issue-{int(issue_number)}/"
+    return prefix if token is None else f"{prefix}{fmt_token(token)}/"
+
+
+def parse_reap(ref: str) -> Optional[dict]:
+    match = _REAP_RE.match(ref or "")
+    if not match:
+        return None
+    return {
+        "issue_number": int(match.group("issue")),
+        "token": int(match.group("token")),
+        "reaper_instance": match.group("reaper"),
+        "ref": ref,
+    }
+
 
 _TOKEN_WIDTH = 8
 _AGENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
