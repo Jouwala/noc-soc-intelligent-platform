@@ -2,8 +2,10 @@
 # 「建分支 + 第一个提交 + 开 PR」三步做掉，开发 Agent 不再手工起分支。
 #
 # 做什么：
-#   1. 解析分支名：优先用 Issue 正文「所属分支」里的 agent/<任务>；
-#      没有时按 agent/task-<编号>-<标题 ASCII slug> 生成（标题无 ASCII 时
+#   1. 解析分支名：优先用 Issue 正文「所属分支」行里的任务指定分支名
+#      （agent/<任务> 或 refactor/<任务> 等，见安全阀的允许前缀）；
+#      该行没有时取正文里第一个允许前缀的分支名；都没有时按
+#      agent/task-<编号>-<标题 ASCII slug> 生成（标题无 ASCII 时
 #      退化为 agent/task-<编号>）。
 #   2. 分支不存在 → 从最新 main 用 Git Data API 建一条脚手架提交（只新增
 #      .agent-work/tasks/active/task-<编号>.md 进度文件，见根 AGENTS.md
@@ -21,7 +23,7 @@
 #     （开发任务才需要分支；Grok 的 QA 任务、Muse 1 的协调任务跳过）。
 #   - 幂等：分支已存在不重建，PR 已存在不开第二个，Issue 下已有本工作流
 #     的完成标记评论时整体跳过——重复打标签、手动重跑都不会重复建。
-#   - 分支名必须通过 ^agent/[A-Za-z0-9._/-]+$ 校验且不含 ..，防注入。
+#   - 分支名必须通过 ^(agent|refactor|fix|feat|chore|task)/[A-Za-z0-9._/-]+$ 校验且不含 ..，防注入。
 #   - 只做脚手架，不碰任何业务文件；PR 是草稿，auto-merge 不会合草稿。
 
 name: issue-to-pr
@@ -79,12 +81,19 @@ jobs:
           fi
 
           # ---- 1. 解析分支名 ----
-          BRANCH="$(grep -oE 'agent/[A-Za-z0-9._/-]+' /tmp/issue-body.md | head -n 1 || true)"
+          # 允许前缀：agent（自动生成）与任务指定的 refactor/fix/feat/chore/task。
+          # 先取「所属分支」行的指定名（Issue #11 的 refactor/round-2-except-logging
+          # 就写在这一行，旧解析器只认 agent/ 才会漏掉它、退回标题 slug 生成的
+          # agent/task-11-11-6-except-pass）；该行没有时取正文第一个匹配名。
+          BRANCH="$(grep -iE '所属分支|branch' /tmp/issue-body.md | grep -oE '(agent|refactor|fix|feat|chore|task)/[A-Za-z0-9._/-]+' | head -n 1 || true)"
+          if [ -z "$BRANCH" ]; then
+            BRANCH="$(grep -oE '(agent|refactor|fix|feat|chore|task)/[A-Za-z0-9._/-]+' /tmp/issue-body.md | head -n 1 || true)"
+          fi
           if [ -z "$BRANCH" ]; then
             SLUG="$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')"
             if [ -n "$SLUG" ]; then BRANCH="agent/task-$ISSUE_NUMBER-$SLUG"; else BRANCH="agent/task-$ISSUE_NUMBER"; fi
           fi
-          if ! echo "$BRANCH" | grep -qE '^agent/[A-Za-z0-9._/-]+$' || echo "$BRANCH" | grep -q '\.\.'; then
+          if ! echo "$BRANCH" | grep -qE '^(agent|refactor|fix|feat|chore|task)/[A-Za-z0-9._/-]+$' || echo "$BRANCH" | grep -q '\.\.'; then
             echo "分支名不合法：$BRANCH，跳过"; exit 0
           fi
           echo "目标分支：$BRANCH"
@@ -161,11 +170,16 @@ jobs:
               echo "---"
               echo "本 PR 由 issue-to-pr 工作流在任务被认领时自动创建（草稿）。开发 Agent 在本分支提交代码；转正式 PR 后走 CI → Grok 冒烟（smoke-passed）→ auto-merge 合并，合并后 pr-merged-writeback 自动回写任务状态并关闭 Issue。"
             } > /tmp/pr-body.md
-            PR_NUMBER="$(jq -n --arg title "$TITLE" --arg head "$BRANCH" --rawfile body /tmp/pr-body.md \
+            # 保留 HTTP 状态与 API 报错原文：Issue #11 实跑时这一步 403 失败，
+            # 旧写法把响应直接丢进 jq，只剩一句「开 PR 失败」，根因（仓库设置里
+            # 「Allow GitHub Actions to create and approve pull requests」未开）
+            # 是事后查设置才确认的。失败时把状态码与 message 打出来再退出。
+            HTTP_CODE="$(jq -n --arg title "$TITLE" --arg head "$BRANCH" --rawfile body /tmp/pr-body.md \
               '{title: $title, head: $head, base: "main", body: $body, draft: true}' \
-              | curl -sS -X POST "${AUTH[@]}" "$API/pulls" --data-binary @- | jq -r '.number')"
-            if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-              echo "开 PR 失败，退出"; exit 1
+              | curl -sS -o /tmp/pr-create-resp.json -w '%{http_code}' -X POST "${AUTH[@]}" "$API/pulls" --data-binary @-)"
+            PR_NUMBER="$(jq -r '.number // empty' /tmp/pr-create-resp.json)"
+            if [ -z "$PR_NUMBER" ]; then
+              echo "开 PR 失败：HTTP $HTTP_CODE，API 返回：$(jq -c '.message // .' /tmp/pr-create-resp.json | head -c 500)"; exit 1
             fi
             echo "已开草稿 PR #$PR_NUMBER"
           fi
