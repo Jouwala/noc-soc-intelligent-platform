@@ -12,6 +12,13 @@
 - `local_authority_tools.py`：迁移时校验 / 复制 SQLite 本地权威三表
   （`credentials`、`task_schedule_config`、`email_recipients`）
 - `ensure_portal.ps1`：门户保活（计划任务调用）
+- `smoke-local.ps1` + `smoke-watcher.ps1`：D:\02 本机冒烟（替代 Grok
+  Routine 的冒烟 + 回写，0 token）。watcher 每 60 秒轮询 GitHub，CI
+  变绿且无 `smoke-passed` 的 open PR 就地跑 §8.2–§8.4 + 离线 pytest，
+  贴回评论、通过才打标签；贴标签前重读 PR，head 变了就作废重跑。
+  Token 放环境变量 `SMOKE_GITHUB_TOKEN`（细粒度 PAT，本仓库 Issues
+  读写即可）。先在 MSNOC1 上 `-DryRun` 跑一遍，再与 Grok 同 PR 对照
+  一次，对上才能停 Grok；停 Grok 前不要动 agent-orchestrator 的 webhook。
 - `bundle_data.ps1`：把生产 PostgreSQL 快照灌进副本便携实例
 - `my_portal_ctl.ps1`、`write_nginx_conf.ps1`：§11-5 自仓库根归位至此；
   两者都按自身位置向上推导仓库根，`ops/shortcuts/` 的 bat 已指向新位置
