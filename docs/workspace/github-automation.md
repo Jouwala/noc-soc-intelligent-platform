@@ -28,13 +28,17 @@ quality 全绿 → agent-orchestrator.yml 自动 POST webhook 请 Grok 冒烟
 auto-merge.yml：quality 全绿 + smoke-passed + 无 do-not-merge → 自动合并
 │ 其中 update-branches 作业：main 前进时自动更新
 │ 落后的 agent/* 分支（update-branch），更新后 CI 自动重跑再评估合并
+│ 合并成功后显式 POST workflow dispatch 触发下面两步（2026-11-14 修正）：
+│ GITHUB_TOKEN 合并的事件不会再启动新工作流，pull_request closed
+│ 触发路径被抑制，必须显式 dispatch（见第二节、第三节第 8 条）
 ▼
 pr-merged-writeback.yml：给 Issue 打 state:merged、摘其余
 state: 标签、发 PR_MERGED 评论、关闭 Issue
-│
+│（触发：PR 关闭事件，或 auto-merge 的 workflow_dispatch）
 ▼
 auto-dispatch.yml：PR 合入后自动把下一个就绪任务派给空闲的 builder
 （TASK_ASSIGNED 评论，from: github-actions），不再等每小时巡逻
+（触发：PR 关闭事件，或 auto-merge 的 workflow_dispatch）
 │
 ▼
 Muse 1 按 dispatch-rules.md 第四节做最终汇总（人工/Agent 环节，不自动化）
@@ -47,9 +51,10 @@ Muse 1 按 dispatch-rules.md 第四节做最终汇总（人工/Agent 环节，�
 | `issue-to-pr.yml` | Issue 打 `state:claimed` 标签；或手动 dispatch（填 Issue 号） | 解析分支名 → 建分支（脚手架提交）→ 开草稿 PR（描述自动生成、含 `Closes #N`）→ Issue 留评论 | 只处理 open 且带 `agent:muse-2/3` 的 Issue；分支名正则校验；全程幂等（完成标记 + 存在性检查） |
 | `auto-merge.yml` 的 `update-branches` 作业 | push 到 main；或手动 dispatch | 对落后的 `agent/*` 分支 PR 调 `PUT /pulls/{n}/update-branch` | 只动 `agent/*` 分支、非草稿、`mergeable_state == behind` 才更新；冲突只记录不处理（开发 Agent 自行 rebase） |
 | `ci-failure-notify.yml` | `quality` 工作流跑完且结论 failure / timed_out | 按 head SHA 定位 open PR，评论通知 builder（失败 job、运行链接、SHA），关联 Issue 同步一份 | 同一 run 只通知一次（`ci-failure-notice` 标记去重）；只通知不改代码/标签 |
-| `pr-merged-writeback.yml` | PR 关闭且 `merged == true`、base 为 main | 解析关联 Issue → 打 `state:merged`、摘其余 `state:` 标签 → 发 PR_MERGED 评论 → 关闭 Issue | 解析不到关联 Issue 就跳过；已回写过的重复触发跳过 |
+| `pr-merged-writeback.yml` | PR 关闭且 `merged == true`、base 为 main；或 auto-merge 合并成功后 `workflow_dispatch`（填 PR 号） | 解析关联 Issue → 打 `state:merged`、摘其余 `state:` 标签 → 发 PR_MERGED 评论 → 关闭 Issue | 解析不到关联 Issue 就跳过；已回写过的重复触发跳过；dispatch 路径从 API 取 PR 并校验已合入 main |
+| `auto-merge.yml` 的 `auto-merge` 作业 | 合并成功后（本作业内） | 向 `auto-dispatch.yml` 与 `pr-merged-writeback.yml` 各 POST 一次 `workflow dispatch`（`ref: main`，`inputs: pr_number`） | dispatch 失败只记日志，不让合并作业变红（合并已发生）；下游工作流自身幂等，重复触发不重复评论/分派 |
 | `agent-orchestrator.yml`（2026-11-14 扩展） | `quality` 跑完且结论 success；或 PR 打 `state:qa-ready` 标签；或手动 dispatch | 按 head SHA 定位 open PR → POST webhook 请 Grok 冒烟 | 只认 success 结论；草稿 PR 跳过；已有 `state:qa-ready` 的跳过（打标签路径会触发）；同一 head SHA 只触发一次（查本工作流按 head SHA 的运行记录去重，失败的运行不算、可重试）；无对应 open PR 只记日志 |
-| `auto-dispatch.yml`（2026-11-14 新增） | PR 关闭且 `merged == true`、base 为 main | 找下一个就绪任务（`state:todo` + `agent:muse-2/3` + 依赖全关 + 无认领/分派评论）→ 发 TASK_ASSIGNED 评论（from: github-actions）→ 补 `state:todo` 标签 | 优先派给本次合并空闲的 builder；依赖未满足的绝不分派；已认领 / 已分派的任务不动；无就绪任务只记日志；每次只派一个任务 |
+| `auto-dispatch.yml`（2026-11-14 新增） | PR 关闭且 `merged == true`、base 为 main；或 auto-merge 合并成功后 `workflow_dispatch`（填 PR 号） | 找下一个就绪任务（`state:todo` + `agent:muse-2/3` + 依赖全关 + 无认领/分派评论）→ 发 TASK_ASSIGNED 评论（from: github-actions）→ 补 `state:todo` 标签 | 优先派给本次合并空闲的 builder；依赖未满足的绝不分派；已认领 / 已分派的任务不动；无就绪任务只记日志；每次只派一个任务；dispatch 路径从 API 取 PR 并校验已合入 main |
 | `dispatch-check.yml`（2026-11-14 修 404） | Issue 新建 / 编辑 / 关闭 / 标签变化；每小时定时巡检 | 缺字段提醒、依赖阻塞打 `state:blocked`、依赖解除摘标签 | 只做提醒与标签，不合并、不关闭 Issue；依赖方搜索改走 REST Search API（`gh api search/issues` 在 runner 里报 HTTP 404，见第五节备忘） |
 
 既有 workflow 不在 TASK-07 改动范围：`quality.yml`（检查本体）；
@@ -90,6 +95,14 @@ pull_request），去重靠查本工作流按 head SHA 的运行记录，同一 
 编号最小的就绪任务，优先给本次空闲的 builder；没有就绪任务时只记
 日志，不报错、不派错。已被分派过（有 TASK_ASSIGNED 评论）的任务不
 重复分派；48 小时无人认领的走协议升级流程，不由本工作流重派。
+8. **GITHUB_TOKEN 合并不会触发下游工作流**：auto-merge 用默认
+GITHUB_TOKEN 合并 PR，GitHub 不会为该 token 触发的事件再启动新工作
+流，所以 `pull_request closed` 事件被抑制，auto-dispatch 与
+pr-merged-writeback 收不到合入事件（2026-11-14 实测：PR #31 合入后
+两者均为 0 次运行）。修法是 auto-merge 合并成功后显式 POST
+workflow dispatch 触发它俩（workflow_dispatch 明确豁免这条限制），
+不需要换 PAT、不需要新 secret。手动在网页上合并（用人 token）时
+pull_request closed 事件正常触发，两条路径都保留。
 
 ## 四、分支保护（main）核实清单
 
@@ -128,6 +141,13 @@ main、force push 在 GitHub 侧均不被拦截，此前的合并纪律全靠流
 - 手动补救入口：`issue-to-pr`、`auto-merge` 均支持 `workflow_dispatch`，
 在 Actions 页选对应 workflow 填参数即可重跑（幂等，不会重复建）。
 `agent-orchestrator` 也支持 `workflow_dispatch`（填 PR 号）手动补触发。
+`auto-dispatch` 与 `pr-merged-writeback` 同样支持 `workflow_dispatch`
+（填 PR 号）手动补触发——合入事件被抑制时就用这条路。
+- 派任务链断链与修复（2026-11-14）：auto-merge 用 GITHUB_TOKEN 合并后，
+`pull_request closed` 事件被 GitHub 抑制，auto-dispatch 与
+pr-merged-writeback 均为 0 次运行。已改为 auto-merge 合并成功后显式
+POST workflow dispatch（`ref: main`，`inputs: pr_number`）触发它俩；
+dispatch 失败只记日志，不影响已发生的合并。
 - 出问题先看对应 workflow 的运行日志：每个跳过分支都写了原因
 （无标签 / 非 behind / 解析不到 Issue 等），按日志定位即可。
 - `dispatch-check.yml` 的依赖方搜索（2026-11-14 修）：原先用

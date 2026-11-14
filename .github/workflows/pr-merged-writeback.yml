@@ -16,12 +16,28 @@
 #   - 只处理 merged == true 且 base 为 main 的 PR；
 #   - Issue 已关闭且已带 state:merged 时整体跳过，重复触发不重复评论；
 #   - 只动解析出的那一个 Issue，不批量扫其他 Issue。
+#
+# 触发（两条路，同一套逻辑）：
+#   - PR 关闭且 merged == true、base 为 main（手动在网页上合并时走这条）；
+#   - auto-merge 合并成功后显式 workflow_dispatch（填 PR 号）。
+#   第二条是必需的：auto-merge 用默认 GITHUB_TOKEN 合并，GitHub 不会为
+#   该 token 触发的事件再启动新工作流，pull_request closed 事件被抑制
+#   （2026-11-14 实测：PR #31 合入后本工作流 0 次运行）。workflow_dispatch
+#   明确豁免这条限制，所以由 auto-merge 显式触发。
+#   workflow_dispatch 路径下事件里没有 pull_request 对象，PR 正文、
+#   分支名、合并提交一律从 API 取，并校验 PR 确实已合入 main。
 
 name: pr-merged-writeback
 
 on:
   pull_request:
     types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: '已合入 main 的 PR 编号'
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -30,21 +46,43 @@ permissions:
 
 jobs:
   writeback:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: 回写任务状态并关闭 Issue
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER_EVENT: ${{ github.event.pull_request.number }}
+          PR_NUMBER_INPUT: ${{ inputs.pr_number }}
+          PR_BODY_EVENT: ${{ github.event.pull_request.body }}
+          HEAD_REF_EVENT: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA_EVENT: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           set -euo pipefail
           API="https://api.github.com/repos/$REPO"
           AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')
+
+          # 两条触发路径取 PR 编号：pull_request 事件取事件里的编号，
+          # workflow_dispatch 取 inputs.pr_number。
+          PR_NUMBER="${PR_NUMBER_EVENT:-$PR_NUMBER_INPUT}"
+          test -n "$PR_NUMBER" || { echo "未取到 PR 编号，跳过"; exit 0; }
+          PR_BODY="$PR_BODY_EVENT"
+          HEAD_REF="$HEAD_REF_EVENT"
+          MERGE_SHA="$MERGE_SHA_EVENT"
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # 事件里没有 pull_request 对象，从 API 取 PR，并校验它确实已合入 main。
+            PR_JSON="$(curl -sS "${AUTH[@]}" "$API/pulls/$PR_NUMBER")"
+            MERGED="$(echo "$PR_JSON" | jq -r '.merged')"
+            BASE="$(echo "$PR_JSON" | jq -r '.base.ref')"
+            if [ "$MERGED" != "true" ] || [ "$BASE" != "main" ]; then
+              echo "PR #$PR_NUMBER 未合入 main（merged=$MERGED，base=$BASE），跳过"; exit 0
+            fi
+            PR_BODY="$(echo "$PR_JSON" | jq -r '.body // ""')"
+            HEAD_REF="$(echo "$PR_JSON" | jq -r '.head.ref')"
+            MERGE_SHA="$(echo "$PR_JSON" | jq -r '.merge_commit_sha // ""')"
+          fi
 
           ISSUE_NUMBER="$(echo "$PR_BODY" | grep -ioE '(closes|fixes|resolves)[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' | head -n 1 || true)"
           if [ -z "$ISSUE_NUMBER" ]; then

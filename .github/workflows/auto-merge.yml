@@ -16,6 +16,16 @@
 #
 # 合并方式：默认 merge 提交；带 merge-squash 标签的用 squash。
 #
+# 合并后显式触发下游（2026-11-14 修正）：合并成功后向 auto-dispatch.yml
+# 与 pr-merged-writeback.yml 各 POST 一次 workflow dispatch（ref: main，
+# inputs: pr_number）。必需的：auto-merge 用默认 GITHUB_TOKEN 合并，
+# GitHub 不会为该 token 触发的事件再启动新工作流，pull_request closed
+# 事件被抑制，下游收不到合入事件（实测 PR #31 合入后两者均为 0 次运行）。
+# workflow_dispatch 明确豁免这条限制，显式触发即可接通；不需要换 PAT、
+# 不需要新 secret。dispatch 失败只记日志，不让合并作业变红（合并已发生）。
+# 手动在网页上合并（用人 token）时 pull_request closed 事件正常触发，
+# 两条路径都保留；下游工作流自身幂等，重复触发不重复评论/分派。
+#
 # TASK-07 扩展（2026-11-14）：新增 update-branches 作业——main 有新提交
 # （push）或手动 dispatch 时，把落后的 agent/* 任务分支自动更新到最新
 # main（PUT /pulls/{n}/update-branch，协议第六节定的机械动作）；有冲突
@@ -37,6 +47,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   update-branches:
@@ -93,6 +104,22 @@ jobs:
           API="https://api.github.com/repos/$REPO"
           AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')
 
+          # 合并成功后显式触发下游工作流（见文件头注释）：auto-dispatch 与
+          # pr-merged-writeback 各一次 workflow dispatch。dispatch 失败只
+          # 记日志，不让合并作业变红——合并已发生，不可回滚；下游未触发时
+          # 可在 Actions 页手动 dispatch（填 PR 号）补救。
+          dispatch_downstream() {
+            local pr="$1"
+            local wf d_code
+            for wf in auto-dispatch.yml pr-merged-writeback.yml; do
+              d_code="$(curl -sS -o /tmp/dispatch.json -w '%{http_code}' -X POST "${AUTH[@]}" "$API/actions/workflows/$wf/dispatches" -H 'Content-Type: application/json' --data-binary "{\"ref\": \"main\", \"inputs\": {\"pr_number\": $pr}}" || true)"
+              case "$d_code" in
+                204) echo "已触发 $wf（PR #$pr）" ;;
+                *) echo "$wf 触发未成功（HTTP ${d_code:-无响应}）："; cat /tmp/dispatch.json 2>/dev/null || true; echo; echo "只记录不报错——下游工作流未触发，可在 Actions 页手动 dispatch（填 PR 号 $pr）补救。" ;;
+              esac
+            done
+          }
+
           # 收集待评估的 PR 编号：pull_request 事件只看本 PR；
           # workflow_run 事件（quality 跑完）列出所有 open PR 逐个评估。
           if [ "$EVENT" = "pull_request" ]; then
@@ -144,7 +171,7 @@ jobs:
             echo "条件满足，合并 PR #$PR（方式：$METHOD，head：$HEAD_SHA）"
             HTTP_CODE="$(curl -sS -o /tmp/merge.json -w '%{http_code}' -X PUT "${AUTH[@]}" "$API/pulls/$PR/merge" -H 'Content-Type: application/json' --data-binary "{\"merge_method\": \"$METHOD\", \"sha\": \"$HEAD_SHA\"}")"
             case "$HTTP_CODE" in
-              200) echo "PR #$PR 已合并。" ;;
+              200) echo "PR #$PR 已合并。"; dispatch_downstream "$PR" ;;
               *) echo "合并未成功（HTTP $HTTP_CODE）："; cat /tmp/merge.json; echo; echo "本次只记录，不报错——可能原因：分支不是最新、保护规则拦截，处理后下次触发会再试。" ;;
             esac
           done

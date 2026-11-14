@@ -117,3 +117,10 @@ state:todo ──(TASK_ACCEPTED)──▶ state:claimed ──(TASK_COMPLETED + 
   （机器可读头 `from: github-actions`），优先派给本次合并空闲出来的
   builder；不再等每小时巡逻（`dispatch-check.yml` 只做检查与标签，
   不分派任务）。
+- 触发路径（2026-11-14 修正）：上面两步由 auto-merge 在合并成功后显式
+  POST workflow dispatch 触发（`workflow_dispatch`，填 PR 号）。原因是
+  auto-merge 用默认 GITHUB_TOKEN 合并，GitHub 不会为该 token 触发的
+  事件再启动新工作流，`pull_request closed` 事件被抑制（实测 PR #31
+  合入后两者均为 0 次运行）。手动在网页上合并（用人 token）时
+  pull_request closed 事件正常触发，两条路径都保留；两工作流也都支持
+  手动 workflow_dispatch 补救。
