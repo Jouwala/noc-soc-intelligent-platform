@@ -112,7 +112,7 @@ jobs:
             local pr="$1"
             local wf d_code
             for wf in auto-dispatch.yml pr-merged-writeback.yml; do
-              d_code="$(curl -sS -o /tmp/dispatch.json -w '%{http_code}' -X POST "${AUTH[@]}" "$API/actions/workflows/$wf/dispatches" -H 'Content-Type: application/json' --data-binary "{\"ref\": \"main\", \"inputs\": {\"pr_number\": $pr}}" || true)"
+              d_code="$(curl -sS -o /tmp/dispatch.json -w '%{http_code}' -X POST "${AUTH[@]}" "$API/actions/workflows/$wf/dispatches" -H 'Content-Type: application/json' --data-binary "{\"ref\": \"main\", \"inputs\": {\"pr_number\": \"$pr\"}}" || true)"
               case "$d_code" in
                 204) echo "已触发 $wf（PR #$pr）" ;;
                 *) echo "$wf 触发未成功（HTTP ${d_code:-无响应}）："; cat /tmp/dispatch.json 2>/dev/null || true; echo; echo "只记录不报错——下游工作流未触发，可在 Actions 页手动 dispatch（填 PR 号 $pr）补救。" ;;
