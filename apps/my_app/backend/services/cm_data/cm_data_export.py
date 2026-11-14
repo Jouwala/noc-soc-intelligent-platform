@@ -56,7 +56,7 @@ import openpyxl
 import pandas as pd
 
 # rsa_util 在 services 包根，不在本子包内：用 `..rsa_util`，
-# 与下面后续的 `from backend.services.credential_store import ...` 同一目标。
+# 与下面后续的 `from backend.services.credential.credential_store import ...` 同一目标。
 try:
     from ..rsa_util import rsa_encrypt_pem  # RSA 公钥加密（PKCS#1 v1.5）统一实现
 except ImportError:
@@ -105,7 +105,7 @@ SUMMARY_TABLE = "cm_site_summary"
 
 # 远程写入客户端（定时任务加载时走 backend.services 路径，独立运行时直连）
 try:
-    from backend.services.db_writer_client import DbWriterClient
+    from backend.services.db.db_writer_client import DbWriterClient
 except ImportError:
     try:
         sys.path.insert(0, os.path.join(SCRIPT_DIR, ".."))
@@ -194,7 +194,7 @@ TECH_MAPPING = {
 #     REFERER 依赖 HOST/PORT，故在本块末尾重算。
 # ============================================================
 try:
-    from backend.services.task_config_files import apply_config_overrides
+    from backend.services.task.task_config_files import apply_config_overrides
 except ImportError:
     from task_config_files import apply_config_overrides  # type: ignore
 
@@ -402,7 +402,7 @@ def _runtime_credentials():
     if user and pwd:
         return user, pwd
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         try:
             from credential_store import get_credential  # type: ignore

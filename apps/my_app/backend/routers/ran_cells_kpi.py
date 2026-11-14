@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """RAN 2G/3G/4G Cells KPI 看板 API。
 
-数据源与统计口径见 backend/services/ran_cells_kpi_service.py 顶部说明。
+数据源与统计口径见 backend/services/ran/ran_cells_kpi_service.py 顶部说明。
 
 GET /api/ran-cells-kpi/overview
     ?month=YYYY-MM        统计月份（默认当前月）
@@ -27,7 +27,7 @@ from datetime import date
 
 from fastapi import APIRouter, Query
 
-from backend.services import ran_cells_kpi_service as svc
+from backend.services.ran import ran_cells_kpi_service as svc
 
 logger = logging.getLogger("ran_cells_kpi")
 

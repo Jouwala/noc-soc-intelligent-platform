@@ -11,11 +11,11 @@
   GET /api/pm-analysis/workflow-drilldown 里程碑下钻（走过 / 当前停在该节点）
 
 口径说明（字段语义陷阱、超期定义、下钻与概览如何保持一致）
-统一写在 `backend/services/pm_caliber.py` 的模块 docstring —— 改口径只改那里。
+统一写在 `backend/services/pm/pm_caliber.py` 的模块 docstring —— 改口径只改那里。
 里程碑顺序严格按 eFlow 的 Workflow History（`queryAllSteps`，payload
 `eflow-pm-task`）：Create → Schedule → Accept → Process → PMManagerApprove
 → FLMLeaderApprove → Closed（**与 pm_caliber 里的「真实时序」相反**，见
-`backend/services/pm_workflow_service.py` 的模块 docstring）。
+`backend/services/pm/pm_workflow_service.py` 的模块 docstring）。
 """
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ import logging
 
 from fastapi import APIRouter, Query
 
-from backend.services import pm_analysis_service as svc
-from backend.services import pm_workflow_service as wfs
+from backend.services.pm import pm_analysis_service as svc
+from backend.services.pm import pm_workflow_service as wfs
 
 logger = logging.getLogger("pm_analysis")
 

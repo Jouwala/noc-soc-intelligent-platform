@@ -4,14 +4,14 @@
 - /api/sp-data/summary、/api/sp-data/rows       SP 表概览与分页查询
 - /api/data、/api/warehouses、/api/details      仓库看板（对齐 Unified_Tools/WareHouseDashBoard）
 
-计算逻辑完整复用 app_sp_optimized.py（见 backend/services/sp_dashboard.py），
+计算逻辑完整复用 app_sp_optimized.py（见 backend/services/sp/sp_dashboard.py），
 返回结构对齐参考 Flask 的 /api/data、/api/warehouses、/api/details。
 """
 import logging
 
 from fastapi import APIRouter, HTTPException
 
-from backend.services.sp_dashboard import (
+from backend.services.sp.sp_dashboard import (
     get_dashboard_data,
     get_warehouses as sp_list_warehouses,
     get_detail_rows,
@@ -25,14 +25,14 @@ router = APIRouter(tags=["sp-dashboard"])
 @router.get("/api/sp-data/summary")
 def sp_data_summary():
     """各 SP 表的总行数、列、最近同步时间、衍生指标（供仓库看板）"""
-    from backend.services.get_sp_table import get_sp_summary
+    from backend.services.sp.get_sp_table import get_sp_summary
     return get_sp_summary()
 
 
 @router.get("/api/sp-data/rows")
 def sp_data_rows(table: str, page: int = 1, size: int = 50, search: str = ""):
     """分页 + 模糊搜索返回某 SP 表的数据"""
-    from backend.services.get_sp_table import get_sp_rows, SP_TABLES
+    from backend.services.sp.get_sp_table import get_sp_rows, SP_TABLES
     if table not in SP_TABLES:
         raise HTTPException(status_code=400, detail=f"未知表: {table}")
     return get_sp_rows(table, page=page, size=size, search=search)

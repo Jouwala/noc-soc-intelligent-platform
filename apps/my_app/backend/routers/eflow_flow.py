@@ -14,7 +14,7 @@
       多条件模拟：不查具体单子，按给定字段值（告警码 / VIP / HUB / 站点子类型
       / 下挂站点数等）评估全部规则，判定与 query 同引擎（eflow_flow_rules）。
 
-实现全部委托 `backend/services/eflow_flow.py`；本文件只做参数校验与路由。
+实现全部委托 `backend/services/eflow/eflow_flow.py`；本文件只做参数校验与路由。
 只读：不对任何库表做写操作。
 """
 import logging
@@ -65,7 +65,7 @@ def flow_query(
 ):
     """按告警或 TT 查询全流程。"""
     try:
-        from backend.services.eflow_flow import query_flow
+        from backend.services.eflow.eflow_flow import query_flow
     except Exception as e:  # noqa: BLE001
         logger.exception("[eflow-flow] 模块导入失败")
         raise HTTPException(status_code=500, detail=f"流程模块不可用：{e}") from e
@@ -81,7 +81,7 @@ def flow_query(
 def flow_graph(lang: str = Query("zh", pattern=_LANG_PATTERN)):
     """规则驱动的流程骨架（节点 + 边），与具体单子无关。"""
     try:
-        from backend.services.eflow_flow import build_flow_graph
+        from backend.services.eflow.eflow_flow import build_flow_graph
         return build_flow_graph(lang=lang)
     except Exception as e:  # noqa: BLE001
         logger.exception("[eflow-flow] 骨架构建失败")
@@ -97,7 +97,7 @@ def flow_rules(
     """规则清单（可选过滤），供页面展示与导出。"""
     try:
         from backend.database import get_raw_connection
-        from backend.services.eflow_flow import _load_rules
+        from backend.services.eflow.eflow_flow import _load_rules
         with get_raw_connection() as conn:
             rules = _load_rules(conn)
     except Exception as e:  # noqa: BLE001
@@ -128,7 +128,7 @@ def flow_simulate(body: FlowSimulateIn, lang: str = Query("zh", pattern=_LANG_PA
         raise HTTPException(status_code=422, detail="至少填写一个模拟条件")
 
     try:
-        from backend.services.eflow_flow import simulate_flow
+        from backend.services.eflow.eflow_flow import simulate_flow
         return simulate_flow(conds, lang=lang)
     except HTTPException:
         raise

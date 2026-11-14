@@ -20,7 +20,7 @@ import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 
-from backend.services import tt_exclude as tx
+from backend.services.tt import tt_exclude as tx
 
 logger = logging.getLogger(__name__)
 

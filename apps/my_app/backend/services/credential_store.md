@@ -62,7 +62,7 @@ CREATE TABLE credentials (
 
 ## 用法
 ```python
-from backend.services.credential_store import get_credential
+from backend.services.credential.credential_store import get_credential
 user, pwd = get_credential("zte_ume")   # 口令不写在代码/文档里
 ```
 
@@ -74,7 +74,7 @@ user, pwd = get_credential("zte_ume")   # 口令不写在代码/文档里
 def _runtime_credentials():
     """运行时凭据：环境变量 > credential_store > 模块默认值。"""
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         return USERNAME, PASSWORD
     return get_credential("cm_data", USERNAME, PASSWORD)
@@ -95,4 +95,4 @@ def _runtime_credentials():
 
 ## 连接测试的实现位置
 - `backend/routers/credentials.py` — `zte_oauth2` / `rais` 两组（auth_manager 路径）
-- `backend/services/credential_tester.py`（及同目录 `credential_tester.md`）— 其余 10 种 kind
+- `backend/services/credential/credential_tester.py`（及同目录 `credential_tester.md`）— 其余 10 种 kind

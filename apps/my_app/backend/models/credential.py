@@ -1,6 +1,6 @@
 """凭据表模型（app.db）
 
-对应原 backend/services/credential_store.py::_get_conn 的
+对应原 backend/services/credential/credential_store.py::_get_conn 的
 CREATE TABLE IF NOT EXISTS credentials。
 """
 from sqlalchemy import Column, Text

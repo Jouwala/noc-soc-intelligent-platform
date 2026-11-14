@@ -157,9 +157,9 @@ from backend.routers import (
     ipran_topo,
 )
 # 任务配置文件注册表（Settings「任务配置」页签 → 配置文件管理）
-from backend.services import task_configs_registry  # noqa: F401  (注册副作用)
-from backend.services import task_runner
-from backend.services import portal_auth  # noqa: F401  (会话路由 + current_user 供鉴权中间件)
+from backend.services.task import task_configs_registry  # noqa: F401  (注册副作用)
+from backend.services.task import task_runner
+from backend.services.portal import portal_auth  # noqa: F401  (会话路由 + current_user 供鉴权中间件)
 from backend import auth_switch  # noqa: F401  (日常开发免登录总开关，见 backend/auth_switch.py)
 from backend.database import get_raw_connection
 
@@ -234,10 +234,10 @@ app.include_router(sp_dashboard.router)
 # SP 物料库存/消耗统计汇总（WH/DOP 报表模板，见 routers/sp_material_summary.py）
 app.include_router(sp_material_summary.router)
 # SP 备件明细报表（page=sp_details；数据源 = sp_email_details 任务生成的合并工作簿，
-# 见 routers/sp_details.py 与 services/sp_details_service.py）
+# 见 routers/sp_details.py 与 services/sp/sp_details_service.py）
 app.include_router(sp_details.router)
 # SP 备件 / 耗材汇总报表（page=sp_report / com_report；数据源 = sp_report_generate 任务
-# 生成的汇总工作簿，见 routers/sp_report.py 与 services/sp_report_service.py）
+# 生成的汇总工作簿，见 routers/sp_report.py 与 services/sp/sp_report_service.py）
 app.include_router(sp_report.router)
 app.include_router(system.router)
 # Incident Overview / IP Trace：从 Unified_Tools 集成（Phase 1 拆分时遗漏挂载，
@@ -265,7 +265,7 @@ app.include_router(avail_county.router)
 # RAN 2G/3G/4G Cells KPI 看板（小区级可用率，达标值 99.65%）
 app.include_router(ran_cells_kpi.router)
 # BP Report 劣化小区报告（page=bp_report；读本机派生库 data/bp_report.sqlite3，
-# Cluster 来自 Excel 的 BP Cells List、指标由 RAN_UME 更新，口径见 services/bp_caliber.py）
+# Cluster 来自 Excel 的 BP Cells List、指标由 RAN_UME 更新，口径见 services/bp/bp_caliber.py）
 app.include_router(bp_report.router)
 app.include_router(ume_in_kpi.router)
 # UME 割接大屏「实时还原」：后端代理 UME 大屏鉴权+取数，页面任意时刻打开都是当前值
@@ -350,7 +350,7 @@ app.include_router(ap.router)
 app.include_router(ui_config.router)
 # eFlow Q&A 工具块顺序：全局共享一份，仅本机可改（见 routers/ui_tool_order.py）
 app.include_router(ui_tool_order.router)
-# uniplam 门户鉴权适配：/api/auth/portal-login、/api/auth/logout、/api/auth/me（见 services/portal_auth.py）
+# uniplam 门户鉴权适配：/api/auth/portal-login、/api/auth/logout、/api/auth/me（见 services/portal/portal_auth.py）
 app.include_router(portal_auth.router)
 # MsPortal 静态门户「Quality Control」面板的数据库统计与明细下钻（只读，见 routers/portal_qc.py）
 app.include_router(portal_qc.router)
@@ -358,10 +358,10 @@ app.include_router(portal_qc.router)
 # （见 routers/portal_catalog.py）。未登录访客读不到——刻意不进 _PUBLIC_API 白名单。
 app.include_router(portal_catalog.router)
 # CN KPI 看板：原 my-finebi「CN KPI」看板原生重建（18 组件，经远端只读 SQL API 取数，
-# 不依赖 my-finebi 进程）。数据源/口径见 services/cn_kpi_service.py 顶部说明。
+# 不依赖 my-finebi 进程）。数据源/口径见 services/cn/cn_kpi_service.py 顶部说明。
 app.include_router(cn_kpi.router)
 # CN KPI 5 分钟看板：读 cnn_kpi_sync_5mins 任务写入的 5mins_* 表，Day0/Day1/Day7 叠画。
-# 数据源/口径见 services/cn_kpi_5mins_service.py 顶部说明。
+# 数据源/口径见 services/cn/cn_kpi_5mins_service.py 顶部说明。
 app.include_router(cn_kpi_5mins.router)
 # 原生看板（泛化版）：my-finebi 其余全部看板（IP RAN Metro Ring / 可用率 / 2G-3G-4G KPI /
 # MTTR / CM / 备件 / Progress 等 17 个）统一由一套引擎驱动，经远端只读 SQL API 取数，
@@ -374,22 +374,22 @@ app.include_router(repeat_site_down.router)
 app.include_router(fme_ranking.router)
 # CR 变更分析：按 change_category 看变更计划的排期与执行情况（数据源 eflow_cr）。
 # 口径（终态词表、按时/延期判定、概览与下钻如何共用同一份 WHERE）见
-# services/cr_analysis_service.py 的模块 docstring。
+# services/cr/cr_analysis_service.py 的模块 docstring。
 app.include_router(cr_analysis.router)
 # PM 执行分析：按 PM 计划 (pmp_no) 看预防性维护工单的完成与超期情况（数据源 eflow_pm）。
 # 口径（字段名陷阱、真实流程顺序、pmt_overdue 语义、概览与下钻如何共用同一份 WHERE）
-# 见 services/pm_caliber.py 的模块 docstring。
+# 见 services/pm/pm_caliber.py 的模块 docstring。
 app.include_router(pm_analysis.router)
 
 # Speedtest 竞对分析：ORANGE vs MTN 的速率/时延/抖动/测试量对比（数据源 speedtest_data）。
 # 口径（品牌归一、左闭右开时间窗、下钻与概览如何共用同一份 WHERE）见
-# services/bm_speedtest_caliber.py 的模块 docstring。
+# services/bm/bm_speedtest_caliber.py 的模块 docstring。
 app.include_router(bm_speedtest.router)
 
 # Meta 基准报告：ORANGE vs MTN 的速率 PK + FDD 网络侧 KPI（数据源 meta_data）。
 # ⚠️ 与 bm_speedtest 是**两张不同的表、两套口径**，不要合并：
 # speedtest_data 是实测网速（provider 列 + LIKE 归一），meta_data 是 Meta 口径的
-# 竞对基准（两家各占一个固定列，无运营商维度）。口径见 services/bm_meta_caliber.py。
+# 竞对基准（两家各占一个固定列，无运营商维度）。口径见 services/bm/bm_meta_caliber.py。
 app.include_router(bm_meta.router)
 
 # Data Agent（只读 NL2SQL + 告警归因）：探索性副驾，不参与任何定时报表/看板数字的产出。
@@ -400,7 +400,7 @@ app.include_router(data_agent.router)
 # CMDB 站点同步比对（Email Reports →「站点同步」页签）：
 # 只提供「上次运行摘要 + 产出文件下载」两个只读接口；执行复用任务接口
 # POST /api/tasks/eflow_site_update/run，把队列、禁用态校验、执行历史都交给 task_runner。
-# 任务本体见 services/eflow_site_update_task.py（只生成文件，绝不写库）。
+# 任务本体见 services/eflow/eflow_site_update_task.py（只生成文件，绝不写库）。
 app.include_router(cmdb_site_update.router)
 
 # IP RAN 光纤拓扑（?page=ipran_topo）：UME lid=1293626099480711168 的网元 + 链路 + 活动告警，
@@ -677,7 +677,7 @@ async def startup_event():
     # SP 备件明细看板预热：首次要整份解析合并工作簿（实测 4.7s），
     # 后端重启后缓存为空，冷成本会落在第一个打开该页的用户头上。
     try:
-        from backend.services import sp_details_service as _spd
+        from backend.services.sp import sp_details_service as _spd
         _spd.warmup()
         print("[startup] SP 备件明细看板预热已启动（后台）")
     except Exception as _e:
@@ -722,7 +722,7 @@ async def startup_event():
     def _probe_portal_bg():
         try:
             import asyncio as _asyncio
-            from backend.services import portal_auth as _pa
+            from backend.services.portal import portal_auth as _pa
             _reason = _asyncio.run(_pa.probe_portal_reachable())
             if _reason is None:
                 print(f"[startup] 门户回调地址可达: {_pa.UNIPLAM_ME_URL}", flush=True)

@@ -8,8 +8,8 @@ import logging
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from backend.services import incident_ai_service as ai_svc
-from backend.services import incident_overview_service as svc
+from backend.services.incident import incident_ai_service as ai_svc
+from backend.services.incident import incident_overview_service as svc
 from backend.api_i18n import translate_ui_fields
 
 logger = logging.getLogger("incident_overview_router")

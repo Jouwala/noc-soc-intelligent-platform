@@ -73,7 +73,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 logger = logging.getLogger("avail_ms")
 
 # my_app 自持派生库（与 dashboard_service.LOCAL_SQLITE_FILES['__local_avail_recon__'] 同一文件）
-AVAIL_DB = Path(__file__).resolve().parents[2] / "data" / "avail_recon.sqlite3"
+AVAIL_DB = Path(__file__).resolve().parents[3] / "data" / "avail_recon.sqlite3"
 
 # 未达标阈值（比率），与 site_availability_service.DEFAULT_THRESHOLD 同值同义
 DEFAULT_THRESHOLD = 0.9965

@@ -55,7 +55,7 @@ if hasattr(sys.stdout, "reconfigure"):
 SCHEMA = "ipran_ume"
 
 # 表名 → (索引列, 用于计时/探测的代表性谓词)
-# 谓词取自 backend/services/native_catalog.py 里该表真实组件的 WHERE（见各注释）。
+# 谓词取自 backend/services/native/native_catalog.py 里该表真实组件的 WHERE（见各注释）。
 PLAN: dict[str, tuple[tuple[str, ...], dict[str, str]]] = {
     # metro_ring 8 个组件：ME + Measure Object（native_catalog c1..c8）
     "Metro_ring_me_15mins": (

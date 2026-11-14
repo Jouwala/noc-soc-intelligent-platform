@@ -102,8 +102,8 @@ print(c.execute('SELECT Status, COUNT(*) FROM eflow_tt GROUP BY Status').fetchal
 
 ### 2. Sync logic, field mapping
 
-- `D:\01_RPA\Task\my_app\backend\services\sync_from_eflow_api.py`
-- `D:\01_RPA\Task\my_app\backend\services\eflow_api_client.py`
+- `D:\01_RPA\Task\my_app\backend\services\eflow\sync_from_eflow_api.py`
+- `D:\01_RPA\Task\my_app\backend\services\eflow\eflow_api_client.py`
 
 ### 3. Architecture & data flow
 
@@ -116,7 +116,7 @@ print(c.execute('SELECT Status, COUNT(*) FROM eflow_tt GROUP BY Status').fetchal
 
 ### 5. Alarms
 
-- `D:\01_RPA\Task\my_app\backend\services\eflow_alarm_service.py`
+- `D:\01_RPA\Task\my_app\backend\services\eflow\eflow_alarm_service.py`
 - Config: `eflow_alarm_config.json`
 
 ---

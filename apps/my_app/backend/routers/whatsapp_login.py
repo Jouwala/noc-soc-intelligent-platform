@@ -2,7 +2,7 @@
 """WhatsApp 网页扫码登录接口 —— 供设置页「WhatsApp 登录」Tab 使用。
 
 业务逻辑（通道文件读写、状态汇总）都在
-`backend/services/whatsapp_login_service.py`；本文件只做 HTTP 薄封装。
+`backend/services/whatsapp/whatsapp_login_service.py`；本文件只做 HTTP 薄封装。
 
 端点（均走 require_protected；本地访问回环放行）：
 - GET  /api/whatsapp/login/status?device=notify|bot  → 连接状态 + 出码状态 + 二维码
@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.security import require_protected
-from backend.services import whatsapp_login_service as svc
+from backend.services.whatsapp import whatsapp_login_service as svc
 
 logger = logging.getLogger("whatsapp_login_router")
 

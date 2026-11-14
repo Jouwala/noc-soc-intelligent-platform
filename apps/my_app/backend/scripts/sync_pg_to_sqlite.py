@@ -61,9 +61,9 @@ BATCH_SIZE = 5000  # 每批写入行数
 #    实例：用户 14:48:47 保存密码 → 15:45 那次同步（15:50:30 落盘）后消失。
 #
 # 判定标准：看这张表的**写入方**是否与 DB 模式无关地固定写 SQLite。
-#   - credentials      → backend/services/credential_store.py 经 get_sqlite_connection 本地入口
-#   - email_recipients → backend/services/email_recipient_store.py 同样走本地入口
-#   - task_schedule_config → backend/services/task_runner.py::_save_schedule_config
+#   - credentials      → backend/services/credential/credential_store.py 经 get_sqlite_connection 本地入口
+#   - email_recipients → backend/services/email/email_recipient_store.py 同样走本地入口
+#   - task_schedule_config → backend/services/task/task_runner.py::_save_schedule_config
 #       无条件写 SQLite（`load_schedule_config_rows` / `_load_schedule_config` /
 #       `schedule_all_tasks` / 执行前的 `_refresh_task_schedule_from_db` 都读它）。
 #       **代码里没有任何判定依据 PG 那份**：它只是 `_save_schedule_config` 双写出来的

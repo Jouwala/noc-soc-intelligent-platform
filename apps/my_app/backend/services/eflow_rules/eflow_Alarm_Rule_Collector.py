@@ -38,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger("eflow_alarm_rule_collector")
 
 # ========== 导入项目中的 eflow API 客户端 ==========
-from backend.services.eflow_api_client import (
+from backend.services.eflow.eflow_api_client import (
     ensure_login, get_session_headers, _http_request, HOST, PORT
 )
 

@@ -276,7 +276,7 @@ def _probe_ran_em_session(cookie: str, forgery_token: str) -> bool:
 
 def _runtime_credentials():
     """凭据：环境变量 > credential_store(`zte_ume`) > 模块默认值。"""
-    from backend.services.credential_store import get_credential
+    from backend.services.credential.credential_store import get_credential
     return get_credential("zte_ume",
                           os.environ.get("RAN_EM_USER", "NOC"),
                           os.environ.get("RAN_EM_PASS", ""),

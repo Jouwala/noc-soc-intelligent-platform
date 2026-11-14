@@ -4,7 +4,7 @@
 
 `ms_sla_dashboard.py`（router）为 **MS Contract KPIs / MS WOs SLA** 数据看板提供后端
 接口，数据源为 `data/ms_sla/ms_sla_dashboard.sqlite3`（由
-`backend/services/ms_sla_dashboard.py` 在 `ms_sla_full` 任务中全量写入）。
+`backend/services/ms/ms_sla_dashboard.py` 在 `ms_sla_full` 任务中全量写入）。
 
 ## 接口
 

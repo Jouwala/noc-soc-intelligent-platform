@@ -1,6 +1,6 @@
 """SP 备件同步日志表模型（app.db）
 
-对应原 backend/services/get_sp_table.py::_ensure_log_table 的
+对应原 backend/services/sp/get_sp_table.py::_ensure_log_table 的
 CREATE TABLE IF NOT EXISTS sp_sync_log。
 """
 from sqlalchemy import Column, Integer, Text

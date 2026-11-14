@@ -87,7 +87,7 @@ def set_scope_switch(scope: str, enabled: bool) -> None:
 def task_enabled_by_scope(task_id: str) -> bool:
     """判断某任务在本机是否被允许执行：基于 _task_registry[task_id]['exec_scope'] 组合 get_scope_switch。"""
     # 延迟 import 避免循环依赖（task_runner 在 import 时初始化 _task_registry）
-    from backend.services.task_runner import _task_registry
+    from backend.services.task.task_runner import _task_registry
     task = _task_registry.get(task_id, {})
     scope = task.get("exec_scope", "internal")
     return get_scope_switch(scope)
@@ -95,7 +95,7 @@ def task_enabled_by_scope(task_id: str) -> bool:
 
 def scope_allowed_task_ids(scope: str) -> set:
     """返回本机 scope 开关允许的 task_id 集合（v6 §4.4.1 _claim_next 用）。"""
-    from backend.services.task_runner import _task_registry
+    from backend.services.task.task_runner import _task_registry
     if not get_scope_switch(scope):
         return set()
     return {tid for tid, t in _task_registry.items() if t.get("exec_scope", "internal") == scope}

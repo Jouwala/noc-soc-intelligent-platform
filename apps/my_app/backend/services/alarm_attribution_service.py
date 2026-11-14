@@ -232,7 +232,7 @@ def attribute(site: Optional[str] = None, days: int = 7,
                 provider, api_key, model, prompt, base_url
             )
         else:
-            from backend.services import incident_ai_service as ai_svc
+            from backend.services.incident import incident_ai_service as ai_svc
             payload, status = ai_svc.dispatch(
                 provider, {"api_key": api_key, "prompt": prompt, "model": model}
             )

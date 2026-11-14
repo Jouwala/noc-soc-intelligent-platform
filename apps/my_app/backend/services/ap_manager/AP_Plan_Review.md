@@ -33,7 +33,7 @@
 | 2. 数据库与用户/部门/角色表 | **PG 为主**（`MY_APP_DB_MODE=pg`），schema = `app`，68 张表。**无用户表、无部门表、无角色表**；`portal_sessions` 只有 `username/role/allowed_groups/allowed_cards` | `backend/.env`；`app.portal_sessions` |
 | 3. 页面路由与导航 | `frontend/src/App.tsx` 菜单数组 + `i18n.tsx` + `pages/helpContent.ts`，**新增页面必须三处同步** | `AGENTS.md` 第三节 1 |
 | 4. 登录态如何传给 API | 会话 Cookie（`sid`）→ 中间件校验 → `current_user()` 返回 `{username, role, allowedGroups, allowedCards}`；本机回环放行 | `backend/main.py:369-390`；`portal_auth.py:509-520` |
-| 5. 邮件服务 | **双通道已就绪**：126 邮箱 SMTP（`send_status_email`）+ Exchange EWS（`send_ews_status_email`），另有 EWS 故障自动补发任务。**但没有通用 outbox/重试队列** | `services/email_notifier.py:146,225`；`services/email_recovery.py` |
+| 5. 邮件服务 | **双通道已就绪**：126 邮箱 SMTP（`send_status_email`）+ Exchange EWS（`send_ews_status_email`），另有 EWS 故障自动补发任务。**但没有通用 outbox/重试队列** | `services/email/email_notifier.py:146,225`；`services/email/email_recovery.py` |
 | 6. 附件上传/存储/下载 | **已有完整可复制的实现**：`issue_reports` + `db/attachments/fb_<id>/`，5 个/10MB 限制、可执行文件黑名单、inline 预览 | `routers/feedback.py:1-20,49-62` |
 | 7. 用户是否有部门负责人/经理字段 | `app.person` 有 `region_leader / sub_region_leader / sub_center_leader / circle_leader / position` 列，但**实测全为空**。真正可用的是 `app.flm_team_information`（30 人，含 Position / Base location / County / eFlow Acount） | 实测 SQL |
 | 8. 是否关联 Ticket/Site/Region | 可关联，字段现成：`eflow_tt`（TT 号）、`master_site_db`（site id）、`person.managed_regions`（区域） | — |
@@ -114,7 +114,7 @@ app.person（email 50/137、managed_regions、leavestatus）
 | 能力 | 复用对象 | 说明 |
 |---|---|---|
 | 附件上传/下载/预览 | `routers/feedback.py` 全流程 | 连黑名单、大小限制、路径穿越防护、inline 预览都齐了，改前缀即可 |
-| 邮件发送 | `services/email_notifier.send_status_email` / `send_ews_status_email` | 不要新写 SMTP 客户端 |
+| 邮件发送 | `services/email/email_notifier.send_status_email` / `send_ews_status_email` | 不要新写 SMTP 客户端 |
 | 邮件失败不阻断业务 | 项目既有约定 | 通知失败只记日志（`email_notifier.py` 顶部设计原则），与方案 9.3 一致 |
 | 定时提醒任务 | `task_registry.TASK_SPECS` | 加 1 条即可，但**必须显式分到 worker 组**，否则队列 pending 卡死 |
 | 表读写双模 | `backend/database.get_raw_connection` + `dialect_helpers` | 别写裸 `sqlite3.connect` |

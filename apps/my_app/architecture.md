@@ -194,7 +194,7 @@ my_app 页面 ?page=<key>  ──►  门户看板直链（只存相对路径 re
 （`intercepts pointer events` / `等待登录超时`）。
 
 **决策**：改为 **Baileys 为主通道（`whatsapp_send_baileys_service` → notify.js），
-Playwright 为回退**。编排层为 `backend/services/whatsapp_dispatch.py`。
+Playwright 为回退**。编排层为 `backend/services/whatsapp/whatsapp_dispatch.py`。
 
 **理由**：
 - Baileys 走「已关联设备」直连协议，回执是服务端 message id，不碰页面，
@@ -229,9 +229,9 @@ Playwright 为回退**。编排层为 `backend/services/whatsapp_dispatch.py`。
 7. 运维退场开关：`WHATSAPP_DISPATCH_CHANNEL=playwright` 可把三个任务整体打回
    Playwright（副号被封时的应急手段，无需改代码）。
 
-出处：`backend/services/whatsapp_dispatch.py`（编排）、
-`backend/services/whatsapp_send_baileys_service.py:195`（`build_items` / `dispatch_items`）、
-`backend/services/kpi_email_report.py:532/1424/1496`（三处接入点）。
+出处：`backend/services/whatsapp/whatsapp_dispatch.py`（编排）、
+`backend/services/whatsapp/whatsapp_send_baileys_service.py:195`（`build_items` / `dispatch_items`）、
+`backend/services/email/kpi_email_report.py:532/1424/1496`（三处接入点）。
 
 ### 2026-10-15 · PG 下「整表替换」DDL 必须带 schema 限定
 
@@ -274,9 +274,9 @@ PG 的 `DROP TABLE` 沿 `search_path`（`app,eflow,lte_pl,…`，
 必须锁 schema 的回归守卫）+ 重启 x/m 组后 23:24~23:28 连续 5 轮同步全绿、
 `app.realtime_alarm` 全程存在、与失败轮**同相位**的 23:27:00.996 推送轮 `success=True`。
 
-**出处**：`backend/services/eflow_alarm_service.py:433`（`_swap_table_sql`）、
+**出处**：`backend/services/eflow/eflow_alarm_service.py:433`（`_swap_table_sql`）、
 `:463`（`_conn_schema`）、`:482`（`_replace_table_atomically`）、
-`:608`（`_replace_table_via_engine`）、`backend/services/tt_alarm_trigger.py:57`
+`:608`（`_replace_table_via_engine`）、`backend/services/tt/tt_alarm_trigger.py:57`
 （`TRIGGER_SCHEMA`）、`docs/manual/04-task-system.md`（同一事故的详版框）、
 `docs/manual/13-operations.md`（排障入口与探针用法）。
 

@@ -5,7 +5,7 @@
 本路由只读 data/vmax_cxo_daily/daily.json（由新任务 vmax_cxo_daily_sync 写入），
 不读也不写 data/cxo_dashboard/*，现有看板不受任何影响。
 
-背景约束（实测，见 backend/services/vmax_cxo_daily_cache.py 头注释）：
+背景约束（实测，见 backend/services/cxo/vmax_cxo_daily_cache.py 头注释）：
     - VMAX 无原生天粒度（Granularity 枚举只到 1hour）-> 日值由小时明细本地聚合
     - 小时明细仅保留约 8 天 -> 网格中早于保留地板的日期永久不可回补，前端留灰空格
 """
@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from backend.services.vmax_cxo_daily_cache import (DAILY_FILE, KPI_SPECS, RETENTION_DAYS,
+from backend.services.cxo.vmax_cxo_daily_cache import (DAILY_FILE, KPI_SPECS, RETENTION_DAYS,
                                                    build_tab_tree)
 
 logger = logging.getLogger(__name__)

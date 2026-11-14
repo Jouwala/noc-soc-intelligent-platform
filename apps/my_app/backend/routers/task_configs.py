@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.security import require_protected
-from backend.services import task_config_files
+from backend.services.task import task_config_files
 
 logger = logging.getLogger(__name__)
 

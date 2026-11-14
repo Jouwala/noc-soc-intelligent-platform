@@ -96,7 +96,7 @@ DEFAULTS = {
 # ========== 外部化配置（Settings 页面可编辑的 battery_config.json） ==========
 # 优先级：环境变量 > 配置文件 > 内置默认
 try:
-    from backend.services.task_config_files import load_json_config
+    from backend.services.task.task_config_files import load_json_config
     _BATT_CONF = load_json_config(Path(__file__).resolve().parent.parent / "battery_config.json")
 except Exception:
     _BATT_CONF = None
@@ -1085,7 +1085,7 @@ def _run_battery_email_impl(to: str | None = None, cc: str | None = None) -> dic
     """run_battery_email 的内部实现（已在互斥锁内执行）。"""
     started = time.time()
     try:
-        from backend.services import kpi_email_report as ker
+        from backend.services.email import kpi_email_report as ker
     except ImportError:  # 独立运行
         import kpi_email_report as ker  # type: ignore
 
@@ -1109,7 +1109,7 @@ def _run_battery_email_impl(to: str | None = None, cc: str | None = None) -> dic
         img_path = None
 
     # 2) 收件人（Settings 维护，未保存时回退远程 FTP 名单；to/cc 显式传入时优先，用于测试）
-    from backend.services.email_recipient_store import get_email_recipients
+    from backend.services.email.email_recipient_store import get_email_recipients
     to_arg, cc_arg = get_email_recipients("battery_email", to, cc)
     if not to_arg:
         return {"success": False,

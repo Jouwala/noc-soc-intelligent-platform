@@ -22,7 +22,7 @@ for d in dirs_to_search:
 
 # 也搜索 _find_latest_xlsx 函数使用的路径
 print("\n--- Checking ran_ume_service EXPORT_DIR ---")
-from backend.services.ran_ume_service import EXPORT_DIR, _find_latest_xlsx
+from backend.services.ran.ran_ume_service import EXPORT_DIR, _find_latest_xlsx
 print(f"EXPORT_DIR: {EXPORT_DIR}")
 print(f"Exists: {os.path.exists(str(EXPORT_DIR))}")
 if os.path.exists(str(EXPORT_DIR)):

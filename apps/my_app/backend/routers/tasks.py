@@ -15,7 +15,7 @@ from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from backend.api_i18n import translate_ui_fields
 
 from backend.security import require_protected
-from backend.services import task_runner
+from backend.services.task import task_runner
 from backend.task_registry import sync_history
 
 logger = logging.getLogger(__name__)

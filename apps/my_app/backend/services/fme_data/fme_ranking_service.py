@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.database import get_raw_connection
 from backend.dialect_helpers import list_table_names, table_columns
-from backend.services import site_availability_service as availability
+from backend.services.site import site_availability_service as availability
 
 logger = logging.getLogger("fme_ranking")
 

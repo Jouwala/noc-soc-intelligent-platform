@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """MS SLA 看板 API（MS Contract KPIs / MS WOs SLA 数据看板）
 
-数据源: data/ms_sla/ms_sla_dashboard.sqlite3（由 backend/services/ms_sla_dashboard.py
+数据源: data/ms_sla/ms_sla_dashboard.sqlite3（由 backend/services/ms/ms_sla_dashboard.py
 在 ms_sla_full 报表流程中全量写入；NUR/SLA/WO 已改为 nur_calc 实时计算，见下）。
 
 GET /api/ms-sla-dashboard/overview : 一次返回 NUR / SLA / Network KPI / Per-Site /

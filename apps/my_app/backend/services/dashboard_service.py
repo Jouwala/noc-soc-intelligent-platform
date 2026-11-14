@@ -4,7 +4,7 @@
 =========================== 设计要点 ===========================
 
 一套引擎驱动 17 个看板 / 187 个组件
-    看板定义全部来自 backend/services/native_catalog.py（由 _gen_native_catalog.py
+    看板定义全部来自 backend/services/native/native_catalog.py（由 _gen_native_catalog.py
     从 my-finebi 的 app.db 自动提取），本模块只负责「按定义取数 + 统一后处理」，
     不再为每个看板写一份代码。新增看板 = 重新生成目录，无需改本文件。
 
@@ -71,7 +71,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.config.remote_host import get_api_base_url
-from backend.services.native_catalog import BY_SLUG, CATALOG, DASHBOARDS
+from backend.services.native.native_catalog import BY_SLUG, CATALOG, DASHBOARDS
 
 logger = logging.getLogger("native_board")
 
@@ -187,7 +187,7 @@ LOCAL_APP_DB = "__local_app_db__"
 #
 # 现在改由 my_app 自己的定时任务重建到本机，看板直读本机文件：
 #   __local_avail_recon__  ← backend/services/avail/avail_recon_sync.py（任务 avail_recon_sync）
-#   __local_mttr_tt__      ← backend/services/mttr_tt_sync.py   （任务 mttr_tt_sync）
+#   __local_mttr_tt__      ← backend/services/tt/mttr_tt_sync.py   （任务 mttr_tt_sync）
 #   __local_progress__     ← backend/services/progress_sync.py  （任务 progress_sync）
 LOCAL_SQLITE_FILES: Dict[str, Path] = {
     "__local_avail_recon__": Path(__file__).resolve().parents[2] / "data" / "avail_recon.sqlite3",
@@ -201,7 +201,7 @@ LOCAL_SQLITE_FILES: Dict[str, Path] = {
 MIRROR_ENABLED = os.environ.get(
     "NATIVE_BOARD_MIRROR", "1").strip().lower() not in ("0", "false", "no", "off")
 if MIRROR_ENABLED:
-    from backend.services import native_board_mirror_sync as _mirror_sync
+    from backend.services.native import native_board_mirror_sync as _mirror_sync
 
     for _remote_db in _mirror_sync.REMOTE_DBS:
         LOCAL_SQLITE_FILES[_mirror_sync.mirror_alias(_remote_db)] = \
@@ -270,7 +270,7 @@ def _query_local(sql: str, limit: int, path: Optional[Path] = None) -> Dict[str,
     from backend.database import get_sqlite_readonly_connection
 
     if path is None:
-        from backend.services.sp_dashboard import DB_PATH  # 复用既有路径定义
+        from backend.services.sp.sp_dashboard import DB_PATH  # 复用既有路径定义
         path = DB_PATH
     if not Path(path).is_file():
         raise RuntimeError(

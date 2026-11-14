@@ -1,6 +1,6 @@
 """任务执行日志表模型（app.db）
 
-对应原 backend/services/task_runner.py::_ensure_task_log_table 的
+对应原 backend/services/task/task_runner.py::_ensure_task_log_table 的
 CREATE TABLE IF NOT EXISTS task_execution_log（含 error_trace 兼容补列）。
 """
 from sqlalchemy import Column, Integer, Float, Text

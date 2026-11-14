@@ -278,7 +278,7 @@ def _fetch_tt_remote_cached(tt_clean: str):
         ent = _REMOTE_TT_CACHE.get(tt_clean)
         if ent and time.time() - ent[0] < _REMOTE_TT_TTL:
             return ent[1]
-    from backend.services.eflow_data_mapper import fetch_tt_live
+    from backend.services.eflow.eflow_data_mapper import fetch_tt_live
     row = fetch_tt_live(tt_clean)
     with _REMOTE_TT_LOCK:
         _REMOTE_TT_CACHE[tt_clean] = (time.time(), row)
@@ -329,7 +329,7 @@ def _tt_context(tt_clean: str):
         return report, {"mode": "none", "source": "", "elapsed_sec": 0.0,
                         "error": "工单没有 alarm_id，无法查告警表", "cached": False}
 
-    from backend.services import eflow_alarm_query
+    from backend.services.eflow import eflow_alarm_query
     occur = mod.parse_dt((report.get("timing") or {}).get("alarm_occur_time"))
     live = eflow_alarm_query.find_alarm_by_id(aid, occur_time=occur)
     info = {"mode": "eflow", "source": live.get("source") or "",
@@ -455,7 +455,7 @@ def tt_ume_suggestion(tt: str = Query(..., min_length=2, max_length=64, descript
     related_ume = None
     rec = {"aid": "", "ume": None}
     if alarm_id and alarm_id.isdigit():
-        from backend.services import eflow_ume_link
+        from backend.services.eflow import eflow_ume_link
         chain = eflow_ume_link.resolve_alarm_chain(alarm_id)
         related_ume, items = _chain_related(ume_svc, chain, site_name, raised_ms)
         # 关系链主建议：取第一个成功的原始 UME
@@ -510,7 +510,7 @@ def ume_alarm(
     try:
         aid = alarm_id.strip()
         if aid.isdigit():
-            from backend.services import eflow_ume_link
+            from backend.services.eflow import eflow_ume_link
             from backend.services.ran_ume import ran_ume_alarm_service as ume_svc
             chain = eflow_ume_link.resolve_alarm_chain(aid)
             rel_ume, _items = _chain_related(ume_svc, chain, "", None)
@@ -1295,7 +1295,7 @@ def _render_postmortem_md(rep: Dict[str, Any]) -> str:
 # ========== WO 清理（批量关闭 WaitConfirm 工单，2026-10-01） ==========
 # 背景：FE 处理完成后大量 WO 停在 WaitConfirm，需 NOC 确认关闭；此前只能逐单在
 # eFlow 界面点确认。本组端点把 TMP 探针验证过的「detail → process → 复核」三步
-# 链路（见 backend/services/eflow_wo_close.py 模块注释）开放为页面能力。
+# 链路（见 backend/services/eflow/eflow_wo_close.py 模块注释）开放为页面能力。
 # 设计：① /wo-close/check 只读预检；② /wo-close/submit 真正提交（逐单串行+间隔）；
 # 两者都不碰已有路由；写入操作仅限 opName=Confirm 且 status=WaitConfirm 的单。
 
@@ -1314,7 +1314,7 @@ def wo_close_check(payload: WoCloseIn):
     不做任何提交。返回 rows（逐单：woId/状态/站点/能否关闭/原因）+ summary，
     供页面先给用户过目，再决定是否真正提交。
     """
-    from backend.services.eflow_wo_close import batch_check, normalize_wo_list, MAX_BATCH
+    from backend.services.eflow.eflow_wo_close import batch_check, normalize_wo_list, MAX_BATCH
 
     valid, invalid = normalize_wo_list(payload.text, payload.wos)
     if not valid:
@@ -1334,7 +1334,7 @@ def wo_close_submit(payload: WoCloseIn):
     逐单串行 + 1s 间隔；每单提交后立即回读 detail 复核是否真的 Closed。
     幂等性：已 Closed / 非 WaitConfirm 的单会被跳过而不是报错，重跑安全。
     """
-    from backend.services.eflow_wo_close import batch_close, normalize_wo_list, MAX_BATCH
+    from backend.services.eflow.eflow_wo_close import batch_close, normalize_wo_list, MAX_BATCH
 
     valid, invalid = normalize_wo_list(payload.text, payload.wos)
     if not valid:

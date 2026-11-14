@@ -11,7 +11,7 @@
   GET /api/cr-analysis/workflow-drilldown  步骤下钻（走过 / 当前停在某一步的 CR）
 
 口径说明（终态、按时/延期判定、下钻与概览如何保持一致）统一写在
-`backend/services/cr_analysis_service.py` 的模块 docstring —— 改口径只改那里。
+`backend/services/cr/cr_analysis_service.py` 的模块 docstring —— 改口径只改那里。
 """
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ import logging
 
 from fastapi import APIRouter, Query
 
-from backend.services import cr_analysis_service as svc
-from backend.services import cr_workflow_service as wfs
+from backend.services.cr import cr_analysis_service as svc
+from backend.services.cr import cr_workflow_service as wfs
 
 logger = logging.getLogger("cr_analysis")
 

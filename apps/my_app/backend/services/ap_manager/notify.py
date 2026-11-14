@@ -73,7 +73,7 @@ def _flush_once() -> None:
         if not messages:
             continue
         try:
-            from backend.services import wa_notify_service as wa
+            from backend.services.whatsapp import wa_notify_service as wa
             res = wa.dispatch(messages, list(groups))
             if res.get("ok"):
                 logger.info("[ap.notify] WhatsApp 已投递 %s 条 → %s", len(messages), groups)
@@ -161,7 +161,7 @@ def send_email(to_list, subject: str, title: str, lines: list[tuple[str, str]],
 </body></html>"""
 
     try:
-        from backend.services import email_notifier as en
+        from backend.services.email import email_notifier as en
         user, pwd = en._runtime_credentials()  # noqa: SLF001  复用同一份凭据（改密免重启）
         msg = MIMEMultipart("alternative")
         msg["From"] = formataddr((en.SENDER_NAME, en.SENDER))

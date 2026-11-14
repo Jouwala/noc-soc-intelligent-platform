@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """FME 站点可用率与工单看板 API。
 
-数据源与统计口径见 backend/services/site_availability_service.py 顶部说明。
+数据源与统计口径见 backend/services/site/site_availability_service.py 顶部说明。
 
 GET /api/site-availability/filters
     -> 筛选器选项（supervisor / fme / 最近 12 个月）
@@ -25,7 +25,7 @@ from datetime import date
 
 from fastapi import APIRouter, Query
 
-from backend.services import site_availability_service as svc
+from backend.services.site import site_availability_service as svc
 
 logger = logging.getLogger("site_availability")
 

@@ -98,5 +98,5 @@
   兼容 PG 中 `site_id` 整数列与文本值比较。
 - `backend/routers/packet_loss_dashboard.py`：列名含 `%` 的查询改为内联安全日期
   字面量；`datetime()` 改为 Python 计算；`LastDayMaxPL` 用双引号标识符。
-- `backend/services/sp_dashboard.py`：`row["col"]` → 兼容双模索引；PG `date()`
+- `backend/services/sp/sp_dashboard.py`：`row["col"]` → 兼容双模索引；PG `date()`
   返回的日期对象统一转字符串；数值列判空使用 `CAST(... AS TEXT)`。

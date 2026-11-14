@@ -5,7 +5,7 @@
   1. 解析 text 组件的 HTML → 纯标题文本（去掉 FineBI 外链与内联样式噪声）
   2. 清理 pivot / limit / pct 等展示元数据
   3. 生成 SLUG（URL ?page=xxx 用的短名）
-  4. 输出 backend/services/native_catalog.py
+  4. 输出 backend/services/native/native_catalog.py
 
 用法：python backend/services/_gen_native_catalog.py
 """
@@ -19,7 +19,7 @@ from typing import Dict
 
 HERE = Path(__file__).resolve().parent
 RAW = HERE / "_native_catalog_raw.json"
-OUT = HERE / "native_catalog.py"
+OUT = HERE / "native" / "native_catalog.py"  # §11-4 重组后 native_catalog 在 services/native/ 下
 
 # 文本组件标题里的装饰字符（FineBI 原版用 ❯❯❯ xxx ❮❮❮ 做标题栏）
 _DECOR_RE = re.compile(r"[❯❮\s\u00a0]+")
@@ -51,7 +51,7 @@ def html_to_title(html: str, fallback: str) -> str:
 # 该库单次锁 1~9min、最坏 2h+ 的历史事故）。
 #
 # 关键事实：inventory.db 只是**镜像库**，其唯一写入方就是 my_app 自己的
-# sp_data_sync 任务（backend/services/get_sp_table.py → 镜像写入 UNC inventory.db）。
+# sp_data_sync 任务（backend/services/sp/get_sp_table.py → 镜像写入 UNC inventory.db）。
 # 而它镜像的源头，正是本机 db/app.db 里的 inband_details / outband_details /
 # inventory_details 三张表（实测：inventory_details 133031 行，且 12 条 SQL 全部通过）。
 #

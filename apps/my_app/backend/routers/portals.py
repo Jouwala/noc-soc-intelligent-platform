@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from backend.services import portal_login_service as svc
+from backend.services.portal import portal_login_service as svc
 from backend.api_i18n import translate_text
 
 logger = logging.getLogger(__name__)

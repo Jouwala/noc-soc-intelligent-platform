@@ -1,6 +1,6 @@
 """任务调度配置表模型（app.db）
 
-对应原 backend/services/task_runner.py::_init_schedule_table 的
+对应原 backend/services/task/task_runner.py::_init_schedule_table 的
 CREATE TABLE IF NOT EXISTS task_schedule_config。
 """
 from sqlalchemy import Column, Integer, Text

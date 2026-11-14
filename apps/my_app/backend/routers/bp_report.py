@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """BP Report（Bad Performance 小区报告）API。
 
-数据来源与口径见 backend/services/bp_caliber.py、
-backend/services/bp_report_import.py（Excel 一次性导入）、
-backend/services/bp_report_sync.py（从 RAN_UME 更新）。
+数据来源与口径见 backend/services/bp/bp_caliber.py、
+backend/services/bp/bp_report_import.py（Excel 一次性导入）、
+backend/services/bp/bp_report_sync.py（从 RAN_UME 更新）。
 
 口径（umlaut 定义）：
     Daily:   Average DL Active User Number > 2.5
@@ -45,7 +45,7 @@ from fastapi.responses import JSONResponse
 
 from backend.api_i18n import translate_ui_fields
 
-from backend.services import bp_report_service as svc
+from backend.services.bp import bp_report_service as svc
 
 logger = logging.getLogger("bp_report")
 

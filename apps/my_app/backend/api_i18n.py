@@ -143,7 +143,7 @@ _EXACT = {
         "Use the alarm detail to narrow it down further (cell level / board level)",
     "eflow_tt.alarm_reason_type（系统字段，无告警链路佐证）":
         "eflow_tt.alarm_reason_type (system field, no alarm-chain evidence)",
-    # ---- 事件总览的电话/短信/AI 回执（services/incident_overview_service.py）----
+    # ---- 事件总览的电话/短信/AI 回执（services/incident/incident_overview_service.py）----
     "电话通知已发送": "Voice notification sent",
     "短信已发送": "SMS sent",
     "电话通知已发送（模拟模式）": "Voice notification sent (dry-run mode)",
@@ -160,7 +160,7 @@ _EXACT = {
         "Tencent Cloud voice service is not enabled (requires tencentcloud-sdk-python)",
     "未配置 Gemini API key，已回退本地规则":
         "No Gemini API key configured, fell back to local rules",
-    # ---- 任务执行器（services/task_runner.py，经 /api/tasks/* 上到任务管理页）----
+    # ---- 任务执行器（services/task/task_runner.py，经 /api/tasks/* 上到任务管理页）----
     # STOPPED_BY_USER 前缀是判定标记，必须原样留在英文里。
     "STOPPED_BY_USER: 用户手动停止执行": "STOPPED_BY_USER: execution stopped manually",
     "任务未注册": "The task is not registered",
@@ -175,7 +175,7 @@ _EXACT = {
     "缺少 task_id": "Missing task_id",
     "cron 必须是字符串": "cron must be a string",
     "enabled 必须是布尔值": "enabled must be a boolean",
-    # ---- BP 报表口径说明（services/bp_report_service.py 的 caliber.notes）----
+    # ---- BP 报表口径说明（services/bp/bp_report_service.py 的 caliber.notes）----
     # 这几条是给值班解释统计口径的，数字必须逐字保留，不得改写事实。
     "行数等于该期 trend[].detail_cells；与 BP Cells List 同源":
         "The row count equals trend[].detail_cells for that period; same source as the BP Cells List",

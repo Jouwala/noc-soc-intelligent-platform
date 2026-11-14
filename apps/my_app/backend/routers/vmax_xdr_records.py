@@ -43,7 +43,7 @@ from backend.database import get_raw_connection
 from backend.routers.vmax_xdr_common import (
     humanize_login, humanize_upstream, mask_msisdn, parse_bound,
 )
-from backend.services.portal_auth import require_user
+from backend.services.portal.portal_auth import require_user
 from backend.services.vmax_cca.vmax_cca_client import (
     VmaxCcaError, VmaxCcaNotConfigured, VmaxCcaUnavailable, normalize_msisdn,
 )

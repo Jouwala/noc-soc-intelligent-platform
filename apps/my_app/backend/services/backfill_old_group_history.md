@@ -20,8 +20,8 @@
 
 ```powershell
 cd D:\01_RPA\Task\my_app
-python backend\services\backfill_old_group_history.py --dry-run   # 先只统计不写入
-python backend\services\backfill_old_group_history.py             # 正式回补
+python backend\services\backfill\backfill_old_group_history.py --dry-run   # 先只统计不写入
+python backend\services\backfill\backfill_old_group_history.py             # 正式回补
 ```
 
 ## 写入方式

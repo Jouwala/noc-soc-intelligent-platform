@@ -21,7 +21,7 @@
 | POST | /api/tasks/{task_id}/toggle | 启用/禁用 |
 
 ## 依赖
-- `backend.services.task_runner`：调度框架核心
+- `backend.services.task.task_runner`：调度框架核心
 - `backend.task_registry.sync_history`：旧 eFlow 接口同步历史
 - `backend.security.require_protected`：高危端点鉴权
 

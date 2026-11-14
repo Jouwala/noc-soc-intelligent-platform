@@ -32,7 +32,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from backend.services import portal_auth, portal_qa_ctl
+from backend.services.portal import portal_auth, portal_qa_ctl
 
 logger = logging.getLogger(__name__)
 

@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.stdout.reconfigure(encoding="utf-8")
 
 from backend.config.remote_host import get_api_base_url  # noqa: E402
-from backend.services.native_catalog import DASHBOARDS  # noqa: E402
+from backend.services.native.native_catalog import DASHBOARDS  # noqa: E402
 
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 TIMEOUT = 90

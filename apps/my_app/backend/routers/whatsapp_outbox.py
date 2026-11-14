@@ -1,9 +1,9 @@
 """WhatsApp 出图 / 扩展作业接口 —— 供「WhatsApp 定时发图」Chrome 扩展使用。
 
-与 backend/services/whatsapp_service.py（/myapp/?page=sync 的 WhatsApp Message Send 任务）
+与 backend/services/whatsapp/whatsapp_service.py（/myapp/?page=sync 的 WhatsApp Message Send 任务）
 共用同一份图片目录与群组/备注配置，但发送由 Chrome 扩展在已登录的 WhatsApp Web 标签页里完成。
 业务逻辑（扫描图片 / 备注规则 / 作业状态机）都在
-backend/services/whatsapp_ext_service.py；本文件只做 HTTP 薄封装。
+backend/services/whatsapp/whatsapp_ext_service.py；本文件只做 HTTP 薄封装。
 
 端点（均走 require_protected；扩展与后端同机，回环地址自动放行，无需 token）：
 - GET  /api/whatsapp/outbox            → { groups, items, generated_at }（图片清单）
@@ -13,7 +13,7 @@ backend/services/whatsapp_ext_service.py；本文件只做 HTTP 薄封装。
 
 > **`/api/whatsapp/ext/job` 是「统一认领口」**：系统里有两个作业源（定时发图、
 > TT 告警文本），但扩展只轮询这一个端点。合并逻辑在
-> `backend/services/whatsapp_job_claim.py`，返回体带 `kind`（`image` / `text`）
+> `backend/services/whatsapp/whatsapp_job_claim.py`，返回体带 `kind`（`image` / `text`）
 > 供扩展分发到两条发送路径。
 """
 import logging
@@ -24,8 +24,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.security import require_protected
-from backend.services import whatsapp_ext_service as ext
-from backend.services import whatsapp_job_claim as claim
+from backend.services.whatsapp import whatsapp_ext_service as ext
+from backend.services.whatsapp import whatsapp_job_claim as claim
 
 logger = logging.getLogger("whatsapp_outbox")
 

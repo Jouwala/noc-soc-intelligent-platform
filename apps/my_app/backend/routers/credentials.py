@@ -6,7 +6,7 @@ credentials.py - 凭据管理 API 路由
 - PUT  /api/credentials          按 key 更新用户名/密码（写 db/app.db credentials 表）
 - POST /api/credentials/test     连接测试（ZTE UME 系 / eFlow 走真实登录，其余返回不支持）
 
-存储实现见 backend/services/credential_store.py。
+存储实现见 backend/services/credential/credential_store.py。
 """
 
 import time
@@ -15,7 +15,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.services.credential_store import (
+from backend.services.credential.credential_store import (
     CREDENTIAL_GROUPS,
     _GROUP_INDEX,
     get_credential,
@@ -146,7 +146,7 @@ def test_credential(body: CredentialTestRequest, request: Request):
         （auth_manager，带本地熔断冷却提示与终态错误判定）；
       - 其余 kind（vmax_portal / gbase / ssh / ssh_via_control / ume_keystone /
         umc_portal / sftp / smtp / ews / weixin_push / rais_uaclite）统一派发到
-        backend/services/credential_tester.py。
+        backend/services/credential/credential_tester.py。
     """
     en = _is_en(request)
     t0 = time.time()
@@ -173,7 +173,7 @@ def test_credential(body: CredentialTestRequest, request: Request):
             logger.warning(f"[CRED] 读取凭据失败: {body.key}: {e}")
             user, pwd = group["default_user"], group["default_secret"]
         try:
-            from backend.services.credential_tester import run_test
+            from backend.services.credential.credential_tester import run_test
         except Exception as e:
             logger.warning(f"[CRED] credential_tester 导入失败: {e}")
             return {
