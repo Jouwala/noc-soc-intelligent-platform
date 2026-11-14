@@ -84,8 +84,8 @@ logger = logging.getLogger("ume_in_screen_render")
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-except Exception:  # noqa: BLE001
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 BLOB_PATH = os.environ.get(
     "UME_IN_SCREEN_BLOB_PATH", "/api/guard-imonitor-service/v1/largescreen/blob"

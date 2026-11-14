@@ -391,8 +391,8 @@ class VmaxReportClient:
             r = self.session.get(health_url, timeout=5)
             if r.json().get("proxy") == "ready":
                 return "proxy"
-        except Exception:                                                # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("探测报表传输方式失败: %s", exc)
         return "direct"
 
     def _request(self, method: str, path: str, body: Optional[dict] = None,
@@ -496,8 +496,8 @@ class VmaxReportClient:
                 try:
                     out[key] = json.loads(cached.read_text(encoding="utf-8"))
                     continue
-                except Exception:                                        # noqa: BLE001
-                    pass
+                except Exception as exc:
+                    logger.debug("读取报表配置缓存失败: %s", exc)
             try:
                 if key == "metadata":
                     payload = self.server_script(report_part, "metadata")

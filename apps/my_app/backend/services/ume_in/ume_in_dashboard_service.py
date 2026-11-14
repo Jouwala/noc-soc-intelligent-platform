@@ -59,8 +59,8 @@ logger = logging.getLogger("ume_in_dashboard_service")
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-except Exception:  # noqa: BLE001 - 非 Windows / 已被重定向时忽略
-    pass
+except Exception as exc:
+    logger.debug("设置 stdout 编码失败: %s", exc)
 
 # ============================================================
 # 看板接口配置（可用环境变量覆盖）
@@ -326,8 +326,8 @@ def purge_old_rows(retention_days=RETENTION_DAYS):
             n = cur.rowcount or 0
             try:
                 conn.commit()
-            except Exception:  # noqa: BLE001 - PG autocommit 下 commit 可能空操作
-                pass
+            except Exception as exc:
+                logger.debug("清理旧数据后提交失败: %s", exc)
         logger.info(f"[PURGE] {TABLE_NAME}: 删除 day<{cutoff} 共 {n} 行")
         return n
     except Exception as e:  # noqa: BLE001

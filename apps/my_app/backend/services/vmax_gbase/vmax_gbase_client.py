@@ -102,8 +102,8 @@ def resolve_dsn(cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         group = next((g for g in CREDENTIAL_GROUPS if g.get("key") == cred_key), None) or {}
         user_default = user_default or str(group.get("default_user") or "")
         sec_default = sec_default or str(group.get("default_secret") or "")
-    except Exception:                                                    # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.warning("读取凭据库 DSN 失败，走兜底 DSN: %s", exc)
     dsn.update({k: v for k, v in conf.items() if v not in (None, "")})
 
     env_map = {"host": "VMAX_GBASE_HOST", "port": "VMAX_GBASE_PORT",
@@ -251,8 +251,8 @@ class VmaxGbaseClient:
         if conn is not None:
             try:
                 conn.close()
-            except Exception:                                            # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("关闭 GBase 连接失败: %s", exc)
 
     def __enter__(self) -> "VmaxGbaseClient":
         self.connect()

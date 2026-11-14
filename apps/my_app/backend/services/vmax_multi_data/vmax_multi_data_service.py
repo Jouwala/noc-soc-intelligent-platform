@@ -109,8 +109,8 @@ def load_config(path: Optional[Path] = None) -> Dict[str, Any]:
     if os.environ.get("VMAX_MULTI_DAYS_BACK"):
         try:
             cfg["days_back"] = max(1, int(os.environ["VMAX_MULTI_DAYS_BACK"]))
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("回溯天数环境变量解析失败，用默认值: %s", exc)
     return cfg
 
 
@@ -200,8 +200,8 @@ def _table_name(client: vrc.VmaxReportClient, report_part: str) -> str:
         tables = meta.get("table") or []
         if tables and isinstance(tables[0], dict):
             return str(tables[0].get("id") or "")
-    except Exception:                                                    # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("读取报表元数据推导表名失败: %s", exc)
     return ""
 
 

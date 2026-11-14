@@ -171,8 +171,8 @@ def _parse_app_flux(raw: str) -> list:
         import ast
         value = ast.literal_eval(text)
         return value if isinstance(value, list) else []
-    except (ValueError, SyntaxError):
-        pass
+    except (ValueError, SyntaxError) as exc:
+        logger.debug("解析 APP 流量字面量失败: %s", exc)
     try:
         value = json.loads(text)
         return value if isinstance(value, list) else []
