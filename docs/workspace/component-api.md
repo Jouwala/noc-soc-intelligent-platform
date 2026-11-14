@@ -8,7 +8,7 @@
 
 | 项目 | 组件位置 | 数量 | 技术 |
 | --- | --- | --- | --- |
-| 统一门户 | `apps\portal\src\components\` | 24 个 `.tsx` | React 19 + Tailwind v4 + lucide-react |
+| 统一门户 | `apps\portal\src\components\` | 27 个 `.tsx` | React 19 + Tailwind v4 + lucide-react |
 | 门户页面级 | `...\src\App.tsx` | 状态中枢 | 非组件化，状态与持久化都在这 |
 | my_app 前端 | `apps\my_app\frontend\src\` | 见 my_app 索引 | React + Vite |
 | 门户静态页 | `...\MsPortal\` | `index.html` / `viewer.html` | 原生 HTML（复刻参考与查看器） |
@@ -61,6 +61,15 @@
 | --- | --- |
 | `TaskSyncWidget.tsx` | **实时任务调度部件**：每 60s 拉任务状态，接口离线降级为静态快照 |
 | `WhatsAppTasksView.tsx` | WhatsApp 任务视图 |
+
+### Agent 控制台（`components\agent\`，TASK-08）
+
+| 组件 | 职责 |
+| --- | --- |
+| `agent\AgentNodesView.tsx` | Agent 节点视图：在线/失联/离线（心跳新鲜度推导）、当前任务 |
+| `agent\AgentTasksView.tsx` | 任务视图：状态/进度/认领关系 + 执行日志流（SSE 实时追加） |
+| `agent\ApprovalsView.tsx` | 异常（blocked / qa-failed 常驻可见）+ 审批队列（可批准/驳回并记事件） |
+| `agent\hooks\useAgentEvents.ts` | 数据层 hook（非组件）：快照 + SSE 增量订阅，接口走 `PORTAL_API/agent-console/*` |
 
 ### 工具组件
 
