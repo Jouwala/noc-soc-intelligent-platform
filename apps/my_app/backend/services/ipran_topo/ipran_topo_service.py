@@ -21,7 +21,7 @@ UME（ZTE NetNumen，`https://10.100.2.99:28001`，自签 TLS）的四张逻辑�
 调用方法原始记录见同目录四个 `url_*.txt`（含浏览器会话头，仅作参考，**代码不读它们**；
 其凭据不得进入代码、日志或响应）。抓包对应的层：
 `url_ipran_fiber.txt` / `url_ipcore.txt` / `url_metro_ring.txt` / `url_dwdm.txt`。
-鉴权复用 `backend/services/ipran_ume_kpi_service.py::UmeSessionClient`（OAuth2 + RSA 登录、
+鉴权复用 `backend/services/ipran/ipran_ume_kpi_service.py::UmeSessionClient`（OAuth2 + RSA 登录、
 跨进程共享鉴权缓存），凭据组 `ipran_ume`。两个实测坑：
 
 1. `_apply_session_headers` 用的 `forgerydefense` 头**不带 `-28001` 后缀**，带后缀一律 403。
@@ -67,7 +67,7 @@ import time
 from datetime import datetime, timezone
 
 from backend.database import get_raw_connection
-from backend.services.ipran_ume_kpi_service import HOST, PORT, UmeSessionClient
+from backend.services.ipran.ipran_ume_kpi_service import HOST, PORT, UmeSessionClient
 from backend.services.ipran_topo import layers
 from backend.services.ipran_topo.layers import DEFAULT_LAYER, TIER_EXT
 

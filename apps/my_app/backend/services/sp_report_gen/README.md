@@ -42,7 +42,7 @@ EWS 发送邮件（owa_mail_report.py）
 > 迁到 `sp/inbound|outbound|inventory_management|wh_transfer`（+ 新增 `wh_transfer_return`），
 > 文件名也从 `spinbound.xlsx` 之类改成与目录同名。**旧目录已于 2026-09-15 08:00 停更**，
 > 继续用会静默取到过期快照（旧逻辑只取「最新 xlsx」、不校验文件名）。
-> 同一变更同步应用于 `backend/services/get_sp_table.py`（仓库看板同步）与
+> 同一变更同步应用于 `backend/services/sp/get_sp_table.py`（仓库看板同步）与
 > `task_configs_registry.py` 的 `sp_sftp_config.json` 默认目录。
 
 ## 文件说明
@@ -50,7 +50,7 @@ EWS 发送邮件（owa_mail_report.py）
 | 文件 | 说明 |
 |------|------|
 | `gernarate_sp_report.py` | 主脚本（源自远程 `gernarate_sp_report.py`，已按 my_app 大量改造）。配置：`DATA_DIR=my_app\data\sp_email\data`、`OUT_DIR=my_app\data\sp_email`；相对路径下载统一解析到 DATA_DIR（不依赖进程 cwd）。Step 0 刷新物料主数据，`load_data()` 之后是明细预处理（剔除 / 状态过滤 / Material Name·Type 归一），详见下方「明细预处理流水线」 |
-| `../sp_material_name.py` | **Material Name 的唯一口径**（`backend\services\sp_material_name.py`）：`load_material_maps()` 读物料主数据 + `normalize_dataframe()` / `normalize_rows()` 按 `Material No.` 覆盖名字。除本目录外还被 `get_sp_table.py`（明细落库）使用，两条链路的改名口径不会分叉。实现细节与踩坑见该文件同目录的 `sp_material_name.md` |
+| `../sp_material_name.py` | **Material Name 的唯一口径**（`backend\services\sp\sp_material_name.py`）：`load_material_maps()` 读物料主数据 + `normalize_dataframe()` / `normalize_rows()` 按 `Material No.` 覆盖名字。除本目录外还被 `get_sp_table.py`（明细落库）使用，两条链路的改名口径不会分叉。实现细节与踩坑见该文件同目录的 `sp_material_name.md` |
 | `generate_sp_online_report.py` | 生成 SP 在线未关闭单表格（Inbound / Outbound 的 PNG + XLSX）到 `data\sp_email\sp_online`，图片复用本目录 `_render_summary_image` 渲染样式，Excel 复用 `style_excel` 样式 |
 | `generate_sp_weekly_report.py` | **SP 周报生成器（2026-11-03 新增）**：按「完整自然周（周一→周日）」窗口产出 `data\sp_weekly\SP Weekly Report <start> to <end>.xlsx`（8 个 sheet），见下方「SP 周报」 |
 | `requirements.txt` | 依赖：pandas / numpy / paramiko / openpyxl / Pillow（系统 Python3.12 已具备） |
@@ -93,7 +93,7 @@ EWS 发送邮件（owa_mail_report.py）
 
 ### Material Name / Domain 数据来源：物料主数据 `sp_material`
 
-**唯一实现**在 `backend\services\sp_material_name.py`（`load_material_maps()` 读表、
+**唯一实现**在 `backend\services\sp\sp_material_name.py`（`load_material_maps()` 读表、
 `normalize_dataframe()` / `normalize_rows()` 覆盖），本目录与 `get_sp_table.py` 共用同一份，
 不在两处各写一套口径。按 materialNo 建 `{materialNo: materialName}` /
 `{materialNo: materialType}`，并按 materialName 建 `{materialName: domain}`
@@ -303,7 +303,7 @@ inbound Terminated 83 行、outbound Terminated 14 行，含在过滤前版本�
 
 即上游那份导出**根本不产 WaitingForUpdate**，它在报表第 4 道过滤之前就已不存在。
 故 Outbound 支路整体改读库表 `sp_outbound`（`sp_online_sync` 每小时更新，见本目录同级
-`backend\services\sp_online_sync.py`）。
+`backend\services\sp\sp_online_sync.py`）。
 
 改源的两个附带好处：
 - **不影响其他报表**：xlsx 支路的 Step 2.2 `apply_status_filters()` 会把 WaitingForUpdate

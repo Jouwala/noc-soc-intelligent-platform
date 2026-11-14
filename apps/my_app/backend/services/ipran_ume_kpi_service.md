@@ -11,7 +11,7 @@
 | task_id | `ipran_kpi_sync` |
 | 分类 | `ipran_kpi` |
 | 默认调度 | 每天凌晨 8 点（`0 8 * * *`） |
-| 服务文件 | `backend/services/ipran_ume_kpi_service.py` |
+| 服务文件 | `backend/services/ipran/ipran_ume_kpi_service.py` |
 | 数据目录 | `data/ipran_ume/` |
 | 数据库 | `data/ipran_ume/ipran_ume_kpi.sqlite3` |
 | FTP 目标 | `192.168.100.19:/01_RPA/LBR_Tools/KPI/IPRAN` |
@@ -56,4 +56,4 @@
 本服务完全自包含于 my_app 项目内，无外部目录引用：
 - 数据存放：`data/ipran_ume/exports/`
 - 数据库：`data/ipran_ume/ipran_ume_kpi.sqlite3`
-- 配置扩展（可选）：`backend/services/ipran_configs_generated.py`
+- 配置扩展（可选）：`backend/services/ipran/ipran_configs_generated.py`

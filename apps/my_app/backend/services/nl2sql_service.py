@@ -896,7 +896,7 @@ def _call_provider(provider: str, api_key: str, model: str,
     """
     import requests
 
-    from backend.services.incident_ai_service import PROVIDERS
+    from backend.services.incident.incident_ai_service import PROVIDERS
 
     if provider not in PROVIDERS:
         raise Nl2SqlError(

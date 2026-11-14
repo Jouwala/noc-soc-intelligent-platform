@@ -20,7 +20,7 @@ Body  : {"param": {"encryptedStr": RSA_encryptLong(JSON(condition))}}
 * `RSA_encryptLong` = 前端 `jsencrypt_ex.encryptData`：静态 RSA 公钥 + PKCS#1 v1.5 分块
   （**首段 114 字节，其后每段 117 字节**，按字符落刀以免劈开多字节字符），
   每段密文 128B → 256 位十六进制 → 拼起来转 base64。公钥与 mars 历史查询同款
-  （见 `backend/services/vmax_cxo_daily_cache.py`）。
+  （见 `backend/services/cxo/vmax_cxo_daily_cache.py`）。
 * 明文 `condition`（前端 `report.js` 的 `conditionTableProcessor()`）：
   `reportPart` / `condition.topN` / `condition.times{beginTime,endTime,granularity,multi_period,bh}`
   / `condition.filterList{filters,filter_type}` / `paging{currentPage,pageSize,totalRecord}`

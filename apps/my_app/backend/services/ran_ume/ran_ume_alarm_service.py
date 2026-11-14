@@ -51,7 +51,7 @@ _PASSWORD = os.environ.get("RAN_UME_PASS", "")
 
 try:
     from pathlib import Path
-    from backend.services.task_config_files import load_json_config
+    from backend.services.task.task_config_files import load_json_config
     _CONF = load_json_config(Path(__file__).resolve().parents[1] / "ran_ume_config.json")
 except Exception:
     _CONF = None
@@ -72,7 +72,7 @@ DEFAULT_HISTORY_LIMIT = 50
 def _runtime_credentials() -> Tuple[str, str]:
     """环境变量 > 数据库(credential_store) > 模块默认值。"""
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         from credential_store import get_credential
     return get_credential("zte_ume", _USERNAME, _PASSWORD,

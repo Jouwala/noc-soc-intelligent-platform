@@ -15,7 +15,7 @@
 - `func`：可直接调用的函数（需要特殊包装的任务，如 eFlow 同步、告警摘要）；
 - `loader`：`(module_path, func_name)` 元组，注册时自动生成懒加载包装。
 
-其余字段：`task_id` / `name` / `name_en` / `description` / `description_en` / `default_cron` / `category`，与 `backend/services/task_runner.py::register_task` 参数一一对应。
+其余字段：`task_id` / `name` / `name_en` / `description` / `description_en` / `default_cron` / `category`，与 `backend/services/task/task_runner.py::register_task` 参数一一对应。
 
 可选字段：
 

@@ -28,7 +28,7 @@ import pandas as pd
 import numpy as np
 
 try:
-    from .ran_ume_service import (
+    from backend.services.ran.ran_ume_service import (
         _login, _http_request, _pm_auth_headers, _read_xlsx_bytes,
         _run_with_cleanup,
         PM_HISTORY_PATH, PM_HISTORY_POLL_PATH, PM_HISTORY_EXPORT_PATH,

@@ -1,7 +1,7 @@
 # 本机 PG schema 新鲜度巡检（pg_schema_freshness）
 
 > 2026-11-05 新增，由 `db_freshness_check`（每小时 15 分）调用，也可单独跑。
-> 入口：`backend/services/pg_schema_freshness.py::check_all`
+> 入口：`backend/services/db/pg_schema_freshness.py::check_all`
 
 ## 背景：一次「页面看起来正常、数却是断的」事故
 
@@ -73,7 +73,7 @@
 ```powershell
 cd D:\01_RPA\Task\my_app
 # 单独跑一次（结果直接打印，便于人工核对）
-python -m backend.services.pg_schema_freshness
+python -m backend.services.db.pg_schema_freshness
 # 随小时巡检一起跑：无需额外操作，db_freshness_check 已调用
 ```
 
@@ -93,4 +93,4 @@ python -m backend.services.pg_schema_freshness
 ## 依赖
 
 见 `requirements_pg_schema_freshness.txt`。核心判定只用标准库；
-取数经 `backend.database`（PG）与 `backend.services.remote_readonly`（远端只读 API）。
+取数经 `backend.database`（PG）与 `backend.services.remote.remote_readonly`（远端只读 API）。

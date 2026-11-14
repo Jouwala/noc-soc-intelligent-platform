@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.database import get_sqlite_connection
-from backend.services.remote_readonly import query_dicts
+from backend.services.remote.remote_readonly import query_dicts
 
 logger = logging.getLogger("progress_sync")
 
@@ -81,7 +81,7 @@ NULLISH = ("", "nan", "NaT", "None")
 #   优先级：环境变量 > 配置文件 > 内置默认。src_db 是 DbWriter 侧的库逻辑名，不是本地路径。
 # ============================================================
 try:
-    from backend.services.task_config_files import apply_config_overrides
+    from backend.services.task.task_config_files import apply_config_overrides
 except ImportError:
     from task_config_files import apply_config_overrides  # type: ignore
 

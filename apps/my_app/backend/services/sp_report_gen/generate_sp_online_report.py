@@ -39,7 +39,7 @@ import pandas as pd
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-# 本脚本以子进程方式运行（backend/services/kpi_email_report.py 调 sys.executable），
+# 本脚本以子进程方式运行（backend/services/email/kpi_email_report.py 调 sys.executable），
 # 需把项目根塞进 sys.path 才能 import backend.* —— 同 sp_online_sync.py 的写法。
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 

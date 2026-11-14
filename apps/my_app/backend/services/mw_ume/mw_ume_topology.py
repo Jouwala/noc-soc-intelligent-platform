@@ -52,7 +52,7 @@ RT_HISTORY_POINTS = 96
 
 # 利用率分级阈值（4 级；键为分级名，值为该级下界：u >= 键值 即进入该级，critical 需 u > 80）
 # ⚠️ 与以下三处必须逐值同步，任何一处单独改动都会让同一条链路在两页显示不同等级：
-#   - backend/services/gis_mw_overlay.py（GIS 叠加着色，复用本文件的 level_of）
+#   - backend/services/gis/gis_mw_overlay.py（GIS 叠加着色，复用本文件的 level_of）
 #   - frontend/src/pages/gismap/types.ts（UTIL_LEVEL_COLORS / utilLevelOf）
 #   - frontend/public/mw_real_time.html（LVL_COLOR / LVL_TEXT / lvlOfUtil）
 THRESHOLDS = {"minor": 60.0, "major": 70.0, "critical": 80.0}

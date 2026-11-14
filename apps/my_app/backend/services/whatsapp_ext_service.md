@@ -38,6 +38,6 @@
 
 ## 直接自测
 ```bash
-python -m backend.services.whatsapp_ext_service
+python -m backend.services.whatsapp.whatsapp_ext_service
 # 会投递一个作业并等待（若没有开扩展，将在 WHATSAPP_EXT_WAIT_SECONDS 后超时返回）
 ```

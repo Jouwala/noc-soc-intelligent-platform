@@ -154,7 +154,7 @@ run_olib_soc_report(start="2026-08-01", end="2026-08-31", blocks=["traffic"])
   * `task_id=olib_soc_kpi_daily_sync`，loader =
     `...run_olib_soc_kpi_sync`（无参），默认 cron `20 6 * * *`（每天补看板 KPI 缺口 + 重取最新 1 天）；
   * 两者 category 都是 `olib_soc` → `CATEGORY_GATEWAY["olib_soc"]="vmax_gbase"`。
-* `backend/services/task_configs_registry.py`：注册 `ConfigResource`（设置页可视化编辑/导入导出）。
+* `backend/services/task/task_configs_registry.py`：注册 `ConfigResource`（设置页可视化编辑/导入导出）。
 * ⚠️ 新增任务只在进程启动时注册（`backend/main.py`、`backend/worker.py`），
   需要重启后端/worker 后才出现在任务列表（重启命令：`python restart_workers.py --reason "..."`）。
 * ⚠️ **两个任务必须同时登记进 `backend/worker_watchdog.py` 的 `GROUP_TASK_MAP`**（2026-09-18 补录：
@@ -167,7 +167,7 @@ run_olib_soc_report(start="2026-08-01", end="2026-08-31", blocks=["traffic"])
   现在三道防线兼得：`tests/test_worker_group_coverage.py`（5 个用例：任务覆盖/重复/幽灵 id、三处组集合一致、
   8790 任务同组、前端任务帮助与分组表一致；不依赖 pytest：`python tests\test_worker_group_coverage.py`）
   + `worker.py::_expire_orphan_pending`
-  （pending 超 6h 无人认领则置 failed 并释放单飞名额）+ `services/task_health_alert.py`
+  （pending 超 6h 无人认领则置 failed 并释放单飞名额）+ `services/task/task_health_alert.py`
   （每小时巡检后把“未归组 / 无执行记录 / 队列滞留 / 成功逾期”按翻转去重主动微信+邮件通知）。
 * 与任务 41 `vmax_multi_data_sync`（门户接口，小时级）互补：41 管实时趋势，42 管业务维度月报/看板。
   41 与 `cxo_dashboard_cache_sync`、`vmax_cxo_daily_sync` 共用本机 8790 VMAX 单会话代理，
@@ -409,14 +409,14 @@ python -m backend.services.olib_soc_report.olib_soc_report_service --start 2026-
 **现象**：任务管理页里 `OLIB SOC VMAX Routine Report` 显示 **No Record / 未记录**。
 
 **原因**：任务列表的最新执行记录来自主库 `task_execution_log`，该表按
-`TASK_LOG_RETENTION_DAYS`（默认 **7 天**）定期清理（`backend/services/task_runner.py`）。
+`TASK_LOG_RETENTION_DAYS`（默认 **7 天**）定期清理（`backend/services/task/task_runner.py`）。
 月报任务 cron 是 `30 7 1 * *`，**每月只跑一次** —— 月中查看时它的记录早已被清掉，
 前端 `classifyTaskStatus()` 见不到任何记录，遂判为 `unknown` → No Record。
 **报表本身一直是正常的**：`OLIB SOC VMAX Monthly-Report*.xlsx` 与 `report_runs` 都在。
 
 **修法**（不是给保留期开口子，而是让任务自报产物库里的运行）：
 
-* 通用机制在 **`backend/services/task_stats.py`**：
+* 通用机制在 **`backend/services/task/task_stats.py`**：
   `register_recent_runs_provider(task_id, provider)` 登记「最近运行」提供者；
   `_fetch_latest_runs()` **只在日志表里该任务一条记录都没有时**才调用它 ——
   日志表仍是唯一主源，已有记录的任务完全不受影响。

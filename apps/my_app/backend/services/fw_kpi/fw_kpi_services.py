@@ -63,7 +63,7 @@ PORT = 443
 def _runtime_credentials():
     """运行时获取凭据（环境变量 > 数据库 > 模块默认值），支持页面改密后免重启生效。"""
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from credential_store import get_credential
@@ -81,7 +81,7 @@ DEVICE_IDS = ["37781505", "37781506"]
 # ⚠ 路径必须与 task_configs_registry 注册的路径一致（backend/services/ 下），
 #   否则页面保存的文件没人读：本模块在 fw_kpi/ 子包内，要用 parents[1]。
 try:
-    from backend.services.task_config_files import load_json_config
+    from backend.services.task.task_config_files import load_json_config
     _FW_CONF = load_json_config(Path(__file__).resolve().parents[1] / "fw_kpi_config.json")
 except Exception:
     _FW_CONF = None
@@ -773,7 +773,7 @@ def generate_chart_and_send_email(device_rows):
     """
     t0 = time.time()
 
-    from backend.services.email_recipient_store import get_email_recipients
+    from backend.services.email.email_recipient_store import get_email_recipients
     to_arg, cc_arg = get_email_recipients("fw_kpi_sync", None, None)
     to_list = [a.strip() for a in (to_arg or "").split(";") if a.strip()]
     cc_list = [a.strip() for a in (cc_arg or "").split(";") if a.strip()]

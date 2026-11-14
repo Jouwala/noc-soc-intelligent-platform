@@ -57,7 +57,7 @@ class EmailSender:
         2026-09-27 前这里传 cls.USERNAME/cls.PASSWORD 字面量，属重复真相源。
         """
         try:
-            from backend.services.credential_store import get_credential
+            from backend.services.credential.credential_store import get_credential
         except ImportError:
             import sys as _sys
             _sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

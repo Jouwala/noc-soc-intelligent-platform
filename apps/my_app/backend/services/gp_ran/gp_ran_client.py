@@ -86,7 +86,7 @@ class GpRanUnavailable(GpRanError):
 # ---------------------------------------------------------------- 凭据与端点
 def _cred(key: str, default_user: str, env_user: str, env_pass: str) -> Tuple[str, str]:
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except Exception:  # noqa: BLE001
         try:
             from credential_store import get_credential  # 直接跑本文件时
