@@ -183,7 +183,7 @@ CI 兜底：`.github\workflows\docs-consistency.yml`（push / PR 都跑，
 ```powershell
 # 证伪样板：确认测试期间没有任何真实发送
 cd D:\02_olbr_portal\apps\my_app
-python -c "import sys; sys.path.insert(0,'.'); import backend.services.tt_alarm_mailer as M; M.send_mail=lambda *a,**k:(_ for _ in ()).throw(AssertionError('REAL SEND')); import pytest; raise SystemExit(pytest.main(['tests/','-q','-p','no:warnings']))"
+python -c "import sys; sys.path.insert(0,'.'); import backend.services.tt.tt_alarm_mailer as M; M.send_mail=lambda *a,**k:(_ for _ in ()).throw(AssertionError('REAL SEND')); import pytest; raise SystemExit(pytest.main(['tests/','-q','-p','no:warnings']))"
 ```
 
 - [ ] 需要验证**真实**发信能力时，手工跑 `TMP\_` 探针（用完即删），

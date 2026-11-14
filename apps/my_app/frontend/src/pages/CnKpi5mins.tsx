@@ -2,7 +2,7 @@
  * CN KPI 5 分钟看板（?page=cn_kpi_5mins）
  * ----------------------------------------------------------------------------
  * 数据源：后端 /api/cn-kpi-5mins/overview
- *   → services/cn_kpi_5mins_service.py（读远端 db_ps_cs_cn 的 5mins_* 表）
+ *   → services/cn/cn_kpi_5mins_service.py（读远端 db_ps_cs_cn 的 5mins_* 表）
  *   → 由任务 cnn_kpi_sync_5mins 每 15 分钟写入（gr=300，窗口昨天 00:00 → 现在）。
  *
  * 核心展示：每个组件画 **Day0（今天）/ Day1（昨天）/ Day7（7 天前，同一星期几）
@@ -30,7 +30,7 @@ import ReactECharts from '../components/ECharts'
 import { CardBase } from '../components/cards'
 import CalcChainNote from '../components/CalcChainNote'
 // 数字悬浮口径说明（AGENTS.md 三.3c）：本页此前只有整页级 CalcChainNote，
-// 组件卡与页头统计的数字问不到。口径对过 services/cn_kpi_5mins_service.py 的 WIDGETS 与 _agg_sql。
+// 组件卡与页头统计的数字问不到。口径对过 services/cn/cn_kpi_5mins_service.py 的 WIDGETS 与 _agg_sql。
 import { ExplainIcon, ExplainLabel, ExplainPopover } from '../components/MetricExplain'
 import { exportReport, type ReportSheetSpec } from '../utils/excelReport'
 import { getCnKpi5minsOverview } from '../api'

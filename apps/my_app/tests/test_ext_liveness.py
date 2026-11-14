@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from backend.services import ext_liveness as L
-from backend.services import tt_alarm_whatsapp_service as svc
+from backend.services.tt import tt_alarm_whatsapp_service as svc
 
 
 # ==========================================================
@@ -179,7 +179,7 @@ class TestCheckChannelBeforeDispatch:
 class TestClaimRecordsActivity:
     def test_认领会记录活动(self, tmp_path, monkeypatch):
         """扩展每分钟轮询一次，**空手而归也算活着** —— 故在入口就记录。"""
-        from backend.services import whatsapp_job_claim as claim
+        from backend.services.whatsapp import whatsapp_job_claim as claim
         monkeypatch.setattr(L, "STATE_FILE", tmp_path / "state.json")
         # 两个作业源都返回 None（无作业可发）——正是"空手而归"的场景
         monkeypatch.setattr(claim.ext, "claim_pending_job", lambda: None)

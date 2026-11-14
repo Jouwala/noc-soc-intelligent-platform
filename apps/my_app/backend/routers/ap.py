@@ -51,7 +51,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.database import DB_PATH, get_raw_connection
-from backend.services import portal_auth
+from backend.services.portal import portal_auth
 from backend.services.ap_manager import notify, org, permissions, store
 
 logger = logging.getLogger("ap.router")

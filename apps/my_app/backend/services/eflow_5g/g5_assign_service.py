@@ -61,7 +61,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from backend.database import get_raw_connection
-from backend.services import wa_notify_service as wa_notify
+from backend.services.whatsapp import wa_notify_service as wa_notify
 from backend.services.eflow_assign import assign_engine as engine
 from backend.services.eflow_assign import eflow_assign_client as client
 from backend.services.eflow_assign.assign_config import norm_code
@@ -71,7 +71,7 @@ from backend.services.eflow_5g import g5_fetch
 from backend.services.eflow_5g import g5_notify
 from backend.services.eflow_5g import g5_rules as rules
 from backend.services.eflow_5g import g5_store as store
-from backend.services.wa_notify_service import dispatch, wait_for_job_result
+from backend.services.whatsapp.wa_notify_service import dispatch, wait_for_job_result
 
 logger = logging.getLogger("eflow_5g_assign")
 

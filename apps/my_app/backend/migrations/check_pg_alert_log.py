@@ -37,7 +37,7 @@ DEFAULT_DB = "myapp"
 SCHEMA = "app"
 TABLE = "eflow_tt_whatsapp_alert_log"
 
-# 代码期望的完整列（与 backend/services/tt_alarm_store.py 的 LOG_COLUMNS 对齐）。
+# 代码期望的完整列（与 backend/services/tt/tt_alarm_store.py 的 LOG_COLUMNS 对齐）。
 # 若脚本报「缺列」中有 last_error，即证实诊断。
 EXPECTED_COLUMNS = [
     "tt_no", "alarm_occur_time", "ticket_severity", "alarm_code",

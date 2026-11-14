@@ -29,7 +29,7 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 
-from backend.services.credential_store import get_credential  # noqa: E402
+from backend.services.credential.credential_store import get_credential  # noqa: E402
 from backend.services import auth_manager as am  # noqa: E402
 
 HOST, PORT = "10.100.28.27", 28001
@@ -71,7 +71,7 @@ def main() -> int:
             return 0
 
     print("\n[执行] 开始补跑 ran_ume_full_task（滚动 7 天窗口，自动覆盖缺失日期）...")
-    from backend.services.ran_ume_service import run_ran_ume_full_task
+    from backend.services.ran.ran_ume_service import run_ran_ume_full_task
 
     result = run_ran_ume_full_task()
     print("\n[结果] success=%s elapsed=%ss" % (result.get("success"), result.get("elapsed_seconds")))

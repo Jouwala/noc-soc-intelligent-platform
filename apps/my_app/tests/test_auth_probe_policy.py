@@ -223,7 +223,7 @@ def test_battery_portal_has_probe_registered():
     （假绿）——这正是「一键登录总落回登录页」的成因之一。Battery 不是 UME
     PM-analysis 协议，必须用它自己的业务接口。
     """
-    from backend.services import portal_login_service as p
+    from backend.services.portal import portal_login_service as p
 
     path = p.PORTAL_PROBE_PATHS.get("battery_ume")
     assert path, "battery_ume 应已登记探活端点"
@@ -235,7 +235,7 @@ def test_battery_portal_has_probe_registered():
 
 def test_ume_portals_share_pm_history_but_battery_does_not():
     """UME 系共用 PM history 端点；battery 必须与它们区分开。"""
-    from backend.services import portal_login_service as p
+    from backend.services.portal import portal_login_service as p
 
     for k in ("zte_ume", "ccn_ume", "ipran_ume", "mw_ume", "ume_in"):
         assert p.PORTAL_PROBE_PATHS.get(k) == "/api/pm-analysis/v2/history"
@@ -244,7 +244,7 @@ def test_ume_portals_share_pm_history_but_battery_does_not():
 
 def test_eflow_now_registered_with_measured_endpoint():
     """eflow 已登记（2026-10-06 实测），且必须是**业务接口**而非门户首页。"""
-    from backend.services import portal_login_service as p
+    from backend.services.portal import portal_login_service as p
 
     path = p.PORTAL_PROBE_PATHS.get("eflow")
     assert path, "eflow 应已登记探活端点"
@@ -261,7 +261,7 @@ def test_non_getauth_portals_still_return_no_probe():
     只会让人以为覆盖到了。它们"落回登录页"另有原因（验证码、SSO 过期、
     互踢），不是 TTL/探活能修的。
     """
-    from backend.services import portal_login_service as p
+    from backend.services.portal import portal_login_service as p
 
     for k in ("rais", "vmax_cxo", "fw_kpi"):
         assert p._portal_probe(p.PORTALS[k]) is None, f"{k} 不应被探活"

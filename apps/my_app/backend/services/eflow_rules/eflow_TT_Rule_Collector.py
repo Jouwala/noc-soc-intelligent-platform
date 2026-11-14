@@ -38,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger("eflow_rule_collector")
 
 # ========== 导入项目中的 eflow API 客户端 ==========
-from backend.services.eflow_api_client import (
+from backend.services.eflow.eflow_api_client import (
     ensure_login, get_session_headers, HOST, PORT
 )
 
@@ -117,7 +117,7 @@ class EflowTTRuleCollector:
         body = json.dumps(payload)
         
         # 从 eflow_api_client 导入 _http_request
-        from backend.services.eflow_api_client import _http_request
+        from backend.services.eflow.eflow_api_client import _http_request
         
         status, hdrs, raw_hdrs, resp_body = _http_request(
             "POST", 
@@ -162,7 +162,7 @@ class EflowTTRuleCollector:
         )
         
         try:
-            from backend.services.eflow_api_client import _http_request
+            from backend.services.eflow.eflow_api_client import _http_request
         except ImportError:
             from eflow_api_client import _http_request
         

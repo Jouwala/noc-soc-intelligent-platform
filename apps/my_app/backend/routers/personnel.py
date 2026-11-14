@@ -25,7 +25,7 @@ import logging
 from fastapi import APIRouter, Query, HTTPException
 from backend.database import get_raw_connection
 from backend.dialect_helpers import list_table_names, table_columns
-from backend.services import pm_caliber
+from backend.services.pm import pm_caliber
 from backend.services.person_name import normalize_person_name, split_multi_person
 from backend.services.routing_service import plan_route
 from backend.routers.gis import (

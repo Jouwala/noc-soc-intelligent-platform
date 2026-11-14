@@ -116,11 +116,11 @@ eFlow manages the full lifecycle of operations work orders, with 7 core object t
 
 | Purpose | Path |
 |---|---|
-| eFlow API client | `D:\01_RPA\Task\my_app\backend\services\eflow_api_client.py` |
-| Sync service | `D:\01_RPA\Task\my_app\backend\services\sync_from_eflow_api.py` |
+| eFlow API client | `D:\01_RPA\Task\my_app\backend\services\eflow\eflow_api_client.py` |
+| Sync service | `D:\01_RPA\Task\my_app\backend\services\eflow\sync_from_eflow_api.py` |
 | Integration design doc | `D:\01_RPA\Task\my_app\backend\services\eFlow_API集成方案.md` |
 | TT severity rule engine | `D:\01_RPA\Task\my_app\backend\services\eflow_rules\` |
-| Alarm service | `D:\01_RPA\Task\my_app\backend\services\eflow_alarm_service.py` |
+| Alarm service | `D:\01_RPA\Task\my_app\backend\services\eflow\eflow_alarm_service.py` |
 | eFlow raw DB | `D:\01_RPA\Task\my_app\data\eflow\eflow.sqlite3` |
 | Early login script | `D:\01_RPA\Task\eflow_python\eflow_login.py.txt` |
 

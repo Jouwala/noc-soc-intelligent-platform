@@ -211,7 +211,7 @@ def _email_task_ids() -> set:
     if os.environ.get("AUTO_RETRY_INCLUDE_EMAIL", "0") == "1":
         return set()
     try:
-        from backend.services.email_recovery import EMAIL_TASK_IDS
+        from backend.services.email.email_recovery import EMAIL_TASK_IDS
         return set(EMAIL_TASK_IDS)
     except Exception as e:  # noqa: BLE001
         logger.warning(f"加载 EMAIL_TASK_IDS 失败，邮件任务未被排除: {e}")
@@ -244,7 +244,7 @@ def _is_excluded_from_retry(task_id: str, error=None) -> bool:
     if error is None:
         return True  # 没有失败原因可用 → 维持任务级粗排除
     try:
-        from backend.services.email_recovery import is_ews_resendable
+        from backend.services.email.email_recovery import is_ews_resendable
     except Exception as e:  # noqa: BLE001
         logger.warning(f"加载 is_ews_resendable 失败，邮件任务按原行为全部让路: {e}")
         return True  # 保守：维持旧行为，宁可漏重试也不重复发送
@@ -579,7 +579,7 @@ def _heal_session_before_retry(task_id: str, error) -> bool:
     if task_id not in WHATSAPP_TASK_IDS:
         return False
     try:
-        from backend.services.whatsapp_service import _kill_stale_chrome, USER_DATA_DIR
+        from backend.services.whatsapp.whatsapp_service import _kill_stale_chrome, USER_DATA_DIR
         _kill_stale_chrome(USER_DATA_DIR)
         logger.info(f"[{task_id}] 会话类失败，重试前已清理 WhatsApp stale chrome 会话")
         return True
@@ -803,7 +803,7 @@ def get_all_retry_info() -> dict:
     now = datetime.now()
     cutoff_iso = (now - timedelta(hours=SCAN_WINDOW_HOURS)).isoformat()
     try:
-        from backend.services import task_runner
+        from backend.services.task import task_runner
         registry = task_runner._task_registry
     except Exception:
         registry = {}
@@ -828,7 +828,7 @@ def scan_and_retry_failed_tasks() -> dict:
         return {"success": True, "retried": 0, "message": "AUTO_RETRY_ENABLED=0，已关闭自动重试"}
 
     # 延迟导入，避免与 task_runner 的注册期循环依赖
-    from backend.services import task_runner
+    from backend.services.task import task_runner
 
     now = datetime.now()
     cutoff_iso = (now - timedelta(hours=SCAN_WINDOW_HOURS)).isoformat()

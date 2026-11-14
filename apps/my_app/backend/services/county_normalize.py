@@ -37,7 +37,7 @@ import logging
 import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from backend.services.incident_overview_service import LIBERIA_COUNTIES
+from backend.services.incident.incident_overview_service import LIBERIA_COUNTIES
 
 logger = logging.getLogger("county_normalize")
 

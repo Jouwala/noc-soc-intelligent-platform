@@ -70,7 +70,7 @@
 修复**不需要动回环授权**：把 preview 绑到 `127.0.0.1`（或商用实例干脆不跑 `vite preview`，改由 nginx 直出静态产物）即可闭合。
 
 ### 设计保留项：回环即管理员（按用户要求保留）
-`backend/services/portal_auth.py:397-407` + `security.py:17-23`。本轮实测确认**这条信任本身是可靠的**：
+`backend/services/portal/portal_auth.py:397-407` + `security.py:17-23`。本轮实测确认**这条信任本身是可靠的**：
 
 | 伪装尝试（打 `192.168.100.20/api/portal-catalog`） | 结果 |
 |---|---|

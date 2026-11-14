@@ -33,6 +33,6 @@
 ## 自测
 ```bash
 python -X utf8 -c "import sys; sys.path.insert(0,r'D:\01_RPA\Task\my_app'); \
-from backend.services.eflow_alarm_query import find_alarm_by_id; \
+from backend.services.eflow.eflow_alarm_query import find_alarm_by_id; \
 print(find_alarm_by_id('1764204783913'))"
 ```

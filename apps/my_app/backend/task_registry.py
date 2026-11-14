@@ -109,7 +109,7 @@ def preload_common_deps() -> tuple:
 
 def scheduled_eflow_sync():
     """定时 eFlow API 数据同步任务（兼容旧接口）"""
-    from backend.services.sync_from_eflow_api import sync_from_eflow_api
+    from backend.services.eflow.sync_from_eflow_api import sync_from_eflow_api
     logger.info("定时 eFlow API 同步开始")
     result = sync_from_eflow_api(mode="delta")
     sync_history.append(result)
@@ -121,7 +121,7 @@ def scheduled_eflow_sync():
 
 def scheduled_eflow_sync_full():
     """每日 eFlow 全量兜底同步：拉全量窗口，补齐增量遗漏并刷新报告"""
-    from backend.services.sync_from_eflow_api import sync_from_eflow_api
+    from backend.services.eflow.sync_from_eflow_api import sync_from_eflow_api
     logger.info("每日 eFlow 全量兜底同步开始")
     result = sync_from_eflow_api(mode="full")
     logger.info(f"eFlow 全量同步完成: success={result['success']}, tables={result['tables_synced']}")
@@ -130,7 +130,7 @@ def scheduled_eflow_sync_full():
 
 def _run_eflow_active_alarm():
     """eFlow 实时告警同步（仅记录条数摘要，避免 ~300KB 告警列表写入执行日志）"""
-    from backend.services.eflow_api_client import fetch_and_save_active_alarm
+    from backend.services.eflow.eflow_api_client import fetch_and_save_active_alarm
     res = fetch_and_save_active_alarm()
     rows = res.get("realtime_alarm", []) if isinstance(res, dict) else []
     return {"realtime_alarm_count": len(rows)}
@@ -138,7 +138,7 @@ def _run_eflow_active_alarm():
 
 def _run_eflow_history_alarm():
     """eFlow 历史告警同步（仅记录条数摘要，避免完整历史告警列表写入执行日志）"""
-    from backend.services.eflow_api_client import fetch_and_save_history_alarm
+    from backend.services.eflow.eflow_api_client import fetch_and_save_history_alarm
     res = fetch_and_save_history_alarm()
     rows = res.get("history_alarm", []) if isinstance(res, dict) else []
     return {"history_alarm_count": len(rows)}
@@ -193,21 +193,21 @@ TASK_SPECS = [
 
     # 3. RAN UME PM 数据 + Availability 报表（每天凌晨2点）
     dict(task_id="ran_ume_daily", name="RAN UME 日报", name_en="RAN UME Daily Report",
-         loader=("backend.services.ran_ume_service", "run_ran_ume_full_task"),
+         loader=("backend.services.ran.ran_ume_service", "run_ran_ume_full_task"),
          description="RAN UME PM 数据获取 + Daily Availability KPI 报表生成 + FTP 上传",
          description_en="RAN UME PM data fetch + Daily Availability KPI report generation + FTP upload",
          default_cron="0 2 * * *", category="ran_ume"),
 
     # 4. Site Outage 截图（每天凌晨1点）
     dict(task_id="site_outage_screenshot", name="Site Outage 截图", name_en="Site Outage Screenshot",
-         loader=("backend.services.site_outage_service", "run_site_outage_screenshot"),
+         loader=("backend.services.site.site_outage_service", "run_site_outage_screenshot"),
          description="Site Down Dashboard 自动截图（ERA/Regular/ALL）",
          description_en="Auto screenshot of Site Down Dashboard (ERA/Regular/ALL)",
          default_cron="0 1 * * *", category="site_outage"),
 
     # 5. WhatsApp 发送（每天凌晨3点，在截图之后）
     dict(task_id="whatsapp_send", name="WhatsApp 消息发送", name_en="WhatsApp Message Send",
-         loader=("backend.services.whatsapp_service", "run_whatsapp_send"),
+         loader=("backend.services.whatsapp.whatsapp_service", "run_whatsapp_send"),
          description="发送 Site Outage 截图和文件到 WhatsApp 群组",
          description_en="Send Site Outage screenshots and files to WhatsApp groups",
          default_cron="0 3 * * *", category="whatsapp"),
@@ -215,7 +215,7 @@ TASK_SPECS = [
     # 5b. WhatsApp 发送（扩展版）：投递作业并等待浏览器扩展在已登录的 WhatsApp Web 标签页中发送。
     #     与上面的 Playwright 版并存，互不影响；扩展见 extensions/whatsapp_sender_extension。
     dict(task_id="whatsapp_send_ext", name="WhatsApp 消息发送（扩展）", name_en="WhatsApp Message Send (Extension)",
-         loader=("backend.services.whatsapp_ext_service", "run_whatsapp_send_ext"),
+         loader=("backend.services.whatsapp.whatsapp_ext_service", "run_whatsapp_send_ext"),
          description="投递发送作业，由浏览器扩展在已登录的 WhatsApp Web 中发送 Site Outage 截图",
          description_en="Dispatch a send job; a browser extension sends Site Outage screenshots in the logged-in WhatsApp Web",
          default_cron="0 3 * * *", category="whatsapp"),
@@ -230,7 +230,7 @@ TASK_SPECS = [
     #     原因：Baileys 违反 WhatsApp ToS，启用后号码可能被封，必须走人工审批路径。
     #     已被主开关豁免（见 MASTER_SWITCH_EXEMPT_IDS），批量切换不参与。
     dict(task_id="whatsapp_send_baileys", name="WhatsApp 消息发送（Baileys）", name_en="WhatsApp Message Send (Baileys)",
-         loader=("backend.services.whatsapp_send_baileys_service", "run_whatsapp_send_baileys"),
+         loader=("backend.services.whatsapp.whatsapp_send_baileys_service", "run_whatsapp_send_baileys"),
          description="通过 Baileys 协议直发 Site Outage 截图与文档到 WhatsApp 群组（与 Playwright/扩展版并行；默认禁用，需在「任务管理」页手动启用）",
          description_en="Dispatch Site Outage images and documents to WhatsApp groups via the Baileys protocol (parallel to Playwright/extension; disabled by default — enable manually from the Task Manager page)",
          default_cron="0 4 * * *", category="whatsapp",
@@ -257,7 +257,7 @@ TASK_SPECS = [
     #     那是全平台共性问题，不靠本任务的相位解决。
     dict(task_id="tt_alarm_whatsapp_alert", name="eFlow P1 告警 WhatsApp 推送",
          name_en="eFlow P1 Alarm WhatsApp Push",
-         loader=("backend.services.tt_alarm_whatsapp_service", "run_tt_alarm_whatsapp_alert"),
+         loader=("backend.services.tt.tt_alarm_whatsapp_service", "run_tt_alarm_whatsapp_alert"),
          description="每 5 分钟扫 realtime_alarm 触发（带 TT + 窗口内 + 告警码白名单），实时查 eFlow 拿最新更新时间；P1 单首推即发，之后双档重报（自上次发送后工单无更新满 10 分钟催报、有更新满 30 分钟才报，均带 REMINDER 横幅），告警清除即止损；状态（是否已发/发了几次）落 eflow_tt_whatsapp_alert_log",
          description_en="Every 5 min: trigger from realtime_alarm (TT-linked, within window, code whitelist), live-fetch eFlow for the latest update time; first push immediately, then two-tier re-notify with a REMINDER banner (no update since last send -> nudge at 10 min; updated since last send -> wait 30 min), stop when cleared; send status (sent? how many times) recorded in eflow_tt_whatsapp_alert_log",
          default_cron="2-59/5 * * * *", category="whatsapp"),
@@ -273,7 +273,7 @@ TASK_SPECS = [
     #     状态落 ume_alarm_whatsapp_log；发送走 Baileys 推送进程，确认后才置 Y。
     dict(task_id="ume_alarm_whatsapp_alert", name="DC server  alarm WhatsApp push",
          name_en="DC server  alarm WhatsApp push",
-         loader=("backend.services.ume_alarm_whatsapp_service", "run_ume_alarm_whatsapp"),
+         loader=("backend.services.ume_alarm.ume_alarm_whatsapp_service", "run_ume_alarm_whatsapp"),
          description="每分钟直连 ZTE UME 网管 10.121.8.2 拉当前告警，命中精确「告警码:级别」对（默认 89029:major,89006:major）才推送到指定群；未清除告警按配置间隔催报（带 REMINDER 横幅），曾推送过的告警从上游消失则补发「已恢复」；首轮只登记不发送（防存量刷群）；状态落 ume_alarm_whatsapp_log，发送经 Baileys 推送进程确认后才置 Y。告警对/群组/催报间隔均在「任务配置」页维护",
          description_en="Every minute, connect to the ZTE UME NMS at 10.121.8.2 and pull current alarms; push to the target group only when the exact code:level pair matches the whitelist (default 89029:major,89006:major); re-notify uncleared alarms on the configured interval (with a REMINDER banner) and, for an alarm that was actually pushed, send a recovery notice once it disappears upstream; register-only on the first run (avoid flooding the group with backlog); state recorded in ume_alarm_whatsapp_log and send_status set to Y only on Baileys push confirmation. Alarm pairs/groups/resend interval are maintained on the Task Config page",
          default_cron="* * * * *", category="whatsapp"),
@@ -328,7 +328,7 @@ TASK_SPECS = [
     #    上游 KPI list（FTP /webroot/WEB-INF/schedule/NUR_SLA/<date>/）实测约 15:04 发布，
     #    内容覆盖到发布当天；故 05:00 取到的正是「覆盖到昨天」的最新一版，不损失数据。
     dict(task_id="ms_sla_full", name="MS SLA 完整同步", name_en="MS SLA Full Sync",
-         loader=("backend.services.ms_sla_service", "run_full_sync"),
+         loader=("backend.services.ms.ms_sla_service", "run_full_sync"),
          description="SLA 指标同步 + Contract KPIs 报表更新（项目自包含，无需外部文件）",
          description_en="SLA metrics sync + Contract KPIs report update (self-contained, no external files)",
          default_cron="0 5 * * *", category="ms_sla"),
@@ -372,14 +372,14 @@ TASK_SPECS = [
 
     # 9. RAN UME Main KPI 同步（每天凌晨4点）
     dict(task_id="main_kpi_sync", name="RAN Main KPI 同步", name_en="RAN Main KPI Sync",
-         loader=("backend.services.ran_ume_main_kpi", "run_main_kpi_sync"),
+         loader=("backend.services.ran.ran_ume_main_kpi", "run_main_kpi_sync"),
          description="RAN UME Main KPI 历史指标同步（2G/3G/4G x Cells/Sites/Group/NW），导出 Excel 并增量更新 SQLite + FTP 上传",
          description_en="RAN UME Main KPI history sync (2G/3G/4G x Cells/Sites/Group/NW), export Excel and incremental SQLite update + FTP upload",
          default_cron="0 4 * * *", category="main_kpi"),
 
     # 9b. RAN 小区可用性 1-Day KPI 同步（每天 04:30，替代独立 RPA 脚本 ran_kpi_avalability_1day.py）
     dict(task_id="cell_availability_sync", name="RAN 小区可用性 1-Day 同步", name_en="RAN Cell Availability 1-Day Sync",
-         loader=("backend.services.ran_cell_availability_sync", "run_cell_availability_sync"),
+         loader=("backend.services.ran.ran_cell_availability_sync", "run_cell_availability_sync"),
          description="RAN UME 小区可用性天粒度 KPI 同步（FDD/UMTS/GSM/TDD 4 模板），写 ran_kpi_avalability_1day.sqlite3 + FTP 上传",
          description_en="RAN UME cell availability day-granularity KPI sync (FDD/UMTS/GSM/TDD), write ran_kpi_avalability_1day.sqlite3 + FTP upload",
          default_cron="30 4 * * *", category="availability"),
@@ -388,14 +388,14 @@ TASK_SPECS = [
     #     复用 ran_cell_availability_sync 的 RAN_UME 小区数据获取方法，聚合当月每日
     #     Cells KPI（Total/Meeting/Below/Blank/%/Availability）物化到 ran_cells_kpi.sqlite3。
     dict(task_id="cells_kpi_sync", name="RAN Cells KPI 同步", name_en="RAN Cells KPI Sync",
-         loader=("backend.services.ran_cells_kpi_sync", "run_cells_kpi_sync"),
+         loader=("backend.services.ran.ran_cells_kpi_sync", "run_cells_kpi_sync"),
          description="RAN UME 小区数据（2G/3G/4G）每日同步，聚合 Cells KPI（达标值 99.65%）物化写 ran_cells_kpi.sqlite3，只保留当月",
          description_en="Daily RAN UME cell data sync (2G/3G/4G), aggregate Cells KPI (target 99.65%) into ran_cells_kpi.sqlite3, current month only",
          default_cron="50 4 * * *", category="availability"),
 
     # 10. RAN UME Network KPI（Zeenshan）同步（每天凌晨5点）
     dict(task_id="network_kpi_sync", name="RAN Network KPI 同步", name_en="RAN Network KPI Sync",
-         loader=("backend.services.ran_ume_network_kpi", "run_network_kpi_sync"),
+         loader=("backend.services.ran.ran_ume_network_kpi", "run_network_kpi_sync"),
          description="RAN UME Network KPI（Zeenshan）历史指标同步（2G/3G/4G x Group/NW），导出 Excel 并导入 SQLite + FTP 上传",
          description_en="RAN UME Network KPI (Zeenshan) history sync (2G/3G/4G x Group/NW), export Excel and import to SQLite + FTP upload",
          default_cron="0 5 * * *", category="network_kpi"),
@@ -426,7 +426,7 @@ TASK_SPECS = [
     #        ① Excel（data/umlaut_data/BP Report.xlsx）是一次性导入 —— 它提供
     #           `BP Cells List` 的 **cell → Cluster/Layer 字典**，因为 RAN_UME 侧
     #           完全没有 Cluster1~6/Rural 这套分区维度，无法从任何其它表推导。
-    #           导入脚本 backend/services/bp_report_import.py（手工执行，不在调度内）。
+    #           导入脚本 backend/services/bp/bp_report_import.py（手工执行，不在调度内）。
     #        ② 本任务负责**指标更新**：从 RAN_UME 读 4G_Main_Kpi_Cell_Daily 的
     #           PRB/吞吐/流量，重算 is_bp 并重算日/周/月汇总，写本机
     #           data/bp_report.sqlite3，最后与 Excel 真值对账并写入 bp_sync_meta。
@@ -439,12 +439,12 @@ TASK_SPECS = [
     #      4G_Main_Kpi_Cell_Daily 里，且**加不进去** —— 那张表由日粒度任务
     #      （gr=86400）写入，而该指标只在**小时粒度**（gr=3600）可用；日粒度下
     #      UME 返回 HTTP 200 但**静默丢弃该列**（原文 PDF counter/indicator
-    #      dimension is illegal）。故由 services/bp_active_user.py 按小时取数、
+    #      dimension is illegal）。故由 services/bp/bp_active_user.py 按小时取数、
     #      本地聚合成**当日峰值**后并入第三条件判定。实测每天约 100s。
     #      取不到时该日 is_bp 仍记 NULL（不可判定），并在 bp_sync_meta 暴露。
     #      因口径由「两条件」变为「三条件」，caliber 版本同步升到 bp-v2。
     dict(task_id="bp_report_sync", name="BP 劣化小区报告更新", name_en="BP Report Sync",
-         loader=("backend.services.bp_report_sync", "run_bp_report_sync"),
+         loader=("backend.services.bp.bp_report_sync", "run_bp_report_sync"),
          description="从 RAN_UME 读取 4G 小区级 PRB/吞吐/流量，并按 UME 小时粒度取 Average DL Active User Number（当日峰值），按 umlaut 三条件口径重算 BP 劣化小区（日/周/月），更新本机 data/bp_report.sqlite3 并与 Excel 真值对账",
          description_en="Read per-cell 4G PRB/throughput/traffic from RAN_UME plus Average DL Active User Number at hourly granularity (daily peak), recompute Bad Performance cells by the umlaut three-condition caliber (daily/weekly/monthly), refresh local data/bp_report.sqlite3 and reconcile against the Excel ground truth",
          default_cron="20 6 * * *", category="availability"),
@@ -460,7 +460,7 @@ TASK_SPECS = [
     #      约 6min 跑完）写；:40 取到的一定是 :22 那一版。本任务只用远端**只读** API
     #      + 写本机文件，不占任何业务会话，与 db_freshness_check 等内务任务同组。
     dict(task_id="mttr_tt_sync", name="MTTR/TT 宽表重建", name_en="MTTR/TT Wide Table Rebuild",
-         loader=("backend.services.mttr_tt_sync", "run_mttr_tt_sync"),
+         loader=("backend.services.tt.mttr_tt_sync", "run_mttr_tt_sync"),
          description="重建 mttr_tt 宽表（Eflow_TT_FB + OLR_CELLS/Site_Maintainer_Category 参考库），写本机 data/mttr_tt.sqlite3，供 MTTR Monthly&Weekly 看板",
          description_en="Rebuild the mttr_tt wide table (Eflow_TT_FB + OLR_CELLS/Site_Maintainer_Category reference) into local data/mttr_tt.sqlite3 for the MTTR Monthly&Weekly board",
          default_cron="40 7 * * *", category="availability"),
@@ -480,7 +480,7 @@ TASK_SPECS = [
 
     # 11. CNN UME KPI 同步（每天凌晨6点）
     dict(task_id="cnn_kpi_sync", name="CNN UME KPI 同步", name_en="CNN UME KPI Sync",
-         loader=("backend.services.ccn_ume_kpi_service", "run_cnn_kpi_sync"),
+         loader=("backend.services.cnn.ccn_ume_kpi_service", "run_cnn_kpi_sync"),
          description="CNN UME 核心网 KPI 同步（xGW License/CPU/Voice/VLR/Data/3G/4G/Free Rating），API 写入 DB CNN",
          description_en="CNN UME Core Network KPI sync (xGW License/CPU/Voice/VLR/Data/3G/4G/Free Rating), API write to DB CNN",
          default_cron="0 6 * * *", category="cnn_kpi"),
@@ -494,7 +494,7 @@ TASK_SPECS = [
     #      实测恒为 0 行，服务内会跳过且不计失败）；实测见 cnn_ume_kpi_5mins_service.py 文件头。
     #      ⚠ 实测单轮约 105s（FREE_RATING_GROUP 一天就有 1.4 万行），远小于 15 分钟节拍。
     dict(task_id="cnn_kpi_sync_5mins", name="CNN UME KPI 5分钟同步", name_en="CNN UME KPI 5-Min Sync",
-         loader=("backend.services.cnn_ume_kpi_5mins_service", "run_cnn_kpi_sync_5mins"),
+         loader=("backend.services.cnn.cnn_ume_kpi_5mins_service", "run_cnn_kpi_sync_5mins"),
          description="CNN UME 核心网 KPI 5 分钟粒度同步（同 8 个模板，取昨天 00:00 至现在），API 写入 DB CNN 的 5mins_* 新表，供 5 分钟看板 Day0/Day1/Day7 对比",
          description_en="CNN UME core-network KPI sync at 5-minute granularity (same 8 templates, window yesterday 00:00 to now), API write to DB CNN 5mins_* tables for the 5-minute Day0/Day1/Day7 board",
          default_cron="*/15 * * * *", category="cnn_kpi"),
@@ -511,7 +511,7 @@ TASK_SPECS = [
     #     队列有单飞保护：上一轮没跑完就跳过本轮触发，不会堆叠，但那一小时的数就是旧的。
     #     若日后 QC 的 TT/WO/CR/PMT 出现「跟着 SP 一起变慢」，先怀疑这里占用了 n 组 worker。
     dict(task_id="sp_data_sync", name="SP 备件数据同步", name_en="SP Spare Data Sync",
-         loader=("backend.services.get_sp_table", "run_sp_data_sync"),
+         loader=("backend.services.sp.get_sp_table", "run_sp_data_sync"),
          description="从 SFTP 拉取 5 份备件报表（Inbound/Outbound/Inventory/OC Rule/Transfer）写入 app.db，并镜像写入 FineBI WareHouseDashBoard inventory.db；落库前 Material Name 一律按 Material No. 取物料主数据 sp_material 的最新名",
          description_en="Pull 5 spare-part reports from SFTP (Inbound/Outbound/Inventory/OC Rule/Transfer) into app.db, then mirror into FineBI WareHouseDashBoard inventory.db; before writing, Material Name is resolved by Material No. from the sp_material master (latest name)",
          default_cron="10 * * * *", category="sp"),
@@ -522,7 +522,7 @@ TASK_SPECS = [
     # 08:00 —— 新部署会静默退化成日更。默认值改成与意图一致；本机的库内覆盖行
     # 保持不动（与默认值已相等，注册期的「默认≠生效」WARNING 从此不再对本任务报）。
     dict(task_id="ipran_kpi_sync", name="iPRAN UME KPI 同步", name_en="iPRAN UME KPI Sync",
-         loader=("backend.services.ipran_ume_kpi_service", "run_ipran_kpi_sync"),
+         loader=("backend.services.ipran.ipran_ume_kpi_service", "run_ipran_kpi_sync"),
          description="iPRAN UME M6000 路由器 KPI 同步（HQ M6K-FW 等），导出 Excel 并导入 SQLite + FTP 上传",
          description_en="iPRAN UME M6000 router KPI sync (HQ M6K-FW etc.), export Excel and import to SQLite + FTP upload",
          default_cron="0 * * * *", category="ipran_kpi"),
@@ -531,7 +531,7 @@ TASK_SPECS = [
     #     时序约束：数据是 eflow_sync(每小时 :00，实测 ~6min 完成) 产出的
     #     data/eflow/tt_reports/*.xlsx，必须留足余量，故排在 :15。
     dict(task_id="liberia_email_1h", name="Liberia 宕站 1小时报告邮件", name_en="Liberia Site-Down 1H Report Email",
-         loader=("backend.services.liberia_email_report", "run_1h_report"),
+         loader=("backend.services.email.liberia_email_report", "run_1h_report"),
          description="发送 Liberia Orange Site Down hourly Report（内嵌图 + Excel）到主送/抄送名单",
          description_en="Email Liberia Orange Site Down hourly Report (inline images + Excel) to recipient lists",
          default_cron="15 * * * *", category="email"),
@@ -540,7 +540,7 @@ TASK_SPECS = [
     #     时序约束：同 liberia_email_1h。原先排在 :07，与 eflow_sync 的完成时刻
     #     （实测 :06~:07）几乎重合，实测出现过抢跑读到上一期报告的情况。
     dict(task_id="liberia_email_8h", name="Liberia 宕站 8小时报告邮件", name_en="Liberia Site-Down 8H Report Email",
-         loader=("backend.services.liberia_email_report", "run_8h_report"),
+         loader=("backend.services.email.liberia_email_report", "run_8h_report"),
          description="发送 Liberia Orange Site Down 8 hours Report（内嵌图 + Excel）到主送/抄送名单",
          description_en="Email Liberia Orange Site Down 8 hours Report (inline images + Excel) to recipient lists",
          default_cron="20 */8 * * *", category="email"),
@@ -548,7 +548,7 @@ TASK_SPECS = [
     # 16. MS Contract KPIs Achievements Daily Report 邮件（数据本地 ms_sla）
     #     时序约束：必须晚于 ms_sla_full(05:00，约 05:11 完成)
     dict(task_id="kpi_ms_contract", name="MS Contract KPIs 日报邮件", name_en="MS Contract KPIs Daily Report Email",
-         loader=("backend.services.kpi_email_report", "run_ms_contract_kpi"),
+         loader=("backend.services.email.kpi_email_report", "run_ms_contract_kpi"),
          description="发送 MS Contract KPIs Achievements Daily Report（本地数据 + 远程名单）",
          description_en="Email MS Contract KPIs Achievements Daily Report (local data + remote recipient list)",
          default_cron="30 5 * * *", category="kpi_email"),
@@ -556,28 +556,28 @@ TASK_SPECS = [
     # 17. MS WOs SLA Achievements Daily Report 邮件（数据本地 ms_sla）
     #     时序约束：必须晚于 ms_sla_full(05:00，约 05:11 完成)
     dict(task_id="kpi_ms_wo_sla", name="MS WOs SLA 日报邮件", name_en="MS WOs SLA Daily Report Email",
-         loader=("backend.services.kpi_email_report", "run_ms_wo_sla"),
+         loader=("backend.services.email.kpi_email_report", "run_ms_wo_sla"),
          description="发送 MS WOs SLA Achievements Daily Report（本地数据 + 远程名单）",
          description_en="Email MS WOs SLA Achievements Daily Report (local data + remote recipient list)",
          default_cron="35 5 * * *", category="kpi_email"),
 
     # 18. SpareParts 备件报表邮件（数据本地 sp_email 生成端产出 + 远程共享名单）
     dict(task_id="kpi_sp_spareparts", name="SpareParts 备件报表邮件", name_en="SpareParts Report Email",
-         loader=("backend.services.kpi_email_report", "run_sp_spareparts"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_spareparts"),
          description="发送 SpareParts 报表（本地 sp_email 数据 + 远程共享名单）",
          description_en="Email SpareParts report (local sp_email data + remote shared recipient list)",
          default_cron="45 9 * * *", category="kpi_email"),
 
     # 19. Comsumables 耗材报表邮件（数据本地 sp_email 生成端产出 + 远程共享名单）
     dict(task_id="kpi_sp_consumables", name="Comsumables 耗材报表邮件", name_en="Comsumables Report Email",
-         loader=("backend.services.kpi_email_report", "run_sp_consumables"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_consumables"),
          description="发送 Comsumables 报表（本地 sp_email 数据 + 远程共享名单）",
          description_en="Email Comsumables report (local sp_email data + remote shared recipient list)",
          default_cron="50 9 * * *", category="kpi_email"),
 
     # 19b. SP 备件报表生成（每天 05:15，先于 05:45/06:40 两个邮件任务）
     dict(task_id="sp_report_generate", name="SP 备件报表生成", name_en="SP Report Generate",
-         loader=("backend.services.kpi_email_report", "run_sp_report_generate"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_report_generate"),
          description="先从 eFlow 刷新物料主数据 sp_material，再从 SFTP 下载备件数据生成 Comsumables & SpareParts Inbound&Outbound&Inventory 报表到本地 data/sp_email；五份明细与五份原始快照的 Material Name 一律按 Material No. 取主数据最新名（Summary-Current 才不会把同一物料裂成两行）",
          description_en="Refresh the sp_material master from eFlow first, then download spare-part data from SFTP and generate Comsumables & SpareParts Inbound&Outbound&Inventory reports into local data/sp_email; Material Name in all 5 details and 5 raw snapshots is resolved by Material No. from the master (latest name), so Summary-Current no longer splits one material into two rows",
          default_cron="15 5 * * *", category="kpi_email"),
@@ -596,14 +596,14 @@ TASK_SPECS = [
     #        与 07:05 的 sp_email_details 同组串行：周报先跑完再走明细。
     dict(task_id="sp_weekly_report", name="SP 备件周报（上周一→上周日）",
          name_en="SP Weekly Report (Monday → Sunday)",
-         loader=("backend.services.kpi_email_report", "run_sp_weekly_report"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_weekly_report"),
          description="每周一 07:00 生成「上一个完整自然周（上周一 00:00 → 上周日 23:59）」的 SP 周报：Inventory / Inbound&Outbound Summary / Daily report（7 个日期列按真实星期+日期动态生成）/ Top 10 Consumed Spares / Replenishment / Details / Warehouse-info，数量带单位，文件名与邮件主题均带周期日期，并邮件发送（主送/抄送可在 Settings → 邮件收件人 的 sp_weekly_report 分组配置）。周期按自然周对齐，其它日子手动补跑取到的仍是同一个周",
          description_en="Every Monday 07:00: build the SP weekly report for the previous full natural week (last Monday 00:00 → Sunday 23:59) with Inventory / Inbound&Outbound Summary / Daily report (7 dynamic weekday+date columns) / Top 10 Consumed Spares / Replenishment / Details / Warehouse-info, quantities carry their unit, name the file and the mail subject after the period, and email it (recipients configurable under Settings → Email Recipients, group sp_weekly_report). The window is aligned to a natural week, so a manual re-run on another weekday still covers the same Monday → Sunday",
          default_cron="0 7 * * mon", category="kpi_email"),
 
     # 19c. SP 备件明细报表（每天 07:00）：4 份明细合并为一个带时间戳的 Excel，邮件 + WhatsApp 群
     dict(task_id="sp_email_details", name="SP 备件明细报表邮件", name_en="SP Spare Parts Details Report Email",
-         loader=("backend.services.kpi_email_report", "run_sp_details_email"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_details_email"),
          description="把 data/sp_email/data 下 4 份备件明细（inventory/inband/outband/transfer）合并为一个 Excel（sheet: Inventory/Inbound/Outbound/Transfer），附件名与主题携带时间戳发送；邮件主送 ansah.boadu@zte.com.cn，抄送 dong.xinmin@zte.com.cn（收件人可在 Settings → Email Recipient Settings 覆盖）；邮件发出后把同一份合并 Excel 作为文档发到 WhatsApp 群 WH&SP Management",
          description_en="Merge the 4 spare-part detail files (inventory/inband/outband/transfer) under data/sp_email/data into one Excel (sheets: Inventory/Inbound/Outbound/Transfer) with a timestamped filename and subject; email to ansah.boadu@zte.com.cn, cc dong.xinmin@zte.com.cn (recipients editable under Settings → Email Recipient Settings); after the email, also send the same merged Excel as a document to the WhatsApp group WH&SP Management",
          # 2026-10-11：07:00 → 07:05。与 sp_whatsapp_report（07:15）拉开到 10 分钟以上，
@@ -622,7 +622,7 @@ TASK_SPECS = [
     #        ⚠️ 一文件一邮件 => 一次任务最多 6 次 EWS 会话，耗时约为单封的 6 倍。
     dict(task_id="sp_details_files_email", name="SP 备件明细分文件邮件",
          name_en="SP Spare Parts Details Files Email",
-         loader=("backend.services.kpi_email_report", "run_sp_details_files_email"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_details_files_email"),
          description="每天 10:05 把 data/sp_email/data 下 6 份备件明细（inventory/inband/outband/transfer/transfer_return/ocrule）**一文件一邮件**逐个发送，主题为「Liberia OLR W.H <附件文件名> <日期时间>」；对外附件名把 inband/outband 写作 inbound/outbound，且 6 份一律带 _source 后缀（磁盘源名不变；ocrule 无原始快照，对外名带 _source 但内容为过滤版）；优先用未过滤的 *_source.xlsx 原始快照，缺失时逐份回退过滤版；任一份文件缺失即整体失败、一封都不发，单封发送失败则不中断后续并汇总点名。默认主送 MS.NOC@zte.com.cn，抄送 li.jing132@zte.com.cn / luo.wutao@zte.com.cn（收件人可在 Settings → Email Recipients 的 sp_details_files 分组覆盖）",
          description_en="Daily 10:05: send the 6 spare-part detail files (inventory/inband/outband/transfer/transfer_return/ocrule) under data/sp_email/data as ONE EMAIL PER FILE, each with a single attachment and the subject 'Liberia OLR W.H <attachment file name> <date time>'; outbound attachment names use inbound/outbound for inband/outband and all 6 carry the _source suffix (on-disk source names unchanged; ocrule has no raw snapshot, so its outbound name carries _source while the content is the filtered version); prefers the unfiltered *_source.xlsx raw snapshot and falls back per-file to the filtered version; if any file is missing the whole run fails and nothing is sent, while a single send failure does not stop the rest and is reported by name. Default To MS.NOC@zte.com.cn, Cc li.jing132@zte.com.cn / luo.wutao@zte.com.cn (recipients editable in Settings → Email Recipients, group sp_details_files)",
          default_cron="5 10 * * *", category="kpi_email"),
@@ -635,21 +635,21 @@ TASK_SPECS = [
     #      原先排在 06:45 会永远读到前一天的快照。
     dict(task_id="sp_material_report", name="SP 物料库存与消耗报表邮件",
          name_en="SP Material Stock & Consumption Report Email",
-         loader=("backend.services.kpi_email_report", "run_sp_material_stock_consumption"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_material_stock_consumption"),
          description="每天 07:45 把 SP 物料库存与消耗汇总（同 page=sp_material 页面口径）导出为 UNIFIED_EXCEL_V1 版式 Excel 附件（SP_Material_Summary_<当前快照>.xlsx）+ 同内容 PNG 内嵌正文并邮件发送；默认 15 主送 + 2 抄送（收件人可在 Settings → 邮件收件人 覆盖）",
          description_en="Daily 07:45: export the SP material stock & consumption summary (same scope as page=sp_material) to a UNIFIED_EXCEL_V1 Excel attachment (SP_Material_Summary_<snapshot>.xlsx) plus an inline PNG of the same table, and email it; default 15 To + 2 Cc (recipients editable under Settings → Email Recipients)",
          default_cron="45 7 * * *", category="kpi_email"),
 
     # 19d. SP 在线未关闭单报表生成（每天 06:00）：基于最新明细生成 sp_online 的 PNG+XLSX，供 06:20 发送
     dict(task_id="sp_online_report_generate", name="SP 在线未关闭单报表生成", name_en="SP Online Open Tickets Report Generate",
-         loader=("backend.services.kpi_email_report", "run_sp_online_report_generate"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_online_report_generate"),
          description="基于 data/sp_email/data 最新 inband/outband 明细，过滤未关闭单生成 sp_online 下 Inbound/Outbound 报表（PNG+XLSX，Create Time 倒序）",
          description_en="Generate open-ticket reports (Inbound/Outbound PNG+XLSX, sorted by Create Time desc) into data/sp_email/sp_online from the latest details",
          default_cron="0 6 * * *", category="kpi_email"),
 
     # 19e. SP 在线未关闭单报表发送（每天 06:20）：邮件（PNG 内嵌 + XLSX 附件）+ WhatsApp 群发
     dict(task_id="sp_online_report_send", name="SP 在线未关闭单报表发送", name_en="SP Online Open Tickets Report Send",
-         loader=("backend.services.kpi_email_report", "run_sp_online_report"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_online_report"),
          description="发送 sp_online 未关闭单报表：邮件（Inbound/Outbound PNG 内嵌 + XLSX 附件，默认复用 SP 报表远程名单）+ WhatsApp 群（收件人可在 Settings → Email Recipient Settings 覆盖）",
          description_en="Send the open-ticket report: email (inline Inbound/Outbound PNG + XLSX attachments, default SP shared recipient list) + WhatsApp groups (recipients editable under Settings → Email Recipient Settings)",
          # 2026-10-11：06:20 → 06:35。三个 WhatsApp 发送任务（本任务、sp_email_details、
@@ -664,7 +664,7 @@ TASK_SPECS = [
     #      发到 WhatsApp 群 WH&SP Management；只发 WhatsApp，不重复发邮件
     dict(task_id="sp_whatsapp_report", name="Comsumables&SpareParts Report Whatsapp",
          name_en="Comsumables&SpareParts Report Whatsapp",
-         loader=("backend.services.kpi_email_report", "run_sp_whatsapp_report"),
+         loader=("backend.services.email.kpi_email_report", "run_sp_whatsapp_report"),
          description="每天 07:55 把 Comsumables Report Email / SpareParts Report Email 所发送的 Excel（合并总表）与报表图片发送到 WhatsApp 群 WH&SP Management",
          description_en="Daily 07:55: send the same Excel (consolidated) and report images used by the Comsumables / SpareParts report emails to the WhatsApp group WH&SP Management",
          # 2026-10-11：07:15 → 07:55。错开三个共用 WhatsApp profile 的发送任务
@@ -678,14 +678,14 @@ TASK_SPECS = [
 
     # 20. MS Network Availability Daily Report 邮件（远程 FTP 图片，无 Excel）
     dict(task_id="kpi_ran_availability", name="MS Network Availability 日报邮件", name_en="MS Network Availability Daily Report Email",
-         loader=("backend.services.kpi_email_report", "run_ran_availability"),
+         loader=("backend.services.email.kpi_email_report", "run_ran_availability"),
          description="发送 MS Network Availability Daily Report（远程 FTP 图片 + 远程名单，无 Excel）",
          description_en="Email MS Network Availability Daily Report (remote FTP images + remote recipient list, no Excel)",
          default_cron="30 9 * * *", category="kpi_email"),
 
     # 21. EWS 恢复后自动补发失败邮件（每 10 分钟扫描；按小时/8小时/日报时效策略补发）
     dict(task_id="email_recovery", name="EWS 恢复后邮件补发", name_en="Email Recovery after EWS Restored",
-        loader=("backend.services.email_recovery", "run_email_recovery_task"),
+        loader=("backend.services.email.email_recovery", "run_email_recovery_task"),
         description="每10分钟探测 EWS；按任务失败链的小时/8小时/日报时效策略补发失败邮件，成功后关闭失败链以防重复发送",
         description_en="Probe EWS every 10 minutes; recover failed emails using per-task hourly, 8-hour, and daily retry policies with failure-chain deduplication",
         default_cron="*/10 * * * *", category="email"),
@@ -699,21 +699,21 @@ TASK_SPECS = [
 
     # 22b. Packet Loss 丢包看板日报邮件（每天 06:45，依赖 06:30 同步生成的报告）
     dict(task_id="packet_loss_email", name="Packet Loss 丢包日报邮件", name_en="Packet Loss Daily Report Email",
-         loader=("backend.services.kpi_email_report", "run_packet_loss_email"),
+         loader=("backend.services.email.kpi_email_report", "run_packet_loss_email"),
          description="发送 Packet Loss 丢包看板日报邮件（本地截图 + 最新报告 xlsx + 远程收件人清单），经 OWA 账户发送",
          description_en="Send Packet Loss dashboard daily email (local screenshot + latest report xlsx + remote recipient list) via OWA",
          default_cron="45 6 * * *", category="packet_loss"),
 
     # 23. IP RAN M6K-FW Chart Email - 3组 ME+SmartGroup 折线图，每天 6:45
     dict(task_id="ipran_m6k_chart_email", name="IP RAN M6K-FW 图表邮件", name_en="IP RAN M6K-FW Chart Email",
-         loader=("backend.services.ipran_chart_service", "run_ipran_m6k_chart_email"),
+         loader=("backend.services.ipran.ipran_chart_service", "run_ipran_m6k_chart_email"),
          description="从 ipran_ume_kpi.sqlite3 查询 HQ_M6K_FW_bnctp_15mins，按 ME+SmartGroup 生成3张利用率折线图并发送",
          description_en="Query HQ_M6K_FW_bnctp_15mins by ME+SmartGroup, generate 3 utilization line charts and email",
          default_cron="45 6 * * *", category="email"),
 
     # 24. CNN Free Rating Group Chart Email - 4个 MO 柱状图，每天 7:45
     dict(task_id="ccn_free_rating_chart_email", name="CNN Free Rating 图表邮件", name_en="CNN Free Rating Chart Email",
-         loader=("backend.services.ccn_free_rating_chart_service", "run_ccn_free_rating_chart_email"),
+         loader=("backend.services.cnn.ccn_free_rating_chart_service", "run_ccn_free_rating_chart_email"),
          description="从 db_ps_cs_cn.sqlite3 查询 FREE_RATING_GROUP_TEMPLATE_OSS_update_UME，按 MO 生成4张柱状图并发送",
          description_en="Query FREE_RATING by MO, generate 4 bar charts and email",
          default_cron="45 7 * * *", category="email"),
@@ -754,7 +754,7 @@ TASK_SPECS = [
 
     # 27. 邮箱空间守卫（每小时第 0 分钟）：容量超阈值自动清理最旧邮件，避免存储上限告警
     dict(task_id="mailbox_cleanup", name="邮箱空间清理", name_en="Mailbox Storage Guard",
-         loader=("backend.services.mailbox_cleanup", "run_mailbox_cleanup"),
+         loader=("backend.services.cleanup.mailbox_cleanup", "run_mailbox_cleanup"),
          description="每小时检查 Exchange 邮箱（ztenoc.olr@orange.com）：邮件数>500 且 空间>70% 时，硬删除最旧 200 封邮件，避免 'storage limit' 告警",
          description_en="Hourly guard for Exchange mailbox (ztenoc.olr@orange.com): when count>500 AND usage>70%, hard-delete the 200 oldest emails to avoid the 'storage limit' warning",
          default_cron="0 * * * *", category="mailbox"),
@@ -762,14 +762,14 @@ TASK_SPECS = [
     # 28. Incident Overview 数据同步（每小时第 20 分钟）：从远程 FineBI FTP 拉取最新 incident_overview.xlsx
     #     刻意避开 :00–:05 —— FineBI 在 :53 删掉上一轮输出目录、新副本约 :02–:05 才落盘，整点取数会撞空档
     dict(task_id="incident_overview_sync", name="Incident Overview 数据同步", name_en="Incident Overview Data Sync",
-         loader=("backend.services.incident_overview_sync", "run_incident_overview_sync"),
+         loader=("backend.services.incident.incident_overview_sync", "run_incident_overview_sync"),
          description="每小时第 20 分钟从远程 FineBI FTP /webroot/WEB-INF/schedule/TT_WO/ 所有子目录取最新 incident_overview.xlsx，落盘为版本化文件 + current.json 指针（Excel 一直打开也不会失败），best-effort 刷新 incident_overview.xlsx 快照；上游重算窗口内取不到文件时沿用 90 分钟内的本地副本，不判失败",
          description_en="Hourly at minute 20: pull the latest incident_overview.xlsx from remote FineBI FTP /webroot/WEB-INF/schedule/TT_WO/ across all subfolders, store as versioned file + current.json pointer (immune to Excel lock), best-effort refresh snapshot; while upstream is regenerating it reuses a local copy younger than 90 minutes instead of failing",
          default_cron="20 * * * *", category="incident_overview"),
 
     # 29. 数据新鲜度巡检（每小时第 15 分钟）：远程库 + 本地回退库 + 本机文件型源
     dict(task_id="db_freshness_check", name="数据库数据新鲜度巡检", name_en="DB Data Freshness Check",
-         loader=("backend.services.db_freshness_check", "run_db_freshness_check"),
+         loader=("backend.services.db.db_freshness_check", "run_db_freshness_check"),
          description="每小时巡检远程 DB（db_writer_api）、本地回退库各表最新数据日期，以及本机文件型数据源（FTP 落盘的 Excel）的落盘年龄，滞后时输出调用链路与检查方向",
          description_en="Hourly freshness audit of remote DBs (via db_writer_api), local fallback DBs, and local file-based sources (FTP-pulled Excel) by on-disk age; outputs call chain and troubleshooting guidance when stale",
          default_cron="15 * * * *", category="general"),
@@ -860,14 +860,14 @@ TASK_SPECS = [
     #   —— 工单不是秒级变化的实时指标。若日后确需更高频，**同时**把 TTL 调长
     #   或确认缓存命中，不要只把 cron 调密。
     dict(task_id="sp_online_sync", name="SP Online 工单同步", name_en="SP Online Ticket Sync",
-         loader=("backend.services.sp_online_sync", "run_sp_online_sync"),
+         loader=("backend.services.sp.sp_online_sync", "run_sp_online_sync"),
          description="从 eFlow SP 接口（sp-outbound/sp-inbound/sp-transfer）拉全量在线工单，写入 app.db 表 sp_outbound / sp_inbound / sp_transfer（Table Browser 可查）。每 6 小时一轮，避免每轮都触发一次 eFlow 登录。表语义=上游当前快照：全量重建，删除上游已消失的单据；拉取不完整时只 upsert 不删除",
          description_en="Fetch all online tickets from eFlow SP APIs (sp-outbound/sp-inbound/sp-transfer) into app.db tables sp_outbound / sp_inbound / sp_transfer (visible in Table Browser). Runs every 6 hours to avoid a fresh eFlow login each round. Tables mirror the upstream snapshot: full rebuild deletes tickets that vanished upstream; on an incomplete fetch it only upserts and never deletes",
          default_cron="35 */6 * * *", category="sp_online"),
 
     # 34c. SP 物料主数据同步（每天 04:55）：从 eFlow SP 物料接口拉全量写入 sp_material
     dict(task_id="sp_material_sync", name="SP 物料主数据同步", name_en="SP Material Master Sync",
-         loader=("backend.services.sp_material_sync", "run_sp_material_sync"),
+         loader=("backend.services.sp.sp_material_sync", "run_sp_material_sync"),
          description="从 eFlow SP 物料接口（eflow-sp-material）拉全量物料主数据，写入 app.db 表 sp_material（按 materialNo 唯一键 upsert，Table Browser 可查）。表语义=上游当前快照：全量重建，删除上游已消失的物料；拉取不完整时只 upsert 不删除",
          description_en="Fetch the full material master from eFlow SP (eflow-sp-material) into app.db table sp_material (upsert by materialNo, visible in Table Browser). The table mirrors the upstream snapshot: full rebuild deletes materials that vanished upstream; on an incomplete fetch it only upserts and never deletes",
          default_cron="55 4 * * *", category="sp_material"),
@@ -891,7 +891,7 @@ TASK_SPECS = [
     # 36. CXO 看板 last-known-good 缓存同步（每 10 分钟）：经本机 8790 VMAX 代理拉全量看板接口，
     #     空值保留旧值，落盘 data/cxo_dashboard/last_known_good.json 供前端兜底展示
     dict(task_id="cxo_dashboard_cache_sync", name="CXO看板数据缓存同步", name_en="CXO Dashboard Cache Sync",
-         loader=("backend.services.cxo_dashboard_cache", "run_cxo_dashboard_cache_sync"),
+         loader=("backend.services.cxo.cxo_dashboard_cache", "run_cxo_dashboard_cache_sync"),
          description="每10分钟经本机8790 VMAX代理拉取CXO看板全量接口，按接口粒度合并为last-known-good缓存（空值保留旧值），落盘 data/cxo_dashboard/last_known_good.json 供看板兜底展示",
          description_en="Every 10 min pull all CXO dashboard APIs via local 8790 VMAX proxy, merge per-endpoint into a last-known-good cache (empty fetch keeps old value), written to data/cxo_dashboard/last_known_good.json as the dashboard fallback",
          default_cron="*/10 * * * *", category="general"),
@@ -942,21 +942,21 @@ TASK_SPECS = [
     #      失败只记在任务结果里，**不影响采集任务本身**的成功与否。
     dict(task_id="whatsapp_kb_sync_push_rules",
          name="WhatsApp 知识库同步（推单规则）", name_en="WhatsApp KB Sync (Push Rules)",
-         loader=("backend.services.whatsapp_kb_service", "run_whatsapp_kb_sync_after_push_rules"),
+         loader=("backend.services.whatsapp.whatsapp_kb_service", "run_whatsapp_kb_sync_after_push_rules"),
          description="eFlow 推单规则收集完成后 5 分钟触发：比对规则 xlsx 指纹，有变化才重导知识文档、重建索引并重启 whatsapp-kb-bot（无变化直接跳过，不重启进程）",
          description_en="5 min after the push-rules collect: compare rule xlsx fingerprints; re-export knowledge docs, rebuild the index and restart whatsapp-kb-bot only when something changed (skips without restarting otherwise)",
          default_cron="4 0 */3 * *", category="eflow"),
 
     dict(task_id="whatsapp_kb_sync_alarm_rules",
          name="WhatsApp 知识库同步（告警规则）", name_en="WhatsApp KB Sync (Alarm Rules)",
-         loader=("backend.services.whatsapp_kb_service", "run_whatsapp_kb_sync_after_alarm_rules"),
+         loader=("backend.services.whatsapp.whatsapp_kb_service", "run_whatsapp_kb_sync_after_alarm_rules"),
          description="eFlow 告警规则收集完成后触发知识库同步（压缩规则来自 eflow_alarm_rules.xlsx）；无变化自动跳过",
          description_en="Trigger KB sync after the alarm-rules collect (compression rules come from eflow_alarm_rules.xlsx); auto-skips when unchanged",
          default_cron="4 0 */3 * *", category="eflow"),
 
     dict(task_id="whatsapp_kb_sync_tt_rules",
          name="WhatsApp 知识库同步（TT 级别规则）", name_en="WhatsApp KB Sync (TT Level Rules)",
-         loader=("backend.services.whatsapp_kb_service", "run_whatsapp_kb_sync_after_tt_rules"),
+         loader=("backend.services.whatsapp.whatsapp_kb_service", "run_whatsapp_kb_sync_after_tt_rules"),
          description="eFlow TT 级别规则收集（每日 04:20）完成后触发知识库同步（级别规则来自 eflow_TT_rules.xlsx）；无变化自动跳过",
          description_en="Trigger KB sync after the daily 04:20 TT level-rules collect (level rules come from eflow_TT_rules.xlsx); auto-skips when unchanged",
          default_cron="35 4 * * *", category="eflow"),
@@ -967,7 +967,7 @@ TASK_SPECS = [
     #     （默认 100MB）自动切 _pN 分片（见 backend/log_writer.py）。本任务负责把已无进程
     #     写入的旧命名日志补日期后缀，并删除 mtime 超过 7 天的 log/*.log（含分片）。
     dict(task_id="log_cleanup", name="日志文件清理", name_en="Log Files Cleanup",
-         loader=("backend.services.log_cleanup", "run_log_cleanup"),
+         loader=("backend.services.cleanup.log_cleanup", "run_log_cleanup"),
          description="清理 my_app/log 下超过保留期（默认7天）的日志文件，并把已无进程写入的旧命名日志补上日期后缀；与各 watchdog 按日期命名配合实现滚动保留",
          description_en="Purge log files older than retention (default 7 days) under my_app/log; rename legacy no-longer-written logs with a date suffix",
          default_cron="17 3 * * *", category="general"),
@@ -978,7 +978,7 @@ TASK_SPECS = [
     #     独立文件 + 独立目录 data/vmax_cxo_daily/，不读写 cxo_dashboard 的 last_known_good，
     #     也不调用 ensure_proxy（不把重启逻辑压到现有看板共用的 8790 代理上），故与任务 36 互不影响。
     dict(task_id="vmax_cxo_daily_sync", name="VMAX CXO天粒度日值归档", name_en="VMAX CXO Daily Value Archive",
-         loader=("backend.services.vmax_cxo_daily_cache", "run_vmax_cxo_daily_sync"),
+         loader=("backend.services.cxo.vmax_cxo_daily_cache", "run_vmax_cxo_daily_sync"),
          description="每小时经8790 VMAX代理按监控批量拉取最近8天的1hour明细（共50个指标：6个CXO趋势 + 14个网络KPI + 30个服务/OTT KPI，压成8个多列请求），按流量SUM/用户PEAK/速率AVG聚合为日值，落盘 data/vmax_cxo_daily/daily.json 供页签化天粒度看板累积回看三周",
          description_en="Hourly: batch-pull the last 8 days of 1-hour detail for 50 KPIs (6 CXO trend + 14 network + 30 service/OTT) from the 8790 VMAX proxy as 8 multi-column requests, aggregate per day (SUM for volume, PEAK for users, AVG for rates) into data/vmax_cxo_daily/daily.json for the tabbed daily board",
          default_cron="15 * * * *", category="general"),
@@ -1036,7 +1036,7 @@ TASK_SPECS = [
     #     TMP/_quarantine_YYYYMMDD/（可还原），隔离再超 7 天才真删；服务在用路径
     #     （charts/dl/状态文件）白名单永不处理。与 log_cleanup(03:17) 错峰。
     dict(task_id="tmp_cleanup", name="TMP 目录清理", name_en="TMP Directory Cleanup",
-         loader=("backend.services.tmp_cleanup", "run_tmp_cleanup"),
+         loader=("backend.services.cleanup.tmp_cleanup", "run_tmp_cleanup"),
          description="隔离 my_app/TMP 下超过保留期（默认7天）的临时产物到 _quarantine_ 目录，隔离满 7 天后彻底删除；白名单保护服务在用路径",
          description_en="Quarantine TMP entries idle beyond retention (default 7 days) into _quarantine_ dirs, purge quarantine after another 7 days; service paths whitelisted",
          default_cron="47 3 * * *", category="general"),
@@ -1048,7 +1048,7 @@ TASK_SPECS = [
     #     排在 07:20 是为了读到 eflow_sync(每小时 :00) 当天第一期产出的数据。
     #     需要更高频的话在任务管理页改 cron 即可，不必改代码（产物按 mtime 只留最新 1 份）。
     dict(task_id="tt_mttr_report_generate", name="TTs and MTTR 报表生成", name_en="TTs and MTTR Report Generate",
-         loader=("backend.services.tt_mttr_report", "run_tt_mttr_report"),
+         loader=("backend.services.tt.tt_mttr_report", "run_tt_mttr_report"),
          description="从最新 Site Down hourly Report 生成 TTs and MTTR (Hour).xlsx：有 WO + 告警发生→清除历时<48h + Site Category 非空 + 2026-01 起，Summary 用 COUNTIFS/AVERAGEIFS 公式分月统计并出 P1~P4 组合图",
          description_en="Build TTs and MTTR (Hour).xlsx from the latest Site Down hourly Report: WO present + occur-to-clear < 48h + non-empty Site Category + from 2026-01; Summary counts via COUNTIFS/AVERAGEIFS formulas with P1-P4 combo charts",
          default_cron="20 7 * * *", category="eflow"),
@@ -1116,7 +1116,7 @@ TASK_SPECS = [
     # 审查通过后由人工导入 —— 这是业务定下的铁律，别在这条链路上加写库参数。
     # 每日 07:00 兜底跑一次；关掉自动调度不影响页面按钮（enabled 为 True 时手动触发才可用）。
     dict(task_id="eflow_site_update", name="CMDB 站点同步比对", name_en="CMDB Site Sync Diff",
-         loader=("backend.services.eflow_site_update_task", "run_eflow_site_update"),
+         loader=("backend.services.eflow.eflow_site_update_task", "run_eflow_site_update"),
          description="比对 CMDB 主数据（my_app/db 下最新的 ZTE OLR MS Master Site Database）与 eflow 基线、PG master_site_db 基线，生成带 A/M/D 标记与着色的差异文件（eflow_site_update.xlsx / master_site_db .xlsx / 导入副本 / 同步报告）。只生成文件供人工审查，不写入 eflow 与 PostgreSQL",
          description_en="Diff the CMDB master data (newest ZTE OLR MS Master Site Database under my_app/db) against the eflow baseline and the PG master_site_db baseline, producing colour-coded A/M/D workbooks (eflow_site_update.xlsx / master_site_db .xlsx / import copies / sync report). Generates review files only - never writes to eflow or PostgreSQL",
          default_cron="0 7 * * *", category="eflow"),
@@ -1243,7 +1243,7 @@ def register_all_tasks(task_runner) -> int:
     """将 TASK_SPECS 中的全部任务注册到 task_runner，返回注册数量"""
     # 局部导入：task_stats 只依赖 database/dialect_helpers，无环；放函数内与本章
     # 「启动期不引入业务依赖」的懒加载约定一致。
-    from backend.services.task_stats import register_recent_runs_provider
+    from backend.services.task.task_stats import register_recent_runs_provider
     for spec in TASK_SPECS:
         func = spec.get("func")
         call_chain = None

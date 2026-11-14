@@ -57,11 +57,11 @@
 
 ### 2.4 现有 AI 能力
 
-- `backend/services/incident_ai_service.py`（**恰好 500 行，已达项目单文件上限**）
+- `backend/services/incident/incident_ai_service.py`（**恰好 500 行，已达项目单文件上限**）
   已实现 7 个 provider 的分发：openai / gemini / doubao / qianwen / glm-coding / deepseek / agnes，
   含模型回退、超时重试、SSE 流式（`stream_deepseek`）。
 - **api_key 一律由前端请求体传入，服务端不落盘、不日志** —— 这是既有安全约定，必须沿用。
-- `backend/services/incident_overview_service.py:566` 的 `analyze_with_ai()` 已有
+- `backend/services/incident/incident_overview_service.py:566` 的 `analyze_with_ai()` 已有
   「provider 不可用时回退本地规则」的降级路径。
 
 ## 三、为什么定时报表/看板**不**应该 Agent 化
@@ -212,8 +212,8 @@ Invoke-WebRequest http://127.0.0.1:7038/api/data-agent/ask -Method POST `
 | 无多用户体系 | `docs/manual/01-overview.md:22` |
 | autocommit 的 PG 连接 | `backend/database.py:320,324` |
 | 双模列元数据 | `backend/routers/tables.py:116` |
-| provider 分发 | `backend/services/incident_ai_service.py:477-500` |
-| AI 失败回退本地规则 | `backend/services/incident_overview_service.py:576-597` |
+| provider 分发 | `backend/services/incident/incident_ai_service.py:477-500` |
+| AI 失败回退本地规则 | `backend/services/incident/incident_overview_service.py:576-597` |
 | 裸连接点位 | `AGENTS.md` 第六节；`ipran_chart_service.py:233`、`fw_kpi_services.py:488` |
 | `db_ps_cs_cn` 空占位 | `AGENTS.md` 第六节第 4 条 |
 | 表/行数实测 | 2026-09-25 直连 PG `information_schema` 查询（见 2.2） |

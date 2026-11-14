@@ -2,7 +2,7 @@
  * BP Report —— 劣化小区（Bad Performance）报告
  * ============================================================================
  *
- * 口径（umlaut 定义，唯一真相源在 backend/services/bp_caliber.py）：
+ * 口径（umlaut 定义，唯一真相源在 backend/services/bp/bp_caliber.py）：
  *   Daily:   Average DL Active User Number > 2.5
  *            AND [FDD]DL IP Throughput(Mbps) < 3
  *            AND [FDD]DL PRB Utilization Rate > 80% *   Weekly:  一周内 4/7 天为 BP

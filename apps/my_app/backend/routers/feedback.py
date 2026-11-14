@@ -45,7 +45,7 @@ from pydantic import BaseModel, Field
 
 from backend.database import DB_PATH, get_raw_connection
 from backend.dialect_helpers import table_columns
-from backend.services import portal_auth
+from backend.services.portal import portal_auth
 
 logger = logging.getLogger(__name__)
 

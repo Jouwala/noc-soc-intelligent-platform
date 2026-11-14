@@ -152,7 +152,7 @@ def _runtime_credentials():
     保持本脚本「可直接独立运行」的特性。
     """
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         try:
             from credential_store import get_credential

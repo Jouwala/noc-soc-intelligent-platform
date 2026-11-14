@@ -85,7 +85,7 @@
 > **`ap_center`（AP 行动计划）属于「工作流」目录**（`grp_workflow`，与 `DEFAULT_GROUPS` 一致），
 > 逐页说明见第 39 节。
 > 原生看板的 16 个 slug 见 `App.tsx` 的 `FINEBI_BOARDS`（与
-> `backend/services/native_catalog.py` 一一对应），逐页说明见第 29 节。
+> `backend/services/native/native_catalog.py` 一一对应），逐页说明见第 29 节。
 
 ---
 
@@ -273,7 +273,7 @@
   - 文件清单**不新增端点**，复用 `GET /api/email-reports/latest` 里 `source_id='tt_mttr'` 的那一项
     （`_SOURCES` 注册见 `backend/routers/email_reports.py:44`），下载同样走通用 `/download/{source}/{file}`；
     页签表格只留 文件/大小/生成时间/下载（任务名与类型在该目录内恒定，没有信息量）。
-  - 口径、公式写法与验证步骤见 `backend/services/tt_mttr_report.md`。
+  - 口径、公式写法与验证步骤见 `backend/services/tt/tt_mttr_report.md`。
 - 接口：`GET /api/email-reports/latest`、`GET /api/email-reports/eflow_tt_rules_check`、下钻 `GET /api/email-reports/eflow_tt_rules_check/drill`、未匹配分布 `GET /api/email-reports/eflow_tt_rules_check/unmatched_dist`、下载 `GET /api/.../download/{source}/{file}`。
 - **导出 Excel**（2026-09-27 新增）：**每个页签各一个导出按钮**，导的是该页签表格当前的全量行
   （这些表 `pagination={false}`，无分页截断）——
@@ -386,7 +386,7 @@
 - **汇总数字不再独占一排（2026-10-17）**：「TT 总数」从独立汇总卡改为「TT Statistics」分区标题旁的徽标（`SectionTitle` 的 `summaries`），点击仍下钻 `all_tt`，省掉首屏一整排只有一个大数字的高度。`page=wo` 同理只保留「WO 总数」徽标。
 - **Ticket Severity 固定 P1→P4 序（2026-10-17）**：该维度按级别排，不按数量降序 —— 否则 P3 单多的月份会显示成 P3 在 P2 前面，看起来像级别顺序变了。固定序由 `renderStatCards` 的 `fixedOrder` 参数给出，未识别的取值排在末尾。
 - **Workflow 里程碑（2026-10-17）**：区块名中英统一为 **`Workflow`**（key `ttwo.statusMilestone`）。状态原值有 12 种（`Waiting for FO Process(WO RCA to FO Confirm)` 等），平铺成卡片无法扫读。现在按业务生命周期归并为里程碑 —— 派单 → 受理 → 到场 → 处理 → 离场 → 现场确认 → 客户确认 → 关闭 —— 版式参照 `page=incident_overview` 的「圆点 + 连接线」（`renderStatusMilestones`）。归类表 `STATUS_MILESTONES` **按原始状态名精确匹配**（含 `Wait For Confirm` 大小写变体与 `(Suspended)` 变体）；只影响展示，下钻仍是 `dimension=status` + 原值。一个阶段含多个原值时，圆点显示合计但不可点，下方逐条列出并各自可点，保证「数字 = 下钻行数」。未识别的状态落到「其他」，不静默吞数。各阶段圆点与文字同色、同字重（需求：字体颜色一样）。
-- **阶段顺序以 eFlow 流程图为权威（2026-10-17）**：新增 `GET /api/tt-wo-dashboard/workflow`（服务层 `backend/services/eflow_workflow_service.py`），向前端下发 `stage_order` / `main_path` / `node_to_stage`。前端用它给里程碑排序，取不到时**静默回落**到 `STATUS_MILESTONES` 的本地声明顺序（里程碑数字来自本地库，只有顺序依赖该端点，故不会空态）。
+- **阶段顺序以 eFlow 流程图为权威（2026-10-17）**：新增 `GET /api/tt-wo-dashboard/workflow`（服务层 `backend/services/eflow/eflow_workflow_service.py`），向前端下发 `stage_order` / `main_path` / `node_to_stage`。前端用它给里程碑排序，取不到时**静默回落**到 `STATUS_MILESTONES` 的本地声明顺序（里程碑数字来自本地库，只有顺序依赖该端点，故不会空态）。
   - ⚠ **上游调用契约（实测确认，勿凭直觉改）**：`POST /api/eflow-ticket/v1/flow/runtime/queryAllSteps`，`Content-Type: text/plain`，body 是**裸字符串 `eflow-tt`** —— 不是 JSON，也不是单号。按 JSON 传 `{"ttNo": ...}` 等键名一律 `500 {"code":48990002,"message":"Failed to send request!"}`，那个 500 是 **body 解析失败**，不是「单号不存在」。
   - **该端点返回的是流程定义**（8 个节点 + 节点间连边 + 出口条件），**不是某张单的步骤历史**。实测主干：`Create → FOAccept → FOProcess → BOAccept → BOProcess → ThirdAccept → ThirdProcess → Confirm → Closed`。图是有环的（`Confirm` 可驳回回 `FOProcess` / `ThirdProcess`），服务层用 DFS 取最长路径作主干，不画环。
   - 两端阶段 key 必须**逐字一致**（`reassign` / `waitAccept` / `arriveSite` / `waitProcess` / `leaveSite` / `waitConfirmFO` / `waitConfirm` / `closed`）。`arriveSite` / `leaveSite` 只存在于 `eflow_wo`（TT 图上无对应节点），但 WO 页共用同一渲染器，故 `CANONICAL_STAGE_ORDER` 保留其顺序位。
@@ -476,7 +476,7 @@
   - **为什么落库**：xlsx 名单是隐形的、无法审计，且**「拉取时间 ≠ 内容时间」**—— 页面上 `(10-05 16:47)` 看着很新，内容却全是 8 月初的，
     用户会把「名单过时导致最近几天 NUR 全 0」误判成「计算算错了」（2026-10-05 真实踩坑）。现在展示 `_import_time`（内容时间）与上传来源。
   - 上传人记**客户端 IP** 而非用户名：本项目无多用户体系（`helpContent.ts:950`「No multi-user system」），假的审计数据比没有更危险。
-  - **单条记录**：`services/tt_exclude.py`（解析/读写/播种，含 `ExcludeImportError`）、`routers/tt_exclude.py`（两个端点）。
+  - **单条记录**：`services/tt/tt_exclude.py`（解析/读写/播种，含 `ExcludeImportError`）、`routers/tt_exclude.py`（两个端点）。
     首次播种来自 FTP 现网 46 条（`tt_exclude.seed_from_ftp()`）；此后**真相源是数据库**，FTP 仅兜底。
   - 注意：`vip_site_list` 是「有上游 Excel、可批量导入」的表，**不是本表的先例** —— 排除名单是人工维护的，两者是不同写入路径。
 
@@ -514,7 +514,7 @@ MS 合同 KPI（Contract KPIs）与工单 SLA（WOs SLA）达成情况。
 > 改动落在**共用组件** `frontend/src/pages/MsKpiShared.tsx` 的 `MetricCard`（月值与「N/M 天达标」挂
 > `ExplainPopover`）与趋势弹窗（标题挂 `ExplainIcon`），所以一处改动两页同时生效。
 > 口径键 `msKpi.explain.monthValue / metDays / cell / trendStat`（中英各 4），内容全部从
-> `backend/services/ms_kpi_report_service.py` 与 `ms_sla_report.py` 核实：月值取工作簿 Month 行**原值**
+> `backend/services/ms/ms_kpi_report_service.py` 与 `ms_sla_report.py` 核实：月值取工作簿 Month 行**原值**
 > （不做除法重算）；`met_days/矩阵日行数` 的分母**不是自然月天数**（缺档日不计）；
 > `min/max/avg` 只统计有值日行且 avg 是等权算术平均，**可以与月值不相等**；
 > **PerSite 类的目标 90% 是代码里写死的**（`_parse_kpi_matrix:397-408`，`target_source=persite_ratio`），
@@ -541,7 +541,7 @@ Service / Network / Summary / Healthscore 四视图经营看板（`CxoDashboard.
   2. **last-known-good 缓存**：worker 任务 `cxo_dashboard_cache_sync`（每 10 分钟，v 组）经本机 8790 VMAX 代理拉全量接口、**空值保留旧值**，落盘 `data/cxo_dashboard/last_known_good.json`，页面打开/开启自动刷新后到点时经 `GET /api/cxo-dashboard/cache` 应用；
   3. 实时拉取（经 `/api/realtime-proxy/cxo` 转发 8790 代理）成功则覆盖缓存。
   实时不可用时页面显示最近可用缓存数据（状态行 `offline · cached data`），Health 页 live 为空时回退缓存并在标题标注 `cached <时间>`。
-- 缓存任务详情见 `backend/services/cxo_dashboard_cache.md`；每次运行还向 `data/cxo_dashboard/history.jsonl` 追加一行 Summary KPI + Health 概要（积累趋势用）。
+- 缓存任务详情见 `backend/services/cxo/cxo_dashboard_cache.md`；每次运行还向 `data/cxo_dashboard/history.jsonl` 追加一行 Summary KPI + Health 概要（积累趋势用）。
 - **轮播（大屏值守）**：页头 `Carousel` 按钮（2026-09-02 起）每 15 秒轮换 Service→Network→Summary→Healthscore 四页签并**进入全屏**（同 Alarm Management：再点按钮停止并退全屏；Esc 退出全屏会联动停轮播；手动点页签视为接管、停轮播但保留全屏）。
 - 图表尺寸自适应：所有图表 setOption 后统一排队一次 rAF `resize()`（`queueResizeAll`）——trend-grid 卡片逐个 append 时列宽多次回流，不补偿会把 1570px 画布塞进 359px 卡片（x 轴标签挤压、线条重叠的根因）；实时刷新按代次（`REFRESH_GEN`）管理，切页/轮播后旧刷新静默作废，不在隐藏视图上重建图表、也不覆盖状态行。
 - 数据源是 VMAX 实时保障看板，凭据在「系统设置 → 凭据 → `vmax_cxo`」。
@@ -1010,7 +1010,7 @@ React 自身驱动（其 cleanup 顺序是「子先父后」，子图层先 remo
 
 **需求**：把 `?page=mwRealTime` 的最新 15 分钟粒度链路利用率直接显示到 GIS 页，不必切页就能看出哪条微波链路吃紧。
 
-**实现**：`GET /api/gis/topology?with_util=1` 在原有 844 条链路上叠加 `mw_ume_bw_ultilazation_rt` 的实时 KPI；匹配逻辑独立成 `backend/services/gis_mw_overlay.py`（不塞进已 1700+ 行的 `gis.py`）。
+**实现**：`GET /api/gis/topology?with_util=1` 在原有 844 条链路上叠加 `mw_ume_bw_ultilazation_rt` 的实时 KPI；匹配逻辑独立成 `backend/services/gis/gis_mw_overlay.py`（不塞进已 1700+ 行的 `gis.py`）。
 
 **⚠️ 核心难点：两套数据没有现成的 JOIN 键。**
 
@@ -1247,7 +1247,7 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 
 **回答的问题**：「高级筛选出来的一批断站，哪些其实是**同一个原因**？」—— 把人工翻 `link_path` 链路变成卡片上一目了然的簇。
 
-**三类簇**（`backend/services/gis_rca_service.py::compute_rca`，纯内存确定性聚类，无 LLM）：
+**三类簇**（`backend/services/gis/gis_rca_service.py::compute_rca`，纯内存确定性聚类，无 LLM）：
 
 | 簇 | 判定 | 证据字段 |
 | --- | --- | --- |
@@ -2441,7 +2441,7 @@ WO 的 `current_handler` 是 `P:Kelvin Kollie`（只有姓名），
 - **两种图叠在一张画布上**：底图是 `ocrule_details` 的规则骨架（节点下方的"生效/总数"
   是该步骤绑定的规则条数），叠加层是该单的实际路径 —— 绿色=已走过、黄色=当前步骤
   （取 `eflow_tt.operation_type`）、粗青线=实际连线。一眼看出"走到哪一步、卡在哪"。
-- **状态机主干**（`backend/services/eflow_flow.py` 的 `_FLOW_NODES`）：
+- **状态机主干**（`backend/services/eflow/eflow_flow.py` 的 `_FLOW_NODES`）：
   告警发生 → TT 建单 → 自动派单 → FO/BO 接单 → FO/BO 处理 → 第三方接单/处理 → 确认 → 关单，
   外加 TT 派生的 **WO 现场子流程**独立一条流水线（`wo_create`→`wo_accept`→`wo_process`→`wo_confirm`→`wo_closed`）。
 - **告警 → TT 的定位**：① 告警表 `tt_id` 直连（realtime/history）；② TT 自己的 `alarm_id`
@@ -2478,7 +2478,7 @@ WO 的 `current_handler` 是 `P:Kelvin Kollie`（只有姓名），
     并在气泡里单列「WO 子流程另计：走过 N 个节点」。
 - **节点规则「仅相关」过滤 + 规则详情（2026-11-10 新增）**：查某个告警/TT 后，点图中节点（如「TT 建单」），
   规则明细**默认只显示与本单相关的规则**，不再铺全部挂载规则。
-  - **判定同源不另造**：`backend/services/eflow_flow_rules.py` 的 `annotate_graph()` 把图上每条规则与采集表
+  - **判定同源不另造**：`backend/services/eflow/eflow_flow_rules.py` 的 `annotate_graph()` 把图上每条规则与采集表
     `eflow_push_rules.xlsx`（Push_Rules 工作表，全规则类型、含「条件」列）按（规则名, 规则类型）对齐，
     复用 TT 规则检查的同一引擎（`tt_rule_evidence._parse_push_conditions` + `eflow_rules_matcher.build_value_frame`
     / `build_rule_mask` / `format_details`）对本单取值帧求值。站点属性同源 `master_site_db.victims(hub_site=Y)`
@@ -2496,7 +2496,7 @@ WO 的 `current_handler` 是 `P:Kelvin Kollie`（只有姓名），
   - **多条件模拟（2026-11-10 新增）**：查询卡切到「多条件模拟」后不查具体单子，直接给一组
     取值帧字段（告警码 / 工单级别 / VIP / HUB / 站点子类型 / 站点类型 / 网络制式 / 当前断站数 /
     下挂站点总数 / 根因 / 告警描述），看全部规则会怎么判。后端 `POST /api/eflow-flow/simulate`
-    → `simulate_flow()`（`backend/services/eflow_flow.py`）→ `build_sim_frame()` 把条件构造成
+    → `simulate_flow()`（`backend/services/eflow/eflow_flow.py`）→ `build_sim_frame()` 把条件构造成
     合成 TT 行 + 站点属性，**原样交给 `build_value_frame`**（YES/NO→1/0、大小写等归一化与真实
     单子同一条路径），再走与按单查询**同一个** `annotate_graph_with_frame` 求值循环 —— 不存在
     第二套判定。要点：① **留空字段按「无值」参与判定**，引用它的条件不成立 —— 例：「HUB site P1」
@@ -2635,7 +2635,7 @@ TT 复盘抽屉（`TtPostmortemPanel.tsx:693-710`）的红字
 
 `IncidentOverview.tsx:17` → `public/incident-overview.html`（`<title>` 为 **OLR Incident Dashboard**），接口 `/api/incident-overview`。数据由 `incident_overview_sync` **每小时第 20 分钟**从 FineBI FTP 调度目录取最新 `incident_overview.xlsx`，以"版本化文件 + `current.json` 指针"落盘（`backend/task_registry.py:585-591`）——这样即使上游 Excel 一直被打开占用，取数也不会失败。
 
-> **为什么排在 :20，而不是整点**（2026-09-30 实测）：FineBI 每小时 **:53** 触发重算，会**先删掉上一轮的 `TT_WO/<日期>/<HHMM>/通用结果/` 目录**，新副本约 **:02–:05** 才落盘，源树任意时刻只保留一份。整点取数正好撞在这约 12 分钟的空档里，当天 18 次跑挂 8 次、微信+邮件每小时误报一次。现在取不到文件时，只要本地副本不超过 90 分钟就沿用上并按"跳过"上报（`services/incident_overview_sync.py` 的 `NO_SOURCE_GRACE_MINUTES`），文件年龄本身另外进 `db_freshness_check` 的 `FILE_CHECKS` 巡检。完整来龙去脉见 `04-task-system.md` 的「FineBI `schedule/` 的重算空档」。
+> **为什么排在 :20，而不是整点**（2026-09-30 实测）：FineBI 每小时 **:53** 触发重算，会**先删掉上一轮的 `TT_WO/<日期>/<HHMM>/通用结果/` 目录**，新副本约 **:02–:05** 才落盘，源树任意时刻只保留一份。整点取数正好撞在这约 12 分钟的空档里，当天 18 次跑挂 8 次、微信+邮件每小时误报一次。现在取不到文件时，只要本地副本不超过 90 分钟就沿用上并按"跳过"上报（`services/incident/incident_overview_sync.py` 的 `NO_SOURCE_GRACE_MINUTES`），文件年龄本身另外进 `db_freshness_check` 的 `FILE_CHECKS` 巡检。完整来龙去脉见 `04-task-system.md` 的「FineBI `schedule/` 的重算空档」。
 
 ## 17. 仓库看板（`?page=warehouse`）— iframe
 
@@ -2720,7 +2720,7 @@ TT 复盘抽屉（`TtPostmortemPanel.tsx:693-710`）的红字
 
 | 页签 | 组件 | 能配什么 |
 | --- | --- | --- |
-| 凭据 | `CredentialSettings.tsx` | **20 组**上游账号：搜索（:8 区）、保存 `PUT /api/credentials`（:83）、**测试连接** `POST /api/credentials/test`（:100）、**显示明文** `GET /api/credentials/{key}/reveal`（:118）。列表默认掩码显示。<br>**2026-10-21 起 20 组全部可测试**（此前只有 11 组有按钮）：按 `credential_store` 的 `test_kind` 派发到 `backend/services/credential_tester.py`，见表 [23.1](#231-凭据连接测试对照表) |
+| 凭据 | `CredentialSettings.tsx` | **20 组**上游账号：搜索（:8 区）、保存 `PUT /api/credentials`（:83）、**测试连接** `POST /api/credentials/test`（:100）、**显示明文** `GET /api/credentials/{key}/reveal`（:118）。列表默认掩码显示。<br>**2026-10-21 起 20 组全部可测试**（此前只有 11 组有按钮）：按 `credential_store` 的 `test_kind` 派发到 `backend/services/credential/credential_tester.py`，见表 [23.1](#231-凭据连接测试对照表) |
 | 邮件收件人 | `EmailRecipientsSettings.tsx` | 分组收件人名单：编辑 `PUT /api/email-recipients`（:77）、**重置为默认** `POST /api/email-recipients/reset`（:95）。`GET /api/email-recipients`（:31） |
 | 远程主机 | `RemoteHostSettings.tsx` | 一个 `host` 字段：`GET`/`PUT /api/settings/remote-host`（:20,:44）+ 连通性测试 `POST /api/settings/test-connection`（:68）。**改完即时生效，无需重启**（写 `backend/data/settings.json`） |
 | 任务配置 | `datasync/TaskConfigTab.tsx` | 任务的业务参数（非排程）。优先级 `环境变量 > 配置文件 > 默认值` |
@@ -2731,7 +2731,7 @@ TT 复盘抽屉（`TtPostmortemPanel.tsx:693-710`）的红字
 
 `POST /api/credentials/test`（`backend/routers/credentials.py:130`）按组的 `test_kind` 分发：
 `zte_oauth2` / `rais` 走本文件里的 `auth_manager` 路径（带本地熔断冷却提示与终态错误判定），
-其余 kind 派发到 `backend/services/credential_tester.py`（`run_test()`，:末尾）。
+其余 kind 派发到 `backend/services/credential/credential_tester.py`（`run_test()`，:末尾）。
 
 | test_kind | 凭据组 | 实际做什么 |
 | --- | --- | --- |
@@ -2762,7 +2762,7 @@ TT 复盘抽屉（`TtPostmortemPanel.tsx:693-710`）的红字
 - 与其他页面**共用同一份凭据**（`credential_store` 分组），不必重复填。
 - 会话 cookie 会缓存到 `backend/services/auth_cache/`，等价于有效登录态——按 `05-security-and-credentials.md` 的要求对待该目录。
 
-### 门户清单（`backend/services/portal_login_service.py::PORTALS`）
+### 门户清单（`backend/services/portal/portal_login_service.py::PORTALS`）
 
 | key | 门户 | 地址 | 登录方式 |
 |---|---|---|---|
@@ -2889,7 +2889,7 @@ postMessage 的唯一用途。自愈循环上限 4 次（`MAX_AUTO_RELOGIN`）�
 
 同一条代码路径服务两个页面，只是 `kind` 不同（`spareparts` / `consumables`）：
 页面包装 `SpReport.tsx` / `ComReport.tsx` → 共用 `SpReportBase.tsx`，
-后端 `backend/routers/sp_report.py` → `backend/services/sp_report_service.py`。
+后端 `backend/routers/sp_report.py` → `backend/services/sp/sp_report_service.py`。
 
 - **数字悬浮说明（2026-11-04，`AGENTS.md` 三.3c）**：顶部八张卡（物料数 / 入库 / 出库 / 库存 / 差额 / 安全库存 / 补库 / 紧急补库）
   标题挂 `ExplainIcon`、数字挂 `ExplainPopover`（该页自带的页面级 `StatCard` 加了 `explain` / `tip` 两个入参）；
@@ -2920,13 +2920,13 @@ postMessage 的唯一用途。自愈循环上限 4 次（`MAX_AUTO_RELOGIN`）�
 数据源是任务 `sp_report_generate`（每天 05:15）产出的汇总工作簿
 `data/sp_email/<前缀> <时间戳>.xlsx`，与邮件/WhatsApp 发出去的是**同一份文件**，
 页面不做二次加工（口径说明由接口 `notes` 原样透传，见
-`backend/services/sp_report_service.py` 顶部 docstring）。
+`backend/services/sp/sp_report_service.py` 顶部 docstring）。
 
 > **`Material Name` 一律是物料主数据 `sp_material` 的最新名（2026-11-06 起）**。上游明细里这一列
 > 是**单据导出那一刻**的快照名，物料改名后历史单据不回写，于是同一物料会在 `Summary-Current`
 > 里裂成两行、入库/出库/库存被拆开（当天实测 4 组、86 行受影响）。生成端 Step 0 先从 eFlow 刷新
 > 主数据，Step 2.5 再按 `Material No.` 覆盖五份明细与五份原始快照
-> （实现 `backend/services/sp_material_name.py`，落库链路 `get_sp_table.py` 共用同一份）。
+> （实现 `backend/services/sp/sp_material_name.py`，落库链路 `get_sp_table.py` 共用同一份）。
 > 代价：当天 05:15 之后发生的改名，要等次日报表才跟上 —— 页面读的就是这份报表，
 > 所以**不会出现明细已是新名、汇总还是旧名**这种同页两套写法。
 
@@ -2940,7 +2940,7 @@ postMessage 的唯一用途。自愈循环上限 4 次（`MAX_AUTO_RELOGIN`）�
 > 去重，剔除 `WaitingForUpdate`）。其余 sheet 的 `open_count` 仍来自 Excel 快照。
 > 原因：Excel 是 05:15 的快照、DB 是 07:00 落库，两边会差一两张单；用户在同一
 > 门户里看到两个数字，只会认为其中一个错了。口径唯一来源见
-> `backend/services/sp_common.py`，守卫见 `tests/test_sp_open_count_caliber.py`。
+> `backend/services/sp/sp_common.py`，守卫见 `tests/test_sp_open_count_caliber.py`。
 >
 > 三处页面的取舍（**刻意不同，不要"顺手统一"**）：
 >
@@ -3019,7 +3019,7 @@ Others / Inventory Lost / Repair 五种）或出现空白值，都会自动落�
 - 页面整体 404 → 工作簿不存在，按提示先跑 `sp_report_generate`；
 - 有表头无数据 / 部分 sheet 空 → 看接口返回的 `warnings`（页面顶部橙色告警条原样显示）；
 - 页面与 Excel 数字对不上，先看 `notes` 里的口径说明，再查
-  `backend/services/sp_report_service.py`，**不要**在页面层改口径。
+  `backend/services/sp/sp_report_service.py`，**不要**在页面层改口径。
 
 ## 26b. 仓库汇总报表（`?page=warehouse_summary`）—— 页签 = Excel 的两个 sheet（2026-09-29 新增）
 
@@ -3265,7 +3265,7 @@ tooltip 的「受影响站点」是**该区域内 site_id 去重数**（`:481-48
 - 后端路由：`backend/routers/sp_material_summary.py` —— 只有 `/api/sp-material/summary`（8 列 + Total 行）
   与 `/api/sp-material/detail`（单元格下钻）两个只读端点，**非法参数一律「200 + warnings」软失败**，不抛 5xx
   （看板不能因为一个格子炸掉整页）。
-- 口径层：`backend/services/sp_material_summary_service.py` 顶部 docstring（`RCK_MATERIAL_SUMMARY_V1`）。
+- 口径层：`backend/services/sp/sp_material_summary_service.py` 顶部 docstring（`RCK_MATERIAL_SUMMARY_V1`）。
   数据源是 `inventory_details`（APPEND 表，按 `update_date` 保留每日全量快照，所以能做「期初 vs 期末」）
   与 `outband_details`（**全量刷新表**，所有行 `update_date` 相同，所以报修出库只能按 `Outbound Time` 过滤）。
 - **数字悬浮说明（2026-11-04，`AGENTS.md` 三.3c）**：每个数字挂 `ExplainPopover`（`spMat.tip.*`）、
@@ -3313,11 +3313,11 @@ tooltip 的「受影响站点」是**该区域内 site_id 去重数**（`:481-48
 实际执行了多少、其中多少按时**。
 
 - 后端路由：`backend/routers/cr_analysis.py`（5 个只读端点）
-- **口径层（唯一真相源）**：`backend/services/cr_caliber.py` —— 表名、时间字段、
+- **口径层（唯一真相源）**：`backend/services/cr/cr_caliber.py` —— 表名、时间字段、
   终态词表、按时/延期判定、窗口规整、`bucket_expr()`、`base_where()`、
   `status_bucket_expr()`、`WORKFLOW_STEPS` 全在这里
-- 服务层：`backend/services/cr_analysis_service.py`（拼聚合与下钻 SQL）、
-  `backend/services/cr_workflow_service.py`（解析 `*_detail` 文本列算步骤耗时）
+- 服务层：`backend/services/cr/cr_analysis_service.py`（拼聚合与下钻 SQL）、
+  `backend/services/cr/cr_workflow_service.py`（解析 `*_detail` 文本列算步骤耗时）
 - 前端页面：`frontend/src/pages/CrChangeAnalysis.tsx`（500 行）
 - 前端配套：`frontend/src/pages/crAnalysis/` 下 `crTypes.ts`（类型/常量/纯函数）、
   `crCharts.ts`（ECharts option）、`crColumns.tsx`（表格列定义）、
@@ -3531,7 +3531,7 @@ detail 记录的是**已完成**的操作，语义上错开一格：
   卡标题挂 `ExplainLabel`（ⓘ 讲该字段的 SQL 判据，键 `pm.explain.*`），数字本身走 `StatCard.explainText`
   与 `ExplainPopover`（键 `pm.tip.count` / `pm.tip.rate`）。ⓘ 的键用**逐条字面量 switch** 映射，
   不拼 `pm.explain. + metric` —— 拼串会被 `check:i18n` 读成键名 `pm.explain.` 而报「字典缺失」（三.1b 第 3 条）。
-  口径逐条从 `backend/services/pm_caliber.py` 与 `pm_analysis_service.py` 核实后写进界面：
+  口径逐条从 `backend/services/pm/pm_caliber.py` 与 `pm_analysis_service.py` 核实后写进界面：
   `closed` = `UPPER(TRIM(status)) = 'CLOSED'`（动态建表的 eflow_pm 里 status 大小写两种写法都有，先归一再比）；
   **`overdue` = `UPPER(TRIM(pmt_overdue)) = 'YES'` —— 直接采用源表自己的判定，页面不按计划日期/实际日期推算**，
   源表没填这一列时该卡恒为 0、**不代表真的没有超期**，这句连同「上游新造的状态名会默认落进『未关闭』」一起写进 ⓘ；
@@ -3542,10 +3542,10 @@ detail 记录的是**已完成**的操作，语义上错开一格：
   在总数卡上会读成「自己占自己」，现改为写明它同时是下方关闭率与超期率的分母。
 - 后端路由：`backend/routers/pm_analysis.py`（**5 个**只读端点：filters / overview /
   drilldown / **workflow** / **workflow-drilldown**，后两个 2026-10-17 新增）
-- **口径层（唯一真相源）**：`backend/services/pm_caliber.py` —— 表名、时间字段、
+- **口径层（唯一真相源）**：`backend/services/pm/pm_caliber.py` —— 表名、时间字段、
   终态、超期判定、流程顺序、窗口规整、`bucket_expr()`、`base_where()` 全在这里
-- 服务层：`backend/services/pm_analysis_service.py`（拼聚合与下钻 SQL）、
-  `backend/services/pm_workflow_service.py`（里程碑与环节停留耗时）
+- 服务层：`backend/services/pm/pm_analysis_service.py`（拼聚合与下钻 SQL）、
+  `backend/services/pm/pm_workflow_service.py`（里程碑与环节停留耗时）
 - 前端页面：`frontend/src/pages/PmExecutionAnalysis.tsx`
 - 前端配套：`frontend/src/pages/pmAnalysis/` 下 `pmTypes.ts`、`pmCharts.ts`、
   `pmColumns.tsx`、`PmDrillModal.tsx`、`PmKpiCards.tsx`、
@@ -3689,7 +3689,7 @@ created_time → last_create_time → last_schedule_time → last_accept_time
 
 `Create → Schedule → Accept → Process → PM Manager Approve → FLM Leader Approve → Closed`
 
-- 后端：`backend/services/pm_workflow_service.py`
+- 后端：`backend/services/pm/pm_workflow_service.py`
   （`build_workflow()` / `drill_workflow()`），路由 `GET /api/pm-analysis/workflow`
   与 `GET /api/pm-analysis/workflow-drilldown`；
 - 前端：`pmAnalysis/PmMilestones.tsx`（里程碑条，每格两个大字号数字）+
@@ -3755,14 +3755,14 @@ created_time → last_create_time → last_schedule_time → last_accept_time
   三张数字卡「最新一期 BP 小区数」「期数」「平均 BP 占比」标题挂 ⓘ + 数字走 `StatCard.explainText`。
   两条最容易读错的口径已核实并写进界面：
   ① `bp_ratio` 是**汇总表里该期自己的存储列**，服务层直接 `SELECT … {ratio_col} AS bp_ratio`
-  （`backend/services/bp_report_service.py:185`），页面**不拿 bp_cells ÷ total_cells 再除一遍**；
+  （`backend/services/bp/bp_report_service.py:185`），页面**不拿 bp_cells ÷ total_cells 再除一遍**；
   ② **`avg_ratio` = `AVG({ratio_col})`**（`bp_report_service.py:212`）= **各期占比的算术平均（每期一票）**，
   **不是** ΣBP ÷ Σ全网 —— 小区数很少的期与很多的期在这里一样重。气泡因此**把两个数并列给出来**
   （等权平均 vs 区间合计口径），两者不等是口径不同、不是算错；这张卡点下去是**整个区间**的 BP 明细，不是最后一期。
   「期数」= 所选区间在该粒度下**实际有数据的周期个数**（一行一周期），不是自然周期数 —— 切粒度后它会变。
   气泡内容一律取接口既有字段（`bp_ratio` / `bp_cells` / `total_cells` / `detail_cells` / `detail_diff`），前端不重算。
 
-### 口径（唯一真相源：`backend/services/bp_caliber.py`）
+### 口径（唯一真相源：`backend/services/bp/bp_caliber.py`）
 
 ```
 Daily:   取「Average DL Active User Number 最大的那个小时」，
@@ -3794,7 +3794,7 @@ Monthly: 一个月内 3/4 个完整周为 BP
    该表由日粒度任务（`gr=86400`）写入，而该指标**只在小时粒度（`gr=3600`）可用**：
    日粒度下 UME 返回 **HTTP 200 + 合法 `queryid`，但静默丢弃该列**，无任何报错
    （UME 原文 `0001610001 ... PDF counter/indicator dimension is illegal`）。
-   故由 `backend/services/bp_active_user.py` 走**独立通道**按小时一次取
+   故由 `backend/services/bp/bp_active_user.py` 走**独立通道**按小时一次取
    PRB+Thr+AU 三个 counter（`C373384373` / `1638004469342` / `1638004469332`），
    本地按 AU 最大小时聚合出当天三值。
    取不到时该日仍记 `is_bp=NULL`（不可判定），**绝不当 0**（当 0 会把可能的 BP 判成非 BP）。
@@ -4147,12 +4147,12 @@ Excel `BP Cells List` 的 `Cluster`/`Layer` 列有脏值（如数字 ID `'4593'`
 
 | 文件 | 作用 |
 | --- | --- |
-| `backend/services/bp_caliber.py` | **口径唯一真相源**（阈值、列名、判定函数） |
-| `backend/services/bp_report_store.py` | 物化库建表与读写（8 张表） |
-| `backend/services/bp_report_import.py` | Excel 一次性导入 |
-| `backend/services/bp_active_user.py` | **三指标独立通道**（UME 小时粒度 → AU 最大小时的三值） |
-| `backend/services/bp_report_sync.py` | RAN_UME 增量更新 + 周月重算 + 对账 |
-| `backend/services/bp_report_service.py` | 查询层（概览/分区/频层/明细/元信息） |
+| `backend/services/bp/bp_caliber.py` | **口径唯一真相源**（阈值、列名、判定函数） |
+| `backend/services/bp/bp_report_store.py` | 物化库建表与读写（8 张表） |
+| `backend/services/bp/bp_report_import.py` | Excel 一次性导入 |
+| `backend/services/bp/bp_active_user.py` | **三指标独立通道**（UME 小时粒度 → AU 最大小时的三值） |
+| `backend/services/bp/bp_report_sync.py` | RAN_UME 增量更新 + 周月重算 + 对账 |
+| `backend/services/bp/bp_report_service.py` | 查询层（概览/分区/频层/明细/元信息） |
 | `backend/routers/bp_report.py` | 5 个端点 |
 | `frontend/src/pages/BpReport.tsx` | 页面 |
 | `data/bp_report.sqlite3` | 派生库（**不入库**，可整库重建） |
@@ -4198,8 +4198,8 @@ Excel `BP Cells List` 的 `Cluster`/`Layer` 列有脏值（如数字 ID `'4593'`
 | 时间字段 | `aggregate_date`（时间部分恒为 `00:00:00`） |
 | 空值 | 时延与抖动各 3 行，其余列无空值 |
 
-**口径唯一真相源**：`backend/services/bm_speedtest_caliber.py`。页面与接口都不含业务口径，
-改口径只改这一处。数据访问在 `backend/services/bm_speedtest_service.py`，
+**口径唯一真相源**：`backend/services/bm/bm_speedtest_caliber.py`。页面与接口都不含业务口径，
+改口径只改这一处。数据访问在 `backend/services/bm/bm_speedtest_service.py`，
 路由在 `backend/routers/bm_speedtest.py`（前缀 `/api/bm-speedtest`）。
 
 **几个刻意的设计决定，改之前请先读理由**：
@@ -4330,8 +4330,8 @@ MTN 胜 206 天；上传 ORANGE 194 / MTN 224；时延 ORANGE 胜 299 天。
 | 空值 | **8 个指标列全部无空值**（612 行实测） |
 | 日期缺口 | 2 处（2025-04-10、2025-04-14 缺失），故全区间实际 612 天而不是连续天数 |
 
-**口径唯一真相源**：`backend/services/bm_meta_caliber.py`。数据访问在
-`backend/services/bm_meta_service.py`，路由在 `backend/routers/bm_meta.py`（前缀 `/api/bm-meta`）。
+**口径唯一真相源**：`backend/services/bm/bm_meta_caliber.py`。数据访问在
+`backend/services/bm/bm_meta_service.py`，路由在 `backend/routers/bm_meta.py`（前缀 `/api/bm-meta`）。
 
 **几个刻意的设计决定，改之前请先读理由**：
 
@@ -4489,7 +4489,7 @@ MTN 胜 206 天；上传 ORANGE 194 / MTN 224；时延 ORANGE 胜 299 天。
 ## 29. FineBI 原生看板（`?page=finebi_<slug>`，共 17 个）
 
 由通用引擎 `frontend/src/pages/NativeBoard.tsx` 渲染，看板定义（含每条 SQL）来自
-`backend/services/native_catalog.py` 的 `BY_SLUG`，数据经 `GET /api/native-boards/{slug}`
+`backend/services/native/native_catalog.py` 的 `BY_SLUG`，数据经 `GET /api/native-boards/{slug}`
 取本机派生库或远端只读 SQL API。迁移背景见 `docs/FINEBI_MIGRATION.md`。
 
 ### 29a. MTTR 看板（`?page=finebi_mttr`）—— 日/周/月 页签（2026-09-27 改造）
@@ -4675,7 +4675,7 @@ UME 只是自动同步的补充。**这个优先级是口径决定，不是性�
 > 而当时 uvicorn（PID 53728）启于 09-30 20:21 —— **进程比代码早 14 小时**，
 > 所以改完必须重启后端，否则看到的仍是旧台阶。
 > 判据：`Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'"` 看 `CreationDate`
-> 与 `Get-Item backend\services\cn_kpi_service.py` 的 `LastWriteTime` 谁更晚。
+> 与 `Get-Item backend\services\cn\cn_kpi_service.py` 的 `LastWriteTime` 谁更晚。
 >
 > **2026-10-01 10:28 重启后已实测确认**（新 PID 70964）：
 > `c1` 极差 2.03x → **1.02x**，MIN=1,121,544 / MAX=1,148,084，
@@ -4705,7 +4705,7 @@ UME 只是自动同步的补充。**这个优先级是口径决定，不是性�
 | `frontend\src\App.tsx` | `PageKey` 联合类型 + `VALID_PAGES` + 菜单 `nav.cnKpi` + `:cn_kpi` case |
 | `frontend\src\i18n.tsx` | `nav.cnKpi` 与全部 `cnkpi.*`（zh/en 各一份） |
 | `backend\routers\cn_kpi.py` | `GET /api/cn-kpi/overview`、`GET /api/cn-kpi/health` |
-| `backend\services\cn_kpi_service.py` | 组件定义 `WIDGETS` + 取数/降级/缓存 |
+| `backend\services\cn\cn_kpi_service.py` | 组件定义 `WIDGETS` + 取数/降级/缓存 |
 | `backend\main.py` | `app.include_router(cn_kpi.router)`（约 :252） |
 
 ### 33.6 排查顺序（页面空白时）
@@ -4761,11 +4761,11 @@ UME 只是自动同步的补充。**这个优先级是口径决定，不是性�
 
 | 项 | 值 |
 | --- | --- |
-| 采集任务 | `cnn_kpi_sync_5mins`（`backend\services\cnn_ume_kpi_5mins_service.py`），cron `*/15 * * * *`，n 组 |
+| 采集任务 | `cnn_kpi_sync_5mins`（`backend\services\cnn\cnn_ume_kpi_5mins_service.py`），cron `*/15 * * * *`，n 组 |
 | 粒度 | `gr="300"`（5 分钟） |
 | 窗口 | 昨天 00:00 UTC → 现在 |
 | 落库表 | `db_ps_cs_cn.sqlite3` 的 `5mins_<原表名>`（**只写新表，日/月表一行不动**） |
-| 数据服务 | `backend\services\cn_kpi_5mins_service.py` |
+| 数据服务 | `backend\services\cn\cn_kpi_5mins_service.py` |
 | 路由 | `GET /api/cn-kpi-5mins/overview`、`/health` |
 
 **自动刷新不重挂载**（2026-11-10）：本页在 `App.tsx` 的 `AR_INPLACE_REFRESH_PAGES` 里。顶栏到点只派发 `myapp-refresh`，页面 `load({ silent: true })` 静默重取 —— 不清 loading、失败保留上一帧图表。此前走 `key={refreshTick}` 整页重挂载，状态回到 `loading && !data`，overview 打远端的那几秒到几十秒里页面只剩页头和转圈；刷新间隔短于取数耗时时会一直空白。手动「刷新」仍是非静默（按钮转圈，但已有图表不拆），`onClick` 必须写成 `() => load({ force: true })`，不能 `onClick={load}`（事件对象会被当成参数）。后端 `get_overview` 单飞，列名探测另缓存 10 分钟。
@@ -4885,8 +4885,8 @@ FROM "5mins_3G_FDD_DATA_TRAFFIC_TEMPLATE_OSS_UME"
 
 | 文件 | 作用 |
 | --- | --- |
-| `backend\services\cnn_ume_kpi_5mins_service.py` | 采集（复用 `ccn_ume_kpi_service` 的鉴权/查询/导出/写库助手） |
-| `backend\services\cn_kpi_5mins_service.py` | 看板数据：11 个组件（全部有数据，其中 3 个为 15 分钟粒度）+ Day0/Day1/Day7 SQL + 缓存 |
+| `backend\services\cnn\cnn_ume_kpi_5mins_service.py` | 采集（复用 `ccn_ume_kpi_service` 的鉴权/查询/导出/写库助手） |
+| `backend\services\cn\cn_kpi_5mins_service.py` | 看板数据：11 个组件（全部有数据，其中 3 个为 15 分钟粒度）+ Day0/Day1/Day7 SQL + 缓存 |
 | `backend\routers\cn_kpi_5mins.py` | `/api/cn-kpi-5mins/*` |
 | `frontend\src\pages\CnKpi5mins.tsx` | 页面（Day0/Day1/Day7 透视 + 空态） |
 | `backend\task_registry.py` | `TASK_SPECS` 登记 `cnn_kpi_sync_5mins` |
@@ -4930,7 +4930,7 @@ eFlow 里 FE 处理完后大量 WO 停在 `WaitConfirm`（待 NOC 确认关闭�
 | --- | --- |
 | 页面入口 | `?page=eflow_qa` 左栏「WO 清理」→「批量关闭工单」按钮（`frontend/src/pages/EflowQa.tsx` 的 `woCloseView`） |
 | 面板组件 | `frontend/src/components/WoClosePanel.tsx`（预检表 / 勾选 / 二次确认 / 结果导出 / 模板下载） |
-| 服务层 | `backend/services/eflow_wo_close.py`（三步链路 + 批量编排，**模块头注释有全部实测依据**） |
+| 服务层 | `backend/services/eflow/eflow_wo_close.py`（三步链路 + 批量编排，**模块头注释有全部实测依据**） |
 | 路由 | `backend/routers/eflow_qa.py` 末尾 `POST /api/eflow-qa/wo-close/check`（只读预检）与 `/wo-close/submit`（提交关闭） |
 
 ### 34.2 eFlow 关闭链路（三个必须知道的事实，全部 2026-10-01 实机验证）
@@ -5415,7 +5415,7 @@ VMAX 其余页面都是只读透传，本节是**唯一落库**的页签，原�
 | DELETE | `/api/vmax-xdr-records/saved/{id}` | 删除我的存档 |
 | GET | `/api/vmax-xdr-records/history` | 我的查询历史 |
 
-鉴权：全部走 `Depends(require_user)`（`services/portal_auth.py`），与 `/api/*`
+鉴权：全部走 `Depends(require_user)`（`services/portal/portal_auth.py`），与 `/api/*`
 中间件同源；本机回环与免登录开发模式视为 admin（`current_user` 的既有语义）。
 
 ### 37.5 前端
@@ -5545,7 +5545,7 @@ Orange/Lonestar 电话），首次访问种入 `app.ap_org_people`。
 ### 39.3 通知：邮件 + WhatsApp 群（群名可自定义）
 
 - 群名存 `ap_tasks.notify_groups`（逗号分隔，默认 `lbr_assistant` 测试群），
-  下发时可在表单里改。走 `services\wa_notify_service.py::dispatch`（Baileys 文本通道）。
+  下发时可在表单里改。走 `services\whatsapp\wa_notify_service.py::dispatch`（Baileys 文本通道）。
 - **必须批量投递**：该通道只有一个 pending 作业文件，逐条 dispatch 会互相覆盖
   （连续下发 5 个 AP 只剩最后一条）。`ap_manager\notify.py` 用 3 秒合并窗口的
   批处理线程把同一批消息合成一次 dispatch —— 改这段代码前先看它的注释。

@@ -21,7 +21,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 # Let the scheduler start so /api/tasks behaves like production; we stop it at end.
-import backend.services.task_runner as _tr  # noqa: E402
+import backend.services.task.task_runner as _tr  # noqa: E402
 
 from fastapi.testclient import TestClient  # noqa: E402
 from backend.main import app  # noqa: E402

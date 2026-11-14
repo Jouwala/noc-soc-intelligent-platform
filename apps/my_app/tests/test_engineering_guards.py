@@ -163,8 +163,8 @@ def test_task_db_modules_are_all_redirected_by_the_test_fixture():
     )
     # 这两个模块被 test_task_runner 直接或间接调用，必须都被重定向
     must_redirect = {
-        "backend/services/task_runner.py": "tr",
-        "backend/services/task_stats.py": "_ts",
+        "backend/services/task/task_runner.py": "tr",
+        "backend/services/task/task_stats.py": "_ts",
     }
     missing = []
     for rel, alias in must_redirect.items():
@@ -366,8 +366,8 @@ def test_mirror_failure_is_surfaced_as_warning():
       2. task_runner 在 success=True 时也会消费 warnings 触发降级告警。
     任何一侧被删掉，都会退回"静默失败"。
     """
-    sp = (BACKEND / "services" / "get_sp_table.py").read_text(encoding="utf-8", errors="replace")
-    runner = (BACKEND / "services" / "task_runner.py").read_text(encoding="utf-8", errors="replace")
+    sp = (BACKEND / "services" / "sp" / "get_sp_table.py").read_text(encoding="utf-8", errors="replace")
+    runner = (BACKEND / "services" / "task" / "task_runner.py").read_text(encoding="utf-8", errors="replace")
 
     assert 'result.setdefault("warnings", []).append(' in sp, (
         "get_sp_table.py 不再把镜像失败写进 result['warnings'] —— "
@@ -408,7 +408,7 @@ def test_mirror_never_connects_remote_db_directly():
     默认路径不会再退回直连：直连实现只能留在 `_mirror_write_all_direct`
     （回滚路径），且默认的 `_mirror_write_all` 必须先判 `MIRROR_MODE`。
     """
-    sp = (BACKEND / "services" / "get_sp_table.py").read_text(encoding="utf-8", errors="replace")
+    sp = (BACKEND / "services" / "sp" / "get_sp_table.py").read_text(encoding="utf-8", errors="replace")
 
     assert "def _mirror_write_all_direct(" in sp, (
         "旧的直连实现不见了 —— 若是有意删除，请同时删掉本守卫与 mirror_mode=direct 文档"
@@ -421,7 +421,7 @@ def test_mirror_never_connects_remote_db_directly():
     assert 'MIRROR_MODE = "push"' in sp, (
         "镜像默认模式不再是 push —— 直连远端 WAL 库会永久阻塞 worker"
     )
-    push = (BACKEND / "services" / "sp_mirror_push.py").read_text(encoding="utf-8", errors="replace")
+    push = (BACKEND / "services" / "sp" / "sp_mirror_push.py").read_text(encoding="utf-8", errors="replace")
     assert "shutil.copyfile(local_path, remote_path)" in push, (
         "sp_mirror_push.py 不再用 copyfile 推送 —— 整文件推送是本方案能绕开 SMB 字节锁的关键"
     )
@@ -439,7 +439,7 @@ def test_mirror_stage_has_hard_timeout():
     对"远端持有 WAL 库"这一场景完全无效（连不上就是永久阻塞）。因此**任何**
     网络文件系统上的阻塞调用都必须由调用方给上限，否则一次卡死就是 6 小时。
     """
-    sp = (BACKEND / "services" / "get_sp_table.py").read_text(encoding="utf-8", errors="replace")
+    sp = (BACKEND / "services" / "sp" / "get_sp_table.py").read_text(encoding="utf-8", errors="replace")
     assert "def _run_mirror_with_timeout(" in sp, (
         "镜像阶段硬超时包装不见了 —— 一次网络文件系统阻塞会把 worker 永久卡死"
     )
@@ -575,7 +575,7 @@ def test_no_bare_percent_in_parameterized_sql_fragment():
     # 只看当前行会漏判（本守卫第一版就因此假绿，被反向验证抓出来）。
     # 改为：定位每个 `{_NOT_TEST_TASK}` 出现处，向后扫描到该语句结束
     # （遇到 conn.execute(...) 的参数元组或语句结束标记），判断整条语句是否带参数。
-    ts_src = (BACKEND / "services" / "task_stats.py").read_text(
+    ts_src = (BACKEND / "services" / "task" / "task_stats.py").read_text(
         encoding="utf-8", errors="replace")
     assert "_NOT_TEST_TASK_PARAM" in ts_src, (
         "task_stats 缺少「通配符走绑定参数」的写法 —— 失败横幅会再次静默失效"
@@ -694,7 +694,7 @@ def test_no_duplicate_worker_stacks_and_claims_are_atomic():
     )
     assert "AND worker_pid = ?" in w, "_finish 丢失 worker_pid 归属校验（会盖掉别人认领的行）"
 
-    tr = (BACKEND / "services" / "task_runner.py").read_text(encoding="utf-8", errors="replace")
+    tr = (BACKEND / "services" / "task" / "task_runner.py").read_text(encoding="utf-8", errors="replace")
     assert "def _looks_like_live_worker" in tr, "缺少进程级核实辅助函数"
     assert "PROCESS_QUERY_LIMITED_INFORMATION" in tr, (
         "进程核实必须用 0x1000（不受完整性级别限制）；0x0400 会把提权启动的 worker 读成已死"

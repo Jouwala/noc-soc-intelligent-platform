@@ -71,7 +71,7 @@ DISPLAY_DAYS = 31
 def _fetch_mou_data() -> Optional[pd.DataFrame]:
     """从远程 API 读取按日 MOU 数据；先剔除运行当天（不完整）。"""
     try:
-        from backend.services.remote_db_reader import get_remote_reader
+        from backend.services.remote.remote_db_reader import get_remote_reader
 
         reader = get_remote_reader()
         health = reader.health_check()
@@ -284,7 +284,7 @@ def run_mtn_mou_daily_email(to_override: Optional[str] = None,
     """主入口：取数 → 出两张图 → 发邮件。"""
     t0 = time.perf_counter()
 
-    from backend.services.email_recipient_store import get_email_recipients
+    from backend.services.email.email_recipient_store import get_email_recipients
     to_arg, cc_arg = get_email_recipients(EMAIL_GROUP_KEY, to_override, cc_override)
     to_list = [a.strip() for a in (to_arg or "").split(";") if a.strip()]
     cc_list = [a.strip() for a in (cc_arg or "").split(";") if a.strip()]

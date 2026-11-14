@@ -11,7 +11,7 @@
 
 为什么是「桥接」而不是直接 import：
 
-  · `fetch_tt_live` 在 `my_app/backend/services/eflow_data_mapper.py` 里，而那个模块
+  · `fetch_tt_live` 在 `my_app/backend/services/eflow/eflow_data_mapper.py` 里，而那个模块
     顶部 `import pandas` + `from backend.database import ...`（依赖 sqlalchemy）。
     tt-analyze.py 刻意只依赖**标准库 + openpyxl**，就是为了「my_app 的解释器坏掉时
     机器人仍然可用」。把 pandas/sqlalchemy 变成 TT 通道的前置依赖是本末倒置。
@@ -86,7 +86,7 @@ _FETCH = r'''
 import json, os, sys
 sys.path.insert(0, {app!r})
 os.chdir({app!r})
-from backend.services.eflow_data_mapper import fetch_tt_live
+from backend.services.eflow.eflow_data_mapper import fetch_tt_live
 row = fetch_tt_live({tt!r})
 if not row:
     sys.stdout.write({miss!r})

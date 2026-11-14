@@ -227,6 +227,6 @@ def parse_common_config(conf: Dict[str, Any], env: Dict[str, str], *,
 
 def load_json_config(path) -> Dict[str, Any]:
     """读配置文件 → dict；缺失/损坏返回 {}（调用方回退内置默认）。"""
-    from backend.services.task_config_files import load_json_config as _load
+    from backend.services.task.task_config_files import load_json_config as _load
     conf = _load(path)
     return conf if isinstance(conf, dict) else {}

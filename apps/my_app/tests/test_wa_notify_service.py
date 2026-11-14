@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from backend.services import wa_notify_service as n
+from backend.services.whatsapp import wa_notify_service as n
 
 
 @pytest.fixture(autouse=True)

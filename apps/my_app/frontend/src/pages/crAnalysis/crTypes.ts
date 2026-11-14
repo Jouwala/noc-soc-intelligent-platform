@@ -6,7 +6,7 @@
  * 的「单个文件不超过 500 行」上限）。这里只放**无 React 依赖**的东西：
  * 类型、列定义、纯函数 —— 便于单独读、单独测，也避免页面组件文件继续膨胀。
  *
- * 类型与后端 `backend/services/cr_analysis_service.py` 的返回结构一一对应；
+ * 类型与后端 `backend/services/cr/cr_analysis_service.py` 的返回结构一一对应；
  * 改后端返回结构时**必须**同步这里。
  * ========================================================================== */
 
@@ -64,7 +64,7 @@ export type Metric =
   | 'on_time' | 'delayed' | 'closed' | 'open' | 'canceled'
   | 'status'
 
-/* ---- 审批流程（backend/services/cr_workflow_service.py 的返回结构） ---- */
+/* ---- 审批流程（backend/services/cr/cr_workflow_service.py 的返回结构） ---- */
 
 /** 步骤 key，与后端 `cr_caliber.WORKFLOW_STEPS` 同序同值 */
 export type StepKey =

@@ -384,7 +384,7 @@ class VmaxCcaClient:
         import base64
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import padding
-        from backend.services import credential_store
+        from backend.services.credential import credential_store
 
         # default_secret 传空串：口令只从「环境变量 > 凭据库」取（AGENTS.md 四.2），
         # 两处都空时明确报「未配置」而不是拿空口令去撞登录接口。

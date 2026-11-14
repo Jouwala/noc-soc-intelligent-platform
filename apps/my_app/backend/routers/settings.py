@@ -25,7 +25,7 @@ from backend.config.remote_host import (
     get_remote_host,
     set_remote_host,
 )
-from backend.services.remote_ftp import creds_for
+from backend.services.remote.remote_ftp import creds_for
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 # my_app 使用帮助
 
-> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-13。
+> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-14。
 
 > 站内入口：侧边栏「使用帮助」，或直链 `http://<host>/myapp/?page=help`。
 
@@ -87,59 +87,59 @@
 
 | 任务 | task_id | 默认 cron | 组 | 工作流脚本 |
 | --- | --- | --- | --- | --- |
-| eFlow 数据同步 | `eflow_sync` | `22 * * * *` | n | `services/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")` |
-| eFlow 每日全量同步 | `eflow_sync_full` | `0 1 * * *` | n | `services/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")` |
-| RAN UME 日报 | `ran_ume_daily` | `0 2 * * *` | u | `services/ran_ume_service.py → run_ran_ume_full_task` |
-| Site Outage 截图 | `site_outage_screenshot` | `0 1 * * *` | m | `services/site_outage_service.py → run_site_outage_screenshot` |
-| WhatsApp 消息发送 | `whatsapp_send` | `0 3 * * *` | m | `services/whatsapp_service.py → run_whatsapp_send` |
-| WhatsApp 消息发送（扩展） | `whatsapp_send_ext` | `0 3 * * *` | m | `services/whatsapp_ext_service.py → run_whatsapp_send_ext` |
-| WhatsApp 消息发送（Baileys） | `whatsapp_send_baileys` | `0 4 * * *` | m | `services/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys` |
-| eFlow P1 告警 WhatsApp 推送 | `tt_alarm_whatsapp_alert` | `2-59/5 * * * *` | m | `services/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert` |
-| MS SLA 完整同步 | `ms_sla_full` | `0 5 * * *` | n | `services/ms_sla_service.py → run_full_sync` |
-| DC server 告警 WhatsApp 推送 | `ume_alarm_whatsapp_alert` | `* * * * *` | m | `services/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp` |
+| eFlow 数据同步 | `eflow_sync` | `22 * * * *` | n | `services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")` |
+| eFlow 每日全量同步 | `eflow_sync_full` | `0 1 * * *` | n | `services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")` |
+| RAN UME 日报 | `ran_ume_daily` | `0 2 * * *` | u | `services/ran/ran_ume_service.py → run_ran_ume_full_task` |
+| Site Outage 截图 | `site_outage_screenshot` | `0 1 * * *` | m | `services/site/site_outage_service.py → run_site_outage_screenshot` |
+| WhatsApp 消息发送 | `whatsapp_send` | `0 3 * * *` | m | `services/whatsapp/whatsapp_service.py → run_whatsapp_send` |
+| WhatsApp 消息发送（扩展） | `whatsapp_send_ext` | `0 3 * * *` | m | `services/whatsapp/whatsapp_ext_service.py → run_whatsapp_send_ext` |
+| WhatsApp 消息发送（Baileys） | `whatsapp_send_baileys` | `0 4 * * *` | m | `services/whatsapp/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys` |
+| eFlow P1 告警 WhatsApp 推送 | `tt_alarm_whatsapp_alert` | `2-59/5 * * * *` | m | `services/tt/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert` |
+| MS SLA 完整同步 | `ms_sla_full` | `0 5 * * *` | n | `services/ms/ms_sla_service.py → run_full_sync` |
+| DC server 告警 WhatsApp 推送 | `ume_alarm_whatsapp_alert` | `* * * * *` | m | `services/ume_alarm/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp` |
 | Fiber Break 告警自动派单 | `eflow_fiber_assign` | `3-59/5 * * * *` | m | `services/eflow_fiber/fiber_assign_service.py → run_fiber_assign` |
 | 5G 站点告警自动派单 | `eflow_5g_assign` | `8-59/5 * * * *` | m | `services/eflow_5g/g5_assign_service.py → run_5g_assign` |
-| CMDB 站点同步比对 | `eflow_site_update` | `0 7 * * *` | m | `services/eflow_site_update_task.py → run_eflow_site_update` |
-| eFlow 实时告警同步 | `eflow_active_alarm` | `*/1 * * * *` | x | `services/eflow_api_client.py → fetch_and_save_active_alarm` |
-| eFlow 历史告警同步 | `eflow_history_alarm` | `0 */3 * * *` | n | `services/eflow_api_client.py → fetch_and_save_history_alarm` |
+| CMDB 站点同步比对 | `eflow_site_update` | `0 7 * * *` | m | `services/eflow/eflow_site_update_task.py → run_eflow_site_update` |
+| eFlow 实时告警同步 | `eflow_active_alarm` | `*/1 * * * *` | x | `services/eflow/eflow_api_client.py → fetch_and_save_active_alarm` |
+| eFlow 历史告警同步 | `eflow_history_alarm` | `0 */3 * * *` | n | `services/eflow/eflow_api_client.py → fetch_and_save_history_alarm` |
 | eFlow TT 规则收集与匹配检查 | `eflow_tt_rules_check` | `20 4 * * *` | n | `services/eflow_rules/eflow_tt_rules_check_task.py → run_eflow_tt_rules_check` |
-| RAN Main KPI 同步 | `main_kpi_sync` | `0 4 * * *` | u | `services/ran_ume_main_kpi.py → run_main_kpi_sync` |
-| RAN 小区可用性 1-Day 同步 | `cell_availability_sync` | `30 4 * * *` | u | `services/ran_cell_availability_sync.py → run_cell_availability_sync` |
-| RAN Cells KPI 同步 | `cells_kpi_sync` | `50 4 * * *` | u | `services/ran_cells_kpi_sync.py → run_cells_kpi_sync` |
-| RAN Network KPI 同步 | `network_kpi_sync` | `0 5 * * *` | u | `services/ran_ume_network_kpi.py → run_network_kpi_sync` |
+| RAN Main KPI 同步 | `main_kpi_sync` | `0 4 * * *` | u | `services/ran/ran_ume_main_kpi.py → run_main_kpi_sync` |
+| RAN 小区可用性 1-Day 同步 | `cell_availability_sync` | `30 4 * * *` | u | `services/ran/ran_cell_availability_sync.py → run_cell_availability_sync` |
+| RAN Cells KPI 同步 | `cells_kpi_sync` | `50 4 * * *` | u | `services/ran/ran_cells_kpi_sync.py → run_cells_kpi_sync` |
+| RAN Network KPI 同步 | `network_kpi_sync` | `0 5 * * *` | u | `services/ran/ran_ume_network_kpi.py → run_network_kpi_sync` |
 | 可用率核对宽表重建 | `avail_recon_sync` | `10 6 * * *` | u | `services/avail/avail_recon_sync.py → run_avail_recon_sync` |
-| BP Cells Report 更新 | `bp_report_sync` | `20 6 * * *` | u | `services/bp_report_sync.py → run_bp_report_sync` |
-| CNN UME KPI 同步 | `cnn_kpi_sync` | `0 6 * * *` | n | `services/ccn_ume_kpi_service.py → run_cnn_kpi_sync` |
-| CNN UME KPI 5分钟同步 | `cnn_kpi_sync_5mins` | `*/15 * * * *` | n | `services/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins` |
-| SP 备件数据同步 | `sp_data_sync` | `10 * * * *` | s | `services/get_sp_table.py → run_sp_data_sync` |
-| iPRAN UME KPI 同步 | `ipran_kpi_sync` | `0 * * * *` | u | `services/ipran_ume_kpi_service.py → run_ipran_kpi_sync` |
-| Liberia 宕站 1小时报告邮件 | `liberia_email_1h` | `15 * * * *` | m | `services/liberia_email_report.py → run_1h_report` |
-| Liberia 宕站 8小时报告邮件 | `liberia_email_8h` | `20 */8 * * *` | m | `services/liberia_email_report.py → run_8h_report` |
-| MS Contract KPIs 日报邮件 | `kpi_ms_contract` | `30 5 * * *` | m | `services/kpi_email_report.py → run_ms_contract_kpi` |
-| MS WOs SLA 日报邮件 | `kpi_ms_wo_sla` | `35 5 * * *` | m | `services/kpi_email_report.py → run_ms_wo_sla` |
-| SpareParts 备件报表邮件 | `kpi_sp_spareparts` | `45 9 * * *` | m | `services/kpi_email_report.py → run_sp_spareparts` |
-| Comsumables 耗材报表邮件 | `kpi_sp_consumables` | `50 9 * * *` | m | `services/kpi_email_report.py → run_sp_consumables` |
-| SP 备件报表生成 | `sp_report_generate` | `15 5 * * *` | m | `services/kpi_email_report.py → run_sp_report_generate` |
-| SP 备件周报（上周一→上周日） | `sp_weekly_report` | `0 7 * * mon` | m | `services/kpi_email_report.py → run_sp_weekly_report` |
-| SP 备件明细报表邮件 | `sp_email_details` | `5 7 * * *` | m | `services/kpi_email_report.py → run_sp_details_email` |
-| SP 备件明细分文件邮件 | `sp_details_files_email` | `5 10 * * *` | m | `services/kpi_email_report.py → run_sp_details_files_email` |
-| Comsumables&SpareParts Report Whatsapp | `sp_whatsapp_report` | `55 7 * * *` | m | `services/kpi_email_report.py → run_sp_whatsapp_report` |
-| SP 物料库存与消耗报表邮件 | `sp_material_report` | `45 7 * * *` | m | `services/kpi_email_report.py → run_sp_material_stock_consumption` |
-| MS Network Availability 日报邮件 | `kpi_ran_availability` | `30 9 * * *` | m | `services/kpi_email_report.py → run_ran_availability` |
-| EWS 恢复后邮件补发 | `email_recovery` | `*/10 * * * *` | m | `services/email_recovery.py → run_email_recovery_task` |
+| BP Cells Report 更新 | `bp_report_sync` | `20 6 * * *` | u | `services/bp/bp_report_sync.py → run_bp_report_sync` |
+| CNN UME KPI 同步 | `cnn_kpi_sync` | `0 6 * * *` | n | `services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync` |
+| CNN UME KPI 5分钟同步 | `cnn_kpi_sync_5mins` | `*/15 * * * *` | n | `services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins` |
+| SP 备件数据同步 | `sp_data_sync` | `10 * * * *` | s | `services/sp/get_sp_table.py → run_sp_data_sync` |
+| iPRAN UME KPI 同步 | `ipran_kpi_sync` | `0 * * * *` | u | `services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync` |
+| Liberia 宕站 1小时报告邮件 | `liberia_email_1h` | `15 * * * *` | m | `services/email/liberia_email_report.py → run_1h_report` |
+| Liberia 宕站 8小时报告邮件 | `liberia_email_8h` | `20 */8 * * *` | m | `services/email/liberia_email_report.py → run_8h_report` |
+| MS Contract KPIs 日报邮件 | `kpi_ms_contract` | `30 5 * * *` | m | `services/email/kpi_email_report.py → run_ms_contract_kpi` |
+| MS WOs SLA 日报邮件 | `kpi_ms_wo_sla` | `35 5 * * *` | m | `services/email/kpi_email_report.py → run_ms_wo_sla` |
+| SpareParts 备件报表邮件 | `kpi_sp_spareparts` | `45 9 * * *` | m | `services/email/kpi_email_report.py → run_sp_spareparts` |
+| Comsumables 耗材报表邮件 | `kpi_sp_consumables` | `50 9 * * *` | m | `services/email/kpi_email_report.py → run_sp_consumables` |
+| SP 备件报表生成 | `sp_report_generate` | `15 5 * * *` | m | `services/email/kpi_email_report.py → run_sp_report_generate` |
+| SP 备件周报（上周一→上周日） | `sp_weekly_report` | `0 7 * * mon` | m | `services/email/kpi_email_report.py → run_sp_weekly_report` |
+| SP 备件明细报表邮件 | `sp_email_details` | `5 7 * * *` | m | `services/email/kpi_email_report.py → run_sp_details_email` |
+| SP 备件明细分文件邮件 | `sp_details_files_email` | `5 10 * * *` | m | `services/email/kpi_email_report.py → run_sp_details_files_email` |
+| Comsumables&SpareParts Report Whatsapp | `sp_whatsapp_report` | `55 7 * * *` | m | `services/email/kpi_email_report.py → run_sp_whatsapp_report` |
+| SP 物料库存与消耗报表邮件 | `sp_material_report` | `45 7 * * *` | m | `services/email/kpi_email_report.py → run_sp_material_stock_consumption` |
+| MS Network Availability 日报邮件 | `kpi_ran_availability` | `30 9 * * *` | m | `services/email/kpi_email_report.py → run_ran_availability` |
+| EWS 恢复后邮件补发 | `email_recovery` | `*/10 * * * *` | m | `services/email/email_recovery.py → run_email_recovery_task` |
 | Packet Loss 丢包同步 | `packet_loss_sync` | `30 6 * * *` | u | `services/packet_loss_service.py → run_packet_loss_sync` |
-| Packet Loss 丢包日报邮件 | `packet_loss_email` | `45 6 * * *` | u | `services/kpi_email_report.py → run_packet_loss_email` |
-| IP RAN M6K-FW 图表邮件 | `ipran_m6k_chart_email` | `45 6 * * *` | m | `services/ipran_chart_service.py → run_ipran_m6k_chart_email` |
-| CNN Free Rating 图表邮件 | `ccn_free_rating_chart_email` | `45 7 * * *` | m | `services/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email` |
+| Packet Loss 丢包日报邮件 | `packet_loss_email` | `45 6 * * *` | u | `services/email/kpi_email_report.py → run_packet_loss_email` |
+| IP RAN M6K-FW 图表邮件 | `ipran_m6k_chart_email` | `45 6 * * *` | m | `services/ipran/ipran_chart_service.py → run_ipran_m6k_chart_email` |
+| CNN Free Rating 图表邮件 | `ccn_free_rating_chart_email` | `45 7 * * *` | m | `services/cnn/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email` |
 | MTN MOU 日报图表邮件 | `mtn_mou_daily_email` | `0 7 * * *` | m | `services/mtn_mou_chart_service.py → run_mtn_mou_chart_email` |
 | FW 吞吐 KPI 同步+图表邮件 | `fw_kpi_sync` | `15 7 * * *` | n | `services/fw_kpi/fw_kpi_services.py → run_fw_kpi_sync` |
 | 电池 KPI 同步 | `battery_kpi_sync` | `5 * * * *` | u | `services/battary_kpi_fetch/battery_kpi_service.py → run_battery_kpi_sync` |
 | 电池 KPI 邮件 | `battery_email` | `10 7,19 * * *` | m | `services/battary_kpi_fetch/battery_kpi_service.py → run_battery_email` |
-| 邮箱空间清理 | `mailbox_cleanup` | `0 * * * *` | m | `services/mailbox_cleanup.py → run_mailbox_cleanup` |
-| Incident Overview 数据同步 | `incident_overview_sync` | `20 * * * *` | m | `services/incident_overview_sync.py → run_incident_overview_sync` |
-| 数据库数据新鲜度巡检 | `db_freshness_check` | `15 * * * *` | m | `services/db_freshness_check.py → run_db_freshness_check` |
+| 邮箱空间清理 | `mailbox_cleanup` | `0 * * * *` | m | `services/cleanup/mailbox_cleanup.py → run_mailbox_cleanup` |
+| Incident Overview 数据同步 | `incident_overview_sync` | `20 * * * *` | m | `services/incident/incident_overview_sync.py → run_incident_overview_sync` |
+| 数据库数据新鲜度巡检 | `db_freshness_check` | `15 * * * *` | m | `services/db/db_freshness_check.py → run_db_freshness_check` |
 | 鉴权健康巡检 | `auth_health_check` | `0 7 * * *` | m | `scripts/auth_health_check.py → run_auth_health_check` |
-| MTTR/TT 宽表重建 | `mttr_tt_sync` | `40 7 * * *` | m | `services/mttr_tt_sync.py → run_mttr_tt_sync` |
+| MTTR/TT 宽表重建 | `mttr_tt_sync` | `40 7 * * *` | m | `services/tt/mttr_tt_sync.py → run_mttr_tt_sync` |
 | Progress 宽表重建 | `progress_sync` | `50 7 * * *` | m | `services/progress_sync.py → run_progress_sync` |
 | 失败任务自动重试 | `auto_retry_failed` | `*/10 * * * *` | m | `services/auto_retry.py → run_auto_retry_task` |
 | RAN CM 小区数据同步 | `cm_data_sync` | `30 8 * * *` | u | `services/cm_data/cm_data_export.py → run_cm_data_sync` |
@@ -148,27 +148,27 @@
 | MW UME KPI 实时同步 | `mw_ume_kpi_sync_rt` | `*/15 * * * *` | w | `services/mw_ume/mw_ume_kpi_service.py → run_mw_ume_kpi_sync_rt` |
 | CN EMS KPI 缓存同步 | `ems_kpi_cache_sync` | `*/15 * * * *` | c | `services/cn_ems/ems_kpi_service.py → run_ems_kpi_cache_sync` |
 | CN EMS KPI 日粒度CSV | `ems_kpi_daily` | `20 0 * * *` | c | `services/cn_ems/ems_kpi_service.py → run_ems_kpi_daily` |
-| CXO 看板数据缓存同步 | `cxo_dashboard_cache_sync` | `*/10 * * * *` | v | `services/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync` |
-| VMAX CXO 天粒度日值归档 | `vmax_cxo_daily_sync` | `15 * * * *` | v | `services/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync` |
+| CXO 看板数据缓存同步 | `cxo_dashboard_cache_sync` | `*/10 * * * *` | v | `services/cxo/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync` |
+| VMAX CXO 天粒度日值归档 | `vmax_cxo_daily_sync` | `15 * * * *` | v | `services/cxo/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync` |
 | VMAX 多报表指标采集 | `vmax_multi_data_sync` | `45 * * * *` | v | `services/vmax_multi_data/vmax_multi_data_service.py → run_vmax_multi_data_sync` |
 | SOC 多维趋势同步 | `soc_trend_sync` | `40 * * * *` | v | `services/soc_trend/soc_trend_sync.py → run_soc_trend_sync` |
 | OLIB SOC 看板 KPI 增量 | `olib_soc_kpi_daily_sync` | `20 6 * * *` | m | `services/olib_soc_report/olib_soc_report_service.py → run_olib_soc_kpi_sync` |
 | OLIB SOC VMAX 例行报表 | `olib_soc_vmax_report` | `30 7 1 * *` | m | `services/olib_soc_report/olib_soc_report_service.py → run_olib_soc_report` |
 | 客户业务 KPI 同步 | `ume_in_kpi_sync` | `45 5 * * *` | n | `services/ume_in/ume_in_kpi_service.py → run_ume_in_kpi_sync` |
 | 客户业务 KPI + OSG 周报邮件 | `ume_in_osg_report` | `30 6 * * *` | n | `services/ume_in/osg_report_task.py → run_ume_in_osg_report（内部依次调 ume_in_kpi_service + t_osg_build.py）` |
-| SP Online 工单同步 | `sp_online_sync` | `35 */6 * * *` | n | `services/sp_online_sync.py → run_sp_online_sync` |
-| SP 物料主数据同步 | `sp_material_sync` | `55 4 * * *` | n | `services/sp_material_sync.py → run_sp_material_sync` |
-| SP 在线未关闭单报表生成 | `sp_online_report_generate` | `0 6 * * *` | m | `services/kpi_email_report.py → run_sp_online_report_generate` |
-| SP 在线未关闭单报表发送 | `sp_online_report_send` | `35 6 * * *` | m | `services/kpi_email_report.py → run_sp_online_report` |
+| SP Online 工单同步 | `sp_online_sync` | `35 */6 * * *` | n | `services/sp/sp_online_sync.py → run_sp_online_sync` |
+| SP 物料主数据同步 | `sp_material_sync` | `55 4 * * *` | n | `services/sp/sp_material_sync.py → run_sp_material_sync` |
+| SP 在线未关闭单报表生成 | `sp_online_report_generate` | `0 6 * * *` | m | `services/email/kpi_email_report.py → run_sp_online_report_generate` |
+| SP 在线未关闭单报表发送 | `sp_online_report_send` | `35 6 * * *` | m | `services/email/kpi_email_report.py → run_sp_online_report` |
 | eFlow 告警规则收集 | `eflow_alarm_rules_collect` | `59 23 */3 * *` | n | `services/eflow_rules/eflow_Alarm_Rule_Collector.py → run_eflow_alarm_rules` |
 | eFlow 推单规则收集 | `eflow_push_rules_collect` | `59 23 */3 * *` | n | `services/eflow_rules/eflow_Push_Rule_Collector.py → run_eflow_push_rules` |
 | eFlow 推单规则检查 | `eflow_push_rules_check` | `10 5 * * 2` | n | `services/eflow_rules/eflow_push_rules_check_task.py → run_eflow_push_rules_check` |
-| WhatsApp 知识库同步（推单规则） | `whatsapp_kb_sync_push_rules` | `4 0 */3 * *` | n | `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
-| WhatsApp 知识库同步（告警规则） | `whatsapp_kb_sync_alarm_rules` | `4 0 */3 * *` | n | `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
-| WhatsApp 知识库同步（TT 级别规则） | `whatsapp_kb_sync_tt_rules` | `35 4 * * *` | n | `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
-| 日志文件清理 | `log_cleanup` | `17 3 * * *` | m | `services/log_cleanup.py → run_log_cleanup` |
-| TMP 目录清理 | `tmp_cleanup` | `47 3 * * *` | m | `services/tmp_cleanup.py → run_tmp_cleanup` |
-| TTs and MTTR 报表生成 | `tt_mttr_report_generate` | `20 7 * * *` | m | `services/tt_mttr_report.py → run_tt_mttr_report` |
+| WhatsApp 知识库同步（推单规则） | `whatsapp_kb_sync_push_rules` | `4 0 */3 * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
+| WhatsApp 知识库同步（告警规则） | `whatsapp_kb_sync_alarm_rules` | `4 0 */3 * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
+| WhatsApp 知识库同步（TT 级别规则） | `whatsapp_kb_sync_tt_rules` | `35 4 * * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
+| 日志文件清理 | `log_cleanup` | `17 3 * * *` | m | `services/cleanup/log_cleanup.py → run_log_cleanup` |
+| TMP 目录清理 | `tmp_cleanup` | `47 3 * * *` | m | `services/cleanup/tmp_cleanup.py → run_tmp_cleanup` |
+| TTs and MTTR 报表生成 | `tt_mttr_report_generate` | `20 7 * * *` | m | `services/tt/tt_mttr_report.py → run_tt_mttr_report` |
 | RAN 用户身份清单（VoLTE/N78） | `gp_ran_user_sync` | `20 13 * * *` | g | `services/gp_ran/gp_ran_sync.py → run_gp_ran_user_sync` |
 | IPT 站点电源采集 | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN 网元管理表同步 | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
@@ -178,7 +178,7 @@
 #### eFlow 数据同步（`eflow_sync`）
 
 - 默认 cron: `22 * * * *`　|　worker 组: **n**
-- 工作流脚本: `services/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")`
+- 工作流脚本: `services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")`
 
 **功能**: 从 ZTE eFlow API 增量同步 TT/WO/CR/PM/Site/Person 六类数据
 
@@ -196,7 +196,7 @@
 #### eFlow 每日全量同步（`eflow_sync_full`）
 
 - 默认 cron: `0 1 * * *`　|　worker 组: **n**
-- 工作流脚本: `services/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")`
+- 工作流脚本: `services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")`
 
 **功能**: eFlow 全量兜底：拉全量窗口（默认自 2026-01-01），补齐增量遗漏并刷新报告。大窗口下 TT/WO 分段拉取，避免单次大导出失败；TT/WO 缺失即判任务失败
 
@@ -216,7 +216,7 @@
 #### RAN UME 日报（`ran_ume_daily`）
 
 - 默认 cron: `0 2 * * *`　|　worker 组: **u**
-- 工作流脚本: `services/ran_ume_service.py → run_ran_ume_full_task`
+- 工作流脚本: `services/ran/ran_ume_service.py → run_ran_ume_full_task`
 
 **功能**: RAN UME PM 数据获取 + Daily Availability KPI 报表生成 + FTP 上传
 
@@ -234,7 +234,7 @@
 #### Site Outage 截图（`site_outage_screenshot`）
 
 - 默认 cron: `0 1 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/site_outage_service.py → run_site_outage_screenshot`
+- 工作流脚本: `services/site/site_outage_service.py → run_site_outage_screenshot`
 
 **功能**: 对告警管理看板（Site Outage Monitor）的 ERA/Regular/ALL 三个视图自动截图
 
@@ -252,7 +252,7 @@
 #### WhatsApp 消息发送（`whatsapp_send`）
 
 - 默认 cron: `0 3 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/whatsapp_service.py → run_whatsapp_send`
+- 工作流脚本: `services/whatsapp/whatsapp_service.py → run_whatsapp_send`
 
 **功能**: 发送 Site Outage 截图和文件到 WhatsApp 群组（Playwright 自动化）
 
@@ -268,7 +268,7 @@
 #### WhatsApp 消息发送（扩展）（`whatsapp_send_ext`）
 
 - 默认 cron: `0 3 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/whatsapp_ext_service.py → run_whatsapp_send_ext`
+- 工作流脚本: `services/whatsapp/whatsapp_ext_service.py → run_whatsapp_send_ext`
 
 **功能**: WhatsApp 发送（扩展版）：投递发送作业，由浏览器扩展在已登录的 WhatsApp Web 中发送，与 Playwright 版并存
 
@@ -284,7 +284,7 @@
 #### WhatsApp 消息发送（Baileys）（`whatsapp_send_baileys`）
 
 - 默认 cron: `0 4 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys`
+- 工作流脚本: `services/whatsapp/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys`
 
 **功能**: 第三种 WhatsApp 发图通道：走 Baileys 协议直发（不依赖浏览器/Playwright），与 Playwright/扩展版并存；默认禁用，必须在「任务管理」页手动启用（Baileys 违反 WhatsApp ToS，启用前须走人工审批）
 
@@ -306,7 +306,7 @@
 #### eFlow P1 告警 WhatsApp 推送（`tt_alarm_whatsapp_alert`）
 
 - 默认 cron: `2-59/5 * * * *`　|　worker 组: **m**
-- 工作流脚本: `services/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert`
+- 工作流脚本: `services/tt/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert`
 
 **功能**: 触发制推送：每 5 分钟（相位 2-59/5，与上游同步错开 2 分钟）扫 realtime_alarm 实时告警表，发现「带 TT + 触发窗口内 + 告警码白名单」的 P1 告警后实时回 eFlow 查单，首推后按双档重报（无更新满 10 分钟催报、有更新满 30 分钟才报，均带 REMINDER 横幅），告警清除即止损。发送状态（是否已发/发了几次）落 eflow_tt_whatsapp_alert_log
 
@@ -328,7 +328,7 @@
 #### MS SLA 完整同步（`ms_sla_full`）
 
 - 默认 cron: `0 5 * * *`　|　worker 组: **n**
-- 工作流脚本: `services/ms_sla_service.py → run_full_sync`
+- 工作流脚本: `services/ms/ms_sla_service.py → run_full_sync`
 
 **功能**: SLA 指标同步 + Contract KPIs 报表更新（项目自包含，无需外部文件）
 
@@ -346,7 +346,7 @@
 #### DC server 告警 WhatsApp 推送（`ume_alarm_whatsapp_alert`）
 
 - 默认 cron: `* * * * *`　|　worker 组: **m**
-- 工作流脚本: `services/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp`
+- 工作流脚本: `services/ume_alarm/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp`
 
 **功能**: 每分钟直连 ZTE UME 网管（10.121.8.2）拉当前告警，命中精确「告警码:级别」对（默认 89029:major、89006:major）才推送到指定群；未清除告警按配置间隔催报（带 REMINDER 横幅），曾推送过的告警从上游消失则补发「已恢复」；首轮只登记不发送（防存量刷群），状态落 ume_alarm 相关表
 
@@ -428,7 +428,7 @@
 #### CMDB 站点同步比对（`eflow_site_update`）
 
 - 默认 cron: `0 7 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/eflow_site_update_task.py → run_eflow_site_update`
+- 工作流脚本: `services/eflow/eflow_site_update_task.py → run_eflow_site_update`
 
 **功能**: 比对 CMDB 主数据（my_app/db 下最新的 ZTE OLR MS Master Site Database）与 eflow 基线、PG master_site_db 基线，生成带 A/M/D 标记与着色的差异文件（eflow_site_update.xlsx / master_site_db .xlsx / 导入副本 / 同步报告）。只生成文件供人工审查，不写入 eflow 与 PostgreSQL
 
@@ -448,7 +448,7 @@
 #### eFlow 实时告警同步（`eflow_active_alarm`）
 
 - 默认 cron: `*/1 * * * *`　|　worker 组: **x**
-- 工作流脚本: `services/eflow_api_client.py → fetch_and_save_active_alarm`
+- 工作流脚本: `services/eflow/eflow_api_client.py → fetch_and_save_active_alarm`
 
 **功能**: 从 eFlow FM Active 接口获取实时告警，保存 CSV + SQLite（每分钟）
 
@@ -469,7 +469,7 @@
 #### eFlow 历史告警同步（`eflow_history_alarm`）
 
 - 默认 cron: `0 */3 * * *`　|　worker 组: **n**
-- 工作流脚本: `services/eflow_api_client.py → fetch_and_save_history_alarm`
+- 工作流脚本: `services/eflow/eflow_api_client.py → fetch_and_save_history_alarm`
 
 **功能**: 从 eFlow FM History 接口获取近 7 天历史告警，过滤 TT ID，保存 CSV + SQLite
 
@@ -503,7 +503,7 @@
 #### RAN Main KPI 同步（`main_kpi_sync`）
 
 - 默认 cron: `0 4 * * *`　|　worker 组: **u**
-- 工作流脚本: `services/ran_ume_main_kpi.py → run_main_kpi_sync`
+- 工作流脚本: `services/ran/ran_ume_main_kpi.py → run_main_kpi_sync`
 
 **功能**: RAN UME Main KPI 历史指标同步（2G/3G/4G × Cells/Sites/Group/NW），导出 Excel 并增量更新 SQLite + FTP 上传
 
@@ -520,7 +520,7 @@
 #### RAN 小区可用性 1-Day 同步（`cell_availability_sync`）
 
 - 默认 cron: `30 4 * * *`　|　worker 组: **u**
-- 工作流脚本: `services/ran_cell_availability_sync.py → run_cell_availability_sync`
+- 工作流脚本: `services/ran/ran_cell_availability_sync.py → run_cell_availability_sync`
 
 **功能**: RAN UME 小区可用性天粒度 KPI 同步（FDD/UMTS/GSM/TDD 4 模板），写 ran_kpi_avalability_1day.sqlite3 + FTP 上传
 
@@ -537,7 +537,7 @@
 #### RAN Cells KPI 同步（`cells_kpi_sync`）
 
 - 默认 cron: `50 4 * * *`　|　worker 组: **u**
-- 工作流脚本: `services/ran_cells_kpi_sync.py → run_cells_kpi_sync`
+- 工作流脚本: `services/ran/ran_cells_kpi_sync.py → run_cells_kpi_sync`
 
 **功能**: RAN UME 小区数据（2G/3G/4G）每日同步，聚合 Cells KPI（达标值 99.65%）物化写 ran_cells_kpi.sqlite3，只保留当月
 
@@ -549,13 +549,13 @@
 
 **维护要点**:
 
-- 口径与达标值定义在 services/ran_cells_kpi_service.py 顶部；2G 用信道折算，3G/4G 用服务时长/86400
+- 口径与达标值定义在 services/ran/ran_cells_kpi_service.py 顶部；2G 用信道折算，3G/4G 用服务时长/86400
 - 看板 RAN 小区 KPI 优先读物化库，缺失时回退实时聚合 ran_kpi_avalability_1day.sqlite3
 
 #### RAN Network KPI 同步（`network_kpi_sync`）
 
 - 默认 cron: `0 5 * * *`　|　worker 组: **u**
-- 工作流脚本: `services/ran_ume_network_kpi.py → run_network_kpi_sync`
+- 工作流脚本: `services/ran/ran_ume_network_kpi.py → run_network_kpi_sync`
 
 **功能**: RAN UME Network KPI（Zeenshan）历史指标同步（2G/3G/4G × Group/NW），导出 Excel 并导入 SQLite + FTP 上传
 
@@ -590,7 +590,7 @@
 #### BP Cells Report 更新（`bp_report_sync`）
 
 - 默认 cron: `20 6 * * *`　|　worker 组: **u**
-- 工作流脚本: `services/bp_report_sync.py → run_bp_report_sync`
+- 工作流脚本: `services/bp/bp_report_sync.py → run_bp_report_sync`
 
 **功能**: 从 RAN_UME 读取 4G 小区级 PRB/吞吐/流量与小时级活跃用户数，按 umlaut 忙时口径重算 BP 劣化小区（日/周/月），更新本机 data/bp_report.sqlite3 并与 Excel 真值对账
 
@@ -604,8 +604,8 @@
 
 **维护要点**:
 
-- 口径唯一真相源在 services/bp_caliber.py：日（忙时三值）、周 4/7、月 3/4
-- ⚠️ Average DL Active User Number 只在**小时粒度**可用：日粒度下 UME 返回 HTTP 200 + 合法 queryid 但**静默丢弃该列**、无任何报错，故走 services/bp_active_user.py 的独立通道（C373384373 + 1638004469342 + 1638004469332）。取不到时该日 is_bp=NULL（不可判定），**绝不当 0**
+- 口径唯一真相源在 services/bp/bp_caliber.py：日（忙时三值）、周 4/7、月 3/4
+- ⚠️ Average DL Active User Number 只在**小时粒度**可用：日粒度下 UME 返回 HTTP 200 + 合法 queryid 但**静默丢弃该列**、无任何报错，故走 services/bp/bp_active_user.py 的独立通道（C373384373 + 1638004469342 + 1638004469332）。取不到时该日 is_bp=NULL（不可判定），**绝不当 0**
 - ⚠️ UME 返回的数值是字符串且 PRB 带百分号（如 "2.46%"），必须去 % 再 /100；且 itemsposition 必须全为 0，写成 [0,1,2] 会返回 0001619999 拒绝查询
 - ⚠️ PRB 利用率在源表里是**小数**（0~1，实测 max 0.9751），阈值是 0.80 不是 80；写成 80 会让条件永不成立且不报错
 - ⚠️ 源表列名 "E-UTRAN\xa0FDD\xa0Cell Name" 里的分隔符是**不换行空格**；写成普通空格时 SQLite 不报错，而是把双引号标识符当字符串字面量返回，整列变成列名文本（bp_caliber.assert_columns_exist / assert_no_literal_fallback 就是为此加的守卫）
@@ -616,7 +616,7 @@
 #### CNN UME KPI 同步（`cnn_kpi_sync`）
 
 - 默认 cron: `0 6 * * *`　|　worker 组: **n**
-- 工作流脚本: `services/ccn_ume_kpi_service.py → run_cnn_kpi_sync`
+- 工作流脚本: `services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync`
 
 **功能**: CNN UME 核心网 KPI 同步（xGW License/CPU/Voice/VLR/Data/3G/4G/Free Rating），API 写入 DB CNN
 
@@ -632,7 +632,7 @@
 #### CNN UME KPI 5分钟同步（`cnn_kpi_sync_5mins`）
 
 - 默认 cron: `*/15 * * * *`　|　worker 组: **n**
-- 工作流脚本: `services/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins`
+- 工作流脚本: `services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins`
 
 **功能**: 与「CNN UME KPI 同步」同源同账号，但取细粒度（5 个模板 5 分钟、3 个模板 15 分钟）、窗口为昨天 00:00 至现在，API 写入 DB CNN 的 5mins_* 新表，供「CN KPI 5分钟」看板做 Day0/Day1/Day7 叠画；日/月粒度表不受影响
 
@@ -648,12 +648,12 @@
 - ⚠ 本任务保留「0 行 → 跳过该表且不计失败」的兜底（原 cnn_kpi_sync 的逻辑是 0 行即报错，本任务刻意不同），上游再调整档位时不会让任务每 15 分钟失败一次
 - ⚠ 实测单轮约 105 秒（Free Rating 一天就有 1.4 万行）；若耗时逼近 15 分钟，需降低并发或放宽节拍
 - 与 cnn_kpi_sync 同在 n 组串行，避免两个任务各自登录同一账号互踢
-- 页面为本任务的唯一消费方：?page=cn_kpi_5mins（services/cn_kpi_5mins_service.py 读 5mins_* 表）
+- 页面为本任务的唯一消费方：?page=cn_kpi_5mins（services/cn/cn_kpi_5mins_service.py 读 5mins_* 表）
 
 #### SP 备件数据同步（`sp_data_sync`）
 
 - 默认 cron: `10 * * * *`　|　worker 组: **s**
-- 工作流脚本: `services/get_sp_table.py → run_sp_data_sync`
+- 工作流脚本: `services/sp/get_sp_table.py → run_sp_data_sync`
 
 **功能**: 从 SFTP 拉取 5 份备件报表（Inbound/Outbound/Inventory/OC Rule/Transfer）写入 app.db，并镜像写入 FineBI WareHouseDashBoard inventory.db
 
@@ -677,7 +677,7 @@
 #### iPRAN UME KPI 同步（`ipran_kpi_sync`）
 
 - 默认 cron: `0 * * * *`　|　worker 组: **u**
-- 工作流脚本: `services/ipran_ume_kpi_service.py → run_ipran_kpi_sync`
+- 工作流脚本: `services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync`
 
 **功能**: iPRAN UME M6000 路由器 KPI 同步（HQ M6K-FW 等），导出 Excel 并导入 SQLite + FTP 上传
 
@@ -693,7 +693,7 @@
 #### Liberia 宕站 1小时报告邮件（`liberia_email_1h`）
 
 - 默认 cron: `15 * * * *`　|　worker 组: **m**
-- 工作流脚本: `services/liberia_email_report.py → run_1h_report`
+- 工作流脚本: `services/email/liberia_email_report.py → run_1h_report`
 
 **功能**: 发送 Liberia Orange Site Down hourly Report（内嵌图 + Excel）到主送/抄送名单
 
@@ -710,7 +710,7 @@
 #### Liberia 宕站 8小时报告邮件（`liberia_email_8h`）
 
 - 默认 cron: `20 */8 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/liberia_email_report.py → run_8h_report`
+- 工作流脚本: `services/email/liberia_email_report.py → run_8h_report`
 
 **功能**: 发送 Liberia Orange Site Down 8 hours Report（内嵌图 + Excel）到主送/抄送名单
 
@@ -726,7 +726,7 @@
 #### MS Contract KPIs 日报邮件（`kpi_ms_contract`）
 
 - 默认 cron: `30 5 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_ms_contract_kpi`
+- 工作流脚本: `services/email/kpi_email_report.py → run_ms_contract_kpi`
 
 **功能**: 发送 MS Contract KPIs Achievements Daily Report（本地数据 + 远程名单）
 
@@ -743,7 +743,7 @@
 #### MS WOs SLA 日报邮件（`kpi_ms_wo_sla`）
 
 - 默认 cron: `35 5 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_ms_wo_sla`
+- 工作流脚本: `services/email/kpi_email_report.py → run_ms_wo_sla`
 
 **功能**: 发送 MS WOs SLA Achievements Daily Report（本地数据 + 远程名单）
 
@@ -759,7 +759,7 @@
 #### SpareParts 备件报表邮件（`kpi_sp_spareparts`）
 
 - 默认 cron: `45 9 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_spareparts`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_spareparts`
 
 **功能**: 发送 SpareParts 报表（本地 sp_email 数据 + 远程共享名单）
 
@@ -775,7 +775,7 @@
 #### Comsumables 耗材报表邮件（`kpi_sp_consumables`）
 
 - 默认 cron: `50 9 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_consumables`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_consumables`
 
 **功能**: 发送 Comsumables 报表（本地 sp_email 数据 + 远程共享名单）
 
@@ -791,7 +791,7 @@
 #### SP 备件报表生成（`sp_report_generate`）
 
 - 默认 cron: `15 5 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_report_generate`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_report_generate`
 
 **功能**: 先从 eFlow 刷新物料主数据 sp_material，再从 SFTP 下载备件数据，生成 Comsumables & SpareParts Inbound&Outbound&Inventory 报表到本地 data/sp_email；明细与原始快照的 Material Name 一律按 Material No. 取主数据最新名
 
@@ -810,7 +810,7 @@
 #### SP 备件周报（上周一→上周日）（`sp_weekly_report`）
 
 - 默认 cron: `0 7 * * mon`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_weekly_report`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_weekly_report`
 
 **功能**: 每周一 07:00 生成上一个完整自然周（上周一 00:00 → 上周日 23:59）的 SP 周报 xlsx 并邮件发送；文件名与邮件主题都带周期日期
 
@@ -832,7 +832,7 @@
 #### SP 备件明细报表邮件（`sp_email_details`）
 
 - 默认 cron: `5 7 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_details_email`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_details_email`
 
 **功能**: 把 data/sp_email/data 下 4 份备件明细（inventory/inband/outband/transfer）合并为一个 Excel（sheet: Inventory/Inbound/Outbound/Transfer）发送邮件，邮件发出后把同一份 Excel 作为文档发到 WhatsApp 群 WH&SP Management
 
@@ -852,7 +852,7 @@
 #### SP 备件明细分文件邮件（`sp_details_files_email`）
 
 - 默认 cron: `5 10 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_details_files_email`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_details_files_email`
 
 **功能**: 每天 10:05 把 data/sp_email/data 下的 6 份备件明细**一份文件一封邮件**逐个发给 NOC，主题 Liberia OLR W.H <文件名> <日期时间>
 
@@ -877,7 +877,7 @@
 #### Comsumables&SpareParts Report Whatsapp（`sp_whatsapp_report`）
 
 - 默认 cron: `55 7 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_whatsapp_report`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_whatsapp_report`
 
 **功能**: 每天 07:55 把 Comsumables / SpareParts 两个邮件任务的同一批产物（合并总表 XLSX + 报表 PNG）发送到 WhatsApp 群 WH&SP Management
 
@@ -896,7 +896,7 @@
 #### SP 物料库存与消耗报表邮件（`sp_material_report`）
 
 - 默认 cron: `45 7 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_material_stock_consumption`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_material_stock_consumption`
 
 **功能**: 每天 07:45 把 SP 物料库存与消耗汇总（同「SP 物料库存与消耗统计」页面 page=sp_material 的口径）导出为 UNIFIED_EXCEL_V1 版式 Excel 附件 + 同内容 PNG 内嵌正文并邮件发送
 
@@ -916,7 +916,7 @@
 #### MS Network Availability 日报邮件（`kpi_ran_availability`）
 
 - 默认 cron: `30 9 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_ran_availability`
+- 工作流脚本: `services/email/kpi_email_report.py → run_ran_availability`
 
 **功能**: 发送 MS Network Availability Daily Report（远程 FTP 图片 + 远程名单，无 Excel）
 
@@ -932,7 +932,7 @@
 #### EWS 恢复后邮件补发（`email_recovery`）
 
 - 默认 cron: `*/10 * * * *`　|　worker 组: **m**
-- 工作流脚本: `services/email_recovery.py → run_email_recovery_task`
+- 工作流脚本: `services/email/email_recovery.py → run_email_recovery_task`
 
 **功能**: 每 10 分钟探测 EWS 是否恢复；恢复后自动补发近 3 小时内因 EWS 超时失败的邮件任务
 
@@ -967,7 +967,7 @@
 #### Packet Loss 丢包日报邮件（`packet_loss_email`）
 
 - 默认 cron: `45 6 * * *`　|　worker 组: **u**
-- 工作流脚本: `services/kpi_email_report.py → run_packet_loss_email`
+- 工作流脚本: `services/email/kpi_email_report.py → run_packet_loss_email`
 
 **功能**: 发送 Packet Loss 丢包看板日报邮件（本地截图 + 最新报告 xlsx + 远程收件人清单），经 OWA 账户发送
 
@@ -983,7 +983,7 @@
 #### IP RAN M6K-FW 图表邮件（`ipran_m6k_chart_email`）
 
 - 默认 cron: `45 6 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/ipran_chart_service.py → run_ipran_m6k_chart_email`
+- 工作流脚本: `services/ipran/ipran_chart_service.py → run_ipran_m6k_chart_email`
 
 **功能**: 从 ipran_ume_kpi.sqlite3 查询 HQ_M6K_FW_bnctp_15mins，按 ME+SmartGroup 生成 3 张利用率折线图并发送
 
@@ -1000,7 +1000,7 @@
 #### CNN Free Rating 图表邮件（`ccn_free_rating_chart_email`）
 
 - 默认 cron: `45 7 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email`
+- 工作流脚本: `services/cnn/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email`
 
 **功能**: 从 db_ps_cs_cn.sqlite3 查询 FREE_RATING_GROUP_TEMPLATE_OSS_update_UME，按 MO 生成 4 张柱状图并发送
 
@@ -1085,7 +1085,7 @@
 #### 邮箱空间清理（`mailbox_cleanup`）
 
 - 默认 cron: `0 * * * *`　|　worker 组: **m**
-- 工作流脚本: `services/mailbox_cleanup.py → run_mailbox_cleanup`
+- 工作流脚本: `services/cleanup/mailbox_cleanup.py → run_mailbox_cleanup`
 
 **功能**: 每小时检查 Exchange 邮箱：邮件数 >500 且空间 >70% 时，硬删除最旧 200 封邮件，避免 storage limit 告警
 
@@ -1101,7 +1101,7 @@
 #### Incident Overview 数据同步（`incident_overview_sync`）
 
 - 默认 cron: `20 * * * *`　|　worker 组: **m**
-- 工作流脚本: `services/incident_overview_sync.py → run_incident_overview_sync`
+- 工作流脚本: `services/incident/incident_overview_sync.py → run_incident_overview_sync`
 
 **功能**: 每小时第 20 分钟从 FineBI FTP /webroot/WEB-INF/schedule/TT_WO/ 所有子目录取最新 incident_overview.xlsx，版本化落盘 + current.json 指针
 
@@ -1119,7 +1119,7 @@
 #### 数据库数据新鲜度巡检（`db_freshness_check`）
 
 - 默认 cron: `15 * * * *`　|　worker 组: **m**
-- 工作流脚本: `services/db_freshness_check.py → run_db_freshness_check`
+- 工作流脚本: `services/db/db_freshness_check.py → run_db_freshness_check`
 
 **功能**: 每小时巡检远程 DB（db_writer_api）、本地回退库各表最新数据日期，以及本机文件型数据源（FTP 落盘的 Excel）的落盘年龄，滞后时输出调用链路与检查方向
 
@@ -1155,7 +1155,7 @@
 #### MTTR/TT 宽表重建（`mttr_tt_sync`）
 
 - 默认 cron: `40 7 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/mttr_tt_sync.py → run_mttr_tt_sync`
+- 工作流脚本: `services/tt/mttr_tt_sync.py → run_mttr_tt_sync`
 
 **功能**: 重建 mttr_tt 宽表（Eflow_TT_FB + OLR_CELLS/Site_Maintainer_Category 参考库），写本机 data/mttr_tt.sqlite3，供 MTTR 看板（日/周/月）
 
@@ -1167,7 +1167,7 @@
 
 **维护要点**:
 
-- 口径解析自 FineDB 数据集 4bc5a679，定义在 services/mttr_tt_sync.py 顶部；MTTR2 只在 0<MTTR1<48h 时非空
+- 口径解析自 FineDB 数据集 4bc5a679，定义在 services/tt/mttr_tt_sync.py 顶部；MTTR2 只在 0<MTTR1<48h 时非空
 - 参考库 excel_ds.sqlite3 是从 my-finebi 固化的静态文件（114KB，2026-08-31 后未变）；FineBI 侧 Excel 数据集若更新需重新导出覆盖
 - 2026-09-21 上线前该表由已退役 my-finebi 的手工 ETL 维护，无调度 → 冻结在 2026-08-31
 
@@ -1310,7 +1310,7 @@
 #### CXO 看板数据缓存同步（`cxo_dashboard_cache_sync`）
 
 - 默认 cron: `*/10 * * * *`　|　worker 组: **v**
-- 工作流脚本: `services/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync`
+- 工作流脚本: `services/cxo/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync`
 
 **功能**: 每 10 分钟经本机 8790 VMAX 代理拉取 CXO 看板全量接口，按接口粒度合并为 last-known-good 缓存（空值保留旧值），供看板兜底展示
 
@@ -1329,7 +1329,7 @@
 #### VMAX CXO 天粒度日值归档（`vmax_cxo_daily_sync`）
 
 - 默认 cron: `15 * * * *`　|　worker 组: **v**
-- 工作流脚本: `services/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync`
+- 工作流脚本: `services/cxo/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync`
 
 **功能**: 每小时经 8790 VMAX 代理按监控批量拉取最近 8 天的 1hour 明细（50 个指标压成 8 个多列请求），聚合为日值落盘，供页签化天粒度看板累积回看约三周
 
@@ -1459,7 +1459,7 @@
 #### SP Online 工单同步（`sp_online_sync`）
 
 - 默认 cron: `35 */6 * * *`　|　worker 组: **n**
-- 工作流脚本: `services/sp_online_sync.py → run_sp_online_sync`
+- 工作流脚本: `services/sp/sp_online_sync.py → run_sp_online_sync`
 
 **功能**: 每 6 小时从 eFlow SP 接口拉在线工单（sp-outbound / sp-inbound / sp-transfer），写库表对应三张表。取「原始 filter」与「状态全集 filter」两份结果的并集，避免 filter 与其返回结果自相矛盾时静默取错数据。表语义=上游当前快照：全量重建，删除上游已消失的单据
 
@@ -1481,7 +1481,7 @@
 #### SP 物料主数据同步（`sp_material_sync`）
 
 - 默认 cron: `55 4 * * *`　|　worker 组: **n**
-- 工作流脚本: `services/sp_material_sync.py → run_sp_material_sync`
+- 工作流脚本: `services/sp/sp_material_sync.py → run_sp_material_sync`
 
 **功能**: 从 eFlow SP 物料接口（eflow-sp-material）拉全量物料主数据，按 materialNo 唯一键 upsert 写 app.db 表 sp_material。表语义=上游当前快照：全量重建，删除上游已消失的物料
 
@@ -1500,7 +1500,7 @@
 #### SP 在线未关闭单报表生成（`sp_online_report_generate`）
 
 - 默认 cron: `0 6 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_online_report_generate`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_online_report_generate`
 
 **功能**: 生成 sp_online 下未关闭单报表（PNG+XLSX，Create Time 倒序）：Inbound 读明细 xlsx 未关闭单，Outbound 读库表 sp_outbound 跟踪 WaitingForUpdate / WaitingForReturn / WaitingForConfirm
 
@@ -1518,7 +1518,7 @@
 #### SP 在线未关闭单报表发送（`sp_online_report_send`）
 
 - 默认 cron: `35 6 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/kpi_email_report.py → run_sp_online_report`
+- 工作流脚本: `services/email/kpi_email_report.py → run_sp_online_report`
 
 **功能**: 发送 sp_online 未关闭单报表：邮件（PNG 内嵌 + XLSX 附件，默认复用 SP 报表远程名单）+ WhatsApp 群
 
@@ -1595,7 +1595,7 @@
 #### WhatsApp 知识库同步（推单规则）（`whatsapp_kb_sync_push_rules`）
 
 - 默认 cron: `4 0 */3 * *`　|　worker 组: **n**
-- 工作流脚本: `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
+- 工作流脚本: `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
 
 **功能**: eFlow 推单规则收集完成后触发：比对规则 xlsx 指纹，有变化才重导知识文档、重建索引并重启 whatsapp-kb-bot
 
@@ -1614,7 +1614,7 @@
 #### WhatsApp 知识库同步（告警规则）（`whatsapp_kb_sync_alarm_rules`）
 
 - 默认 cron: `4 0 */3 * *`　|　worker 组: **n**
-- 工作流脚本: `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
+- 工作流脚本: `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
 
 **功能**: eFlow 告警规则收集完成后触发知识库同步；告警压缩规则来自 eflow_alarm_rules.xlsx，无变化自动跳过
 
@@ -1632,7 +1632,7 @@
 #### WhatsApp 知识库同步（TT 级别规则）（`whatsapp_kb_sync_tt_rules`）
 
 - 默认 cron: `35 4 * * *`　|　worker 组: **n**
-- 工作流脚本: `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
+- 工作流脚本: `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
 
 **功能**: eFlow TT 级别规则收集（每日 04:20）完成后触发知识库同步；级别规则来自 eflow_TT_rules.xlsx
 
@@ -1649,7 +1649,7 @@
 #### 日志文件清理（`log_cleanup`）
 
 - 默认 cron: `17 3 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/log_cleanup.py → run_log_cleanup`
+- 工作流脚本: `services/cleanup/log_cleanup.py → run_log_cleanup`
 
 **功能**: 每天清理 my_app/log 下超过保留期（默认 7 天，LOG_RETENTION_DAYS 可调）的日志，并把已无进程写入的旧命名日志补上日期后缀
 
@@ -1667,7 +1667,7 @@
 #### TMP 目录清理（`tmp_cleanup`）
 
 - 默认 cron: `47 3 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/tmp_cleanup.py → run_tmp_cleanup`
+- 工作流脚本: `services/cleanup/tmp_cleanup.py → run_tmp_cleanup`
 
 **功能**: 两段式回收 my_app/TMP 下超过保留期（默认 7 天）的临时产物：先同盘移进 TMP/_quarantine_YYYYMMDD/（可还原），隔离再满 7 天才真删
 
@@ -1686,7 +1686,7 @@
 #### TTs and MTTR 报表生成（`tt_mttr_report_generate`）
 
 - 默认 cron: `20 7 * * *`　|　worker 组: **m**
-- 工作流脚本: `services/tt_mttr_report.py → run_tt_mttr_report`
+- 工作流脚本: `services/tt/tt_mttr_report.py → run_tt_mttr_report`
 
 **功能**: 从最新一份 Site Down hourly Report 生成 TTs and MTTR (Hour) 月粒度工作簿，供邮件报告页「TTs and MTTR」页签下载
 
@@ -1791,7 +1791,7 @@
 | **漏跑补投** | 时效窗口内应触发却完全没有执行记录的任务自动补投一次（MISS_GRACE_MIN=15 宽限；邮件类默认排除，由 EWS 补发机制负责）。 |
 | **陈旧 pending 过期** | pending 超 6 小时无人认领（典型原因：漏登记 worker 分组）会被置 failed 并补写执行日志，释放被它占住的单飞名额，让下一次调度能正常入队（否则一条陈旧记录会挡住该任务之后的每一次调度）。 |
 | **失败通知** | 任务失败经微信 + 邮件双通道告警（services/weixin_notifier.py 支持 openclaw/wecom/serverchan/pushplus）。 |
-| **漏跑/停摆主动告警** | db_freshness_check 每小时算五类健康异常（未归组 / 超出周期无执行记录 / 队列滞留 / 上次成功后逾期无新成功 / 执行成功但持续零产出），由 services/task_health_alert.py 按「新异常通知一次、恢复通知一次、持续超 24h 再提一次」推微信+邮件，不必等看板没数据了才人工发现（2026-09-18 上线；「成功但零产出」2026-11-06 补，起因是 vmax_multi_data_sync 连续 34 天 rows=0 却每轮 success=1，旧四类全都覆盖不到）。 |
+| **漏跑/停摆主动告警** | db_freshness_check 每小时算五类健康异常（未归组 / 超出周期无执行记录 / 队列滞留 / 上次成功后逾期无新成功 / 执行成功但持续零产出），由 services/task/task_health_alert.py 按「新异常通知一次、恢复通知一次、持续超 24h 再提一次」推微信+邮件，不必等看板没数据了才人工发现（2026-09-18 上线；「成功但零产出」2026-11-06 补，起因是 vmax_multi_data_sync 连续 34 天 rows=0 却每轮 success=1，旧四类全都覆盖不到）。 |
 | **进程自愈** | backend_watchdog / worker_watchdog 托管进程：端口探活、崩溃退避重拉（backend 连崩 10 次降级为每 5 分钟慢速重试、不再放弃；worker 仍是连崩 10 次摘除不再拉起）；心跳 log/heartbeat_*.json 超 3 分钟未更新判定 hung 强杀重拉。 |
 | **保留期** | task_queue 与 task_execution_log 保留 7 天（task_runner.py / worker.py 自动清理，可用环境变量 TASK_LOG_RETENTION_DAYS 调整），无需手工。 |
 
@@ -1976,7 +1976,7 @@ MS Operation KPI 看板的「只保留 SLA」版：WOs SLA 区的工单 SLA 达�
 
 MS WOs SLA 日报：工单 SLA 达成率的每日明细矩阵（Total / Within SLA / Achieve），与每天发的「MS WOs SLA 日报」邮件读同一份文件。
 
-- 数据源是 data/ms_sla/ZTE OLR MS WOs SLA Achievements Daily Report_<日期>.xlsx（任务 kpi_ms_wo_sla 每天落地），页面不做二次加工，解析口径见 backend/services/ms_kpi_report_service.py
+- 数据源是 data/ms_sla/ZTE OLR MS WOs SLA Achievements Daily Report_<日期>.xlsx（任务 kpi_ms_wo_sla 每天落地），页面不做二次加工，解析口径见 backend/services/ms/ms_kpi_report_service.py
 - 页面结构：总览卡片（月工单 / 达标 / 达成率 / 未达标指标）→ 5 个 TTR 指标卡 → 达成率日趋势（含各自目标线）→ 每日明细矩阵（与 Excel 版式一致）
 - 点矩阵列头可看该指标的趋势下钻弹窗
 - **每个数字都能悬浮看算法**（2026-11-03）：总览卡、指标卡的月值与「N/M 天达标」、趋势弹窗统计都可悬浮问「这个数怎么算」。要点三条 —— 月值取工作簿 Month 行**原值**（不做除法重算）；「N/M 天达标」的分母是**矩阵日行数**，不是自然月天数（缺档日不计）；总览里的 Total / Within SLA / Achieve 是三列**各自的原值**，所以 Achieve 不一定等于 Within ÷ Total
@@ -2442,7 +2442,7 @@ SP 备件明细报表：与邮件任务发出的合并工作簿是同一份文�
 - 「显示列」可按分表自定义并本地记住；行详情弹窗始终显示全列
 - **每个数字都能悬浮看算法**（2026-11-04）：顶部七张数量卡的气泡写明「该值 = 汇总工作簿 Summary-Current 的 Total 行 · 某列原值」，并提醒**列缺失或不是数值时后端按 0.0 返回**（所以 0 可能是真 0，也可能那一列压根没值）；「物料数」是**行数不是去重物料号**；「紧急补库」是 Alert Level 等于 Urgent Replenish 的**行数**，单位与旁边的 Qty 卡不同、不能相减
 - 「未关闭单」气泡写明它**取自实时数据库**（与 MsPortal 的 SPMS 大数字同口径），因为工作簿是 05:55 的快照、DB 是 07:00 落的；其余统计仍按 Excel 快照，保证与邮件附件逐行一致
-- **`Material Name` 取物料主数据 `sp_material` 的最新名**（2026-11-06 起）：上游明细里这一列是**单据导出那一刻**的快照名，物料在 eFlow 改名后历史单据不回写，同一物料会在 Summary-Current 里裂成两行、入库/出库/库存被拆开；生成端 Step 0 先从 eFlow 刷新主数据，Step 2.5 再按 `Material No.` 覆盖五份明细与五份原始快照（实现 `backend/services/sp_material_name.py`）。代价：当天 05:15 之后发生的改名次日才进报表 —— 页面读的就是这份报表，所以同页不会出现两套名字
+- **`Material Name` 取物料主数据 `sp_material` 的最新名**（2026-11-06 起）：上游明细里这一列是**单据导出那一刻**的快照名，物料在 eFlow 改名后历史单据不回写，同一物料会在 Summary-Current 里裂成两行、入库/出库/库存被拆开；生成端 Step 0 先从 eFlow 刷新主数据，Step 2.5 再按 `Material No.` 覆盖五份明细与五份原始快照（实现 `backend/services/sp/sp_material_name.py`）。代价：当天 05:15 之后发生的改名次日才进报表 —— 页面读的就是这份报表，所以同页不会出现两套名字
 
 #### com_report（`com_report`）
 

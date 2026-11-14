@@ -55,7 +55,7 @@
 
 | 项 | 证据 |
 | --- | --- |
-| 字段名 | **`Assign Delay`**，是 FM 告警行自带的一列（`backend/services/eflow_alarm_service.py:151-159` 的 `ALARM_COLUMNS`，第 158 行），归一后列名为 `assign_delay` |
+| 字段名 | **`Assign Delay`**，是 FM 告警行自带的一列（`backend/services/eflow/eflow_alarm_service.py:151-159` 的 `ALARM_COLUMNS`，第 158 行），归一后列名为 `assign_delay` |
 | 解析方式 | `backend/routers/alarm_dashboard.py:74-76`：`'900s' -> 900`（正则取数字）；`backend/routers/gis.py:163`：兼容 `'900s'` / `'14400s'` / 纯秒数 |
 | 作用层 | **自动派单规则(103)**：告警命中规则后先进入延迟窗口，窗口内清除则不建 TT。FOAccept 的 `ttPushOrderRule` 作用于**已建 TT 之后**，不产生延迟（`backend/services/eflow_rules/eflow_push_rule_eval.py:34` 的 `DECISION_STEP = "FOAccept"`） |
 | 真实取值（9990，7 天，rf=1，138 条） | **`900s` 103 条、`14400s` 35 条**，无第三种取值、无空值 |
@@ -102,7 +102,7 @@ C 桶明细（说明它们与 A 桶的唯一差别是「告警持续超过了延
 
 - 端点：`/api/fm-history/v1/hisalarms/pageinfo`（只读）。
 - 窗口：2026-10-27T17:46Z ~ 2026-11-03T17:46Z，按 7 个 24h 窗口查询，`size=2000`、`from` 翻页、按 `id` 去重。
-- 条件：`alarmcodeconds=[{restype: "zte.ran.nodeb", alarmcode: X}]`，沿用 `HIS_ALARM_CONDITION`（`backend/services/eflow_alarm_service.py:107-116`）；其中 `extensionconds.maintainstatus=["0"]`（同文件 `:114`）会排除维护态告警，本结论只覆盖非维护态。
+- 条件：`alarmcodeconds=[{restype: "zte.ran.nodeb", alarmcode: X}]`，沿用 `HIS_ALARM_CONDITION`（`backend/services/eflow/eflow_alarm_service.py:107-116`）；其中 `extensionconds.maintainstatus=["0"]`（同文件 `:114`）会排除维护态告警，本结论只覆盖非维护态。
 - 实测行数：`9995` **197**、`99933` **574**、`199083022` **7,888**。与 11-03 基线的 195 / 646 / 7,889 略有差异，原因是 7×24h 窗口边界与 `id` 去重，不是数据矛盾。
 - 保守口径：延迟一律按 `alarmraisedtime` 起算；`alarmclearedtime` 缺失或 ≤0 时按查询时刻计持续时长。**`clearstate` 在本批响应中恒为 `0`、`clearstatename` 恒空，不能用于判定 active/cleared**，故不使用该字段。
 - `relationflag` 分列：`1`=Root（唯一建单主体）、`2`=Secondary（压缩子告警）、`3`=Secondary Root（派生次级根，仍跟随父告警），语义见 2.1 节。
@@ -245,8 +245,8 @@ WO / 处理组
 | 层 | 判定条件 | 代码 / 规则位置 | 本样本结果 |
 | --- | --- | --- | --- |
 | ① 采集条件 | `alarm_code_conds` 白名单 16 项（`99933,9920,9995,9981,9991,9990,9970,9971,9910,9980,4758` 等 + restype） | `backend/services/eflow_alarm_config.json:9-74` | ❌ 不含 199083023 / 199083022 |
-| ① 采集窗口 | active 全量；history `his_alarm_hours=48`、`his_alarm_days_back=1`、`his_alarm_page_size=5000` | `backend/services/eflow_alarm_config.json:5-8`；`backend/services/eflow_alarm_service.py:220`（active 用 `ALARM_CONDITION`）、`:300`（history 用 `HIS_ALARM_CONDITION`） | 不适用（本地不采） |
-| ① 入库过滤 | **只保留 `tt_id` 非空的行** | `backend/services/eflow_alarm_service.py:265-278`（`_filter_rows_with_tt_id`），`:791` 调用 | ❌ 无 TT → 连 history 也不进 |
+| ① 采集窗口 | active 全量；history `his_alarm_hours=48`、`his_alarm_days_back=1`、`his_alarm_page_size=5000` | `backend/services/eflow_alarm_config.json:5-8`；`backend/services/eflow/eflow_alarm_service.py:220`（active 用 `ALARM_CONDITION`）、`:300`（history 用 `HIS_ALARM_CONDITION`） | 不适用（本地不采） |
+| ① 入库过滤 | **只保留 `tt_id` 非空的行** | `backend/services/eflow/eflow_alarm_service.py:265-278`（`_filter_rows_with_tt_id`），`:791` 调用 | ❌ 无 TT → 连 history 也不进 |
 | ② 压缩 | 本厂商 OUTAGE 规则：`zte-3g-sitedown`（3G）、`zte-4g-siteoutage`（4G）、`zte-2g-siteoutage`（2G）、`mwlink-outage-new`、`zte-3g-celloutage`、`csd-outage`；`mpf-outage` **DISABLED** | `eflow_alarm_rules.xlsx` `Alarm_Rules` 第 9 / 10 / 11 / 12 / 14 / 16 / 19 行 | ❌ 断点①（见 1.1）；`mpf-outage` 关闭也解释了本站 7 天无 `99933` |
 | ② 压缩键 | `rootResType + siteAlarmCode + (cellAlarmList 或 relationAlarmCode)`；输出 `parentinfo` / `relationflag`（0=原始、1=Root、2=Secondary、3=Secondary Root） | 规则参数列 `siteAlarmNeType` / `siteAlarmCode` / `cellAlarmList` / `relationAlarmCode` / `supportrelation` / `cellBlock` | `relationflag=0`、`parentinfo=null` |
 | ③ 建 TT | 自动派单规则(103)：`siteSubType` / `assetType` / `alarmCode` / `reasonType` / `ticketSeverity` | **本地无镜像**；结果字段 `assign_rulename` / `tt_id` 是唯一实证 | ❌ `assign_rulename=null`、`tt_id="empty"` |
@@ -255,13 +255,13 @@ WO / 处理组
 
 ### 2.2 关系链解析的代码缺陷（影响可观测性，不直接改压缩结果）
 
-`backend/services/eflow_ume_link.py:202`：
+`backend/services/eflow/eflow_ume_link.py:202`：
 
 ```python
 "relationflag": root_relationflag or 1,
 ```
 
-`relationflag=0`（原始告警，正是本样本）被 `or 1` 静默改写成 1。随后 `backend/services/eflow_ume_link.py:285-296` 把该值放进 `relatedalarmrequestbeans` 请求 `fm-history/relatedAlarms/table`。后果：**所有 `relationflag=0` 的原始告警，关系链查询恒为空**——排查「这条为什么没被压缩」时会被这个 bug 误导成「接口没数据」。调用方 `backend/routers/eflow_qa.py:459` 与 `:515` 均未显式传 `root_relationflag`，全部踩中。
+`relationflag=0`（原始告警，正是本样本）被 `or 1` 静默改写成 1。随后 `backend/services/eflow/eflow_ume_link.py:285-296` 把该值放进 `relatedalarmrequestbeans` 请求 `fm-history/relatedAlarms/table`。后果：**所有 `relationflag=0` 的原始告警，关系链查询恒为空**——排查「这条为什么没被压缩」时会被这个 bug 误导成「接口没数据」。调用方 `backend/routers/eflow_qa.py:459` 与 `:515` 均未显式传 `root_relationflag`，全部踩中。
 
 ---
 
@@ -429,11 +429,11 @@ WO / 处理组
 5. **站点归属**：3467 是 **ZTE** 站点（`organization=ZTE`、BSC1 / RNC105），不是猜测的 Nokia 站点；`ran_site_type=REGULAR`、`site_class=P1`、`hubsite=Yes`。若按「Nokia 设备」去找，会找不到这条。
 6. **时间字段口径**：`alarmraisedtime` / `servertime` 是 13 位毫秒（`1793686669000` → 06:17:49 UTC），`alarmOccurTime` 是 10 位秒；两者不可混用比较。
 7. **规则镜像的采集时点**：`eflow_alarm_rules.xlsx` / `eflow_push_rules.xlsx` 采集于 2026-11-02（后者 10:20），反映的是镜像时点的配置，不等于当前 config-center 的实时状态，最终以 eFlow 配置中心原文为准。
-8. **延迟窗口的起算点未证实**：接口同时提供 `alarmraisedtime`、`First Match Time`、`Latest Match Time`，但 `ALARM_COLUMNS` 只映射 `Latest Match Time` / `First Match Time` / `Assign Delay`（`backend/services/eflow_alarm_service.py:151-159`），未见 `Assign Start Time` 的列映射；代码侧只解析 `assign_delay` 的数值（`backend/routers/alarm_dashboard.py:74-76`），未见「从哪个时刻起算」的实现。本文统一按**告警升起时刻**起算，这是保守口径（若实际从规则命中时刻起算，A 桶只会更多、B 桶不会增加）。
+8. **延迟窗口的起算点未证实**：接口同时提供 `alarmraisedtime`、`First Match Time`、`Latest Match Time`，但 `ALARM_COLUMNS` 只映射 `Latest Match Time` / `First Match Time` / `Assign Delay`（`backend/services/eflow/eflow_alarm_service.py:151-159`），未见 `Assign Start Time` 的列映射；代码侧只解析 `assign_delay` 的数值（`backend/routers/alarm_dashboard.py:74-76`），未见「从哪个时刻起算」的实现。本文统一按**告警升起时刻**起算，这是保守口径（若实际从规则命中时刻起算，A 桶只会更多、B 桶不会增加）。
 9. **分桶已覆盖四个码，但口径仍为单窗口**：`9990` 为 2026-11-03 数据；`9995` / `99933` / `199083022` 为 2026-11-04 重查的 7×24h 窗口数据（见 1.4）。`99933` 最后 24h 为 0 条，与 `mpf-outage` 停用时点接近，但**因果未证实**，因此本次 `99933` 的 574 行低于 11-03 基线的 646 行不能归因于单一规则变更。
 10. **`relationflag=2/3` 的父单归属已做链级验证，但未全量配对**：`9995` rf=3 47 条全部有 `parentinfo`，其中 31 条父告警有 TT；`199083022` rf=2 6,918 条全部有 `parentinfo`，可解析的 2,345 条父链终端为 A=1,841 / B=27 / C=465 / D=12，**另有 4,573 条父告警不在本次 9990/9991/9995/99933 数据集内**（可能属于未抓取的告警码或早于窗口），其父单归属**未证实**。
 11. **`clearstate` 字段不可用**：本批 `9995` / `99933` / `199083022` 的历史响应中 `clearstate` 恒为 `0`、`clearstatename` 恒空，不能用于判定 active / cleared；本次分桶一律以 `alarmclearedtime` 为准（缺失或 ≤0 时按查询时刻计持续时长，仍为保守口径）。
-12. **维护态告警被排除**：查询沿用 `HIS_ALARM_CONDITION`，其中 `extensionconds.maintainstatus=["0"]`（`backend/services/eflow_alarm_service.py:114`），维护窗口内的告警不在本结论范围内；若维护态里存在超延迟无单，需单独放开口径复核。
+12. **维护态告警被排除**：查询沿用 `HIS_ALARM_CONDITION`，其中 `extensionconds.maintainstatus=["0"]`（`backend/services/eflow/eflow_alarm_service.py:114`），维护窗口内的告警不在本结论范围内；若维护态里存在超延迟无单，需单独放开口径复核。
 13. **`9995` 的 `relationflag=3` 不是根告警**：它是 Secondary Root，TT 归父告警。若按 rf=1 口径把它的 26 条「超 900s 无 TT」直接计 B，会与 `99933` 的 6 条父 B 桶重复计数；本文已按父链去重。
 
 ---
@@ -456,7 +456,7 @@ WO / 处理组
 | 四桶外推（2026-11-04） | 同一条件分别取 `alarmcode=9995 / 99933 / 199083022`（`restype=zte.ran.nodeb`）；7 个 24h 窗口 2026-10-27T17:46Z~11-03T17:46Z，`size=2000`、`from` 翻页、按 `id` 去重；rf 分列 |
 | 199083022 父链归属 | 抓 `9990` / `9991` 同窗口（`restype=zte.ran.nodeb`），按 rf=2 行 `parentinfo` 的倒数第二段取父 AID，逐层追到无 `parentinfo` 的终端；终端桶决定子告警归属；未命中数据集记为「未解析」 |
 | 9995 rf=3 父单归属 | 取 rf=3 行 `parentinfo` 的父 AID（`99933`）→ 父 `tt_id` / `Assign Delay` / `alarmclearedtime` 判桶；47 条全部命中，31 条父有 TT，6 条父为 B（与 `99933` B 桶同一条根告警） |
-| delay 字段取证 | 告警行 `Assign Delay` 列（`backend/services/eflow_alarm_service.py:158`）；解析 `backend/routers/alarm_dashboard.py:74-76`、`backend/routers/gis.py:163` |
+| delay 字段取证 | 告警行 `Assign Delay` 列（`backend/services/eflow/eflow_alarm_service.py:158`）；解析 `backend/routers/alarm_dashboard.py:74-76`、`backend/routers/gis.py:163` |
 | 代码位置 | 见第二、三、五节各条的 `文件:行号` |
 
 ### 8.1 规则镜像定位速查

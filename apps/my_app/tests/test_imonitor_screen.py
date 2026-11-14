@@ -14,7 +14,7 @@
 import re
 from pathlib import Path
 
-from backend.services import portal_login_service as svc
+from backend.services.portal import portal_login_service as svc
 
 
 ROOT = Path(__file__).resolve().parents[1]

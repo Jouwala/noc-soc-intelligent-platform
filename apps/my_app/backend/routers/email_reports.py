@@ -45,7 +45,7 @@ _SOURCES = [
     # 2026-10-04 新增：tt_mttr_report_generate 的产物（TTs and MTTR 月粒度组合图报表）。
     # 与三份 hourly/8h/summary 报告同目录，但不在 _cleanup_old_tt_reports 的清理名单里，
     # 体积由该任务自己的 KEEP_FILES 控制。
-    # ⚠ patterns 必须与 services/tt_mttr_report.py 的 OUTPUT_PREFIX 保持一致：
+    # ⚠ patterns 必须与 services/tt/tt_mttr_report.py 的 OUTPUT_PREFIX 保持一致：
     #   下载接口按 patterns 做白名单校验（见 _resolve_download_file），漏配会出现
     #   「文件列出来却下不动」。带 _ 的是任务每次生成的时间戳文件，
     #   不带 _ 的是此前人工核对用的同名文件，两者都要能下载。

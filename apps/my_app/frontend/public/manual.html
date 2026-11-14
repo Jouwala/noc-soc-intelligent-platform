@@ -89,7 +89,7 @@ footer.colophon { text-align: center; color: var(--muted); font-size: 12px; marg
     <div class="logo">📘</div>
     <h1>my_app 项目手册</h1>
     <div class="sub">网络运维数据平台 · 设计手册 + 使用手册</div>
-    <div class="meta">基准日期 2026-08-27　|　适用版本 main 当前代码　|　HTML 合成生成 2026-11-13<br>含 13 章 · 142 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
+    <div class="meta">基准日期 2026-08-27　|　适用版本 main 当前代码　|　HTML 合成生成 2026-11-14<br>含 13 章 · 142 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
     <ul class="parts"><li><a href="#ch-00">前言 · 关于本手册</a></li><li><a href="#ch-01">设计篇 · 01 项目总览</a></li><li><a href="#ch-02">设计篇 · 02 架构设计</a></li><li><a href="#ch-03">设计篇 · 03 数据层设计</a></li><li><a href="#ch-04">设计篇 · 04 任务与调度系统</a></li><li><a href="#ch-05">设计篇 · 05 访问控制与凭据</a></li><li><a href="#ch-10">使用篇 · 10 快速上手</a></li><li><a href="#ch-11">使用篇 · 11 功能页使用手册</a></li><li><a href="#ch-12">使用篇 · 12 配置项与开关</a></li><li><a href="#ch-13">使用篇 · 13 运维手册</a></li><li><a href="#ch-14">使用篇 · 14 外部系统与数据流</a></li><li><a href="#ch-15">使用篇 · 使用帮助（一站式指南）</a></li><li><a href="#ch-90">附录 · 90 附录</a></li></ul>
   </section>
   <section class="toc-section">
@@ -431,7 +431,7 @@ schemas/   预留，实际为空
 <ol>
 <li><strong>Pydantic 模型内联在 router</strong>（如 <code>routers/credentials.py:37</code>），<code>schemas/__init__.py</code> 是空文件。新增请求体模型请放在对应 router 里，与现状一致。</li>
 <li><strong>部分 router 直接裸 SQL 取数</strong>，未经 service：<code>routers/tables.py</code>（10 处）、<code>routers/gis.py</code>（9 处）、<code>routers/alarm_dashboard.py</code>（7 处）调用 <code>get_raw_connection</code>。新功能不建议模仿，但重构这三处要留意回归成本。</li>
-<li><strong>超大文件仍然存在</strong>，行数（已验证）：<code>services/ms_sla_report.py</code> 1697、<code>services/eflow_data_mapper.py</code> 1505、<code>services/ran_ume_network_kpi.py</code> 1481、<code>services/task_runner.py</code> 1164、<code>routers/gis.py</code> 895、<code>routers/alarm_dashboard.py</code> 843。GIS 只拆出了无路由的辅助模块 <code>gis_geometry.py</code>，路由本身未拆。</li>
+<li><strong>超大文件仍然存在</strong>，行数（已验证）：<code>services/ms/ms_sla_report.py</code> 1697、<code>services/eflow/eflow_data_mapper.py</code> 1505、<code>services/ran/ran_ume_network_kpi.py</code> 1481、<code>services/task/task_runner.py</code> 1164、<code>routers/gis.py</code> 895、<code>routers/alarm_dashboard.py</code> 843。GIS 只拆出了无路由的辅助模块 <code>gis_geometry.py</code>，路由本身未拆。</li>
 <li><strong>外部系统客户端的容错四件套（超时 / 重试 / 错误类型 / 健康检查）统一契约在 <code>services/ext_client.py</code></strong>（第二轮重构接入，2026-11-13）：统一基类 <code>ExtClientError</code>（仍是 <code>RuntimeError</code>）、有界 <code>RetryPolicy</code> + <code>call_with_retry</code>（非幂等调用必须 <code>retry=False</code>）、结构化 <code>run_health_check</code>。存量客户端传输层各不相同（原始 socket / urllib / requests / paramiko），<strong>不强行统一传输</strong>，按「改到哪个接哪个」逐个补缺项；已接入 <code>openwebui_client</code> / <code>db_writer_client</code> / <code>ume_alarm_client</code> / <code>eflow_api_client</code>，各客户端的盘点矩阵与接入约定以 <code>ext_client.py</code> 的模块 docstring 为准，不要在本手册再抄一份。</li>
 </ol>
 <p><a id="ch-02-s4"></a></p>
@@ -561,7 +561,7 @@ t.status NOT LIKE 'Closed%%'
 </ul>
 <p><a id="ch-03-s2"></a></p>
 <h3>例外：仍然硬绑 SQLite 的代码</h3>
-<p><code>backend/services/credential_store.py:263-266</code> 用 <code>sqlite3</code> 直连 <code>db/app.db</code> 读写凭据表，<strong>绕过 <code>MY_APP_DB_MODE</code></strong>。后果：</p>
+<p><code>backend/services/credential/credential_store.py:263-266</code> 用 <code>sqlite3</code> 直连 <code>db/app.db</code> 读写凭据表，<strong>绕过 <code>MY_APP_DB_MODE</code></strong>。后果：</p>
 <ul>
 <li>PG 模式下凭据仍然存在本地 <code>app.db</code>，不随 PG 备份走；</li>
 <li>只备份 PG 会丢凭据，只备份 <code>app.db</code> 会丢业务数据。备份策略见 <code>13-operations.md</code>。</li>
@@ -616,15 +616,15 @@ t.status NOT LIKE 'Closed%%'
 </thead>
 <tbody>
 <tr>
-<td><code>backend/services/credential_store.py:696</code></td>
+<td><code>backend/services/credential/credential_store.py:696</code></td>
 <td>凭据表，故意裸连（理由写在 <code>:683</code> 注释）</td>
 </tr>
 <tr>
-<td><code>backend/services/email_recipient_store.py:341</code></td>
+<td><code>backend/services/email/email_recipient_store.py:341</code></td>
 <td>收件人表，同上（理由写在 <code>:334</code> 注释）</td>
 </tr>
 <tr>
-<td><code>backend/services/task_runner.py:412</code> / <code>435</code> / <code>495</code> / <code>561</code></td>
+<td><code>backend/services/task/task_runner.py:412</code> / <code>435</code> / <code>495</code> / <code>561</code></td>
 <td><code>task_schedule_config</code> 读写；判定只读本地这一份，PG 侧只是双写镜像</td>
 </tr>
 </tbody>
@@ -656,11 +656,11 @@ t.status NOT LIKE 'Closed%%'
 </thead>
 <tbody>
 <tr>
-<td><code>backend/services/avail/avail_ms_service.py:189</code></td>
+<td><code>backend/services/avail_ms_service.py:189</code></td>
 <td>可用率库 <code>AVAIL_DB</code>，<code>mode=ro</code></td>
 </tr>
 <tr>
-<td><code>backend/services/bp_report_store.py:184</code></td>
+<td><code>backend/services/bp/bp_report_store.py:184</code></td>
 <td><code>connect(read_only=True)</code> 分支，<code>mode=ro</code></td>
 </tr>
 <tr>
@@ -668,19 +668,19 @@ t.status NOT LIKE 'Closed%%'
 <td>传入的本机库路径，<code>mode=ro</code> + <code>query_only</code></td>
 </tr>
 <tr>
-<td><code>backend/services/db_freshness_check.py:418</code> / <code>432</code></td>
+<td><code>backend/services/db/db_freshness_check.py:418</code> / <code>432</code></td>
 <td>新鲜度巡检任意库文件，<code>mode=ro</code></td>
 </tr>
 <tr>
-<td><code>backend/services/mttr_tt_sync.py:143</code></td>
+<td><code>backend/services/tt/mttr_tt_sync.py:143</code></td>
 <td>读源库，<code>mode=ro</code></td>
 </tr>
 <tr>
-<td><code>backend/services/ran_cells_kpi_service.py:60</code></td>
+<td><code>backend/services/ran/ran_cells_kpi_service.py:60</code></td>
 <td><code>_connect_ro</code>：不用 <code>file:</code> URI（避 UNC 路径坑），改用 <code>PRAGMA query_only=ON</code></td>
 </tr>
 <tr>
-<td><code>backend/services/site_availability_service.py:326</code></td>
+<td><code>backend/services/site/site_availability_service.py:326</code></td>
 <td>本地可用率库 <code>mode=ro</code>；注释已说明 PG 模式走封装会被误映射 schema</td>
 </tr>
 <tr>
@@ -708,7 +708,7 @@ t.status NOT LIKE 'Closed%%'
 <td><code>battery_kpi.sqlite3</code></td>
 </tr>
 <tr>
-<td><code>backend/services/bp_report_store.py:187</code></td>
+<td><code>backend/services/bp/bp_report_store.py:187</code></td>
 <td><code>connect(read_only=False)</code> 分支</td>
 </tr>
 <tr>
@@ -720,7 +720,7 @@ t.status NOT LIKE 'Closed%%'
 <td>候选路径循环打开 FW 库（TODO 原文点名点位，行号已由 488 漂移至此）</td>
 </tr>
 <tr>
-<td><code>backend/services/get_sp_table.py:574</code></td>
+<td><code>backend/services/sp/get_sp_table.py:574</code></td>
 <td>镜像同步路径，带 <code>MIRROR_CONNECT_TIMEOUT</code></td>
 </tr>
 <tr>
@@ -728,7 +728,7 @@ t.status NOT LIKE 'Closed%%'
 <td>本模块独占旁路库（理由写在文件头 <code>:12</code>）</td>
 </tr>
 <tr>
-<td><code>backend/services/native_board_mirror_sync.py:147</code></td>
+<td><code>backend/services/native/native_board_mirror_sync.py:147</code></td>
 <td>本机镜像库 <code>_open_local</code>，自设 PRAGMA</td>
 </tr>
 <tr>
@@ -740,11 +740,11 @@ t.status NOT LIKE 'Closed%%'
 <td><code>olib_soc_report.sqlite3</code></td>
 </tr>
 <tr>
-<td><code>backend/services/ran_cell_availability_sync.py:376</code> / <code>463</code> / <code>470</code></td>
+<td><code>backend/services/ran/ran_cell_availability_sync.py:376</code> / <code>463</code> / <code>470</code></td>
 <td><code>ran_kpi_avalability_1day.sqlite3</code> ⚠️ 未设 timeout</td>
 </tr>
 <tr>
-<td><code>backend/services/ran_cells_kpi_service.py:570</code></td>
+<td><code>backend/services/ran/ran_cells_kpi_service.py:570</code></td>
 <td>物化库 <code>ran_cells_kpi.sqlite3</code> ⚠️ 未设 timeout</td>
 </tr>
 <tr>
@@ -752,7 +752,7 @@ t.status NOT LIKE 'Closed%%'
 <td>写分支，自设 WAL + <code>busy_timeout</code></td>
 </tr>
 <tr>
-<td><code>backend/services/sp_mirror_push.py:124</code></td>
+<td><code>backend/services/sp/sp_mirror_push.py:124</code></td>
 <td>推送用单文件镜像，自设 <code>journal_mode=delete</code> ⚠️ 未设 timeout</td>
 </tr>
 <tr>
@@ -763,13 +763,13 @@ t.status NOT LIKE 'Closed%%'
 </table>
 <p><a id="ch-03-s8"></a></p>
 <h4>E. 临时 / 产物文件（5 处）</h4>
-<p>写临时文件后原子替换、或一次性产物，对象不是共享库：<code>backend/services/avail/avail_recon_sync.py:280</code>、<code>mttr_tt_sync.py:179</code>、<code>progress_sync.py:376</code>、<code>ran_ume_service.py:1075</code>、<code>tt_alarm_render.py:271</code>（未设 timeout，但对象是临时文件，风险低）。</p>
+<p>写临时文件后原子替换、或一次性产物，对象不是共享库：<code>backend/services/avail_recon_sync.py:280</code>、<code>mttr_tt_sync.py:179</code>、<code>progress_sync.py:376</code>、<code>ran_ume_service.py:1075</code>、<code>tt_alarm_render.py:271</code>（未设 timeout，但对象是临时文件，风险低）。</p>
 <p><a id="ch-03-s9"></a></p>
 <h4>F. PG → SQLite 快照重建（1 处）</h4>
 <p><code>backend/scripts/sync_pg_to_sqlite.py:355</code> —— 下一节「PG → SQLite 快照」的实现本体。</p>
 <p><a id="ch-03-s10"></a></p>
 <h4>G. 迁移与离线工具（10 处，人工执行、不在运行期）</h4>
-<p><code>backend/migrations/fix_tt_alert_log_columns.py:210</code>、<code>reconcile.py:161</code>（<code>mode=ro</code>）、<code>transfer_lib.py:97</code>；<code>backend/services/backfill_new_group_history.py:79</code>、<code>backfill_old_group_history.py:86</code>（均 <code>mode=ro</code>）；<code>tools/backfill_manual_stop_flag.py:81</code>、<code>fix_task_schedule_dupes.py:77</code>、<code>reconcile_task_schedule_state.py:163</code> / <code>209</code>、<code>sync_manual_stop_to_pg.py:32</code>。</p>
+<p><code>backend/migrations/fix_tt_alert_log_columns.py:210</code>、<code>reconcile.py:161</code>（<code>mode=ro</code>）、<code>transfer_lib.py:97</code>；<code>backend/services/backfill/backfill_new_group_history.py:79</code>、<code>backfill_old_group_history.py:86</code>（均 <code>mode=ro</code>）；<code>tools/backfill_manual_stop_flag.py:81</code>、<code>fix_task_schedule_dupes.py:77</code>、<code>reconcile_task_schedule_state.py:163</code> / <code>209</code>、<code>sync_manual_stop_to_pg.py:32</code>。</p>
 <p><a id="ch-03-s11"></a></p>
 <h4>核查结论（2026-11-13）</h4>
 <ol>
@@ -951,8 +951,8 @@ WHERE n.nspname = '&lt;schema&gt;' AND cl.relname = '&lt;表&gt;' AND c.contype 
 <p><a id="ch-03-s18"></a></p>
 <h4>eflow 双库归属：<code>eflow_tt</code> 只认主库</h4>
 <ul>
-<li><strong>唯一活写源</strong>：<code>backend/services/sync_from_eflow_api.py</code> 的 <code>sync_from_eflow_api()</code> 经 <code>get_raw_connection(str(DB_PATH))</code>（<code>:665</code>）只写主库（sqlite 模式 = <code>db/app.db</code>，PG 模式 = <code>app</code> schema），覆盖 <code>eflow_tt</code> / <code>eflow_wo</code> / <code>eflow_cr</code> / <code>eflow_pm</code> / <code>eflow_site</code> / <code>person</code>；文件头已声明「不再依赖外部 eflow.sqlite3 中间文件」（<code>:1-4</code>）。<strong>读这些表一律读主库。</strong></li>
-<li><strong><code>data/eflow/eflow.sqlite3</code> 的同名表不是同步结果</strong>：它是旧流水线遗留快照 + 报告中间库。<code>eflow_data_mapper.save_to_sqlite()</code>（<code>backend/services/eflow_data_mapper.py:827</code>）在 sqlite 模式下仍会整表 <code>replace</code> 写入（报告生成副产品），PG 模式下已明确跳过。新代码<strong>不得</strong>把 eflow.sqlite3 当作 <code>eflow_tt</code> 的数据源——读到的是某次报告生成时的快照，会静默过期。</li>
+<li><strong>唯一活写源</strong>：<code>backend/services/eflow/sync_from_eflow_api.py</code> 的 <code>sync_from_eflow_api()</code> 经 <code>get_raw_connection(str(DB_PATH))</code>（<code>:665</code>）只写主库（sqlite 模式 = <code>db/app.db</code>，PG 模式 = <code>app</code> schema），覆盖 <code>eflow_tt</code> / <code>eflow_wo</code> / <code>eflow_cr</code> / <code>eflow_pm</code> / <code>eflow_site</code> / <code>person</code>；文件头已声明「不再依赖外部 eflow.sqlite3 中间文件」（<code>:1-4</code>）。<strong>读这些表一律读主库。</strong></li>
+<li><strong><code>data/eflow/eflow.sqlite3</code> 的同名表不是同步结果</strong>：它是旧流水线遗留快照 + 报告中间库。<code>eflow_data_mapper.save_to_sqlite()</code>（<code>backend/services/eflow/eflow_data_mapper.py:827</code>）在 sqlite 模式下仍会整表 <code>replace</code> 写入（报告生成副产品），PG 模式下已明确跳过。新代码<strong>不得</strong>把 eflow.sqlite3 当作 <code>eflow_tt</code> 的数据源——读到的是某次报告生成时的快照，会静默过期。</li>
 <li><strong>告警两表是例外</strong>：<code>realtime_alarm</code> / <code>history_alarm</code> 由 <code>eflow_alarm_service</code> 双写主库与 eflow 副本，页面只读主库；双 schema 下的换表风险与落地写法见上文「新增 upsert 目标前的自检」中的告警段。</li>
 <li><strong>物理文件仍有合法读者</strong>（sqlite 模式）：<code>packet_loss_service</code> 读其中站点信息（<code>backend/services/packet_loss_service.py:64</code>；PG 模式经 <code>get_raw_connection</code> 映射到 <code>eflow</code> schema），<code>apps/eflow_Q&amp;A/tools/gen_datadict.py</code> 用它生成数据字典。删文件或停掉中间库写入前，先处理这两处。</li>
 <li>结论出处：<code>PROJECT_DOCS.md</code> §2 Phase 0.5 / 0.7（2026-08 查代码闭环，历史档案）；本节是现状固化，后续以本节为准。</li>
@@ -1035,7 +1035,7 @@ SQLite 下缺约束不报错，只有 PG 会拦，别让 SQLite 测试给你假�
 <li>下表列的是 <strong><code>default_cron</code>（代码默认值）</strong>，<strong>不是</strong>当前生效值。二者可能不同（2026-10-11 巡检：22 个任务存在 code≠库 的覆盖）。核对三方一致性用 <code>TMP/_check_task_cron_drift.py</code>。</li>
 </ul>
 </li>
-<li>另有一套<strong>任务配置文件框架</strong> <code>services/task_configs_registry.py:1-30</code>，优先级 <code>环境变量 &gt; 配置文件 &gt; 默认值</code>，用于任务的业务参数（不是排程）。</li>
+<li>另有一套<strong>任务配置文件框架</strong> <code>services/task/task_configs_registry.py:1-30</code>，优先级 <code>环境变量 &gt; 配置文件 &gt; 默认值</code>，用于任务的业务参数（不是排程）。</li>
 <li><strong>状态回传是纯 HTTP 轮询，没有 WebSocket</strong>：<code>/api/tasks</code>、<code>/api/tasks/{id}/status|history|stats</code>。</li>
 <li><strong>降级模式</strong>：未设 <code>MY_APP_TASK_QUEUE=1</code> 时，任务退回调度器进程内线程执行（<code>task_runner.py:527-553</code>），不经过队列、也不由 worker 认领。生产启停脚本会注入该开关（<code>backend_watchdog.py:137</code>）。</li>
 </ul>
@@ -1283,7 +1283,7 @@ python tests/test_doc_consistency.py
 <li><code>component-api.md</code> 里的前端页面数 / 通用组件数 = 磁盘实际 <code>.tsx</code> 文件数；</li>
 <li><code>AGENTS.md</code> 里标的关键文件体积与磁盘实际值相符（容差 ±25%）；</li>
 <li><strong>每个页面都有按页刷新设置</strong>（2026-11-04 新增的项目硬要求）：<code>PAGE_META</code> 里每个自研页面都必须在 <code>App.tsx</code> 的 <code>AR_PAGE_DEFAULTS</code> 登记建议间隔、间隔必须是 <code>AR_OPTIONS</code> 档位，且不得再出现按页禁用刷新控件的白名单（细则见 <code>AGENTS.md</code> 三.3d 与 <code>16-new-page-guide.md</code> 3.4d）。</li>
-<li><strong>看板下推的每张表都要有本机 PG 巡检，且回看天数与看板默认窗口同档</strong>（2026-11-05 新增）：<code>dashboard_service.PUSH_DOWN_TABLES</code> ⊆ <code>pg_schema_freshness.PG_SCHEMA_CHECKS[].tables</code>、<code>lookback_days</code> == <code>PUSH_DOWN_DAYS</code>，并且 <code>dashboard_service</code> 仍在输出 <code>meta.coverage</code>、<code>NativeBoard</code> 仍常驻渲染缺档告警。背景：IP RAN 看板 11-04 改读本机 PG，而镜像只追头部水位，「近 31 天只有 10 天有数」这种洞当时<strong>任何巡检都查不到</strong>（远端一直绿、判据只问最新时间），见 <code>backend/services/pg_schema_freshness.md</code>。</li>
+<li><strong>看板下推的每张表都要有本机 PG 巡检，且回看天数与看板默认窗口同档</strong>（2026-11-05 新增）：<code>dashboard_service.PUSH_DOWN_TABLES</code> ⊆ <code>pg_schema_freshness.PG_SCHEMA_CHECKS[].tables</code>、<code>lookback_days</code> == <code>PUSH_DOWN_DAYS</code>，并且 <code>dashboard_service</code> 仍在输出 <code>meta.coverage</code>、<code>NativeBoard</code> 仍常驻渲染缺档告警。背景：IP RAN 看板 11-04 改读本机 PG，而镜像只追头部水位，「近 31 天只有 10 天有数」这种洞当时<strong>任何巡检都查不到</strong>（远端一直绿、判据只问最新时间），见 <code>backend/services/db/pg_schema_freshness.md</code>。</li>
 </ol>
 <p><strong>三道防线，同一份代码，不规则分叉</strong>：</p>
 <table>
@@ -1391,7 +1391,7 @@ python tests/test_doc_consistency.py
 </tr>
 </tbody>
 </table>
-<p>2026-09-18 之前这些结果<strong>只进日志没人看</strong>（本次停摆两天是用户先发现的），故新增 <code>backend/services/task_health_alert.py</code> 把 findings 推到人前：</p>
+<p>2026-09-18 之前这些结果<strong>只进日志没人看</strong>（本次停摆两天是用户先发现的），故新增 <code>backend/services/task/task_health_alert.py</code> 把 findings 推到人前：</p>
 <ul>
 <li><strong>翻转去重</strong>：以 <code>kind:task_id</code> 为键，状态文件 <code>TMP/task_health_alert_state.json</code>（原子写 tmp + <code>os.replace</code>）。新增异常通知一次、恢复通知一次，不再每小时刷屏；</li>
 <li><strong>持续重提</strong>：同一异常持续超过 <code>TASK_HEALTH_ALERT_RENOTIFY_HOURS</code>（默认 24h）再提一次；</li>
@@ -1413,7 +1413,7 @@ python tests/test_doc_consistency.py
 <p><strong>修复（两层防御）</strong>：</p>
 <ol>
 <li><strong>测试侧堵源</strong>：fixture 补 <code>monkeypatch.setattr(tr, &quot;notify_task_failure_email&quot;, ...)</code>，与微信通知一起屏蔽；<code>test_get_task_stats_and_failures</code> 的失败聚合断言改用<strong>非测试 ID</strong>，并新增「<code>__t_</code> 任务不得出现在聚合里」的契约断言。</li>
-<li><strong>运维视图隔离</strong>：<code>backend/services/task_stats.py</code> 新增 <code>TEST_TASK_PREFIX = &quot;__t_&quot;</code>，在面向运维/前端的查询里排除测试任务 —— <code>get_recent_failures</code>（失败聚类 + active/recovered/needs_attention 分层）、<code>get_task_history</code>（最近历史）、<code>get_global_history</code>（含内存兜底）、<code>_fetch_latest_runs</code>（任务卡片最新记录）。<code>get_task_stats</code> / <code>get_task_history_by_task</code> 是<strong>按 ID 精确查</strong>，不过滤，以免破坏测试自身断言。</li>
+<li><strong>运维视图隔离</strong>：<code>backend/services/task/task_stats.py</code> 新增 <code>TEST_TASK_PREFIX = &quot;__t_&quot;</code>，在面向运维/前端的查询里排除测试任务 —— <code>get_recent_failures</code>（失败聚类 + active/recovered/needs_attention 分层）、<code>get_task_history</code>（最近历史）、<code>get_global_history</code>（含内存兜底）、<code>_fetch_latest_runs</code>（任务卡片最新记录）。<code>get_task_stats</code> / <code>get_task_history_by_task</code> 是<strong>按 ID 精确查</strong>，不过滤，以免破坏测试自身断言。</li>
 <li><strong><code>run_task</code> 新增 <code>is_test</code> 开关</strong>（<code>register_task(..., is_test=...)</code>，默认 <code>False</code>）：测试任务仍正常落库（便于测试断言 <code>task_execution_log</code>），但<strong>跳过微信/邮件/降级通知</strong>。默认不影响线上行为。</li>
 </ol>
 <blockquote>
@@ -2018,7 +2018,7 @@ WebSocket 被服务端关闭（<code>code=428</code>，与 408/500 同属日常�
 <code>result.sent_pairs</code>，并在 <code>skip_pairs</code> 命计时<strong>不扣单作业配额</strong>。
 收尾判据扩成「有一个群收到 <strong>或</strong> 全部命中去重台账且无错误」—— 后者是为了
 让全去重的重投报成功，否则它会触发 Playwright 回退，把已送达的图再发一遍。</li>
-<li><code>backend/services/whatsapp_send_baileys_service.py</code> <code>_retry_skip_pairs</code>：
+<li><code>backend/services/whatsapp/whatsapp_send_baileys_service.py</code> <code>_retry_skip_pairs</code>：
 仅当「上一份作业已终态且当初判失败」+「result 里有 sent_pairs」+「本次 items
 与上次逐条指纹完全一致（指纹在投递时记录进 <code>items[].fingerprint</code>，两边都现读
 磁盘是测不出字节变过的）」+「旧作业完成距今小于
@@ -2249,14 +2249,14 @@ SQLite 先整库备份到 <code>db/app.db.bak_tscfix_&lt;时间戳&gt;</code>）
 <pre><code>python tools/reconcile_task_schedule_state.py            # 期望：需改动 0 行 / 两侧一致
 sqlite3 db/app.db &quot;SELECT COUNT(*), SUM(enabled), SUM(manually_stopped) FROM task_schedule_config&quot;
 # 与 PG 上同样一条查询结果一致，且 SQLite 侧 indexes 里有 ux_task_schedule_config_task_id
-python -c &quot;import sys; sys.path.insert(0,'.'); from backend.services.task_runner import log_schedule_store_drift as d; print('漂移', d())&quot;
+python -c &quot;import sys; sys.path.insert(0,'.'); from backend.services.task.task_runner import log_schedule_store_drift as d; print('漂移', d())&quot;
 # 期望 0；非 0 就是还有进程按旧代码单边写（worker 没重启）
 </code></pre>
 <p><code>tools/sync_manual_stop_to_pg.py</code> 是双写上线<strong>之前</strong>手工补 PG 用的退路，现在只作应急备份。</p>
 <p><a id="ch-04-s11"></a></p>
 <h5>SP 报表任务的双通道回退（2026-10-11）</h5>
 <p><code>sp_email_details</code> / <code>sp_online_report_send</code> / <code>sp_whatsapp_report</code> 三个任务<strong>不再直接</strong>
-调 Playwright，改为经 <code>backend/services/whatsapp_dispatch.send_with_fallback</code> 编排：
+调 Playwright，改为经 <code>backend/services/whatsapp/whatsapp_dispatch.send_with_fallback</code> 编排：
 <strong>Baileys 主通道 → Playwright 回退</strong>（回退判据：投递失败 / 超时 / 零确认 / 任一单项有错）。
 编排层细节与设计理由见 <code>architecture.md</code> 第八节决策记录。</p>
 <ul>
@@ -2288,14 +2288,14 @@ python -c &quot;import sys; sys.path.insert(0,'.'); from backend.services.task_r
 <code>backend/task_registry.py</code> 的 <code>default_cron</code> 一并改掉，避免新环境回到整点。</p>
 </li>
 <li>
-<p><strong>把「源正在重算」与「源断了」分开判定</strong>：<code>services/incident_overview_sync.py</code> 取不到文件时先看
+<p><strong>把「源正在重算」与「源断了」分开判定</strong>：<code>services/incident/incident_overview_sync.py</code> 取不到文件时先看
 本地最新副本年龄，<code>NO_SOURCE_GRACE_MINUTES=90</code> 内返回 <code>success + skipped + note</code>（不告警），
 超龄才算失败并把年龄写进错误信息。<code>services/finebi_report_sync.py</code> 同理：单个目录本轮没有 Excel
 而本机已有历史副本 → 只记进 <code>missing</code>，<strong>不再把整任务拖红</strong>（一个目录的空档会连带其余已同步成功的
 报表一起被判失败）；本机连历史副本都没有才算 <code>error</code>。</p>
 </li>
 <li>
-<p><strong>让&quot;数据陈旧&quot;本身可见</strong>：<code>services/db_freshness_check.py</code> 新增 <code>FILE_CHECKS</code>（第 2b 类检查），
+<p><strong>让&quot;数据陈旧&quot;本身可见</strong>：<code>services/db/db_freshness_check.py</code> 新增 <code>FILE_CHECKS</code>（第 2b 类检查），
 按本机最新文件的落盘年龄判定文件型看板源（首条即事件总览的 <code>data/incident_overview/incident_overview_*.xlsx</code>，
 <code>max_age_hours=2.0</code>）。<strong>取数任务红/绿 与 页面数据是几小时前的 是两件事</strong>——2026-09-30 那次只有人
 看到任务告警，没人看到&quot;页面停在 15:03 那份&quot;。</p>
@@ -2382,7 +2382,7 @@ my_app」这一错误推断上；实测远端确有其它活进程持库。而�
 </tbody>
 </table>
 <p><strong>修法：不再直连远端库，改为「本地构建 + 整文件推送」</strong>
-（<code>backend/services/sp_mirror_push.py</code>）。
+（<code>backend/services/sp/sp_mirror_push.py</code>）。
 在本机临时目录建一个新库（<code>journal_mode=delete</code>、单文件），再用 <code>shutil.copyfile</code>
 整文件覆盖过去 —— <strong>整文件覆盖不需要 SMB 字节锁</strong>，因此远端持库也不影响。</p>
 <blockquote>
@@ -2580,7 +2580,7 @@ USSD 的日表当时只剩 2026-08-25~27 三行，而月表里有完整的 6 个
 旧机制（每 15 分钟扫它的 3 小时窗口）端到端时延 45~75 分钟，对 P1 太慢。
 <code>realtime_alarm</code> 新鲜度（生产 <code>*/1</code> 同步，2026-10-15 起独立 <code>x</code> 组）+ 本任务 5 分钟轮询 + 实时查单，
 首推时延压到分钟级。触发扫描的完整口径见
-<code>backend/services/tt_alarm_trigger.py</code> 的模块 docstring；三层单据来源
+<code>backend/services/tt/tt_alarm_trigger.py</code> 的模块 docstring；三层单据来源
 （实时/镜像/触发行）的取舍见 <code>tt_alarm_sources.py</code>。</p>
 </blockquote>
 <blockquote>
@@ -2650,7 +2650,7 @@ schema 的正式表。回归守卫：<code>tests/test_eflow_alarm_swap_schema.py
 <code>Task/whatsapp-kb-bot/scripts/tt-analyze.py</code>（2175 行，纯标准库 + openpyxl）：
 那是<strong>群里机器人回答问题时用的同一个引擎</strong>，两份分析逻辑并存必然分叉，
 而「群里的分析」与「告警推送里的分析」不一致是最难排查的那类问题。
-封装见 <code>backend/services/tt_alarm_render.py</code>。</p>
+封装见 <code>backend/services/tt/tt_alarm_render.py</code>。</p>
 <p><strong>引擎读的是 SQLite 副本 <code>db/app.db</code>，不是生产的 PG</strong>（<code>tt-analyze.py:57</code>），
 而该副本由 <code>pg_to_sqlite_sync</code> 刷新（2026-09-29 时是<strong>每小时第 45 分</strong>；生效 cron 现被库里
 覆盖成 <code>45 */12 * * *</code>，见上文「双库一致性」—— 滞后可长达半天，别按一小时估）—— 本任务每 5 分钟跑一次。
@@ -2681,7 +2681,7 @@ vs PG 17:41；17 点这一小时 PG 有 5 单、SQLite <strong>0 单</strong>）
 </blockquote>
 <p><strong>这张单的四个口径都可在页面上配置</strong> —— 「设置 → 任务配置 → <code>eFlow P1 Alarm WhatsApp Push</code>」
 （配置文件 <code>backend/services/tt_alert_whatsapp_config.json</code>，注册在
-<code>backend/services/task_configs_registry.py</code>，读写实现见 <code>backend/services/task_config_files.py</code>）：</p>
+<code>backend/services/task/task_configs_registry.py</code>，读写实现见 <code>backend/services/task/task_config_files.py</code>）：</p>
 <table>
 <thead>
 <tr>
@@ -2771,12 +2771,12 @@ vs PG 17:41；17 点这一小时 PG 有 5 单、SQLite <strong>0 单</strong>）
 </table>
 <p>重报（20 分钟停滞再推）<strong>不发</strong>邮件。两列非空即「已发过」，<strong>永不重发</strong>。</p>
 <p><strong>收件人不写死在代码里</strong> —— 走已有的「Settings → 邮件收件人」页
-（<code>backend/services/email_recipient_store.py</code> 的 <code>tt_alarm_p1_email</code> 组，
+（<code>backend/services/email/email_recipient_store.py</code> 的 <code>tt_alarm_p1_email</code> 组，
 默认 <code>dong.xinmin@zte.com.cn</code>）。该页是收件人的<strong>唯一真相源</strong>：页面保存值优先、
 30 秒缓存生效、无需重启。开关是任务配置页的 <code>mail_enabled</code>
 （环境变量 <code>TT_ALERT_MAIL_ENABLED</code>，默认开）。</p>
 <p><strong>通道是项目的 Orange 邮箱</strong>（发件人 <code>ztenoc.olr@orange.com</code>，凭据组 <code>owa_mail</code>），
-不是 126 —— 用户 2026-10-06 明确指定。实现见 <code>backend/services/tt_alarm_mailer.py</code>。</p>
+不是 126 —— 用户 2026-10-06 明确指定。实现见 <code>backend/services/tt/tt_alarm_mailer.py</code>。</p>
 <blockquote>
 <p>⚠️ <strong>汇总不能挂在活跃告警循环上（本特性最容易做错的一点）</strong>：告警一清除，该单就
 从 <code>realtime_alarm</code> <strong>彻底消失</strong>（2026-10-06 实测：4 个已清除单在实时表里 <strong>0 命中</strong>，
@@ -2913,7 +2913,7 @@ worker 分组重启才生效（<code>backend/routers/task_configs.py</code>）�
 写进 <code>whatsapp-kb-bot/data/notify_job.json</code>，常驻的 <code>src/notify.js</code>（Baileys，
 WhatsApp WebSocket 协议，凭据独立于问答 bot）轮询消费，<code>sendMessage()</code> 返回的
 <strong>服务端 message id</strong> 就是发送回执。切换理由与两通道对比见
-<code>backend/services/wa_notify_service.py</code> 的模块 docstring；通道在线检查、投递前
+<code>backend/services/whatsapp/wa_notify_service.py</code> 的模块 docstring；通道在线检查、投递前
 心跳预检也都在该模块。
 无论何时，<strong>只有推送进程回报的 <code>sent</code> 列表里的 <code>tt_no</code> 才会被置 <code>'Y'</code></strong> —— 超时或
 未确认一律写 <code>'N'</code> + <code>last_error</code>，<strong>绝不写假 <code>'Y'</code></strong>；一条都没确认发出的轮次会
@@ -2932,47 +2932,47 @@ WhatsApp WebSocket 协议，凭据独立于问答 bot）轮询消费，<code>sen
 </thead>
 <tbody>
 <tr>
-<td><code>backend/services/tt_alarm_whatsapp_service.py</code></td>
+<td><code>backend/services/tt/tt_alarm_whatsapp_service.py</code></td>
 <td>编排与<strong>发送决策</strong> <code>decide_push()</code>（任务入口 <code>run_tt_alarm_whatsapp_alert</code>）</td>
 </tr>
 <tr>
-<td><code>backend/services/tt_alarm_trigger.py</code></td>
+<td><code>backend/services/tt/tt_alarm_trigger.py</code></td>
 <td><strong>触发扫描</strong>：realtime_alarm 里带 TT 的白名单告警 + 表新鲜度检查</td>
 </tr>
 <tr>
-<td><code>backend/services/tt_alarm_sources.py</code></td>
+<td><code>backend/services/tt/tt_alarm_sources.py</code></td>
 <td><strong>单据来源层</strong>：实时查单 / 本地镜像兜底 / 三层合并</td>
 </tr>
 <tr>
-<td><code>backend/services/tt_alarm_config.py</code></td>
+<td><code>backend/services/tt/tt_alarm_config.py</code></td>
 <td>配置读取、归一化、「留空」语义</td>
 </tr>
 <tr>
-<td><code>backend/services/tt_alarm_message.py</code></td>
+<td><code>backend/services/tt/tt_alarm_message.py</code></td>
 <td>消息渲染（纯函数，<strong>降级模板</strong>：头部 7 行 + 重报横幅）</td>
 </tr>
 <tr>
-<td><code>backend/services/tt_alarm_render.py</code></td>
+<td><code>backend/services/tt/tt_alarm_render.py</code></td>
 <td><strong>主渲染路径</strong>：子进程调 kb-bot 分析引擎出完整消息</td>
 </tr>
 <tr>
-<td><code>backend/services/tt_alarm_store.py</code></td>
+<td><code>backend/services/tt/tt_alarm_store.py</code></td>
 <td>日志表建表、幂等补列（含邮件幂等列）与读写</td>
 </tr>
 <tr>
-<td><code>backend/services/tt_alarm_mailer.py</code></td>
+<td><code>backend/services/tt/tt_alarm_mailer.py</code></td>
 <td><strong>邮件发送通道</strong>（Orange EWS，进程内直发，失败不抛异常）</td>
 </tr>
 <tr>
-<td><code>backend/services/tt_alarm_mail_body.py</code></td>
+<td><code>backend/services/tt/tt_alarm_mail_body.py</code></td>
 <td>邮件正文构造（首次通报 / 结束汇总，纯函数）</td>
 </tr>
 <tr>
-<td><code>backend/services/wa_notify_service.py</code></td>
+<td><code>backend/services/whatsapp/wa_notify_service.py</code></td>
 <td><strong>Baileys 发送通道</strong>（投递/回报/心跳/通道预检）</td>
 </tr>
 <tr>
-<td><code>backend/services/eflow_data_mapper.py</code></td>
+<td><code>backend/services/eflow/eflow_data_mapper.py</code></td>
 <td>实时查单实现（<code>fetch_tt_live_batch</code>，base/list 分页遍历）</td>
 </tr>
 </tbody>
@@ -3130,7 +3130,7 @@ RAN UME 是 <code>10.100.28.27:28001</code>），账号<strong>不通用</strong
 <tr>
 <td>漏跑/停摆通知</td>
 <td>每小时巡检后按 <code>kind:task_id</code> 翻转去重推送（24h 重提）</td>
-<td><code>services/task_health_alert.py</code></td>
+<td><code>services/task/task_health_alert.py</code></td>
 </tr>
 <tr>
 <td>保留期</td>
@@ -3140,7 +3140,7 @@ RAN UME 是 <code>10.100.28.27:28001</code>），账号<strong>不通用</strong
 <tr>
 <td>低频任务「最近运行」兜底</td>
 <td>月/周级任务的执行记录会被上面 7 天保留期清掉，任务列表因而显示 <strong>No Record / 未记录</strong>（<code>sync.statUnknown</code>）。修法：在 <code>TASK_SPECS</code> 给该任务加 <code>recent_runs_provider=(模块路径, 函数名)</code>，<code>task_stats._fetch_latest_runs()</code> 在<strong>日志表无该任务记录时</strong>才调用提供者，从任务自己的产物库补回最近几次运行（唯一主源仍是 <code>task_execution_log</code>）。参考 <code>olib_soc_vmax_report</code> → <code>olib_soc_report_service.recent_runs_for_task</code></td>
-<td><code>services/task_stats.py</code>（<code>register_recent_runs_provider</code>）、<code>task_registry.py</code>（<code>register_all_tasks</code>）、<code>backend/services/olib_soc_report/README.md</code> §12</td>
+<td><code>services/task/task_stats.py</code>（<code>register_recent_runs_provider</code>）、<code>task_registry.py</code>（<code>register_all_tasks</code>）、<code>backend/services/olib_soc_report/README.md</code> §12</td>
 </tr>
 </tbody>
 </table>
@@ -3612,8 +3612,8 @@ eFlow 的 <code>alarmcodeconds</code> <strong>必须同时带 <code>restype</cod
 <p><strong>my_app 没有用户账号体系。</strong> 没有注册、没有登录态、没有角色权限、没有操作审计。任何能访问到 <code>:7038</code> 或前端入口的人，都等于拥有系统的完整操作能力（包括触发任务、改凭据、导出全表数据）。</p>
 <p><a id="ch-05-s1"></a></p>
 <h3>统一门户鉴权适配（看板数据的登录态）</h3>
-<p>看板数据接口（<code>/api/*</code> 的业务端点）由 <code>backend/main.py</code> 的会话中间件保护，登录态来自<strong>统一门户</strong>：门户登录后签发一个内存 Bearer token，my_app 后端回调门户 <code>/me</code> 验证后才签发自己的 HttpOnly 会话 Cookie（<code>portal_sessions</code> 表，进程重启可恢复）。细节见 <code>backend/services/portal_auth.py</code> 模块头。</p>
-<p>两种取得 myapp 会话的方式（都在 <code>backend/services/portal_auth.py</code> 的 <code>/api/auth/*</code> 下）：</p>
+<p>看板数据接口（<code>/api/*</code> 的业务端点）由 <code>backend/main.py</code> 的会话中间件保护，登录态来自<strong>统一门户</strong>：门户登录后签发一个内存 Bearer token，my_app 后端回调门户 <code>/me</code> 验证后才签发自己的 HttpOnly 会话 Cookie（<code>portal_sessions</code> 表，进程重启可恢复）。细节见 <code>backend/services/portal/portal_auth.py</code> 模块头。</p>
+<p>两种取得 myapp 会话的方式（都在 <code>backend/services/portal/portal_auth.py</code> 的 <code>/api/auth/*</code> 下）：</p>
 <table>
 <thead>
 <tr>
@@ -3738,7 +3738,7 @@ eFlow 的 <code>alarmcodeconds</code> <strong>必须同时带 <code>restype</cod
 <h3>凭据存储</h3>
 <p>所有上游系统账号集中在一个注册表里，前端&quot;系统设置 → 凭据&quot;统一维护：</p>
 <ul>
-<li><strong>21 个分组 key</strong>：<code>zte_ume</code>、<code>vmax_cxo</code>、<code>vmax_gbase</code>、<code>vmax_cca</code>、<code>ipran_ume</code>、<code>ccn_ume</code>、<code>eflow</code>、<code>rais</code>、<code>fms_portal</code>、<code>fw_kpi</code>、<code>mw_ume</code>、<code>ume_in</code>、<code>ume_alarm</code>、<code>battery_ume</code>、<code>cm_data</code>、<code>sftp_sp</code>、<code>gp_ran_control</code>、<code>gp_ran_master</code>、<code>mail_126</code>、<code>owa_mail</code>、<code>weixin</code>（<code>backend/services/credential_store.py</code>）。
+<li><strong>21 个分组 key</strong>：<code>zte_ume</code>、<code>vmax_cxo</code>、<code>vmax_gbase</code>、<code>vmax_cca</code>、<code>ipran_ume</code>、<code>ccn_ume</code>、<code>eflow</code>、<code>rais</code>、<code>fms_portal</code>、<code>fw_kpi</code>、<code>mw_ume</code>、<code>ume_in</code>、<code>ume_alarm</code>、<code>battery_ume</code>、<code>cm_data</code>、<code>sftp_sp</code>、<code>gp_ran_control</code>、<code>gp_ran_master</code>、<code>mail_126</code>、<code>owa_mail</code>、<code>weixin</code>（<code>backend/services/credential/credential_store.py</code>）。
 <ul>
 <li><code>vmax_cca</code>（2026-10-24 新增）：VMAX 用户查询页（<code>vmax_user_query</code>）登录 VMAX 门户调 CCA 投诉查询接口。<strong>独立于 <code>vmax_cxo</code> 的原因</strong>：门户同一账号会话数有限，8790 看板代理长持 <code>vmax_cxo</code> 会话，查询页共用会互踢。测试 kind 复用 <code>vmax_portal</code>（登录链路相同）。</li>
 <li><code>ume_alarm</code> / <code>gp_ran_control</code> / <code>gp_ran_master</code>：告警采集与 GP RAN 控制/主站相关链路的凭据分组。</li>
@@ -3786,7 +3786,7 @@ eFlow 的 <code>alarmcodeconds</code> <strong>必须同时带 <code>restype</cod
 </thead>
 <tbody>
 <tr>
-<td><code>backend/services/credential_store.py</code></td>
+<td><code>backend/services/credential/credential_store.py</code></td>
 <td>中央凭据库，<code>CREDENTIAL_GROUPS</code> 里的默认值<strong>就是</strong>唯一真相源</td>
 </tr>
 <tr>
@@ -3838,11 +3838,11 @@ eFlow 的 <code>alarmcodeconds</code> <strong>必须同时带 <code>restype</cod
 </thead>
 <tbody>
 <tr>
-<td><code>backend/services/credential_store.py</code></td>
+<td><code>backend/services/credential/credential_store.py</code></td>
 <td>17 组 <code>default_secret</code> 清空；<code>weixin</code> 的 <code>default_user</code> 清空（那是 SendKey，本身就是凭据）</td>
 </tr>
 <tr>
-<td><code>backend/services/eflow_api_client.py</code>、<code>site_outage_service.py</code></td>
+<td><code>backend/services/eflow/eflow_api_client.py</code>、<code>site_outage_service.py</code></td>
 <td><code>os.environ.get(&quot;EFLOW_PASS&quot;, &quot;&lt;明文&gt;&quot;)</code> → 空串，口令只从 env/凭据库取</td>
 </tr>
 <tr>
@@ -3866,7 +3866,7 @@ eFlow 的 <code>alarmcodeconds</code> <strong>必须同时带 <code>restype</cod
 <td>连接串示例中的口令改为 <code>&lt;password&gt;</code> 占位符</td>
 </tr>
 <tr>
-<td><code>backend/services/credential_store.md</code>、<code>eFlow_API集成方案.md</code>、<code>.workbuddy-ai/memory/2026-09-13.md</code></td>
+<td><code>backend/services/credential/credential_store.md</code>、<code>eFlow_API集成方案.md</code>、<code>.workbuddy-ai/memory/2026-09-13.md</code></td>
 <td>文档里的明文删除</td>
 </tr>
 <tr>
@@ -4978,7 +4978,7 @@ stop.bat all    # 连 PostgreSQL 一起停
 <p><strong><code>ap_center</code>（AP 行动计划）属于「工作流」目录</strong>（<code>grp_workflow</code>，与 <code>DEFAULT_GROUPS</code> 一致），
 逐页说明见第 39 节。
 原生看板的 16 个 slug 见 <code>App.tsx</code> 的 <code>FINEBI_BOARDS</code>（与
-<code>backend/services/native_catalog.py</code> 一一对应），逐页说明见第 29 节。</p>
+<code>backend/services/native/native_catalog.py</code> 一一对应），逐页说明见第 29 节。</p>
 </blockquote>
 <hr />
 <p><a id="ch-11-s0"></a></p>
@@ -5315,7 +5315,7 @@ float NaN，直接递进去整个任务 <code>AttributeError</code> 崩掉（202
 <li>文件清单<strong>不新增端点</strong>，复用 <code>GET /api/email-reports/latest</code> 里 <code>source_id='tt_mttr'</code> 的那一项
 （<code>_SOURCES</code> 注册见 <code>backend/routers/email_reports.py:44</code>），下载同样走通用 <code>/download/{source}/{file}</code>；
 页签表格只留 文件/大小/生成时间/下载（任务名与类型在该目录内恒定，没有信息量）。</li>
-<li>口径、公式写法与验证步骤见 <code>backend/services/tt_mttr_report.md</code>。</li>
+<li>口径、公式写法与验证步骤见 <code>backend/services/tt/tt_mttr_report.md</code>。</li>
 </ul>
 </li>
 <li>
@@ -5492,7 +5492,7 @@ SLA 维度补一句「只剔除 Unknown（含误拼），其余原值各自成�
 <li><strong>汇总数字不再独占一排（2026-10-17）</strong>：「TT 总数」从独立汇总卡改为「TT Statistics」分区标题旁的徽标（<code>SectionTitle</code> 的 <code>summaries</code>），点击仍下钻 <code>all_tt</code>，省掉首屏一整排只有一个大数字的高度。<code>page=wo</code> 同理只保留「WO 总数」徽标。</li>
 <li><strong>Ticket Severity 固定 P1→P4 序（2026-10-17）</strong>：该维度按级别排，不按数量降序 —— 否则 P3 单多的月份会显示成 P3 在 P2 前面，看起来像级别顺序变了。固定序由 <code>renderStatCards</code> 的 <code>fixedOrder</code> 参数给出，未识别的取值排在末尾。</li>
 <li><strong>Workflow 里程碑（2026-10-17）</strong>：区块名中英统一为 <strong><code>Workflow</code></strong>（key <code>ttwo.statusMilestone</code>）。状态原值有 12 种（<code>Waiting for FO Process(WO RCA to FO Confirm)</code> 等），平铺成卡片无法扫读。现在按业务生命周期归并为里程碑 —— 派单 → 受理 → 到场 → 处理 → 离场 → 现场确认 → 客户确认 → 关闭 —— 版式参照 <code>page=incident_overview</code> 的「圆点 + 连接线」（<code>renderStatusMilestones</code>）。归类表 <code>STATUS_MILESTONES</code> <strong>按原始状态名精确匹配</strong>（含 <code>Wait For Confirm</code> 大小写变体与 <code>(Suspended)</code> 变体）；只影响展示，下钻仍是 <code>dimension=status</code> + 原值。一个阶段含多个原值时，圆点显示合计但不可点，下方逐条列出并各自可点，保证「数字 = 下钻行数」。未识别的状态落到「其他」，不静默吞数。各阶段圆点与文字同色、同字重（需求：字体颜色一样）。</li>
-<li><strong>阶段顺序以 eFlow 流程图为权威（2026-10-17）</strong>：新增 <code>GET /api/tt-wo-dashboard/workflow</code>（服务层 <code>backend/services/eflow_workflow_service.py</code>），向前端下发 <code>stage_order</code> / <code>main_path</code> / <code>node_to_stage</code>。前端用它给里程碑排序，取不到时<strong>静默回落</strong>到 <code>STATUS_MILESTONES</code> 的本地声明顺序（里程碑数字来自本地库，只有顺序依赖该端点，故不会空态）。
+<li><strong>阶段顺序以 eFlow 流程图为权威（2026-10-17）</strong>：新增 <code>GET /api/tt-wo-dashboard/workflow</code>（服务层 <code>backend/services/eflow/eflow_workflow_service.py</code>），向前端下发 <code>stage_order</code> / <code>main_path</code> / <code>node_to_stage</code>。前端用它给里程碑排序，取不到时<strong>静默回落</strong>到 <code>STATUS_MILESTONES</code> 的本地声明顺序（里程碑数字来自本地库，只有顺序依赖该端点，故不会空态）。
 <ul>
 <li>⚠ <strong>上游调用契约（实测确认，勿凭直觉改）</strong>：<code>POST /api/eflow-ticket/v1/flow/runtime/queryAllSteps</code>，<code>Content-Type: text/plain</code>，body 是<strong>裸字符串 <code>eflow-tt</code></strong> —— 不是 JSON，也不是单号。按 JSON 传 <code>{&quot;ttNo&quot;: ...}</code> 等键名一律 <code>500 {&quot;code&quot;:48990002,&quot;message&quot;:&quot;Failed to send request!&quot;}</code>，那个 500 是 <strong>body 解析失败</strong>，不是「单号不存在」。</li>
 <li><strong>该端点返回的是流程定义</strong>（8 个节点 + 节点间连边 + 出口条件），<strong>不是某张单的步骤历史</strong>。实测主干：<code>Create → FOAccept → FOProcess → BOAccept → BOProcess → ThirdAccept → ThirdProcess → Confirm → Closed</code>。图是有环的（<code>Confirm</code> 可驳回回 <code>FOProcess</code> / <code>ThirdProcess</code>），服务层用 DFS 取最长路径作主干，不画环。</li>
@@ -5628,7 +5628,7 @@ SLA 维度补一句「只剔除 Unknown（含误拼），其余原值各自成�
 <li><strong>为什么落库</strong>：xlsx 名单是隐形的、无法审计，且**「拉取时间 ≠ 内容时间」**—— 页面上 <code>(10-05 16:47)</code> 看着很新，内容却全是 8 月初的，
 用户会把「名单过时导致最近几天 NUR 全 0」误判成「计算算错了」（2026-10-05 真实踩坑）。现在展示 <code>_import_time</code>（内容时间）与上传来源。</li>
 <li>上传人记<strong>客户端 IP</strong> 而非用户名：本项目无多用户体系（<code>helpContent.ts:950</code>「No multi-user system」），假的审计数据比没有更危险。</li>
-<li><strong>单条记录</strong>：<code>services/tt_exclude.py</code>（解析/读写/播种，含 <code>ExcludeImportError</code>）、<code>routers/tt_exclude.py</code>（两个端点）。
+<li><strong>单条记录</strong>：<code>services/tt/tt_exclude.py</code>（解析/读写/播种，含 <code>ExcludeImportError</code>）、<code>routers/tt_exclude.py</code>（两个端点）。
 首次播种来自 FTP 现网 46 条（<code>tt_exclude.seed_from_ftp()</code>）；此后<strong>真相源是数据库</strong>，FTP 仅兜底。</li>
 <li>注意：<code>vip_site_list</code> 是「有上游 Excel、可批量导入」的表，<strong>不是本表的先例</strong> —— 排除名单是人工维护的，两者是不同写入路径。</li>
 </ul>
@@ -5676,7 +5676,7 @@ Network 取 <code>ms_sla_kpi</code> 快照原值不重算；PS_* = 阈值达标�
 改动落在<strong>共用组件</strong> <code>frontend/src/pages/MsKpiShared.tsx</code> 的 <code>MetricCard</code>（月值与「N/M 天达标」挂
 <code>ExplainPopover</code>）与趋势弹窗（标题挂 <code>ExplainIcon</code>），所以一处改动两页同时生效。
 口径键 <code>msKpi.explain.monthValue / metDays / cell / trendStat</code>（中英各 4），内容全部从
-<code>backend/services/ms_kpi_report_service.py</code> 与 <code>ms_sla_report.py</code> 核实：月值取工作簿 Month 行<strong>原值</strong>
+<code>backend/services/ms/ms_kpi_report_service.py</code> 与 <code>ms_sla_report.py</code> 核实：月值取工作簿 Month 行<strong>原值</strong>
 （不做除法重算）；<code>met_days/矩阵日行数</code> 的分母<strong>不是自然月天数</strong>（缺档日不计）；
 <code>min/max/avg</code> 只统计有值日行且 avg 是等权算术平均，<strong>可以与月值不相等</strong>；
 <strong>PerSite 类的目标 90% 是代码里写死的</strong>（<code>_parse_kpi_matrix:397-408</code>，<code>target_source=persite_ratio</code>），
@@ -5711,7 +5711,7 @@ Network 取 <code>ms_sla_kpi</code> 快照原值不重算；PS_* = 阈值达标�
 实时不可用时页面显示最近可用缓存数据（状态行 <code>offline · cached data</code>），Health 页 live 为空时回退缓存并在标题标注 <code>cached &lt;时间&gt;</code>。</li>
 </ol>
 </li>
-<li>缓存任务详情见 <code>backend/services/cxo_dashboard_cache.md</code>；每次运行还向 <code>data/cxo_dashboard/history.jsonl</code> 追加一行 Summary KPI + Health 概要（积累趋势用）。</li>
+<li>缓存任务详情见 <code>backend/services/cxo/cxo_dashboard_cache.md</code>；每次运行还向 <code>data/cxo_dashboard/history.jsonl</code> 追加一行 Summary KPI + Health 概要（积累趋势用）。</li>
 <li><strong>轮播（大屏值守）</strong>：页头 <code>Carousel</code> 按钮（2026-09-02 起）每 15 秒轮换 Service→Network→Summary→Healthscore 四页签并<strong>进入全屏</strong>（同 Alarm Management：再点按钮停止并退全屏；Esc 退出全屏会联动停轮播；手动点页签视为接管、停轮播但保留全屏）。</li>
 <li>图表尺寸自适应：所有图表 setOption 后统一排队一次 rAF <code>resize()</code>（<code>queueResizeAll</code>）——trend-grid 卡片逐个 append 时列宽多次回流，不补偿会把 1570px 画布塞进 359px 卡片（x 轴标签挤压、线条重叠的根因）；实时刷新按代次（<code>REFRESH_GEN</code>）管理，切页/轮播后旧刷新静默作废，不在隐藏视图上重建图表、也不覆盖状态行。</li>
 <li>数据源是 VMAX 实时保障看板，凭据在「系统设置 → 凭据 → <code>vmax_cxo</code>」。</li>
@@ -6454,7 +6454,7 @@ React 自身驱动（其 cleanup 顺序是「子先父后」，子图层先 remo
 <p><a id="ch-11-s25"></a></p>
 <h4>10d. MW 链路利用率叠加（2026-09-28 新增，<code>?page=gis</code>）</h4>
 <p><strong>需求</strong>：把 <code>?page=mwRealTime</code> 的最新 15 分钟粒度链路利用率直接显示到 GIS 页，不必切页就能看出哪条微波链路吃紧。</p>
-<p><strong>实现</strong>：<code>GET /api/gis/topology?with_util=1</code> 在原有 844 条链路上叠加 <code>mw_ume_bw_ultilazation_rt</code> 的实时 KPI；匹配逻辑独立成 <code>backend/services/gis_mw_overlay.py</code>（不塞进已 1700+ 行的 <code>gis.py</code>）。</p>
+<p><strong>实现</strong>：<code>GET /api/gis/topology?with_util=1</code> 在原有 844 条链路上叠加 <code>mw_ume_bw_ultilazation_rt</code> 的实时 KPI；匹配逻辑独立成 <code>backend/services/gis/gis_mw_overlay.py</code>（不塞进已 1700+ 行的 <code>gis.py</code>）。</p>
 <p><strong>⚠️ 核心难点：两套数据没有现成的 JOIN 键。</strong></p>
 <table>
 <thead>
@@ -6869,7 +6869,7 @@ KPI 卡讲 <strong>FE 人群</strong> —— 32 名 FE（<code>isfe=Yes</code>�
 <p><a id="ch-11-s28"></a></p>
 <h4>10f. 根因聚合分析（RCA，2026-10-21 新增，仅 <code>?page=realtime_alarm</code>）</h4>
 <p><strong>回答的问题</strong>：「高级筛选出来的一批断站，哪些其实是<strong>同一个原因</strong>？」—— 把人工翻 <code>link_path</code> 链路变成卡片上一目了然的簇。</p>
-<p><strong>三类簇</strong>（<code>backend/services/gis_rca_service.py::compute_rca</code>，纯内存确定性聚类，无 LLM）：</p>
+<p><strong>三类簇</strong>（<code>backend/services/gis/gis_rca_service.py::compute_rca</code>，纯内存确定性聚类，无 LLM）：</p>
 <table>
 <thead>
 <tr>
@@ -8567,7 +8567,7 @@ effective_scope:   person 89 / group 19 / none 92
 <li><strong>两种图叠在一张画布上</strong>：底图是 <code>ocrule_details</code> 的规则骨架（节点下方的&quot;生效/总数&quot;
 是该步骤绑定的规则条数），叠加层是该单的实际路径 —— 绿色=已走过、黄色=当前步骤
 （取 <code>eflow_tt.operation_type</code>）、粗青线=实际连线。一眼看出&quot;走到哪一步、卡在哪&quot;。</li>
-<li><strong>状态机主干</strong>（<code>backend/services/eflow_flow.py</code> 的 <code>_FLOW_NODES</code>）：
+<li><strong>状态机主干</strong>（<code>backend/services/eflow/eflow_flow.py</code> 的 <code>_FLOW_NODES</code>）：
 告警发生 → TT 建单 → 自动派单 → FO/BO 接单 → FO/BO 处理 → 第三方接单/处理 → 确认 → 关单，
 外加 TT 派生的 <strong>WO 现场子流程</strong>独立一条流水线（<code>wo_create</code>→<code>wo_accept</code>→<code>wo_process</code>→<code>wo_confirm</code>→<code>wo_closed</code>）。</li>
 <li><strong>告警 → TT 的定位</strong>：① 告警表 <code>tt_id</code> 直连（realtime/history）；② TT 自己的 <code>alarm_id</code>
@@ -8608,7 +8608,7 @@ history、<code>clearstatename</code> 只在 realtime。给两表写同一条 SE
 <li><strong>节点规则「仅相关」过滤 + 规则详情（2026-11-10 新增）</strong>：查某个告警/TT 后，点图中节点（如「TT 建单」），
 规则明细<strong>默认只显示与本单相关的规则</strong>，不再铺全部挂载规则。
 <ul>
-<li><strong>判定同源不另造</strong>：<code>backend/services/eflow_flow_rules.py</code> 的 <code>annotate_graph()</code> 把图上每条规则与采集表
+<li><strong>判定同源不另造</strong>：<code>backend/services/eflow/eflow_flow_rules.py</code> 的 <code>annotate_graph()</code> 把图上每条规则与采集表
 <code>eflow_push_rules.xlsx</code>（Push_Rules 工作表，全规则类型、含「条件」列）按（规则名, 规则类型）对齐，
 复用 TT 规则检查的同一引擎（<code>tt_rule_evidence._parse_push_conditions</code> + <code>eflow_rules_matcher.build_value_frame</code>
 / <code>build_rule_mask</code> / <code>format_details</code>）对本单取值帧求值。站点属性同源 <code>master_site_db.victims(hub_site=Y)</code>
@@ -8629,7 +8629,7 @@ history、<code>clearstatename</code> 只在 realtime。给两表写同一条 SE
 <li><strong>多条件模拟（2026-11-10 新增）</strong>：查询卡切到「多条件模拟」后不查具体单子，直接给一组
 取值帧字段（告警码 / 工单级别 / VIP / HUB / 站点子类型 / 站点类型 / 网络制式 / 当前断站数 /
 下挂站点总数 / 根因 / 告警描述），看全部规则会怎么判。后端 <code>POST /api/eflow-flow/simulate</code>
-→ <code>simulate_flow()</code>（<code>backend/services/eflow_flow.py</code>）→ <code>build_sim_frame()</code> 把条件构造成
+→ <code>simulate_flow()</code>（<code>backend/services/eflow/eflow_flow.py</code>）→ <code>build_sim_frame()</code> 把条件构造成
 合成 TT 行 + 站点属性，<strong>原样交给 <code>build_value_frame</code></strong>（YES/NO→1/0、大小写等归一化与真实
 单子同一条路径），再走与按单查询<strong>同一个</strong> <code>annotate_graph_with_frame</code> 求值循环 —— 不存在
 第二套判定。要点：① <strong>留空字段按「无值」参与判定</strong>，引用它的条件不成立 —— 例：「HUB site P1」
@@ -8868,7 +8868,7 @@ ZTE + IPT == 全部  ✅  （2478 == 2478）
 <h3>16. 事件总览（<code>?page=incident_overview</code>）— iframe</h3>
 <p><code>IncidentOverview.tsx:17</code> → <code>public/incident-overview.html</code>（<code>&lt;title&gt;</code> 为 <strong>OLR Incident Dashboard</strong>），接口 <code>/api/incident-overview</code>。数据由 <code>incident_overview_sync</code> <strong>每小时第 20 分钟</strong>从 FineBI FTP 调度目录取最新 <code>incident_overview.xlsx</code>，以&quot;版本化文件 + <code>current.json</code> 指针&quot;落盘（<code>backend/task_registry.py:585-591</code>）——这样即使上游 Excel 一直被打开占用，取数也不会失败。</p>
 <blockquote>
-<p><strong>为什么排在 :20，而不是整点</strong>（2026-09-30 实测）：FineBI 每小时 <strong>:53</strong> 触发重算，会<strong>先删掉上一轮的 <code>TT_WO/&lt;日期&gt;/&lt;HHMM&gt;/通用结果/</code> 目录</strong>，新副本约 <strong>:02–:05</strong> 才落盘，源树任意时刻只保留一份。整点取数正好撞在这约 12 分钟的空档里，当天 18 次跑挂 8 次、微信+邮件每小时误报一次。现在取不到文件时，只要本地副本不超过 90 分钟就沿用上并按&quot;跳过&quot;上报（<code>services/incident_overview_sync.py</code> 的 <code>NO_SOURCE_GRACE_MINUTES</code>），文件年龄本身另外进 <code>db_freshness_check</code> 的 <code>FILE_CHECKS</code> 巡检。完整来龙去脉见 <code>04-task-system.md</code> 的「FineBI <code>schedule/</code> 的重算空档」。</p>
+<p><strong>为什么排在 :20，而不是整点</strong>（2026-09-30 实测）：FineBI 每小时 <strong>:53</strong> 触发重算，会<strong>先删掉上一轮的 <code>TT_WO/&lt;日期&gt;/&lt;HHMM&gt;/通用结果/</code> 目录</strong>，新副本约 <strong>:02–:05</strong> 才落盘，源树任意时刻只保留一份。整点取数正好撞在这约 12 分钟的空档里，当天 18 次跑挂 8 次、微信+邮件每小时误报一次。现在取不到文件时，只要本地副本不超过 90 分钟就沿用上并按&quot;跳过&quot;上报（<code>services/incident/incident_overview_sync.py</code> 的 <code>NO_SOURCE_GRACE_MINUTES</code>），文件年龄本身另外进 <code>db_freshness_check</code> 的 <code>FILE_CHECKS</code> 巡检。完整来龙去脉见 <code>04-task-system.md</code> 的「FineBI <code>schedule/</code> 的重算空档」。</p>
 </blockquote>
 <p><a id="ch-11-s85"></a></p>
 <h3>17. 仓库看板（<code>?page=warehouse</code>）— iframe</h3>
@@ -8964,7 +8964,7 @@ Top10 的<strong>筛选、排序、截断都在前端</strong>做（接口下发
 <tr>
 <td>凭据</td>
 <td><code>CredentialSettings.tsx</code></td>
-<td><strong>20 组</strong>上游账号：搜索（:8 区）、保存 <code>PUT /api/credentials</code>（:83）、<strong>测试连接</strong> <code>POST /api/credentials/test</code>（:100）、<strong>显示明文</strong> <code>GET /api/credentials/{key}/reveal</code>（:118）。列表默认掩码显示。<br><strong>2026-10-21 起 20 组全部可测试</strong>（此前只有 11 组有按钮）：按 <code>credential_store</code> 的 <code>test_kind</code> 派发到 <code>backend/services/credential_tester.py</code>，见表 <a href="#231-%E5%87%AD%E6%8D%AE%E8%BF%9E%E6%8E%A5%E6%B5%8B%E8%AF%95%E5%AF%B9%E7%85%A7%E8%A1%A8">23.1</a></td>
+<td><strong>20 组</strong>上游账号：搜索（:8 区）、保存 <code>PUT /api/credentials</code>（:83）、<strong>测试连接</strong> <code>POST /api/credentials/test</code>（:100）、<strong>显示明文</strong> <code>GET /api/credentials/{key}/reveal</code>（:118）。列表默认掩码显示。<br><strong>2026-10-21 起 20 组全部可测试</strong>（此前只有 11 组有按钮）：按 <code>credential_store</code> 的 <code>test_kind</code> 派发到 <code>backend/services/credential/credential_tester.py</code>，见表 <a href="#231-%E5%87%AD%E6%8D%AE%E8%BF%9E%E6%8E%A5%E6%B5%8B%E8%AF%95%E5%AF%B9%E7%85%A7%E8%A1%A8">23.1</a></td>
 </tr>
 <tr>
 <td>邮件收件人</td>
@@ -8990,7 +8990,7 @@ Top10 的<strong>筛选、排序、截断都在前端</strong>做（接口下发
 <h4>23.1 凭据连接测试对照表</h4>
 <p><code>POST /api/credentials/test</code>（<code>backend/routers/credentials.py:130</code>）按组的 <code>test_kind</code> 分发：
 <code>zte_oauth2</code> / <code>rais</code> 走本文件里的 <code>auth_manager</code> 路径（带本地熔断冷却提示与终态错误判定），
-其余 kind 派发到 <code>backend/services/credential_tester.py</code>（<code>run_test()</code>，:末尾）。</p>
+其余 kind 派发到 <code>backend/services/credential/credential_tester.py</code>（<code>run_test()</code>，:末尾）。</p>
 <table>
 <thead>
 <tr>
@@ -9078,7 +9078,7 @@ Top10 的<strong>筛选、排序、截断都在前端</strong>做（接口下发
 <li>会话 cookie 会缓存到 <code>backend/services/auth_cache/</code>，等价于有效登录态——按 <code>05-security-and-credentials.md</code> 的要求对待该目录。</li>
 </ul>
 <p><a id="ch-11-s94"></a></p>
-<h4>门户清单（<code>backend/services/portal_login_service.py::PORTALS</code>）</h4>
+<h4>门户清单（<code>backend/services/portal/portal_login_service.py::PORTALS</code>）</h4>
 <table>
 <thead>
 <tr>
@@ -9264,7 +9264,7 @@ Cookie 名<strong>相同</strong>，两个门户不要在同一浏览器里同�
 <h3>26. SP 备件 / 耗材汇总报表（<code>?page=sp_report</code> / <code>?page=com_report</code>）</h3>
 <p>同一条代码路径服务两个页面，只是 <code>kind</code> 不同（<code>spareparts</code> / <code>consumables</code>）：
 页面包装 <code>SpReport.tsx</code> / <code>ComReport.tsx</code> → 共用 <code>SpReportBase.tsx</code>，
-后端 <code>backend/routers/sp_report.py</code> → <code>backend/services/sp_report_service.py</code>。</p>
+后端 <code>backend/routers/sp_report.py</code> → <code>backend/services/sp/sp_report_service.py</code>。</p>
 <ul>
 <li><strong>数字悬浮说明（2026-11-04，<code>AGENTS.md</code> 三.3c）</strong>：顶部八张卡（物料数 / 入库 / 出库 / 库存 / 差额 / 安全库存 / 补库 / 紧急补库）
 标题挂 <code>ExplainIcon</code>、数字挂 <code>ExplainPopover</code>（该页自带的页面级 <code>StatCard</code> 加了 <code>explain</code> / <code>tip</code> 两个入参）；
@@ -9295,13 +9295,13 @@ Cookie 名<strong>相同</strong>，两个门户不要在同一浏览器里同�
 <p>数据源是任务 <code>sp_report_generate</code>（每天 05:15）产出的汇总工作簿
 <code>data/sp_email/&lt;前缀&gt; &lt;时间戳&gt;.xlsx</code>，与邮件/WhatsApp 发出去的是<strong>同一份文件</strong>，
 页面不做二次加工（口径说明由接口 <code>notes</code> 原样透传，见
-<code>backend/services/sp_report_service.py</code> 顶部 docstring）。</p>
+<code>backend/services/sp/sp_report_service.py</code> 顶部 docstring）。</p>
 <blockquote>
 <p><strong><code>Material Name</code> 一律是物料主数据 <code>sp_material</code> 的最新名（2026-11-06 起）</strong>。上游明细里这一列
 是<strong>单据导出那一刻</strong>的快照名，物料改名后历史单据不回写，于是同一物料会在 <code>Summary-Current</code>
 里裂成两行、入库/出库/库存被拆开（当天实测 4 组、86 行受影响）。生成端 Step 0 先从 eFlow 刷新
 主数据，Step 2.5 再按 <code>Material No.</code> 覆盖五份明细与五份原始快照
-（实现 <code>backend/services/sp_material_name.py</code>，落库链路 <code>get_sp_table.py</code> 共用同一份）。
+（实现 <code>backend/services/sp/sp_material_name.py</code>，落库链路 <code>get_sp_table.py</code> 共用同一份）。
 代价：当天 05:15 之后发生的改名，要等次日报表才跟上 —— 页面读的就是这份报表，
 所以<strong>不会出现明细已是新名、汇总还是旧名</strong>这种同页两套写法。</p>
 </blockquote>
@@ -9315,7 +9315,7 @@ Cookie 名<strong>相同</strong>，两个门户不要在同一浏览器里同�
 去重，剔除 <code>WaitingForUpdate</code>）。其余 sheet 的 <code>open_count</code> 仍来自 Excel 快照。
 原因：Excel 是 05:15 的快照、DB 是 07:00 落库，两边会差一两张单；用户在同一
 门户里看到两个数字，只会认为其中一个错了。口径唯一来源见
-<code>backend/services/sp_common.py</code>，守卫见 <code>tests/test_sp_open_count_caliber.py</code>。</p>
+<code>backend/services/sp/sp_common.py</code>，守卫见 <code>tests/test_sp_open_count_caliber.py</code>。</p>
 <p>三处页面的取舍（<strong>刻意不同，不要&quot;顺手统一&quot;</strong>）：</p>
 <table>
 <thead>
@@ -9429,7 +9429,7 @@ Others / Inventory Lost / Repair 五种）或出现空白值，都会自动落�
 <li>页面整体 404 → 工作簿不存在，按提示先跑 <code>sp_report_generate</code>；</li>
 <li>有表头无数据 / 部分 sheet 空 → 看接口返回的 <code>warnings</code>（页面顶部橙色告警条原样显示）；</li>
 <li>页面与 Excel 数字对不上，先看 <code>notes</code> 里的口径说明，再查
-<code>backend/services/sp_report_service.py</code>，<strong>不要</strong>在页面层改口径。</li>
+<code>backend/services/sp/sp_report_service.py</code>，<strong>不要</strong>在页面层改口径。</li>
 </ul>
 <p><a id="ch-11-s106"></a></p>
 <h3>26b. 仓库汇总报表（<code>?page=warehouse_summary</code>）—— 页签 = Excel 的两个 sheet（2026-09-29 新增）</h3>
@@ -9810,7 +9810,7 @@ TT 侧在 <code>tt_wo_dashboard.py</code>，WO 侧镜像在 <code>wo_dashboard_s
 <li>后端路由：<code>backend/routers/sp_material_summary.py</code> —— 只有 <code>/api/sp-material/summary</code>（8 列 + Total 行）
 与 <code>/api/sp-material/detail</code>（单元格下钻）两个只读端点，<strong>非法参数一律「200 + warnings」软失败</strong>，不抛 5xx
 （看板不能因为一个格子炸掉整页）。</li>
-<li>口径层：<code>backend/services/sp_material_summary_service.py</code> 顶部 docstring（<code>RCK_MATERIAL_SUMMARY_V1</code>）。
+<li>口径层：<code>backend/services/sp/sp_material_summary_service.py</code> 顶部 docstring（<code>RCK_MATERIAL_SUMMARY_V1</code>）。
 数据源是 <code>inventory_details</code>（APPEND 表，按 <code>update_date</code> 保留每日全量快照，所以能做「期初 vs 期末」）
 与 <code>outband_details</code>（<strong>全量刷新表</strong>，所有行 <code>update_date</code> 相同，所以报修出库只能按 <code>Outbound Time</code> 过滤）。</li>
 <li><strong>数字悬浮说明（2026-11-04，<code>AGENTS.md</code> 三.3c）</strong>：每个数字挂 <code>ExplainPopover</code>（<code>spMat.tip.*</code>）、
@@ -9859,11 +9859,11 @@ TT 侧在 <code>tt_wo_dashboard.py</code>，WO 侧镜像在 <code>wo_dashboard_s
 实际执行了多少、其中多少按时</strong>。</p>
 <ul>
 <li>后端路由：<code>backend/routers/cr_analysis.py</code>（5 个只读端点）</li>
-<li><strong>口径层（唯一真相源）</strong>：<code>backend/services/cr_caliber.py</code> —— 表名、时间字段、
+<li><strong>口径层（唯一真相源）</strong>：<code>backend/services/cr/cr_caliber.py</code> —— 表名、时间字段、
 终态词表、按时/延期判定、窗口规整、<code>bucket_expr()</code>、<code>base_where()</code>、
 <code>status_bucket_expr()</code>、<code>WORKFLOW_STEPS</code> 全在这里</li>
-<li>服务层：<code>backend/services/cr_analysis_service.py</code>（拼聚合与下钻 SQL）、
-<code>backend/services/cr_workflow_service.py</code>（解析 <code>*_detail</code> 文本列算步骤耗时）</li>
+<li>服务层：<code>backend/services/cr/cr_analysis_service.py</code>（拼聚合与下钻 SQL）、
+<code>backend/services/cr/cr_workflow_service.py</code>（解析 <code>*_detail</code> 文本列算步骤耗时）</li>
 <li>前端页面：<code>frontend/src/pages/CrChangeAnalysis.tsx</code>（500 行）</li>
 <li>前端配套：<code>frontend/src/pages/crAnalysis/</code> 下 <code>crTypes.ts</code>（类型/常量/纯函数）、
 <code>crCharts.ts</code>（ECharts option）、<code>crColumns.tsx</code>（表格列定义）、
@@ -10152,7 +10152,7 @@ bo_fo 9、td 26、cm 36、implement 9）；<code>arrived</code> 同理。</li>
 卡标题挂 <code>ExplainLabel</code>（ⓘ 讲该字段的 SQL 判据，键 <code>pm.explain.*</code>），数字本身走 <code>StatCard.explainText</code>
 与 <code>ExplainPopover</code>（键 <code>pm.tip.count</code> / <code>pm.tip.rate</code>）。ⓘ 的键用<strong>逐条字面量 switch</strong> 映射，
 不拼 <code>pm.explain. + metric</code> —— 拼串会被 <code>check:i18n</code> 读成键名 <code>pm.explain.</code> 而报「字典缺失」（三.1b 第 3 条）。
-口径逐条从 <code>backend/services/pm_caliber.py</code> 与 <code>pm_analysis_service.py</code> 核实后写进界面：
+口径逐条从 <code>backend/services/pm/pm_caliber.py</code> 与 <code>pm_analysis_service.py</code> 核实后写进界面：
 <code>closed</code> = <code>UPPER(TRIM(status)) = 'CLOSED'</code>（动态建表的 eflow_pm 里 status 大小写两种写法都有，先归一再比）；
 <strong><code>overdue</code> = <code>UPPER(TRIM(pmt_overdue)) = 'YES'</code> —— 直接采用源表自己的判定，页面不按计划日期/实际日期推算</strong>，
 源表没填这一列时该卡恒为 0、<strong>不代表真的没有超期</strong>，这句连同「上游新造的状态名会默认落进『未关闭』」一起写进 ⓘ；
@@ -10163,10 +10163,10 @@ bo_fo 9、td 26、cm 36、implement 9）；<code>arrived</code> 同理。</li>
 在总数卡上会读成「自己占自己」，现改为写明它同时是下方关闭率与超期率的分母。</li>
 <li>后端路由：<code>backend/routers/pm_analysis.py</code>（<strong>5 个</strong>只读端点：filters / overview /
 drilldown / <strong>workflow</strong> / <strong>workflow-drilldown</strong>，后两个 2026-10-17 新增）</li>
-<li><strong>口径层（唯一真相源）</strong>：<code>backend/services/pm_caliber.py</code> —— 表名、时间字段、
+<li><strong>口径层（唯一真相源）</strong>：<code>backend/services/pm/pm_caliber.py</code> —— 表名、时间字段、
 终态、超期判定、流程顺序、窗口规整、<code>bucket_expr()</code>、<code>base_where()</code> 全在这里</li>
-<li>服务层：<code>backend/services/pm_analysis_service.py</code>（拼聚合与下钻 SQL）、
-<code>backend/services/pm_workflow_service.py</code>（里程碑与环节停留耗时）</li>
+<li>服务层：<code>backend/services/pm/pm_analysis_service.py</code>（拼聚合与下钻 SQL）、
+<code>backend/services/pm/pm_workflow_service.py</code>（里程碑与环节停留耗时）</li>
 <li>前端页面：<code>frontend/src/pages/PmExecutionAnalysis.tsx</code></li>
 <li>前端配套：<code>frontend/src/pages/pmAnalysis/</code> 下 <code>pmTypes.ts</code>、<code>pmCharts.ts</code>、
 <code>pmColumns.tsx</code>、<code>PmDrillModal.tsx</code>、<code>PmKpiCards.tsx</code>、
@@ -10327,7 +10327,7 @@ Wait FLM Leader Approve 26.4% —— <strong>等待中的工单比已完成的�
 顺序严格对齐 eFlow 的 Workflow History（见上节顺序表），7 个节点：</p>
 <p><code>Create → Schedule → Accept → Process → PM Manager Approve → FLM Leader Approve → Closed</code></p>
 <ul>
-<li>后端：<code>backend/services/pm_workflow_service.py</code>
+<li>后端：<code>backend/services/pm/pm_workflow_service.py</code>
 （<code>build_workflow()</code> / <code>drill_workflow()</code>），路由 <code>GET /api/pm-analysis/workflow</code>
 与 <code>GET /api/pm-analysis/workflow-drilldown</code>；</li>
 <li>前端：<code>pmAnalysis/PmMilestones.tsx</code>（里程碑条，每格两个大字号数字）+
@@ -10442,7 +10442,7 @@ Wait FLM Leader Approve 26.4% —— <strong>等待中的工单比已完成的�
 三张数字卡「最新一期 BP 小区数」「期数」「平均 BP 占比」标题挂 ⓘ + 数字走 <code>StatCard.explainText</code>。
 两条最容易读错的口径已核实并写进界面：
 ① <code>bp_ratio</code> 是<strong>汇总表里该期自己的存储列</strong>，服务层直接 <code>SELECT … {ratio_col} AS bp_ratio</code>
-（<code>backend/services/bp_report_service.py:185</code>），页面<strong>不拿 bp_cells ÷ total_cells 再除一遍</strong>；
+（<code>backend/services/bp/bp_report_service.py:185</code>），页面<strong>不拿 bp_cells ÷ total_cells 再除一遍</strong>；
 ② <strong><code>avg_ratio</code> = <code>AVG({ratio_col})</code></strong>（<code>bp_report_service.py:212</code>）= <strong>各期占比的算术平均（每期一票）</strong>，
 <strong>不是</strong> ΣBP ÷ Σ全网 —— 小区数很少的期与很多的期在这里一样重。气泡因此<strong>把两个数并列给出来</strong>
 （等权平均 vs 区间合计口径），两者不等是口径不同、不是算错；这张卡点下去是<strong>整个区间</strong>的 BP 明细，不是最后一期。
@@ -10450,7 +10450,7 @@ Wait FLM Leader Approve 26.4% —— <strong>等待中的工单比已完成的�
 气泡内容一律取接口既有字段（<code>bp_ratio</code> / <code>bp_cells</code> / <code>total_cells</code> / <code>detail_cells</code> / <code>detail_diff</code>），前端不重算。</li>
 </ul>
 <p><a id="ch-11-s142"></a></p>
-<h4>口径（唯一真相源：<code>backend/services/bp_caliber.py</code>）</h4>
+<h4>口径（唯一真相源：<code>backend/services/bp/bp_caliber.py</code>）</h4>
 <pre><code>Daily:   取「Average DL Active User Number 最大的那个小时」，
          用该小时的三个值判三个条件：
          AU &gt; 2.5  AND  DL IP Throughput &lt; 3 Mbps  AND  DL PRB 利用率 &gt; 80%
@@ -10478,7 +10478,7 @@ PRB/Thr/AU 三值拿来判三条件，命中 607 个小区，与 Excel <code>BP 
 该表由日粒度任务（<code>gr=86400</code>）写入，而该指标<strong>只在小时粒度（<code>gr=3600</code>）可用</strong>：
 日粒度下 UME 返回 <strong>HTTP 200 + 合法 <code>queryid</code>，但静默丢弃该列</strong>，无任何报错
 （UME 原文 <code>0001610001 ... PDF counter/indicator dimension is illegal</code>）。
-故由 <code>backend/services/bp_active_user.py</code> 走<strong>独立通道</strong>按小时一次取
+故由 <code>backend/services/bp/bp_active_user.py</code> 走<strong>独立通道</strong>按小时一次取
 PRB+Thr+AU 三个 counter（<code>C373384373</code> / <code>1638004469342</code> / <code>1638004469332</code>），
 本地按 AU 最大小时聚合出当天三值。
 取不到时该日仍记 <code>is_bp=NULL</code>（不可判定），<strong>绝不当 0</strong>（当 0 会把可能的 BP 判成非 BP）。</li>
@@ -11045,27 +11045,27 @@ Excel 的指标真值（<code>bp_cells</code>/<code>total_cells</code>/<code>bp_
 </thead>
 <tbody>
 <tr>
-<td><code>backend/services/bp_caliber.py</code></td>
+<td><code>backend/services/bp/bp_caliber.py</code></td>
 <td><strong>口径唯一真相源</strong>（阈值、列名、判定函数）</td>
 </tr>
 <tr>
-<td><code>backend/services/bp_report_store.py</code></td>
+<td><code>backend/services/bp/bp_report_store.py</code></td>
 <td>物化库建表与读写（8 张表）</td>
 </tr>
 <tr>
-<td><code>backend/services/bp_report_import.py</code></td>
+<td><code>backend/services/bp/bp_report_import.py</code></td>
 <td>Excel 一次性导入</td>
 </tr>
 <tr>
-<td><code>backend/services/bp_active_user.py</code></td>
+<td><code>backend/services/bp/bp_active_user.py</code></td>
 <td><strong>三指标独立通道</strong>（UME 小时粒度 → AU 最大小时的三值）</td>
 </tr>
 <tr>
-<td><code>backend/services/bp_report_sync.py</code></td>
+<td><code>backend/services/bp/bp_report_sync.py</code></td>
 <td>RAN_UME 增量更新 + 周月重算 + 对账</td>
 </tr>
 <tr>
-<td><code>backend/services/bp_report_service.py</code></td>
+<td><code>backend/services/bp/bp_report_service.py</code></td>
 <td>查询层（概览/分区/频层/明细/元信息）</td>
 </tr>
 <tr>
@@ -11152,8 +11152,8 @@ P50/P90 是 <code>PERCENTILE_CONT(0.5/0.9) WITHIN GROUP</code>，<strong>样本�
 </tr>
 </tbody>
 </table>
-<p><strong>口径唯一真相源</strong>：<code>backend/services/bm_speedtest_caliber.py</code>。页面与接口都不含业务口径，
-改口径只改这一处。数据访问在 <code>backend/services/bm_speedtest_service.py</code>，
+<p><strong>口径唯一真相源</strong>：<code>backend/services/bm/bm_speedtest_caliber.py</code>。页面与接口都不含业务口径，
+改口径只改这一处。数据访问在 <code>backend/services/bm/bm_speedtest_service.py</code>，
 路由在 <code>backend/routers/bm_speedtest.py</code>（前缀 <code>/api/bm-speedtest</code>）。</p>
 <p><strong>几个刻意的设计决定，改之前请先读理由</strong>：</p>
 <ol>
@@ -11339,8 +11339,8 @@ AVG/MIN/MAX 自动跳过 NULL。比率类列（BP / PRB）后端已 <code>×100<
 </tr>
 </tbody>
 </table>
-<p><strong>口径唯一真相源</strong>：<code>backend/services/bm_meta_caliber.py</code>。数据访问在
-<code>backend/services/bm_meta_service.py</code>，路由在 <code>backend/routers/bm_meta.py</code>（前缀 <code>/api/bm-meta</code>）。</p>
+<p><strong>口径唯一真相源</strong>：<code>backend/services/bm/bm_meta_caliber.py</code>。数据访问在
+<code>backend/services/bm/bm_meta_service.py</code>，路由在 <code>backend/routers/bm_meta.py</code>（前缀 <code>/api/bm-meta</code>）。</p>
 <p><strong>几个刻意的设计决定，改之前请先读理由</strong>：</p>
 <ol>
 <li><strong>网络侧 KPI 不参与 PK、不参与评分。</strong> 这是本页最重要的口径决定。把
@@ -11521,7 +11521,7 @@ AVG/MIN/MAX 自动跳过 NULL。比率类列（BP / PRB）后端已 <code>×100<
 <p><a id="ch-11-s175"></a></p>
 <h3>29. FineBI 原生看板（<code>?page=finebi_&lt;slug&gt;</code>，共 17 个）</h3>
 <p>由通用引擎 <code>frontend/src/pages/NativeBoard.tsx</code> 渲染，看板定义（含每条 SQL）来自
-<code>backend/services/native_catalog.py</code> 的 <code>BY_SLUG</code>，数据经 <code>GET /api/native-boards/{slug}</code>
+<code>backend/services/native/native_catalog.py</code> 的 <code>BY_SLUG</code>，数据经 <code>GET /api/native-boards/{slug}</code>
 取本机派生库或远端只读 SQL API。迁移背景见 <code>docs/FINEBI_MIGRATION.md</code>。</p>
 <p><a id="ch-11-s176"></a></p>
 <h4>29a. MTTR 看板（<code>?page=finebi_mttr</code>）—— 日/周/月 页签（2026-09-27 改造）</h4>
@@ -11830,7 +11830,7 @@ UME 只是自动同步的补充。<strong>这个优先级是口径决定，不�
 而当时 uvicorn（PID 53728）启于 09-30 20:21 —— <strong>进程比代码早 14 小时</strong>，
 所以改完必须重启后端，否则看到的仍是旧台阶。
 判据：<code>Get-CimInstance Win32_Process -Filter &quot;Name='pythonw.exe'&quot;</code> 看 <code>CreationDate</code>
-与 <code>Get-Item backend\services\cn_kpi_service.py</code> 的 <code>LastWriteTime</code> 谁更晚。</p>
+与 <code>Get-Item backend\services\cn\cn_kpi_service.py</code> 的 <code>LastWriteTime</code> 谁更晚。</p>
 <p><strong>2026-10-01 10:28 重启后已实测确认</strong>（新 PID 70964）：
 <code>c1</code> 极差 2.03x → <strong>1.02x</strong>，MIN=1,121,544 / MAX=1,148,084，
 9-02 起不再是翻倍值；18 个组件<strong>无空数据、无报错</strong>。</p>
@@ -11876,7 +11876,7 @@ UME 只是自动同步的补充。<strong>这个优先级是口径决定，不�
 <td><code>GET /api/cn-kpi/overview</code>、<code>GET /api/cn-kpi/health</code></td>
 </tr>
 <tr>
-<td><code>backend\services\cn_kpi_service.py</code></td>
+<td><code>backend\services\cn\cn_kpi_service.py</code></td>
 <td>组件定义 <code>WIDGETS</code> + 取数/降级/缓存</td>
 </tr>
 <tr>
@@ -11983,7 +11983,7 @@ VLR / Voice / Data Subscribers / 4G·3G·RG 系列是 <code>SUM</code>（RG 系�
 <tbody>
 <tr>
 <td>采集任务</td>
-<td><code>cnn_kpi_sync_5mins</code>（<code>backend\services\cnn_ume_kpi_5mins_service.py</code>），cron <code>*/15 * * * *</code>，n 组</td>
+<td><code>cnn_kpi_sync_5mins</code>（<code>backend\services\cnn\cnn_ume_kpi_5mins_service.py</code>），cron <code>*/15 * * * *</code>，n 组</td>
 </tr>
 <tr>
 <td>粒度</td>
@@ -11999,7 +11999,7 @@ VLR / Voice / Data Subscribers / 4G·3G·RG 系列是 <code>SUM</code>（RG 系�
 </tr>
 <tr>
 <td>数据服务</td>
-<td><code>backend\services\cn_kpi_5mins_service.py</code></td>
+<td><code>backend\services\cn\cn_kpi_5mins_service.py</code></td>
 </tr>
 <tr>
 <td>路由</td>
@@ -12161,11 +12161,11 @@ FROM &quot;5mins_3G_FDD_DATA_TRAFFIC_TEMPLATE_OSS_UME&quot;
 </thead>
 <tbody>
 <tr>
-<td><code>backend\services\cnn_ume_kpi_5mins_service.py</code></td>
+<td><code>backend\services\cnn\cnn_ume_kpi_5mins_service.py</code></td>
 <td>采集（复用 <code>ccn_ume_kpi_service</code> 的鉴权/查询/导出/写库助手）</td>
 </tr>
 <tr>
-<td><code>backend\services\cn_kpi_5mins_service.py</code></td>
+<td><code>backend\services\cn\cn_kpi_5mins_service.py</code></td>
 <td>看板数据：11 个组件（全部有数据，其中 3 个为 15 分钟粒度）+ Day0/Day1/Day7 SQL + 缓存</td>
 </tr>
 <tr>
@@ -12268,7 +12268,7 @@ FROM &quot;5mins_3G_FDD_DATA_TRAFFIC_TEMPLATE_OSS_UME&quot;
 </tr>
 <tr>
 <td>服务层</td>
-<td><code>backend/services/eflow_wo_close.py</code>（三步链路 + 批量编排，<strong>模块头注释有全部实测依据</strong>）</td>
+<td><code>backend/services/eflow/eflow_wo_close.py</code>（三步链路 + 批量编排，<strong>模块头注释有全部实测依据</strong>）</td>
 </tr>
 <tr>
 <td>路由</td>
@@ -12940,7 +12940,7 @@ url3.txt 只覆盖了 32，补一份抓包即可按同一模式接入。</p>
 </tr>
 </tbody>
 </table>
-<p>鉴权：全部走 <code>Depends(require_user)</code>（<code>services/portal_auth.py</code>），与 <code>/api/*</code>
+<p>鉴权：全部走 <code>Depends(require_user)</code>（<code>services/portal/portal_auth.py</code>），与 <code>/api/*</code>
 中间件同源；本机回环与免登录开发模式视为 admin（<code>current_user</code> 的既有语义）。</p>
 <p><a id="ch-11-s219"></a></p>
 <h4>37.5 前端</h4>
@@ -13116,7 +13116,7 @@ Orange/Lonestar 电话），首次访问种入 <code>app.ap_org_people</code>。
 <h4>39.3 通知：邮件 + WhatsApp 群（群名可自定义）</h4>
 <ul>
 <li>群名存 <code>ap_tasks.notify_groups</code>（逗号分隔，默认 <code>lbr_assistant</code> 测试群），
-下发时可在表单里改。走 <code>services\wa_notify_service.py::dispatch</code>（Baileys 文本通道）。</li>
+下发时可在表单里改。走 <code>services\whatsapp\wa_notify_service.py::dispatch</code>（Baileys 文本通道）。</li>
 <li><strong>必须批量投递</strong>：该通道只有一个 pending 作业文件，逐条 dispatch 会互相覆盖
 （连续下发 5 个 AP 只剩最后一条）。<code>ap_manager\notify.py</code> 用 3 秒合并窗口的
 批处理线程把同一批消息合成一次 dispatch —— 改这段代码前先看它的注释。</li>
@@ -13445,7 +13445,7 @@ Top-N 的小时明细（SQL-B）——Web 类目全天 1810 个 APP，全存不�
 </tr>
 <tr>
 <td>任务参数</td>
-<td>任务配置文件（<code>services/task_configs_registry.py</code> 注册 36 张卡片）</td>
+<td>任务配置文件（<code>services/task/task_configs_registry.py</code> 注册 36 张卡片）</td>
 <td>否（保存后自动重启 worker 组，见 3.1）</td>
 </tr>
 </tbody>
@@ -13632,7 +13632,7 @@ Top-N 的小时明细（SQL-B）——Web 类目全天 1810 个 APP，全存不�
 <p><code>RAN_UME_*</code>、<code>CNN_KPI_*</code>、<code>IPRAN_KPI_*</code>、<code>EFLOW_*</code>、<code>BATT_*</code>、<code>EMS_*</code>、<code>FTP_*</code>、<code>FW_*</code>、<code>SLA_PARALLEL_WORKERS</code>、<code>SLA_DAYS_BACK</code>。
 证书校验开关见 <code>backend/security_tls.py:29-39</code>（<code>*_TLS_VERIFY</code>，<strong>默认关闭</strong>）。</p>
 <p><strong>通知</strong>：<code>WHATSAPP_*</code>、<code>TWILIO_*</code>、<code>PHONE</code>/<code>SMS_SERVICE_PROVIDER</code>、SMTP 系列、微信/OpenClaw 相关（走 <code>services/weixin_notifier.py</code>）。</p>
-<p><strong>任务健康告警</strong>（<code>services/task_health_alert.py</code>，2026-09-18 新增）：<code>TASK_HEALTH_ALERT_ENABLED</code>（默认 <code>1</code>，置 <code>0</code>/<code>false</code> 静音，维护窗口用）、<code>TASK_HEALTH_ALERT_RENOTIFY_HOURS</code>（同一异常持续多久后重提，默认 <code>24</code>）。告警去重状态文件：<code>TMP/task_health_alert_state.json</code>（可安全删：删后下轮会把当前异常当新异常再通知一次，不影响判定）。</p>
+<p><strong>任务健康告警</strong>（<code>services/task/task_health_alert.py</code>，2026-09-18 新增）：<code>TASK_HEALTH_ALERT_ENABLED</code>（默认 <code>1</code>，置 <code>0</code>/<code>false</code> 静音，维护窗口用）、<code>TASK_HEALTH_ALERT_RENOTIFY_HOURS</code>（同一异常持续多久后重提，默认 <code>24</code>）。告警去重状态文件：<code>TMP/task_health_alert_state.json</code>（可安全删：删后下轮会把当前异常当新异常再通知一次，不影响判定）。</p>
 <p><strong>其他</strong>：<code>GEMINI_API_KEY</code>（指标解释文本生成）、<code>CALL_CHAIN_DEPTH</code>（新鲜度巡检调用链深度）、<code>BATT_FRESH_HOURS</code>/<code>BATT_STALE_DAYS</code>/<code>BATT_SOC_LOW</code>/<code>BATT_HEALTH_*</code>（电池看板的&quot;新鲜度/低电量/健康度&quot;阈值——<strong>页面上的数字直接受这些值影响</strong>）。</p>
 <p><a id="ch-12-s2"></a></p>
 <h3>三、配置文件（JSON）</h3>
@@ -13697,7 +13697,7 @@ Top-N 的小时明细（SQL-B）——Web 类目全天 1810 个 APP，全存不�
 </blockquote>
 <p><a id="ch-12-s3"></a></p>
 <h4>3.1 任务配置卡片（Settings →「任务配置」）</h4>
-<p>36 张卡片由 <code>backend/services/task_configs_registry.py</code> 注册。规则：</p>
+<p>36 张卡片由 <code>backend/services/task/task_configs_registry.py</code> 注册。规则：</p>
 <ul>
 <li><strong>页面显示的默认值不是抄写的</strong>：每张卡的 <code>defaults_factory</code> 从服务模块常量现读（例如 <code>_main_kpi_defaults</code>、<code>_sp_defaults</code>），所以页面上的默认值就是代码在用的值，不会与代码漂移。</li>
 <li><strong>优先级</strong>：环境变量 &gt; 配置文件（页面编辑） &gt; 代码默认。覆盖都发生在<strong>模块导入期</strong>，因此由 HOST/PORT 拼出来的派生常量（<code>PM_REFERER</code>、<code>HISTORY_REFERER</code>、<code>LOGIN_URL</code>/<code>DASHBOARD_URL</code>、<code>ALARM_REFERER</code>）必须写在覆盖块<strong>之后</strong>，否则页面上改主机没用。</li>
@@ -13815,7 +13815,7 @@ Top-N 的小时明细（SQL-B）——Web 类目全天 1810 个 APP，全存不�
 <td><code>9269</code></td>
 <td>网页问答服务（whatsapp-kb-bot）</td>
 <td><strong>仅 <code>127.0.0.1</code></strong></td>
-<td>backend 按需拉起（<code>services/portal_qa_ctl.py</code>）</td>
+<td>backend 按需拉起（<code>services/portal/portal_qa_ctl.py</code>）</td>
 </tr>
 <tr>
 <td>无端口</td>
@@ -13833,7 +13833,7 @@ Top-N 的小时明细（SQL-B）——Web 类目全天 1810 个 APP，全存不�
 <p>门户 <code>/v3/olbrportal/</code> 右下角的问答挂件走 <code>POST /api/portal-qa/ask</code>（<code>backend/routers/portal_qa.py</code>），
 后端再转发到本机 <code>127.0.0.1:9269</code> 的 whatsapp-kb-bot 问答服务（<code>Task/whatsapp-kb-bot/src/http-server.js</code>）。</p>
 <ul>
-<li><strong>不常驻</strong>：只有第一次 <code>GET /api/portal-qa/health</code> 或 <code>POST .../ask</code> 时，<code>backend/services/portal_qa_ctl.py</code>
+<li><strong>不常驻</strong>：只有第一次 <code>GET /api/portal-qa/health</code> 或 <code>POST .../ask</code> 时，<code>backend/services/portal/portal_qa_ctl.py</code>
 才会 <code>node --env-file-if-exists=.env src/http-server.js</code> 起它（<code>CREATE_NO_WINDOW</code>，不建计划任务）。
 端口活着但 <code>/health</code> 不健康时会先杀掉再重起一次。</li>
 <li><strong>改了 bot 源码要重启它</strong>：杀掉占用 9269 的 node 进程即可，下一次提问/健康检查会自动重拉
@@ -14100,7 +14100,7 @@ Select-String -Path log\backend_runtime_*.log -Pattern '任务开始执行|任�
 反复重新登录门户也没用。my_app 日志里 <code>POST /api/auth/portal-login</code> 返回 <strong>503</strong>。</p>
 <p><strong>机制</strong>：my_app 自身没有账号体系，登录链路是
 「门户签发 token → 深链 <code>?t=</code> 带进 my_app → my_app <strong>回调门户 <code>/me</code></strong> 校验 → 换 myapp 会话 Cookie」
-（<code>backend/services/portal_auth.py</code> 的 <code>verify_portal_token()</code>，被 <code>portal-login</code> 调用）。</p>
+（<code>backend/services/portal/portal_auth.py</code> 的 <code>verify_portal_token()</code>，被 <code>portal-login</code> 调用）。</p>
 <p>这条链的最后一跳要访问门户，地址由 <strong><code>UNIPLAM_ME_URL</code></strong> 决定，默认值是
 <code>http://127.0.0.1:9267/uniplam/api/auth/me</code>（<code>portal_auth.py:77</code>）——
 <strong>它假定 my_app 与门户同机部署</strong>。一旦分机部署而没人设过这个变量，
@@ -14287,7 +14287,7 @@ $j | ConvertTo-Json -Depth 6 | Set-Content $p -Encoding UTF8
 <p><strong>已做的修复</strong>（2026-10-01）：</p>
 <ol>
 <li><strong>僵尸自动回收</strong> —— <code>running</code> 超过 <code>STALE_RUNNING_SECONDS</code>（默认 3600s）未回报的作业
-允许重新认领；判定口径收敛在 <code>backend/services/job_staleness.py</code>，
+允许重新认领；判定口径收敛在 <code>backend/services/task/job_staleness.py</code>，
 <strong>发图源与告警文本源共用</strong>（两者状态机同构，必须同改）。
 阈值必须<strong>远大于</strong>正常发送耗时，否则多实例会重复发同一批告警。</li>
 <li><strong>告警没发出去就吵</strong> —— 有 due 单却一条都没确认发送时，任务产出 <code>warnings</code>，
@@ -14446,7 +14446,7 @@ Node 侧 watcher（<code>src/qrLogin.js</code>）读到后<strong>把旧凭据�
 前端每 2s 轮询 <code>/api/whatsapp/login/status</code> 并用 <code>qrcode</code> 渲染成图片（二维码约 20s 自动轮换）。</p>
 <ul>
 <li>接口：<code>GET /api/whatsapp/login/status?device=notify|bot</code>、<code>POST /api/whatsapp/login/qr</code>（服务见
-<code>backend/services/whatsapp_login_service.py</code>、路由 <code>backend/routers/whatsapp_login.py</code>）。</li>
+<code>backend/services/whatsapp/whatsapp_login_service.py</code>、路由 <code>backend/routers/whatsapp_login.py</code>）。</li>
 <li>出码通道文件与 <code>notify_job.json</code> 同目录、同条约定；<code>qr_status.json</code> 里两个设备各占一个键，互不覆盖。</li>
 <li><code>notify.js</code> 原先把「隐藏运行时出码」直接 <code>exit(1)</code>，现<strong>当本次出码由网页请求触发时不退出</strong>，
 否则计划任务隐藏窗口场景下网页扫码永远走不通。</li>
@@ -15309,7 +15309,7 @@ worker 刚建的会话</strong>，登出就会<strong>误杀别人的会话</str
 <blockquote>
 <p>⚠️ <strong>这条修复当时并未真正生效（2026-10-04 晚发现并修正认知）</strong>：
 生效 cron 的真相源有<strong>两个</strong>，数据库 <code>task_schedule_config.cron</code> <strong>永远优先</strong>于
-代码 <code>default_cron</code>（<code>backend/services/task_runner.py:327</code> 的三目运算）。
+代码 <code>default_cron</code>（<code>backend/services/task/task_runner.py:327</code> 的三目运算）。
 当时数据库里 <code>sp_online_sync</code> 仍是旧的 <code>35 * * * *</code>，所以<strong>实际仍按小时跑</strong>，
 登录频率并没有降下来。详见下面的「调度覆盖」小节。
 现在的防线只剩一条真的：<code>AUTH_TOKEN_TTL=86400</code>（24 小时）。</p>
@@ -16196,7 +16196,7 @@ HKCU\...\Run      → start_hidden.vbs → start_hidden.ps1 -Quiet
 <h4>结论：未发现正在发生的风暴，但有一处真实的放大结构（已修）</h4>
 <p><a id="ch-13-s50"></a></p>
 <h5>🔴 <code>_wait_export_ready</code> 轮询 × 重试 × 并发（已修）</h5>
-<p><code>backend/services/eflow_api_client.py:739</code> 是&quot;等 eFlow 生成导出文件&quot;的轮询。
+<p><code>backend/services/eflow/eflow_api_client.py:739</code> 是&quot;等 eFlow 生成导出文件&quot;的轮询。
 改前参数 <code>max_wait=300, interval=10</code> → <strong>每条管道轮询 30 次</strong>；TT/WO/CR/PM
 <strong>四条管道全部用默认值</strong>（<code>eflow_data_mapper.py:276,447,484,522</code>），并且
 <code>_http_request</code> 自身还带 <code>HTTP_MAX_RETRIES=3</code> 的指数退避重试
@@ -16247,7 +16247,7 @@ HKCU\...\Run      → start_hidden.vbs → start_hidden.ps1 -Quiet
 <p><a id="ch-13-s51"></a></p>
 <h5>🟡 调度覆盖：改了代码默认值却不生效（已加告警）</h5>
 <p><strong>生效 cron 的真相源有两个，数据库永远优先</strong>：</p>
-<pre><code class="language-python"># backend/services/task_runner.py:327
+<pre><code class="language-python"># backend/services/task/task_runner.py:327
 saved_cron, saved_enabled = _load_schedule_config(task_id)
 current_cron = saved_cron if saved_cron else default_cron   # ← 数据库赢
 </code></pre>
@@ -16833,7 +16833,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
     <h2>使用帮助（一站式指南）</h2>
   </header>
   <blockquote>
-<p>面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-13。</p>
+<p>面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-14。</p>
 </blockquote>
 <blockquote>
 <p>站内入口：侧边栏「使用帮助」，或直链 <code>http://&lt;host&gt;/myapp/?page=help</code>。</p>
@@ -16988,70 +16988,70 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>eflow_sync</code></td>
 <td><code>22 * * * *</code></td>
 <td>n</td>
-<td><code>services/sync_from_eflow_api.py → sync_from_eflow_api(mode=&quot;delta&quot;)</code></td>
+<td><code>services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode=&quot;delta&quot;)</code></td>
 </tr>
 <tr>
 <td>eFlow 每日全量同步</td>
 <td><code>eflow_sync_full</code></td>
 <td><code>0 1 * * *</code></td>
 <td>n</td>
-<td><code>services/sync_from_eflow_api.py → sync_from_eflow_api(mode=&quot;full&quot;)</code></td>
+<td><code>services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode=&quot;full&quot;)</code></td>
 </tr>
 <tr>
 <td>RAN UME 日报</td>
 <td><code>ran_ume_daily</code></td>
 <td><code>0 2 * * *</code></td>
 <td>u</td>
-<td><code>services/ran_ume_service.py → run_ran_ume_full_task</code></td>
+<td><code>services/ran/ran_ume_service.py → run_ran_ume_full_task</code></td>
 </tr>
 <tr>
 <td>Site Outage 截图</td>
 <td><code>site_outage_screenshot</code></td>
 <td><code>0 1 * * *</code></td>
 <td>m</td>
-<td><code>services/site_outage_service.py → run_site_outage_screenshot</code></td>
+<td><code>services/site/site_outage_service.py → run_site_outage_screenshot</code></td>
 </tr>
 <tr>
 <td>WhatsApp 消息发送</td>
 <td><code>whatsapp_send</code></td>
 <td><code>0 3 * * *</code></td>
 <td>m</td>
-<td><code>services/whatsapp_service.py → run_whatsapp_send</code></td>
+<td><code>services/whatsapp/whatsapp_service.py → run_whatsapp_send</code></td>
 </tr>
 <tr>
 <td>WhatsApp 消息发送（扩展）</td>
 <td><code>whatsapp_send_ext</code></td>
 <td><code>0 3 * * *</code></td>
 <td>m</td>
-<td><code>services/whatsapp_ext_service.py → run_whatsapp_send_ext</code></td>
+<td><code>services/whatsapp/whatsapp_ext_service.py → run_whatsapp_send_ext</code></td>
 </tr>
 <tr>
 <td>WhatsApp 消息发送（Baileys）</td>
 <td><code>whatsapp_send_baileys</code></td>
 <td><code>0 4 * * *</code></td>
 <td>m</td>
-<td><code>services/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys</code></td>
+<td><code>services/whatsapp/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys</code></td>
 </tr>
 <tr>
 <td>eFlow P1 告警 WhatsApp 推送</td>
 <td><code>tt_alarm_whatsapp_alert</code></td>
 <td><code>2-59/5 * * * *</code></td>
 <td>m</td>
-<td><code>services/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert</code></td>
+<td><code>services/tt/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert</code></td>
 </tr>
 <tr>
 <td>MS SLA 完整同步</td>
 <td><code>ms_sla_full</code></td>
 <td><code>0 5 * * *</code></td>
 <td>n</td>
-<td><code>services/ms_sla_service.py → run_full_sync</code></td>
+<td><code>services/ms/ms_sla_service.py → run_full_sync</code></td>
 </tr>
 <tr>
 <td>DC server 告警 WhatsApp 推送</td>
 <td><code>ume_alarm_whatsapp_alert</code></td>
 <td><code>* * * * *</code></td>
 <td>m</td>
-<td><code>services/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp</code></td>
+<td><code>services/ume_alarm/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp</code></td>
 </tr>
 <tr>
 <td>Fiber Break 告警自动派单</td>
@@ -17072,21 +17072,21 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>eflow_site_update</code></td>
 <td><code>0 7 * * *</code></td>
 <td>m</td>
-<td><code>services/eflow_site_update_task.py → run_eflow_site_update</code></td>
+<td><code>services/eflow/eflow_site_update_task.py → run_eflow_site_update</code></td>
 </tr>
 <tr>
 <td>eFlow 实时告警同步</td>
 <td><code>eflow_active_alarm</code></td>
 <td><code>*/1 * * * *</code></td>
 <td>x</td>
-<td><code>services/eflow_api_client.py → fetch_and_save_active_alarm</code></td>
+<td><code>services/eflow/eflow_api_client.py → fetch_and_save_active_alarm</code></td>
 </tr>
 <tr>
 <td>eFlow 历史告警同步</td>
 <td><code>eflow_history_alarm</code></td>
 <td><code>0 */3 * * *</code></td>
 <td>n</td>
-<td><code>services/eflow_api_client.py → fetch_and_save_history_alarm</code></td>
+<td><code>services/eflow/eflow_api_client.py → fetch_and_save_history_alarm</code></td>
 </tr>
 <tr>
 <td>eFlow TT 规则收集与匹配检查</td>
@@ -17100,28 +17100,28 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>main_kpi_sync</code></td>
 <td><code>0 4 * * *</code></td>
 <td>u</td>
-<td><code>services/ran_ume_main_kpi.py → run_main_kpi_sync</code></td>
+<td><code>services/ran/ran_ume_main_kpi.py → run_main_kpi_sync</code></td>
 </tr>
 <tr>
 <td>RAN 小区可用性 1-Day 同步</td>
 <td><code>cell_availability_sync</code></td>
 <td><code>30 4 * * *</code></td>
 <td>u</td>
-<td><code>services/ran_cell_availability_sync.py → run_cell_availability_sync</code></td>
+<td><code>services/ran/ran_cell_availability_sync.py → run_cell_availability_sync</code></td>
 </tr>
 <tr>
 <td>RAN Cells KPI 同步</td>
 <td><code>cells_kpi_sync</code></td>
 <td><code>50 4 * * *</code></td>
 <td>u</td>
-<td><code>services/ran_cells_kpi_sync.py → run_cells_kpi_sync</code></td>
+<td><code>services/ran/ran_cells_kpi_sync.py → run_cells_kpi_sync</code></td>
 </tr>
 <tr>
 <td>RAN Network KPI 同步</td>
 <td><code>network_kpi_sync</code></td>
 <td><code>0 5 * * *</code></td>
 <td>u</td>
-<td><code>services/ran_ume_network_kpi.py → run_network_kpi_sync</code></td>
+<td><code>services/ran/ran_ume_network_kpi.py → run_network_kpi_sync</code></td>
 </tr>
 <tr>
 <td>可用率核对宽表重建</td>
@@ -17135,133 +17135,133 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>bp_report_sync</code></td>
 <td><code>20 6 * * *</code></td>
 <td>u</td>
-<td><code>services/bp_report_sync.py → run_bp_report_sync</code></td>
+<td><code>services/bp/bp_report_sync.py → run_bp_report_sync</code></td>
 </tr>
 <tr>
 <td>CNN UME KPI 同步</td>
 <td><code>cnn_kpi_sync</code></td>
 <td><code>0 6 * * *</code></td>
 <td>n</td>
-<td><code>services/ccn_ume_kpi_service.py → run_cnn_kpi_sync</code></td>
+<td><code>services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync</code></td>
 </tr>
 <tr>
 <td>CNN UME KPI 5分钟同步</td>
 <td><code>cnn_kpi_sync_5mins</code></td>
 <td><code>*/15 * * * *</code></td>
 <td>n</td>
-<td><code>services/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins</code></td>
+<td><code>services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins</code></td>
 </tr>
 <tr>
 <td>SP 备件数据同步</td>
 <td><code>sp_data_sync</code></td>
 <td><code>10 * * * *</code></td>
 <td>s</td>
-<td><code>services/get_sp_table.py → run_sp_data_sync</code></td>
+<td><code>services/sp/get_sp_table.py → run_sp_data_sync</code></td>
 </tr>
 <tr>
 <td>iPRAN UME KPI 同步</td>
 <td><code>ipran_kpi_sync</code></td>
 <td><code>0 * * * *</code></td>
 <td>u</td>
-<td><code>services/ipran_ume_kpi_service.py → run_ipran_kpi_sync</code></td>
+<td><code>services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync</code></td>
 </tr>
 <tr>
 <td>Liberia 宕站 1小时报告邮件</td>
 <td><code>liberia_email_1h</code></td>
 <td><code>15 * * * *</code></td>
 <td>m</td>
-<td><code>services/liberia_email_report.py → run_1h_report</code></td>
+<td><code>services/email/liberia_email_report.py → run_1h_report</code></td>
 </tr>
 <tr>
 <td>Liberia 宕站 8小时报告邮件</td>
 <td><code>liberia_email_8h</code></td>
 <td><code>20 */8 * * *</code></td>
 <td>m</td>
-<td><code>services/liberia_email_report.py → run_8h_report</code></td>
+<td><code>services/email/liberia_email_report.py → run_8h_report</code></td>
 </tr>
 <tr>
 <td>MS Contract KPIs 日报邮件</td>
 <td><code>kpi_ms_contract</code></td>
 <td><code>30 5 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_ms_contract_kpi</code></td>
+<td><code>services/email/kpi_email_report.py → run_ms_contract_kpi</code></td>
 </tr>
 <tr>
 <td>MS WOs SLA 日报邮件</td>
 <td><code>kpi_ms_wo_sla</code></td>
 <td><code>35 5 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_ms_wo_sla</code></td>
+<td><code>services/email/kpi_email_report.py → run_ms_wo_sla</code></td>
 </tr>
 <tr>
 <td>SpareParts 备件报表邮件</td>
 <td><code>kpi_sp_spareparts</code></td>
 <td><code>45 9 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_spareparts</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_spareparts</code></td>
 </tr>
 <tr>
 <td>Comsumables 耗材报表邮件</td>
 <td><code>kpi_sp_consumables</code></td>
 <td><code>50 9 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_consumables</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_consumables</code></td>
 </tr>
 <tr>
 <td>SP 备件报表生成</td>
 <td><code>sp_report_generate</code></td>
 <td><code>15 5 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_report_generate</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_report_generate</code></td>
 </tr>
 <tr>
 <td>SP 备件周报（上周一→上周日）</td>
 <td><code>sp_weekly_report</code></td>
 <td><code>0 7 * * mon</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_weekly_report</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_weekly_report</code></td>
 </tr>
 <tr>
 <td>SP 备件明细报表邮件</td>
 <td><code>sp_email_details</code></td>
 <td><code>5 7 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_details_email</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_details_email</code></td>
 </tr>
 <tr>
 <td>SP 备件明细分文件邮件</td>
 <td><code>sp_details_files_email</code></td>
 <td><code>5 10 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_details_files_email</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_details_files_email</code></td>
 </tr>
 <tr>
 <td>Comsumables&amp;SpareParts Report Whatsapp</td>
 <td><code>sp_whatsapp_report</code></td>
 <td><code>55 7 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_whatsapp_report</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_whatsapp_report</code></td>
 </tr>
 <tr>
 <td>SP 物料库存与消耗报表邮件</td>
 <td><code>sp_material_report</code></td>
 <td><code>45 7 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_material_stock_consumption</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_material_stock_consumption</code></td>
 </tr>
 <tr>
 <td>MS Network Availability 日报邮件</td>
 <td><code>kpi_ran_availability</code></td>
 <td><code>30 9 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_ran_availability</code></td>
+<td><code>services/email/kpi_email_report.py → run_ran_availability</code></td>
 </tr>
 <tr>
 <td>EWS 恢复后邮件补发</td>
 <td><code>email_recovery</code></td>
 <td><code>*/10 * * * *</code></td>
 <td>m</td>
-<td><code>services/email_recovery.py → run_email_recovery_task</code></td>
+<td><code>services/email/email_recovery.py → run_email_recovery_task</code></td>
 </tr>
 <tr>
 <td>Packet Loss 丢包同步</td>
@@ -17275,21 +17275,21 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>packet_loss_email</code></td>
 <td><code>45 6 * * *</code></td>
 <td>u</td>
-<td><code>services/kpi_email_report.py → run_packet_loss_email</code></td>
+<td><code>services/email/kpi_email_report.py → run_packet_loss_email</code></td>
 </tr>
 <tr>
 <td>IP RAN M6K-FW 图表邮件</td>
 <td><code>ipran_m6k_chart_email</code></td>
 <td><code>45 6 * * *</code></td>
 <td>m</td>
-<td><code>services/ipran_chart_service.py → run_ipran_m6k_chart_email</code></td>
+<td><code>services/ipran/ipran_chart_service.py → run_ipran_m6k_chart_email</code></td>
 </tr>
 <tr>
 <td>CNN Free Rating 图表邮件</td>
 <td><code>ccn_free_rating_chart_email</code></td>
 <td><code>45 7 * * *</code></td>
 <td>m</td>
-<td><code>services/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email</code></td>
+<td><code>services/cnn/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email</code></td>
 </tr>
 <tr>
 <td>MTN MOU 日报图表邮件</td>
@@ -17324,21 +17324,21 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>mailbox_cleanup</code></td>
 <td><code>0 * * * *</code></td>
 <td>m</td>
-<td><code>services/mailbox_cleanup.py → run_mailbox_cleanup</code></td>
+<td><code>services/cleanup/mailbox_cleanup.py → run_mailbox_cleanup</code></td>
 </tr>
 <tr>
 <td>Incident Overview 数据同步</td>
 <td><code>incident_overview_sync</code></td>
 <td><code>20 * * * *</code></td>
 <td>m</td>
-<td><code>services/incident_overview_sync.py → run_incident_overview_sync</code></td>
+<td><code>services/incident/incident_overview_sync.py → run_incident_overview_sync</code></td>
 </tr>
 <tr>
 <td>数据库数据新鲜度巡检</td>
 <td><code>db_freshness_check</code></td>
 <td><code>15 * * * *</code></td>
 <td>m</td>
-<td><code>services/db_freshness_check.py → run_db_freshness_check</code></td>
+<td><code>services/db/db_freshness_check.py → run_db_freshness_check</code></td>
 </tr>
 <tr>
 <td>鉴权健康巡检</td>
@@ -17352,7 +17352,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>mttr_tt_sync</code></td>
 <td><code>40 7 * * *</code></td>
 <td>m</td>
-<td><code>services/mttr_tt_sync.py → run_mttr_tt_sync</code></td>
+<td><code>services/tt/mttr_tt_sync.py → run_mttr_tt_sync</code></td>
 </tr>
 <tr>
 <td>Progress 宽表重建</td>
@@ -17415,14 +17415,14 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>cxo_dashboard_cache_sync</code></td>
 <td><code>*/10 * * * *</code></td>
 <td>v</td>
-<td><code>services/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync</code></td>
+<td><code>services/cxo/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync</code></td>
 </tr>
 <tr>
 <td>VMAX CXO 天粒度日值归档</td>
 <td><code>vmax_cxo_daily_sync</code></td>
 <td><code>15 * * * *</code></td>
 <td>v</td>
-<td><code>services/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync</code></td>
+<td><code>services/cxo/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync</code></td>
 </tr>
 <tr>
 <td>VMAX 多报表指标采集</td>
@@ -17471,28 +17471,28 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>sp_online_sync</code></td>
 <td><code>35 */6 * * *</code></td>
 <td>n</td>
-<td><code>services/sp_online_sync.py → run_sp_online_sync</code></td>
+<td><code>services/sp/sp_online_sync.py → run_sp_online_sync</code></td>
 </tr>
 <tr>
 <td>SP 物料主数据同步</td>
 <td><code>sp_material_sync</code></td>
 <td><code>55 4 * * *</code></td>
 <td>n</td>
-<td><code>services/sp_material_sync.py → run_sp_material_sync</code></td>
+<td><code>services/sp/sp_material_sync.py → run_sp_material_sync</code></td>
 </tr>
 <tr>
 <td>SP 在线未关闭单报表生成</td>
 <td><code>sp_online_report_generate</code></td>
 <td><code>0 6 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_online_report_generate</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_online_report_generate</code></td>
 </tr>
 <tr>
 <td>SP 在线未关闭单报表发送</td>
 <td><code>sp_online_report_send</code></td>
 <td><code>35 6 * * *</code></td>
 <td>m</td>
-<td><code>services/kpi_email_report.py → run_sp_online_report</code></td>
+<td><code>services/email/kpi_email_report.py → run_sp_online_report</code></td>
 </tr>
 <tr>
 <td>eFlow 告警规则收集</td>
@@ -17520,42 +17520,42 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <td><code>whatsapp_kb_sync_push_rules</code></td>
 <td><code>4 0 */3 * *</code></td>
 <td>n</td>
-<td><code>services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></td>
+<td><code>services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></td>
 </tr>
 <tr>
 <td>WhatsApp 知识库同步（告警规则）</td>
 <td><code>whatsapp_kb_sync_alarm_rules</code></td>
 <td><code>4 0 */3 * *</code></td>
 <td>n</td>
-<td><code>services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></td>
+<td><code>services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></td>
 </tr>
 <tr>
 <td>WhatsApp 知识库同步（TT 级别规则）</td>
 <td><code>whatsapp_kb_sync_tt_rules</code></td>
 <td><code>35 4 * * *</code></td>
 <td>n</td>
-<td><code>services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></td>
+<td><code>services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></td>
 </tr>
 <tr>
 <td>日志文件清理</td>
 <td><code>log_cleanup</code></td>
 <td><code>17 3 * * *</code></td>
 <td>m</td>
-<td><code>services/log_cleanup.py → run_log_cleanup</code></td>
+<td><code>services/cleanup/log_cleanup.py → run_log_cleanup</code></td>
 </tr>
 <tr>
 <td>TMP 目录清理</td>
 <td><code>tmp_cleanup</code></td>
 <td><code>47 3 * * *</code></td>
 <td>m</td>
-<td><code>services/tmp_cleanup.py → run_tmp_cleanup</code></td>
+<td><code>services/cleanup/tmp_cleanup.py → run_tmp_cleanup</code></td>
 </tr>
 <tr>
 <td>TTs and MTTR 报表生成</td>
 <td><code>tt_mttr_report_generate</code></td>
 <td><code>20 7 * * *</code></td>
 <td>m</td>
-<td><code>services/tt_mttr_report.py → run_tt_mttr_report</code></td>
+<td><code>services/tt/tt_mttr_report.py → run_tt_mttr_report</code></td>
 </tr>
 <tr>
 <td>RAN 用户身份清单（VoLTE/N78）</td>
@@ -17585,7 +17585,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>eFlow 数据同步（<code>eflow_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>22 * * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/sync_from_eflow_api.py → sync_from_eflow_api(mode=&quot;delta&quot;)</code></li>
+<li>工作流脚本: <code>services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode=&quot;delta&quot;)</code></li>
 </ul>
 <p><strong>功能</strong>: 从 ZTE eFlow API 增量同步 TT/WO/CR/PM/Site/Person 六类数据</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17603,7 +17603,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>eFlow 每日全量同步（<code>eflow_sync_full</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 1 * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/sync_from_eflow_api.py → sync_from_eflow_api(mode=&quot;full&quot;)</code></li>
+<li>工作流脚本: <code>services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode=&quot;full&quot;)</code></li>
 </ul>
 <p><strong>功能</strong>: eFlow 全量兜底：拉全量窗口（默认自 2026-01-01），补齐增量遗漏并刷新报告。大窗口下 TT/WO 分段拉取，避免单次大导出失败；TT/WO 缺失即判任务失败</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17623,7 +17623,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>RAN UME 日报（<code>ran_ume_daily</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 2 * * *</code>　|　worker 组: <strong>u</strong></li>
-<li>工作流脚本: <code>services/ran_ume_service.py → run_ran_ume_full_task</code></li>
+<li>工作流脚本: <code>services/ran/ran_ume_service.py → run_ran_ume_full_task</code></li>
 </ul>
 <p><strong>功能</strong>: RAN UME PM 数据获取 + Daily Availability KPI 报表生成 + FTP 上传</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17641,7 +17641,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>Site Outage 截图（<code>site_outage_screenshot</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 1 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/site_outage_service.py → run_site_outage_screenshot</code></li>
+<li>工作流脚本: <code>services/site/site_outage_service.py → run_site_outage_screenshot</code></li>
 </ul>
 <p><strong>功能</strong>: 对告警管理看板（Site Outage Monitor）的 ERA/Regular/ALL 三个视图自动截图</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17659,7 +17659,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>WhatsApp 消息发送（<code>whatsapp_send</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 3 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/whatsapp_service.py → run_whatsapp_send</code></li>
+<li>工作流脚本: <code>services/whatsapp/whatsapp_service.py → run_whatsapp_send</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 Site Outage 截图和文件到 WhatsApp 群组（Playwright 自动化）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17675,7 +17675,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>WhatsApp 消息发送（扩展）（<code>whatsapp_send_ext</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 3 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/whatsapp_ext_service.py → run_whatsapp_send_ext</code></li>
+<li>工作流脚本: <code>services/whatsapp/whatsapp_ext_service.py → run_whatsapp_send_ext</code></li>
 </ul>
 <p><strong>功能</strong>: WhatsApp 发送（扩展版）：投递发送作业，由浏览器扩展在已登录的 WhatsApp Web 中发送，与 Playwright 版并存</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17691,7 +17691,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>WhatsApp 消息发送（Baileys）（<code>whatsapp_send_baileys</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 4 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys</code></li>
+<li>工作流脚本: <code>services/whatsapp/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys</code></li>
 </ul>
 <p><strong>功能</strong>: 第三种 WhatsApp 发图通道：走 Baileys 协议直发（不依赖浏览器/Playwright），与 Playwright/扩展版并存；默认禁用，必须在「任务管理」页手动启用（Baileys 违反 WhatsApp ToS，启用前须走人工审批）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17713,7 +17713,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>eFlow P1 告警 WhatsApp 推送（<code>tt_alarm_whatsapp_alert</code>）</h5>
 <ul>
 <li>默认 cron: <code>2-59/5 * * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert</code></li>
+<li>工作流脚本: <code>services/tt/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert</code></li>
 </ul>
 <p><strong>功能</strong>: 触发制推送：每 5 分钟（相位 2-59/5，与上游同步错开 2 分钟）扫 realtime_alarm 实时告警表，发现「带 TT + 触发窗口内 + 告警码白名单」的 P1 告警后实时回 eFlow 查单，首推后按双档重报（无更新满 10 分钟催报、有更新满 30 分钟才报，均带 REMINDER 横幅），告警清除即止损。发送状态（是否已发/发了几次）落 eflow_tt_whatsapp_alert_log</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17735,7 +17735,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>MS SLA 完整同步（<code>ms_sla_full</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 5 * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/ms_sla_service.py → run_full_sync</code></li>
+<li>工作流脚本: <code>services/ms/ms_sla_service.py → run_full_sync</code></li>
 </ul>
 <p><strong>功能</strong>: SLA 指标同步 + Contract KPIs 报表更新（项目自包含，无需外部文件）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17753,7 +17753,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>DC server 告警 WhatsApp 推送（<code>ume_alarm_whatsapp_alert</code>）</h5>
 <ul>
 <li>默认 cron: <code>* * * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp</code></li>
+<li>工作流脚本: <code>services/ume_alarm/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp</code></li>
 </ul>
 <p><strong>功能</strong>: 每分钟直连 ZTE UME 网管（10.121.8.2）拉当前告警，命中精确「告警码:级别」对（默认 89029:major、89006:major）才推送到指定群；未清除告警按配置间隔催报（带 REMINDER 横幅），曾推送过的告警从上游消失则补发「已恢复」；首轮只登记不发送（防存量刷群），状态落 ume_alarm 相关表</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17835,7 +17835,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>CMDB 站点同步比对（<code>eflow_site_update</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 7 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/eflow_site_update_task.py → run_eflow_site_update</code></li>
+<li>工作流脚本: <code>services/eflow/eflow_site_update_task.py → run_eflow_site_update</code></li>
 </ul>
 <p><strong>功能</strong>: 比对 CMDB 主数据（my_app/db 下最新的 ZTE OLR MS Master Site Database）与 eflow 基线、PG master_site_db 基线，生成带 A/M/D 标记与着色的差异文件（eflow_site_update.xlsx / master_site_db .xlsx / 导入副本 / 同步报告）。只生成文件供人工审查，不写入 eflow 与 PostgreSQL</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17855,7 +17855,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>eFlow 实时告警同步（<code>eflow_active_alarm</code>）</h5>
 <ul>
 <li>默认 cron: <code>*/1 * * * *</code>　|　worker 组: <strong>x</strong></li>
-<li>工作流脚本: <code>services/eflow_api_client.py → fetch_and_save_active_alarm</code></li>
+<li>工作流脚本: <code>services/eflow/eflow_api_client.py → fetch_and_save_active_alarm</code></li>
 </ul>
 <p><strong>功能</strong>: 从 eFlow FM Active 接口获取实时告警，保存 CSV + SQLite（每分钟）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17876,7 +17876,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>eFlow 历史告警同步（<code>eflow_history_alarm</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 */3 * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/eflow_api_client.py → fetch_and_save_history_alarm</code></li>
+<li>工作流脚本: <code>services/eflow/eflow_api_client.py → fetch_and_save_history_alarm</code></li>
 </ul>
 <p><strong>功能</strong>: 从 eFlow FM History 接口获取近 7 天历史告警，过滤 TT ID，保存 CSV + SQLite</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17910,7 +17910,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>RAN Main KPI 同步（<code>main_kpi_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 4 * * *</code>　|　worker 组: <strong>u</strong></li>
-<li>工作流脚本: <code>services/ran_ume_main_kpi.py → run_main_kpi_sync</code></li>
+<li>工作流脚本: <code>services/ran/ran_ume_main_kpi.py → run_main_kpi_sync</code></li>
 </ul>
 <p><strong>功能</strong>: RAN UME Main KPI 历史指标同步（2G/3G/4G × Cells/Sites/Group/NW），导出 Excel 并增量更新 SQLite + FTP 上传</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17927,7 +17927,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>RAN 小区可用性 1-Day 同步（<code>cell_availability_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>30 4 * * *</code>　|　worker 组: <strong>u</strong></li>
-<li>工作流脚本: <code>services/ran_cell_availability_sync.py → run_cell_availability_sync</code></li>
+<li>工作流脚本: <code>services/ran/ran_cell_availability_sync.py → run_cell_availability_sync</code></li>
 </ul>
 <p><strong>功能</strong>: RAN UME 小区可用性天粒度 KPI 同步（FDD/UMTS/GSM/TDD 4 模板），写 ran_kpi_avalability_1day.sqlite3 + FTP 上传</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17944,7 +17944,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>RAN Cells KPI 同步（<code>cells_kpi_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>50 4 * * *</code>　|　worker 组: <strong>u</strong></li>
-<li>工作流脚本: <code>services/ran_cells_kpi_sync.py → run_cells_kpi_sync</code></li>
+<li>工作流脚本: <code>services/ran/ran_cells_kpi_sync.py → run_cells_kpi_sync</code></li>
 </ul>
 <p><strong>功能</strong>: RAN UME 小区数据（2G/3G/4G）每日同步，聚合 Cells KPI（达标值 99.65%）物化写 ran_cells_kpi.sqlite3，只保留当月</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17955,14 +17955,14 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 </ol>
 <p><strong>维护要点</strong>:</p>
 <ul>
-<li>口径与达标值定义在 services/ran_cells_kpi_service.py 顶部；2G 用信道折算，3G/4G 用服务时长/86400</li>
+<li>口径与达标值定义在 services/ran/ran_cells_kpi_service.py 顶部；2G 用信道折算，3G/4G 用服务时长/86400</li>
 <li>看板 RAN 小区 KPI 优先读物化库，缺失时回退实时聚合 ran_kpi_avalability_1day.sqlite3</li>
 </ul>
 <p><a id="ch-15-s26"></a></p>
 <h5>RAN Network KPI 同步（<code>network_kpi_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 5 * * *</code>　|　worker 组: <strong>u</strong></li>
-<li>工作流脚本: <code>services/ran_ume_network_kpi.py → run_network_kpi_sync</code></li>
+<li>工作流脚本: <code>services/ran/ran_ume_network_kpi.py → run_network_kpi_sync</code></li>
 </ul>
 <p><strong>功能</strong>: RAN UME Network KPI（Zeenshan）历史指标同步（2G/3G/4G × Group/NW），导出 Excel 并导入 SQLite + FTP 上传</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -17997,7 +17997,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>BP Cells Report 更新（<code>bp_report_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>20 6 * * *</code>　|　worker 组: <strong>u</strong></li>
-<li>工作流脚本: <code>services/bp_report_sync.py → run_bp_report_sync</code></li>
+<li>工作流脚本: <code>services/bp/bp_report_sync.py → run_bp_report_sync</code></li>
 </ul>
 <p><strong>功能</strong>: 从 RAN_UME 读取 4G 小区级 PRB/吞吐/流量与小时级活跃用户数，按 umlaut 忙时口径重算 BP 劣化小区（日/周/月），更新本机 data/bp_report.sqlite3 并与 Excel 真值对账</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18010,8 +18010,8 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 </ol>
 <p><strong>维护要点</strong>:</p>
 <ul>
-<li>口径唯一真相源在 services/bp_caliber.py：日（忙时三值）、周 4/7、月 3/4</li>
-<li>⚠️ Average DL Active User Number 只在<strong>小时粒度</strong>可用：日粒度下 UME 返回 HTTP 200 + 合法 queryid 但<strong>静默丢弃该列</strong>、无任何报错，故走 services/bp_active_user.py 的独立通道（C373384373 + 1638004469342 + 1638004469332）。取不到时该日 is_bp=NULL（不可判定），<strong>绝不当 0</strong></li>
+<li>口径唯一真相源在 services/bp/bp_caliber.py：日（忙时三值）、周 4/7、月 3/4</li>
+<li>⚠️ Average DL Active User Number 只在<strong>小时粒度</strong>可用：日粒度下 UME 返回 HTTP 200 + 合法 queryid 但<strong>静默丢弃该列</strong>、无任何报错，故走 services/bp/bp_active_user.py 的独立通道（C373384373 + 1638004469342 + 1638004469332）。取不到时该日 is_bp=NULL（不可判定），<strong>绝不当 0</strong></li>
 <li>⚠️ UME 返回的数值是字符串且 PRB 带百分号（如 &quot;2.46%&quot;），必须去 % 再 /100；且 itemsposition 必须全为 0，写成 [0,1,2] 会返回 0001619999 拒绝查询</li>
 <li>⚠️ PRB 利用率在源表里是<strong>小数</strong>（0~1，实测 max 0.9751），阈值是 0.80 不是 80；写成 80 会让条件永不成立且不报错</li>
 <li>⚠️ 源表列名 &quot;E-UTRAN\xa0FDD\xa0Cell Name&quot; 里的分隔符是<strong>不换行空格</strong>；写成普通空格时 SQLite 不报错，而是把双引号标识符当字符串字面量返回，整列变成列名文本（bp_caliber.assert_columns_exist / assert_no_literal_fallback 就是为此加的守卫）</li>
@@ -18023,7 +18023,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>CNN UME KPI 同步（<code>cnn_kpi_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 6 * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/ccn_ume_kpi_service.py → run_cnn_kpi_sync</code></li>
+<li>工作流脚本: <code>services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync</code></li>
 </ul>
 <p><strong>功能</strong>: CNN UME 核心网 KPI 同步（xGW License/CPU/Voice/VLR/Data/3G/4G/Free Rating），API 写入 DB CNN</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18039,7 +18039,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>CNN UME KPI 5分钟同步（<code>cnn_kpi_sync_5mins</code>）</h5>
 <ul>
 <li>默认 cron: <code>*/15 * * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins</code></li>
+<li>工作流脚本: <code>services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins</code></li>
 </ul>
 <p><strong>功能</strong>: 与「CNN UME KPI 同步」同源同账号，但取细粒度（5 个模板 5 分钟、3 个模板 15 分钟）、窗口为昨天 00:00 至现在，API 写入 DB CNN 的 5mins_* 新表，供「CN KPI 5分钟」看板做 Day0/Day1/Day7 叠画；日/月粒度表不受影响</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18054,13 +18054,13 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <li>⚠ 本任务保留「0 行 → 跳过该表且不计失败」的兜底（原 cnn_kpi_sync 的逻辑是 0 行即报错，本任务刻意不同），上游再调整档位时不会让任务每 15 分钟失败一次</li>
 <li>⚠ 实测单轮约 105 秒（Free Rating 一天就有 1.4 万行）；若耗时逼近 15 分钟，需降低并发或放宽节拍</li>
 <li>与 cnn_kpi_sync 同在 n 组串行，避免两个任务各自登录同一账号互踢</li>
-<li>页面为本任务的唯一消费方：?page=cn_kpi_5mins（services/cn_kpi_5mins_service.py 读 5mins_* 表）</li>
+<li>页面为本任务的唯一消费方：?page=cn_kpi_5mins（services/cn/cn_kpi_5mins_service.py 读 5mins_* 表）</li>
 </ul>
 <p><a id="ch-15-s31"></a></p>
 <h5>SP 备件数据同步（<code>sp_data_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>10 * * * *</code>　|　worker 组: <strong>s</strong></li>
-<li>工作流脚本: <code>services/get_sp_table.py → run_sp_data_sync</code></li>
+<li>工作流脚本: <code>services/sp/get_sp_table.py → run_sp_data_sync</code></li>
 </ul>
 <p><strong>功能</strong>: 从 SFTP 拉取 5 份备件报表（Inbound/Outbound/Inventory/OC Rule/Transfer）写入 app.db，并镜像写入 FineBI WareHouseDashBoard inventory.db</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18084,7 +18084,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>iPRAN UME KPI 同步（<code>ipran_kpi_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 * * * *</code>　|　worker 组: <strong>u</strong></li>
-<li>工作流脚本: <code>services/ipran_ume_kpi_service.py → run_ipran_kpi_sync</code></li>
+<li>工作流脚本: <code>services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync</code></li>
 </ul>
 <p><strong>功能</strong>: iPRAN UME M6000 路由器 KPI 同步（HQ M6K-FW 等），导出 Excel 并导入 SQLite + FTP 上传</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18100,7 +18100,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>Liberia 宕站 1小时报告邮件（<code>liberia_email_1h</code>）</h5>
 <ul>
 <li>默认 cron: <code>15 * * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/liberia_email_report.py → run_1h_report</code></li>
+<li>工作流脚本: <code>services/email/liberia_email_report.py → run_1h_report</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 Liberia Orange Site Down hourly Report（内嵌图 + Excel）到主送/抄送名单</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18117,7 +18117,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>Liberia 宕站 8小时报告邮件（<code>liberia_email_8h</code>）</h5>
 <ul>
 <li>默认 cron: <code>20 */8 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/liberia_email_report.py → run_8h_report</code></li>
+<li>工作流脚本: <code>services/email/liberia_email_report.py → run_8h_report</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 Liberia Orange Site Down 8 hours Report（内嵌图 + Excel）到主送/抄送名单</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18133,7 +18133,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>MS Contract KPIs 日报邮件（<code>kpi_ms_contract</code>）</h5>
 <ul>
 <li>默认 cron: <code>30 5 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_ms_contract_kpi</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_ms_contract_kpi</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 MS Contract KPIs Achievements Daily Report（本地数据 + 远程名单）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18150,7 +18150,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>MS WOs SLA 日报邮件（<code>kpi_ms_wo_sla</code>）</h5>
 <ul>
 <li>默认 cron: <code>35 5 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_ms_wo_sla</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_ms_wo_sla</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 MS WOs SLA Achievements Daily Report（本地数据 + 远程名单）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18166,7 +18166,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SpareParts 备件报表邮件（<code>kpi_sp_spareparts</code>）</h5>
 <ul>
 <li>默认 cron: <code>45 9 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_spareparts</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_spareparts</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 SpareParts 报表（本地 sp_email 数据 + 远程共享名单）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18182,7 +18182,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>Comsumables 耗材报表邮件（<code>kpi_sp_consumables</code>）</h5>
 <ul>
 <li>默认 cron: <code>50 9 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_consumables</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_consumables</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 Comsumables 报表（本地 sp_email 数据 + 远程共享名单）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18198,7 +18198,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP 备件报表生成（<code>sp_report_generate</code>）</h5>
 <ul>
 <li>默认 cron: <code>15 5 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_report_generate</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_report_generate</code></li>
 </ul>
 <p><strong>功能</strong>: 先从 eFlow 刷新物料主数据 sp_material，再从 SFTP 下载备件数据，生成 Comsumables &amp; SpareParts Inbound&amp;Outbound&amp;Inventory 报表到本地 data/sp_email；明细与原始快照的 Material Name 一律按 Material No. 取主数据最新名</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18217,7 +18217,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP 备件周报（上周一→上周日）（<code>sp_weekly_report</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 7 * * mon</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_weekly_report</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_weekly_report</code></li>
 </ul>
 <p><strong>功能</strong>: 每周一 07:00 生成上一个完整自然周（上周一 00:00 → 上周日 23:59）的 SP 周报 xlsx 并邮件发送；文件名与邮件主题都带周期日期</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18239,7 +18239,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP 备件明细报表邮件（<code>sp_email_details</code>）</h5>
 <ul>
 <li>默认 cron: <code>5 7 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_details_email</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_details_email</code></li>
 </ul>
 <p><strong>功能</strong>: 把 data/sp_email/data 下 4 份备件明细（inventory/inband/outband/transfer）合并为一个 Excel（sheet: Inventory/Inbound/Outbound/Transfer）发送邮件，邮件发出后把同一份 Excel 作为文档发到 WhatsApp 群 WH&amp;SP Management</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18259,7 +18259,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP 备件明细分文件邮件（<code>sp_details_files_email</code>）</h5>
 <ul>
 <li>默认 cron: <code>5 10 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_details_files_email</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_details_files_email</code></li>
 </ul>
 <p><strong>功能</strong>: 每天 10:05 把 data/sp_email/data 下的 6 份备件明细<strong>一份文件一封邮件</strong>逐个发给 NOC，主题 Liberia OLR W.H &lt;文件名&gt; &lt;日期时间&gt;</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18284,7 +18284,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>Comsumables&amp;SpareParts Report Whatsapp（<code>sp_whatsapp_report</code>）</h5>
 <ul>
 <li>默认 cron: <code>55 7 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_whatsapp_report</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_whatsapp_report</code></li>
 </ul>
 <p><strong>功能</strong>: 每天 07:55 把 Comsumables / SpareParts 两个邮件任务的同一批产物（合并总表 XLSX + 报表 PNG）发送到 WhatsApp 群 WH&amp;SP Management</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18303,7 +18303,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP 物料库存与消耗报表邮件（<code>sp_material_report</code>）</h5>
 <ul>
 <li>默认 cron: <code>45 7 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_material_stock_consumption</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_material_stock_consumption</code></li>
 </ul>
 <p><strong>功能</strong>: 每天 07:45 把 SP 物料库存与消耗汇总（同「SP 物料库存与消耗统计」页面 page=sp_material 的口径）导出为 UNIFIED_EXCEL_V1 版式 Excel 附件 + 同内容 PNG 内嵌正文并邮件发送</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18323,7 +18323,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>MS Network Availability 日报邮件（<code>kpi_ran_availability</code>）</h5>
 <ul>
 <li>默认 cron: <code>30 9 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_ran_availability</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_ran_availability</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 MS Network Availability Daily Report（远程 FTP 图片 + 远程名单，无 Excel）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18339,7 +18339,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>EWS 恢复后邮件补发（<code>email_recovery</code>）</h5>
 <ul>
 <li>默认 cron: <code>*/10 * * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/email_recovery.py → run_email_recovery_task</code></li>
+<li>工作流脚本: <code>services/email/email_recovery.py → run_email_recovery_task</code></li>
 </ul>
 <p><strong>功能</strong>: 每 10 分钟探测 EWS 是否恢复；恢复后自动补发近 3 小时内因 EWS 超时失败的邮件任务</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18374,7 +18374,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>Packet Loss 丢包日报邮件（<code>packet_loss_email</code>）</h5>
 <ul>
 <li>默认 cron: <code>45 6 * * *</code>　|　worker 组: <strong>u</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_packet_loss_email</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_packet_loss_email</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 Packet Loss 丢包看板日报邮件（本地截图 + 最新报告 xlsx + 远程收件人清单），经 OWA 账户发送</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18390,7 +18390,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>IP RAN M6K-FW 图表邮件（<code>ipran_m6k_chart_email</code>）</h5>
 <ul>
 <li>默认 cron: <code>45 6 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/ipran_chart_service.py → run_ipran_m6k_chart_email</code></li>
+<li>工作流脚本: <code>services/ipran/ipran_chart_service.py → run_ipran_m6k_chart_email</code></li>
 </ul>
 <p><strong>功能</strong>: 从 ipran_ume_kpi.sqlite3 查询 HQ_M6K_FW_bnctp_15mins，按 ME+SmartGroup 生成 3 张利用率折线图并发送</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18407,7 +18407,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>CNN Free Rating 图表邮件（<code>ccn_free_rating_chart_email</code>）</h5>
 <ul>
 <li>默认 cron: <code>45 7 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email</code></li>
+<li>工作流脚本: <code>services/cnn/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email</code></li>
 </ul>
 <p><strong>功能</strong>: 从 db_ps_cs_cn.sqlite3 查询 FREE_RATING_GROUP_TEMPLATE_OSS_update_UME，按 MO 生成 4 张柱状图并发送</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18492,7 +18492,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>邮箱空间清理（<code>mailbox_cleanup</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 * * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/mailbox_cleanup.py → run_mailbox_cleanup</code></li>
+<li>工作流脚本: <code>services/cleanup/mailbox_cleanup.py → run_mailbox_cleanup</code></li>
 </ul>
 <p><strong>功能</strong>: 每小时检查 Exchange 邮箱：邮件数 &gt;500 且空间 &gt;70% 时，硬删除最旧 200 封邮件，避免 storage limit 告警</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18508,7 +18508,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>Incident Overview 数据同步（<code>incident_overview_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>20 * * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/incident_overview_sync.py → run_incident_overview_sync</code></li>
+<li>工作流脚本: <code>services/incident/incident_overview_sync.py → run_incident_overview_sync</code></li>
 </ul>
 <p><strong>功能</strong>: 每小时第 20 分钟从 FineBI FTP /webroot/WEB-INF/schedule/TT_WO/ 所有子目录取最新 incident_overview.xlsx，版本化落盘 + current.json 指针</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18526,7 +18526,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>数据库数据新鲜度巡检（<code>db_freshness_check</code>）</h5>
 <ul>
 <li>默认 cron: <code>15 * * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/db_freshness_check.py → run_db_freshness_check</code></li>
+<li>工作流脚本: <code>services/db/db_freshness_check.py → run_db_freshness_check</code></li>
 </ul>
 <p><strong>功能</strong>: 每小时巡检远程 DB（db_writer_api）、本地回退库各表最新数据日期，以及本机文件型数据源（FTP 落盘的 Excel）的落盘年龄，滞后时输出调用链路与检查方向</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18562,7 +18562,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>MTTR/TT 宽表重建（<code>mttr_tt_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>40 7 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/mttr_tt_sync.py → run_mttr_tt_sync</code></li>
+<li>工作流脚本: <code>services/tt/mttr_tt_sync.py → run_mttr_tt_sync</code></li>
 </ul>
 <p><strong>功能</strong>: 重建 mttr_tt 宽表（Eflow_TT_FB + OLR_CELLS/Site_Maintainer_Category 参考库），写本机 data/mttr_tt.sqlite3，供 MTTR 看板（日/周/月）</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18573,7 +18573,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 </ol>
 <p><strong>维护要点</strong>:</p>
 <ul>
-<li>口径解析自 FineDB 数据集 4bc5a679，定义在 services/mttr_tt_sync.py 顶部；MTTR2 只在 0&lt;MTTR1&lt;48h 时非空</li>
+<li>口径解析自 FineDB 数据集 4bc5a679，定义在 services/tt/mttr_tt_sync.py 顶部；MTTR2 只在 0&lt;MTTR1&lt;48h 时非空</li>
 <li>参考库 excel_ds.sqlite3 是从 my-finebi 固化的静态文件（114KB，2026-08-31 后未变）；FineBI 侧 Excel 数据集若更新需重新导出覆盖</li>
 <li>2026-09-21 上线前该表由已退役 my-finebi 的手工 ETL 维护，无调度 → 冻结在 2026-08-31</li>
 </ul>
@@ -18717,7 +18717,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>CXO 看板数据缓存同步（<code>cxo_dashboard_cache_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>*/10 * * * *</code>　|　worker 组: <strong>v</strong></li>
-<li>工作流脚本: <code>services/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync</code></li>
+<li>工作流脚本: <code>services/cxo/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync</code></li>
 </ul>
 <p><strong>功能</strong>: 每 10 分钟经本机 8790 VMAX 代理拉取 CXO 看板全量接口，按接口粒度合并为 last-known-good 缓存（空值保留旧值），供看板兜底展示</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18736,7 +18736,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>VMAX CXO 天粒度日值归档（<code>vmax_cxo_daily_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>15 * * * *</code>　|　worker 组: <strong>v</strong></li>
-<li>工作流脚本: <code>services/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync</code></li>
+<li>工作流脚本: <code>services/cxo/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync</code></li>
 </ul>
 <p><strong>功能</strong>: 每小时经 8790 VMAX 代理按监控批量拉取最近 8 天的 1hour 明细（50 个指标压成 8 个多列请求），聚合为日值落盘，供页签化天粒度看板累积回看约三周</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18866,7 +18866,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP Online 工单同步（<code>sp_online_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>35 */6 * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/sp_online_sync.py → run_sp_online_sync</code></li>
+<li>工作流脚本: <code>services/sp/sp_online_sync.py → run_sp_online_sync</code></li>
 </ul>
 <p><strong>功能</strong>: 每 6 小时从 eFlow SP 接口拉在线工单（sp-outbound / sp-inbound / sp-transfer），写库表对应三张表。取「原始 filter」与「状态全集 filter」两份结果的并集，避免 filter 与其返回结果自相矛盾时静默取错数据。表语义=上游当前快照：全量重建，删除上游已消失的单据</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18888,7 +18888,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP 物料主数据同步（<code>sp_material_sync</code>）</h5>
 <ul>
 <li>默认 cron: <code>55 4 * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/sp_material_sync.py → run_sp_material_sync</code></li>
+<li>工作流脚本: <code>services/sp/sp_material_sync.py → run_sp_material_sync</code></li>
 </ul>
 <p><strong>功能</strong>: 从 eFlow SP 物料接口（eflow-sp-material）拉全量物料主数据，按 materialNo 唯一键 upsert 写 app.db 表 sp_material。表语义=上游当前快照：全量重建，删除上游已消失的物料</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18907,7 +18907,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP 在线未关闭单报表生成（<code>sp_online_report_generate</code>）</h5>
 <ul>
 <li>默认 cron: <code>0 6 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_online_report_generate</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_online_report_generate</code></li>
 </ul>
 <p><strong>功能</strong>: 生成 sp_online 下未关闭单报表（PNG+XLSX，Create Time 倒序）：Inbound 读明细 xlsx 未关闭单，Outbound 读库表 sp_outbound 跟踪 WaitingForUpdate / WaitingForReturn / WaitingForConfirm</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -18925,7 +18925,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>SP 在线未关闭单报表发送（<code>sp_online_report_send</code>）</h5>
 <ul>
 <li>默认 cron: <code>35 6 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/kpi_email_report.py → run_sp_online_report</code></li>
+<li>工作流脚本: <code>services/email/kpi_email_report.py → run_sp_online_report</code></li>
 </ul>
 <p><strong>功能</strong>: 发送 sp_online 未关闭单报表：邮件（PNG 内嵌 + XLSX 附件，默认复用 SP 报表远程名单）+ WhatsApp 群</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -19002,7 +19002,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>WhatsApp 知识库同步（推单规则）（<code>whatsapp_kb_sync_push_rules</code>）</h5>
 <ul>
 <li>默认 cron: <code>4 0 */3 * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></li>
+<li>工作流脚本: <code>services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></li>
 </ul>
 <p><strong>功能</strong>: eFlow 推单规则收集完成后触发：比对规则 xlsx 指纹，有变化才重导知识文档、重建索引并重启 whatsapp-kb-bot</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -19021,7 +19021,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>WhatsApp 知识库同步（告警规则）（<code>whatsapp_kb_sync_alarm_rules</code>）</h5>
 <ul>
 <li>默认 cron: <code>4 0 */3 * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></li>
+<li>工作流脚本: <code>services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></li>
 </ul>
 <p><strong>功能</strong>: eFlow 告警规则收集完成后触发知识库同步；告警压缩规则来自 eflow_alarm_rules.xlsx，无变化自动跳过</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -19039,7 +19039,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>WhatsApp 知识库同步（TT 级别规则）（<code>whatsapp_kb_sync_tt_rules</code>）</h5>
 <ul>
 <li>默认 cron: <code>35 4 * * *</code>　|　worker 组: <strong>n</strong></li>
-<li>工作流脚本: <code>services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></li>
+<li>工作流脚本: <code>services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs</code></li>
 </ul>
 <p><strong>功能</strong>: eFlow TT 级别规则收集（每日 04:20）完成后触发知识库同步；级别规则来自 eflow_TT_rules.xlsx</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -19056,7 +19056,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>日志文件清理（<code>log_cleanup</code>）</h5>
 <ul>
 <li>默认 cron: <code>17 3 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/log_cleanup.py → run_log_cleanup</code></li>
+<li>工作流脚本: <code>services/cleanup/log_cleanup.py → run_log_cleanup</code></li>
 </ul>
 <p><strong>功能</strong>: 每天清理 my_app/log 下超过保留期（默认 7 天，LOG_RETENTION_DAYS 可调）的日志，并把已无进程写入的旧命名日志补上日期后缀</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -19074,7 +19074,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>TMP 目录清理（<code>tmp_cleanup</code>）</h5>
 <ul>
 <li>默认 cron: <code>47 3 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/tmp_cleanup.py → run_tmp_cleanup</code></li>
+<li>工作流脚本: <code>services/cleanup/tmp_cleanup.py → run_tmp_cleanup</code></li>
 </ul>
 <p><strong>功能</strong>: 两段式回收 my_app/TMP 下超过保留期（默认 7 天）的临时产物：先同盘移进 TMP/_quarantine_YYYYMMDD/（可还原），隔离再满 7 天才真删</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -19093,7 +19093,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>TTs and MTTR 报表生成（<code>tt_mttr_report_generate</code>）</h5>
 <ul>
 <li>默认 cron: <code>20 7 * * *</code>　|　worker 组: <strong>m</strong></li>
-<li>工作流脚本: <code>services/tt_mttr_report.py → run_tt_mttr_report</code></li>
+<li>工作流脚本: <code>services/tt/tt_mttr_report.py → run_tt_mttr_report</code></li>
 </ul>
 <p><strong>功能</strong>: 从最新一份 Site Down hourly Report 生成 TTs and MTTR (Hour) 月粒度工作簿，供邮件报告页「TTs and MTTR」页签下载</p>
 <p><strong>工作流与数据流</strong>:</p>
@@ -19220,7 +19220,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 </tr>
 <tr>
 <td><strong>漏跑/停摆主动告警</strong></td>
-<td>db_freshness_check 每小时算五类健康异常（未归组 / 超出周期无执行记录 / 队列滞留 / 上次成功后逾期无新成功 / 执行成功但持续零产出），由 services/task_health_alert.py 按「新异常通知一次、恢复通知一次、持续超 24h 再提一次」推微信+邮件，不必等看板没数据了才人工发现（2026-09-18 上线；「成功但零产出」2026-11-06 补，起因是 vmax_multi_data_sync 连续 34 天 rows=0 却每轮 success=1，旧四类全都覆盖不到）。</td>
+<td>db_freshness_check 每小时算五类健康异常（未归组 / 超出周期无执行记录 / 队列滞留 / 上次成功后逾期无新成功 / 执行成功但持续零产出），由 services/task/task_health_alert.py 按「新异常通知一次、恢复通知一次、持续超 24h 再提一次」推微信+邮件，不必等看板没数据了才人工发现（2026-09-18 上线；「成功但零产出」2026-11-06 补，起因是 vmax_multi_data_sync 连续 34 天 rows=0 却每轮 success=1，旧四类全都覆盖不到）。</td>
 </tr>
 <tr>
 <td><strong>进程自愈</strong></td>
@@ -19431,7 +19431,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <h5>ms_wo_sla（<code>ms_wo_sla</code>）</h5>
 <p>MS WOs SLA 日报：工单 SLA 达成率的每日明细矩阵（Total / Within SLA / Achieve），与每天发的「MS WOs SLA 日报」邮件读同一份文件。</p>
 <ul>
-<li>数据源是 data/ms_sla/ZTE OLR MS WOs SLA Achievements Daily Report_&lt;日期&gt;.xlsx（任务 kpi_ms_wo_sla 每天落地），页面不做二次加工，解析口径见 backend/services/ms_kpi_report_service.py</li>
+<li>数据源是 data/ms_sla/ZTE OLR MS WOs SLA Achievements Daily Report_&lt;日期&gt;.xlsx（任务 kpi_ms_wo_sla 每天落地），页面不做二次加工，解析口径见 backend/services/ms/ms_kpi_report_service.py</li>
 <li>页面结构：总览卡片（月工单 / 达标 / 达成率 / 未达标指标）→ 5 个 TTR 指标卡 → 达成率日趋势（含各自目标线）→ 每日明细矩阵（与 Excel 版式一致）</li>
 <li>点矩阵列头可看该指标的趋势下钻弹窗</li>
 <li><strong>每个数字都能悬浮看算法</strong>（2026-11-03）：总览卡、指标卡的月值与「N/M 天达标」、趋势弹窗统计都可悬浮问「这个数怎么算」。要点三条 —— 月值取工作簿 Month 行<strong>原值</strong>（不做除法重算）；「N/M 天达标」的分母是<strong>矩阵日行数</strong>，不是自然月天数（缺档日不计）；总览里的 Total / Within SLA / Achieve 是三列<strong>各自的原值</strong>，所以 Achieve 不一定等于 Within ÷ Total</li>
@@ -19897,7 +19897,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <li>「显示列」可按分表自定义并本地记住；行详情弹窗始终显示全列</li>
 <li><strong>每个数字都能悬浮看算法</strong>（2026-11-04）：顶部七张数量卡的气泡写明「该值 = 汇总工作簿 Summary-Current 的 Total 行 · 某列原值」，并提醒<strong>列缺失或不是数值时后端按 0.0 返回</strong>（所以 0 可能是真 0，也可能那一列压根没值）；「物料数」是<strong>行数不是去重物料号</strong>；「紧急补库」是 Alert Level 等于 Urgent Replenish 的<strong>行数</strong>，单位与旁边的 Qty 卡不同、不能相减</li>
 <li>「未关闭单」气泡写明它<strong>取自实时数据库</strong>（与 MsPortal 的 SPMS 大数字同口径），因为工作簿是 05:55 的快照、DB 是 07:00 落的；其余统计仍按 Excel 快照，保证与邮件附件逐行一致</li>
-<li><strong><code>Material Name</code> 取物料主数据 <code>sp_material</code> 的最新名</strong>（2026-11-06 起）：上游明细里这一列是<strong>单据导出那一刻</strong>的快照名，物料在 eFlow 改名后历史单据不回写，同一物料会在 Summary-Current 里裂成两行、入库/出库/库存被拆开；生成端 Step 0 先从 eFlow 刷新主数据，Step 2.5 再按 <code>Material No.</code> 覆盖五份明细与五份原始快照（实现 <code>backend/services/sp_material_name.py</code>）。代价：当天 05:15 之后发生的改名次日才进报表 —— 页面读的就是这份报表，所以同页不会出现两套名字</li>
+<li><strong><code>Material Name</code> 取物料主数据 <code>sp_material</code> 的最新名</strong>（2026-11-06 起）：上游明细里这一列是<strong>单据导出那一刻</strong>的快照名，物料在 eFlow 改名后历史单据不回写，同一物料会在 Summary-Current 里裂成两行、入库/出库/库存被拆开；生成端 Step 0 先从 eFlow 刷新主数据，Step 2.5 再按 <code>Material No.</code> 覆盖五份明细与五份原始快照（实现 <code>backend/services/sp/sp_material_name.py</code>）。代价：当天 05:15 之后发生的改名次日才进报表 —— 页面读的就是这份报表，所以同页不会出现两套名字</li>
 </ul>
 <p><a id="ch-15-s150"></a></p>
 <h5>com_report（<code>com_report</code>）</h5>
@@ -20597,7 +20597,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <p><strong>保留在 PROJECT_DOCS.md 不动</strong>（属于历史决策与复盘，不是&quot;现状描述&quot;）：§2 迁移计划、§3 架构评估与 Django 论证、§4 FastAPI 架构优化方案、§5–§6 i18n 审计与复查、§8 IP Trace 集成方案、§10 迁移失败复盘、§11 优化建议。</p>
 
 </section>
-  <footer class="colophon">my_app 项目手册 · 由 frontend/scripts/generate-manual-html.mjs 从 docs/manual/*.md 同源生成于 2026-11-13 · 改 MD 后重跑该脚本并重新构建前端即可更新</footer>
+  <footer class="colophon">my_app 项目手册 · 由 frontend/scripts/generate-manual-html.mjs 从 docs/manual/*.md 同源生成于 2026-11-14 · 改 MD 后重跑该脚本并重新构建前端即可更新</footer>
 </div>
 </body>
 </html>

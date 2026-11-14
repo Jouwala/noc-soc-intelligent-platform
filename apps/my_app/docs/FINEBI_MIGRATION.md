@@ -61,7 +61,7 @@ backend/routers/native_boards.py       3 个端点（数据 / 导出 / 健康）
         │
 backend/services/dashboard_service.py  取数引擎：并发 + 缓存 + 时间窗口 + Excel
         │
-backend/services/native_catalog.py     看板定义（187 组件，自动生成）
+backend/services/native/native_catalog.py     看板定义（187 组件，自动生成）
         │
         ├─ 远端只读 SQL API（.19:8765）── 8 个库
         └─ 本机 db/app.db ──────────── spare 看板
@@ -102,7 +102,7 @@ my_app 的 `task_registry.py` 也已记录该库单次锁 1~9min、最坏 2h+ �
 >    真正的症结是**远端那个持锁进程**，而 SMB 无法代理 WAL 的共享内存语义。
 >
 > 该问题已从 my_app 侧根治：镜像改为「本地构建 + 整文件推送」
-> （`backend/services/sp_mirror_push.py`），整文件覆盖**不需要**字节锁。
+> （`backend/services/sp/sp_mirror_push.py`），整文件覆盖**不需要**字节锁。
 > 详见 `docs/manual/04-task-system.md` 的 `sp_data_sync` 小节。
 
 因此 `spare` 直接改读本机 `app.db`：绕开远端锁、少一跳网络，
@@ -330,13 +330,13 @@ SELECT * FROM ( <原 SQL> ) WHERE substr("<日期列>",1,10) BETWEEN '...' AND '
 | `frontend/src/pages/NativeBoard.tsx` | 通用看板页（5 种组件类型） |
 | `backend/routers/native_boards.py` | API 路由 |
 | `backend/services/dashboard_service.py` | 取数引擎 + 时间窗口 + Excel |
-| `backend/services/native_catalog.py` | 看板定义（**自动生成，勿手改**） |
+| `backend/services/native/native_catalog.py` | 看板定义（**自动生成，勿手改**） |
 | `backend/services/_gen_native_catalog.py` | 目录生成器 |
 | `backend/services/_verify_native_catalog.py` | SQL 预检工具 |
 | `backend/services/_native_catalog_raw.json` | 生成器的中间产物 |
 | `backend/services/avail/avail_recon_sync.py` | 可用率核对宽表重建（§4.1，任务 `avail_recon_sync`） |
-| `backend/services/mttr_tt_sync.py` | MTTR/TT 宽表重建（§4.1，任务 `mttr_tt_sync`） |
+| `backend/services/tt/mttr_tt_sync.py` | MTTR/TT 宽表重建（§4.1，任务 `mttr_tt_sync`） |
 | `backend/services/progress_sync.py` | Progress 宽表重建（§4.1，任务 `progress_sync`） |
-| `backend/services/remote_readonly.py` | 远端只读 SQL API 客户端（上面三个 ETL 共用） |
+| `backend/services/remote/remote_readonly.py` | 远端只读 SQL API 客户端（上面三个 ETL 共用） |
 | `data/excel_ds.sqlite3` | 从 my-finebi 固化的静态参考库（`OLR_CELLS` / `Site_Maintainer_Category`） |
 | `TMP/_clean_nat_rows.py` | 一次性 `'NaT'` 清理工具（可回滚） |

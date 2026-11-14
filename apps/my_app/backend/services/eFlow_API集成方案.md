@@ -32,8 +32,8 @@ sync_from_eflow_api.py
 
 | 文件 | 说明 |
 |------|------|
-| `backend/services/eflow_api_client.py` | API 客户端（登录 + 数据获取），合并原 get_eflow_table.py 和 get_eflow_realtime_alarm.py |
-| `backend/services/sync_from_eflow_api.py` | 同步服务（字段映射 + 写入 app.db） |
+| `backend/services/eflow/eflow_api_client.py` | API 客户端（登录 + 数据获取），合并原 get_eflow_table.py 和 get_eflow_realtime_alarm.py |
+| `backend/services/eflow/sync_from_eflow_api.py` | 同步服务（字段映射 + 写入 app.db） |
 | `backend/main.py` | FastAPI 主入口 + 定时同步调度器 |
 | `backend/scripts/init_db.py` | 数据库初始化脚本 |
 | `backend/requirements.txt` | Python 依赖 |
@@ -72,7 +72,7 @@ ZTE eFlow API → eflow_api_client.py → dict{sheet_name: records}
 
 ```bash
 cd d:\01_RPA\Task\my_app
-python -m backend.services.sync_from_eflow_api
+python -m backend.services.eflow.sync_from_eflow_api
 ```
 
 ### 通过 FastAPI 触发

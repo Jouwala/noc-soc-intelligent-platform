@@ -7,14 +7,14 @@
 - GET /api/sp-material/summary   汇总表（8 列 + Total 行）
 - GET /api/sp-material/detail    单元格下钻明细
 
-计算口径见 backend/services/sp_material_summary_service.py 顶部 docstring。
+计算口径见 backend/services/sp/sp_material_summary_service.py 顶部 docstring。
 所有非法参数走「200 + warnings 软失败」，不抛 5xx（看板不能因为一个格子炸掉整页）。
 """
 import logging
 
 from fastapi import APIRouter
 
-from backend.services.sp_material_summary_service import (
+from backend.services.sp.sp_material_summary_service import (
     get_material_detail,
     get_material_summary,
 )

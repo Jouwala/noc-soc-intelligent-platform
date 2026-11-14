@@ -26,7 +26,7 @@ const { Text } = Typography
  * SP 物料库存与消耗统计汇总（WH/DOP 报表）
  *
  * 数据源：db/app.db -> inventory_details（每日全量快照，由 SP 数据同步任务写入）
- * 口径：见 backend/services/sp_material_summary_service.py 顶部 docstring
+ * 口径：见 backend/services/sp/sp_material_summary_service.py 顶部 docstring
  *   - 期初 / 当前 两列 = SUM(Stock Qty)，Spare Part 只算 Material Status != 'damage'
  *   - Need Repair       = 当前快照 Material Status = 'damage' 的合计
  *   - Total Consumption = 期初合计 − 当前合计（三个窗口：锚点日 / 本月 / 本周）
@@ -242,7 +242,7 @@ export default function SpMaterialSummary() {
 
   // 数字渲染（可下钻 / 负数告警色）
   /** 这一格的构成。字段一律取接口下发的 SummaryRow，前端不重算口径
-   *  （AGENTS.md 三.3c）；后端算法见 services/sp_material_summary_service.py 的 _build_row()。 */
+   *  （AGENTS.md 三.3c）；后端算法见 services/sp/sp_material_summary_service.py 的 _build_row()。 */
   const cellTip = useCallback((row: SummaryRow, scope: Scope) => {
     const num = (n: unknown) => Number(n ?? 0).toLocaleString()
     const head = (() => {

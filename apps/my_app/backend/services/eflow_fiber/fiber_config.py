@@ -142,7 +142,7 @@ def parse_config(conf: Dict[str, Any], env: Dict[str, str]) -> Dict[str, Any]:
 
 def load_config(env=None) -> Dict[str, Any]:
     """读配置文件 + 环境变量 → 生效配置。文件缺失/损坏时回退默认。"""
-    from backend.services.task_config_files import load_json_config
+    from backend.services.task.task_config_files import load_json_config
     conf = load_json_config(CONFIG_FILE)
     if not isinstance(conf, dict):
         conf = {}

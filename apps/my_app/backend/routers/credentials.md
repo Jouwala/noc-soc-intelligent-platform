@@ -1,6 +1,6 @@
 # credentials.py - 凭据管理 API 路由
 
-提供"设置"页面所需的凭据管理接口，存储实现见 `backend/services/credential_store.py`。
+提供"设置"页面所需的凭据管理接口，存储实现见 `backend/services/credential/credential_store.py`。
 
 ## 接口
 | 方法 | 路径 | 说明 |
@@ -19,7 +19,7 @@
   （`rais` 曾走这里的「RAIS 直接鉴权」分支，2026-10-26 上游强制人工图形验证码后
   改判给 `credential_tester._test_rais`，本文件内不再有 RAIS 专用代码；
   历史上那条分支报出的 `HTTP 445` 是网关缺同源 Referer 拦的，不是口令错误）
-- 其余 kind → `backend/services/credential_tester.py::run_test()`
+- 其余 kind → `backend/services/credential/credential_tester.py::run_test()`
   （vmax_portal / gbase / ssh / ssh_via_control / ume_keystone / umc_portal /
   sftp / smtp / ews / weixin_push / rais_uaclite）。
 
@@ -27,7 +27,7 @@
 否则 SSH / 数据库 / 邮件这类组会被当成 ZTE 网管去打 OAuth2
 （`gp_ran_control` 在 2026-10-21 前就是这个假阴性：按钮一直报"登录失败"）。
 
-各组实际做什么见 `backend/services/credential_store.md` 的凭据组表。
+各组实际做什么见 `backend/services/credential/credential_store.md` 的凭据组表。
 
 ## 请求体示例
 PUT:

@@ -1,7 +1,7 @@
 """TT 告警文本作业接口 —— 供「TT 告警推送」Chrome 扩展使用。
 
 业务逻辑（取数 / 渲染 / 节流 / 落库 / 作业状态机）都在
-`backend/services/tt_alarm_whatsapp_service.py`；本文件只做 HTTP 薄封装，
+`backend/services/tt/tt_alarm_whatsapp_service.py`；本文件只做 HTTP 薄封装，
 与 `backend/routers/whatsapp_outbox.py`（发图作业）同构，但作业文件相互独立
 （`data/tt_alert_job.json`），互不覆盖。
 
@@ -11,7 +11,7 @@
 - GET  /api/whatsapp/tt-alert/log          → 查看发送日志表（运维排查用）
 
 > **扩展实际走的是统一认领口 `/api/whatsapp/ext/job`**（见
-> `backend/services/whatsapp_job_claim.py`），不是本文件的 `/job` 端点 ——
+> `backend/services/whatsapp/whatsapp_job_claim.py`），不是本文件的 `/job` 端点 ——
 > 因为扩展只轮询一个端点。本文件保留 `/job` 与 `/job/result` 是为了：
 >   1. 让文本作业有一条**可独立自测/手工排查**的通道（不必模拟扩展的完整往返）；
 >   2. 便于将来扩展升级为并行轮询两个端点。
@@ -24,8 +24,8 @@ from pydantic import BaseModel
 
 from backend.database import get_raw_connection
 from backend.security import require_protected
-from backend.services import tt_alarm_job as job_transport
-from backend.services import tt_alarm_whatsapp_service as svc
+from backend.services.tt import tt_alarm_job as job_transport
+from backend.services.tt import tt_alarm_whatsapp_service as svc
 
 logger = logging.getLogger("tt_alert_router")
 

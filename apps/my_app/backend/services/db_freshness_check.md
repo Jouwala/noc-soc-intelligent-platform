@@ -12,7 +12,7 @@
 |---|---|
 | task_id | `db_freshness_check` |
 | cron | `15 * * * *`（每小时第 15 分钟，避开各同步任务整点运行窗口） |
-| 入口 | `backend/services/db_freshness_check.py::run_db_freshness_check` |
+| 入口 | `backend/services/db/db_freshness_check.py::run_db_freshness_check` |
 | category / gateway | `general` / `system` |
 
 ## 巡检范围
@@ -79,7 +79,7 @@
 
 ### 健康告警推送（2026-09-18 新增）
 
-上面五类结果以前**只进日志**（本次停摆两天是用户先发现的），现接入 `backend/services/task_health_alert.py`
+上面五类结果以前**只进日志**（本次停摆两天是用户先发现的），现接入 `backend/services/task/task_health_alert.py`
 把 findings 推到人前（微信 `weixin_notifier` + 邮件 `email_notifier.send_status_email`）：
 
 - **翻转去重**：以 `kind:task_id` 为键，状态文件 `TMP/task_health_alert_state.json`（原子写 tmp + `os.replace`），
@@ -91,7 +91,7 @@
 - **再降噪（`overdue_dependency`）**：上述连带里「最新失败是外部依赖不可用」的（EWS 401 / 连接失败 /
   子进程超时）聚合成一条，文案指向依赖侧（凭据/网络）；真停摆才逐条报
 - **静音**：`TASK_HEALTH_ALERT_ENABLED=0`；告警异常不影响巡检结论（只记 warning）
-- 自测：`python -m backend.services.task_health_alert`（演练不发真信）、
+- 自测：`python -m backend.services.task.task_health_alert`（演练不发真信）、
   `python tests\test_task_health_alert.py`、`python tests\test_task_health_detect.py`
 
 ## 输出与判定
@@ -124,7 +124,7 @@
 
 ```powershell
 # 手动执行一次
-python d:\01_RPA\Task\my_app\backend\services\db_freshness_check.py
+python d:\01_RPA\Task\my_app\backend\services\db\db_freshness_check.py
 ```
 
 ## 依赖

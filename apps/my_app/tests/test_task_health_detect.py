@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.services.db_freshness_check import (  # noqa: E402
+from backend.services.db.db_freshness_check import (  # noqa: E402
     _cron_next_and_interval,
     _silent_task_candidates,
     _result_output_count,

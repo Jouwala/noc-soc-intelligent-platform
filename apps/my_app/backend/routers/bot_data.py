@@ -480,7 +480,7 @@ def _query_task_stats(task_id: str, days: int, limit: int):
     避免机器人给出的数与页面上任何一张卡都对不上。
     """
     try:
-        from backend.services import task_runner
+        from backend.services.task import task_runner
     except Exception as e:  # noqa: BLE001
         return None, f"任务服务不可用：{e}"
 
@@ -554,7 +554,7 @@ def _query_task_stats(task_id: str, days: int, limit: int):
 
     # ---- 失败根因聚类（复用页面「失败聚合」弹窗的同一实现）----
     try:
-        from backend.services import task_stats
+        from backend.services.task import task_stats
         agg = task_stats.get_recent_failures(days=days, limit=200)
         payload["failure_clusters"] = [
             {
@@ -605,7 +605,7 @@ def _query_site_availability(site: str, month: str):
     该站当月各制式的每日可用率与均值 —— 与「站点可用率」看板同源同口径。
     """
     try:
-        from backend.services import site_availability_service as svc
+        from backend.services.site import site_availability_service as svc
     except Exception as e:  # noqa: BLE001
         return None, f"可用率服务不可用：{e}"
 

@@ -5,7 +5,7 @@
  * 数据源：`eflow_pm`（eFlow 同步的动态建表，1632 行 @2026-09-25）。
  * 后端：`backend/routers/pm_analysis.py`，
  *       口径与「概览/下钻如何共用一份 WHERE」见
- *       `backend/services/pm_caliber.py` 的模块 docstring。
+ *       `backend/services/pm/pm_caliber.py` 的模块 docstring。
  *
  * ⚠️ **本表字段名有误导性**：实测 `last_accept_time` 100% 早于
  *    `last_process_time`，而 `last_flm_leader_approve_time` 最晚。

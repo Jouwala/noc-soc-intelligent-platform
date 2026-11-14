@@ -71,7 +71,7 @@ _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 # 输出库：my_app 自持，看板经 LOCAL_SQLITE_FILES 读它
 SERVICE_DIR = Path(__file__).resolve().parent
-OUT_DB = SERVICE_DIR.parent.parent / "data" / "avail_recon.sqlite3"
+OUT_DB = SERVICE_DIR.parent.parent.parent / "data" / "avail_recon.sqlite3"
 
 # 源库（远端逻辑库名，见 db_writer_api 的 GET /api/dbs）
 SRC_DB = "db.sqlite3"
@@ -103,13 +103,13 @@ DDL = """CREATE TABLE availability_daily(
 #   优先级：环境变量 > 配置文件 > 内置默认。这里配的是「远端库逻辑名/表名」，不是本地路径。
 # ============================================================
 try:
-    from backend.services.task_config_files import apply_config_overrides
+    from backend.services.task.task_config_files import apply_config_overrides
 except ImportError:
     from task_config_files import apply_config_overrides  # type: ignore
 
 apply_config_overrides(
     globals(),
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "avail_recon_config.json"),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "avail_recon_config.json"),
     {
         "src_db": ("SRC_DB", str, "AVAIL_RECON_SRC_DB"),
         "master_db": ("MASTER_DB", str, None),
@@ -133,7 +133,7 @@ class AvailReconError(Exception):
 def _q(db: str, sql: str, limit: int = 200000,
        timeout: int = QUERY_TIMEOUT) -> List[List[Any]]:
     """远端只读查询（实现收敛在 remote_readonly，避免每个 ETL 各写一份）。"""
-    from backend.services.remote_readonly import MAX_LIMIT, query_rows
+    from backend.services.remote.remote_readonly import MAX_LIMIT, query_rows
     return query_rows(db, sql, limit=min(limit, MAX_LIMIT), timeout=timeout)
 
 

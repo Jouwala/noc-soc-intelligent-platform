@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """CN KPI 看板 API（原 my-finebi「CN KPI」看板原生重建）。
 
-数据源与统计口径见 backend/services/cn_kpi_service.py 顶部说明。
+数据源与统计口径见 backend/services/cn/cn_kpi_service.py 顶部说明。
 
 GET /api/cn-kpi/overview
     ?start=YYYY-MM-DD     自定义起始日期（含）；留空 = 近 31 天
@@ -21,7 +21,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from backend.services import cn_kpi_service as svc
+from backend.services.cn import cn_kpi_service as svc
 
 logger = logging.getLogger("cn_kpi")
 

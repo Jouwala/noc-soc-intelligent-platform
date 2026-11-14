@@ -17,7 +17,7 @@
 
 | 环节 | 说明 |
 |---|---|
-| 表来源 | `sp_material`（`backend/services/sp_material_sync.py` 从 eFlow `eflow-sp-material/base/list` 全量拉取，`materialNo` 唯一，重复时保留 `woId` 最大的一行 = 最新记录） |
+| 表来源 | `sp_material`（`backend/services/sp/sp_material_sync.py` 从 eFlow `eflow-sp-material/base/list` 全量拉取，`materialNo` 唯一，重复时保留 `woId` 最大的一行 = 最新记录） |
 | 读库 | `backend.database.get_raw_connection()`，双模：`MY_APP_DB_MODE=pg` → `app.sp_material`；`sqlite` → `db/app.db` |
 | 命中 | 覆盖明细的 Material Name |
 | 未命中 | **保留原值**，不清空、不写 `Unknown`：主数据缺档时宁可留着上游的名字 |

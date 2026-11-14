@@ -44,15 +44,15 @@ _APP_ROOT = _SCRIPT_DIR.parent.parent.parent
 # 项目根不在搜索路径上，导致 _runtime_credentials() 里的 `import backend...` 抛
 # ModuleNotFoundError；其 ImportError 回退 `import credential_store` 同样失败
 # （2026-09-28 修复，生产报错 "No module named 'backend'"）。这里显式把「项目根」
-# 与「backend/services」加入 sys.path，使 backend.services.credential_store 及
+# 与「backend/services」加入 sys.path，使 backend.services.credential.credential_store 及
 # 历史回退 credential_store 均可导入（两种启动方式下都成立）。
 for _sys_path_entry in (str(_APP_ROOT), str(_APP_ROOT / 'backend' / 'services')):
     if _sys_path_entry not in sys.path:
         sys.path.insert(0, _sys_path_entry)
 
-# 物料主数据（Material Name 的唯一口径）抽到 backend/services/sp_material_name.py，
+# 物料主数据（Material Name 的唯一口径）抽到 backend/services/sp/sp_material_name.py，
 # 报表生成器与后端服务（落库 / 邮件合并 / SP Details 页）共用同一份解析，不在各处重写。
-from backend.services.sp_material_name import (  # noqa: E402
+from backend.services.sp.sp_material_name import (  # noqa: E402
     load_material_maps, normalize_dataframe, norm_key)
 
 # 报表数据统一存放 my_app/data/sp_email（原始下载数据在 data/ 子目录）
@@ -96,7 +96,7 @@ def _runtime_credentials():
     （重复真相源，且两处都明文入库）。统一改走 credential_store 的 `sftp_sp` 组。
     """
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         from credential_store import get_credential
     return get_credential("sftp_sp")
@@ -210,7 +210,7 @@ REPLENISH_INT_COLS = ('Safety Stock', 'Replenishment Qty')
 # ⚠️ 必须以**函数**形式提供，不能是模块级常量元组：历史月数已改为动态（见 history_months），
 #    常量在 import 时就求值，跨月跑的长驻进程会一直印着第一次的月数。
 # ⚠️ 返回的行数 = Summary-Current 表头之前的说明行数，改动行数必须同步
-#    backend/services/sp_report_service.py 的 SHEET_CONFIG["Summary-Current"]["header_row"]（现为 7）。
+#    backend/services/sp/sp_report_service.py 的 SHEET_CONFIG["Summary-Current"]["header_row"]（现为 7）。
 def replenish_notes(as_of=None):
     """报表口径说明行（4 行）。行数变动必须同步 SHEET_CONFIG 的 header_row。"""
     months = history_months(as_of)
@@ -744,7 +744,7 @@ def snapshot_raw_details():
 # 2026-10-31 起入库同样剔除：实测 inbound 有 81 行 WaitingForUpdate（同一张
 # New Inbound 单、全为 Consumables），此前只有出库剔除，入库侧把这些未生效单
 # 当成已入库计进了 Inbound Qty 与 Summary-Current。
-# 词表与 backend/services/sp_common.SP_IGNORED_WORDS（未关闭单口径）、
+# 词表与 backend/services/sp/sp_common.SP_IGNORED_WORDS（未关闭单口径）、
 # generate_sp_online_report.EXCLUDED_STATUS 保持一致。
 DETAIL_DROP_STATUS = ('WaitingForUpdate',)
 
@@ -883,7 +883,7 @@ def apply_operation_result_filter_to_file(path, label):
 # 主数据表 sp_material 由任务 sp_material_sync 从 eFlow SP 接口拉全量写入
 # （每天 04:55 + 本报表生成前各一次），字段 materialNo / materialName /
 # materialType / domain（PG 模式在 app schema）。
-# 读表与覆盖的实现见 backend/services/sp_material_name.py：报表生成器、明细落库、
+# 读表与覆盖的实现见 backend/services/sp/sp_material_name.py：报表生成器、明细落库、
 # SP Details 页与邮件合并共用那一处，口径不会分叉。
 
 
@@ -896,7 +896,7 @@ def refresh_material_master():
     报表不能因为主数据刷新失败而中断，用昨天的名字至少与昨天一致。
     """
     try:
-        from backend.services.sp_material_sync import run_sp_material_sync
+        from backend.services.sp.sp_material_sync import run_sp_material_sync
         res = run_sp_material_sync()
     except Exception as e:
         print(f'[MatSync][WARN] 生成前刷新主数据失败（{e}），沿用库中现有 sp_material')

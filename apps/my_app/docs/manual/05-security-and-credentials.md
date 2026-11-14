@@ -8,9 +8,9 @@
 
 ## 统一门户鉴权适配（看板数据的登录态）
 
-看板数据接口（`/api/*` 的业务端点）由 `backend/main.py` 的会话中间件保护，登录态来自**统一门户**：门户登录后签发一个内存 Bearer token，my_app 后端回调门户 `/me` 验证后才签发自己的 HttpOnly 会话 Cookie（`portal_sessions` 表，进程重启可恢复）。细节见 `backend/services/portal_auth.py` 模块头。
+看板数据接口（`/api/*` 的业务端点）由 `backend/main.py` 的会话中间件保护，登录态来自**统一门户**：门户登录后签发一个内存 Bearer token，my_app 后端回调门户 `/me` 验证后才签发自己的 HttpOnly 会话 Cookie（`portal_sessions` 表，进程重启可恢复）。细节见 `backend/services/portal/portal_auth.py` 模块头。
 
-两种取得 myapp 会话的方式（都在 `backend/services/portal_auth.py` 的 `/api/auth/*` 下）：
+两种取得 myapp 会话的方式（都在 `backend/services/portal/portal_auth.py` 的 `/api/auth/*` 下）：
 
 | 端点 | 输入 | 用途 |
 | --- | --- | --- |
@@ -89,7 +89,7 @@
 
 所有上游系统账号集中在一个注册表里，前端"系统设置 → 凭据"统一维护：
 
-- **21 个分组 key**：`zte_ume`、`vmax_cxo`、`vmax_gbase`、`vmax_cca`、`ipran_ume`、`ccn_ume`、`eflow`、`rais`、`fms_portal`、`fw_kpi`、`mw_ume`、`ume_in`、`ume_alarm`、`battery_ume`、`cm_data`、`sftp_sp`、`gp_ran_control`、`gp_ran_master`、`mail_126`、`owa_mail`、`weixin`（`backend/services/credential_store.py`）。
+- **21 个分组 key**：`zte_ume`、`vmax_cxo`、`vmax_gbase`、`vmax_cca`、`ipran_ume`、`ccn_ume`、`eflow`、`rais`、`fms_portal`、`fw_kpi`、`mw_ume`、`ume_in`、`ume_alarm`、`battery_ume`、`cm_data`、`sftp_sp`、`gp_ran_control`、`gp_ran_master`、`mail_126`、`owa_mail`、`weixin`（`backend/services/credential/credential_store.py`）。
   - `vmax_cca`（2026-10-24 新增）：VMAX 用户查询页（`vmax_user_query`）登录 VMAX 门户调 CCA 投诉查询接口。**独立于 `vmax_cxo` 的原因**：门户同一账号会话数有限，8790 看板代理长持 `vmax_cxo` 会话，查询页共用会互踢。测试 kind 复用 `vmax_portal`（登录链路相同）。
   - `ume_alarm` / `gp_ran_control` / `gp_ran_master`：告警采集与 GP RAN 控制/主站相关链路的凭据分组。
 - 每组元数据字段：`key`、`name`、`name_en`、`usage`、`usage_en`、`username_label`、`secret_label`、`env_user`、`env_secret`、`testable`、`test_host`、`test_port`。字段名可写进文档，**值不可以**。
@@ -129,7 +129,7 @@
 
 | 文件 | 为何保留 |
 | --- | --- |
-| `backend/services/credential_store.py` | 中央凭据库，`CREDENTIAL_GROUPS` 里的默认值**就是**唯一真相源 |
+| `backend/services/credential/credential_store.py` | 中央凭据库，`CREDENTIAL_GROUPS` 里的默认值**就是**唯一真相源 |
 | `email_reports/owa_credentials.py` | 刻意的最后兜底（`env > credential_store > 此处`）；且 `_LEGACY_DEFAULTS` 依赖该字面量的**值**来识别"调用方传了历史旧口令"，改值会同时改变那套识别逻辑。其 docstring 记录了 2026-09-18 的 65 小时邮件全故障 |
 
 **守卫**：`tests/test_engineering_guards.py::test_no_hardcoded_secrets_in_source`
@@ -170,14 +170,14 @@
 
 | 文件 | 处理 |
 | --- | --- |
-| `backend/services/credential_store.py` | 17 组 `default_secret` 清空；`weixin` 的 `default_user` 清空（那是 SendKey，本身就是凭据） |
-| `backend/services/eflow_api_client.py`、`site_outage_service.py` | `os.environ.get("EFLOW_PASS", "<明文>")` → 空串，口令只从 env/凭据库取 |
+| `backend/services/credential/credential_store.py` | 17 组 `default_secret` 清空；`weixin` 的 `default_user` 清空（那是 SendKey，本身就是凭据） |
+| `backend/services/eflow/eflow_api_client.py`、`site_outage_service.py` | `os.environ.get("EFLOW_PASS", "<明文>")` → 空串，口令只从 env/凭据库取 |
 | `tools/realtime_proxy.py`、`realtime_proxy_vmax.py` | `_load_cred(..., default_secret)` 传空串 |
 | `backend/services/ume_in/ume_in_kpi_service.py` | 同上（`UME_IN_PASSWORD`） |
 | `backend/services/vmax_multi_data/vmax_report_client.py` | 同上（vmax_cxo） |
 | `backend/services/ume_in/url.txt` | 抓包记录里的 `password:` 行改为指向凭据库 |
 | `backend/services/vmax_gbase/vmax_gbase_client.py`、`olib_soc_report/*.py` | 连接串示例中的口令改为 `<password>` 占位符 |
-| `backend/services/credential_store.md`、`eFlow_API集成方案.md`、`.workbuddy-ai/memory/2026-09-13.md` | 文档里的明文删除 |
+| `backend/services/credential/credential_store.md`、`eFlow_API集成方案.md`、`.workbuddy-ai/memory/2026-09-13.md` | 文档里的明文删除 |
 | `tests/test_olib_soc_report.py` | 脱敏测试改用**假哨兵**口令（原先是真实口令，等于写进版本库） |
 
 **09-27 的两个"刻意例外"现已都不成立**（该表已作废）：

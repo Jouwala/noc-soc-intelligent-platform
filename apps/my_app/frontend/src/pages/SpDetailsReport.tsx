@@ -11,7 +11,7 @@ import { getSpDetailsFilters, getSpDetailsRows, getSpDetailsSummary } from '../a
 import { useI18n, numLocale } from '../i18n'
 import { useTheme, WH } from '../theme'
 import DraggableClickModal from '../components/DraggableClickModal'
-// 数字悬浮口径说明（AGENTS.md 三.3c）。口径对过 backend/services/sp_details_service.py 的 get_summary()。
+// 数字悬浮口径说明（AGENTS.md 三.3c）。口径对过 backend/services/sp/sp_details_service.py 的 get_summary()。
 import { ExplainIcon, ExplainPopover } from '../components/MetricExplain'
 import { exportReport, safeFileName, type CellValue } from '../utils/excelReport'
 
@@ -23,7 +23,7 @@ const { Text } = Typography
  * 数据源：任务 `sp_email_details`（SP Spare Parts Details Report Email）每天
  * 生成的合并工作簿 `data/sp_email/data/SP Details Report <时间戳>.xlsx`
  * （sheet：Inventory / Inbound / Outbound / Transfer）—— 页面上看到的就是邮件
- * 附件那份文件，逐行一致；口径见 backend/services/sp_details_service.py。
+ * 附件那份文件，逐行一致；口径见 backend/services/sp/sp_details_service.py。
  *
  * 页面结构：统计卡片（总览 KPI + 分表卡片）+ 明细表格（服务端筛选/排序/分页）。
  * 表格只展示每张表最常用的列，点击任意一行弹出行详情（该 sheet 的全部列）。

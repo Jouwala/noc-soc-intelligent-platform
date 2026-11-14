@@ -4,7 +4,7 @@
 端点：
 - GET /api/cxo-dashboard/cache   返回 data/cxo_dashboard/last_known_good.json 原文
 
-缓存由 worker 定时任务 cxo_dashboard_cache_sync（backend/services/cxo_dashboard_cache.py）
+缓存由 worker 定时任务 cxo_dashboard_cache_sync（backend/services/cxo/cxo_dashboard_cache.py）
 每 10 分钟经本机 8790 VMAX 代理合并写入；前端 cxo_dashboard.html 打开时先应用缓存
 再实时覆盖，VMAX/代理不可用时兜底显示最近可用数据。
 """
@@ -13,7 +13,7 @@ import logging
 
 from fastapi import APIRouter, Response
 
-from backend.services.cxo_dashboard_cache import CACHE_FILE
+from backend.services.cxo.cxo_dashboard_cache import CACHE_FILE
 
 logger = logging.getLogger(__name__)
 

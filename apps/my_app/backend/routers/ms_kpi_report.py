@@ -5,7 +5,7 @@
 - ``?page=ms_contract_kpi`` MS Contract KPIs & WOs Achievement Auto-Reports（kind=contract_kpi）
 
 数据源：``data/ms_sla`` 下任务产出的两份报表工作簿本体 —— 与邮件附件是**同一份
-文件**，页面不做二次加工；口径与解析细节见 ``backend/services/ms_kpi_report_service.py``
+文件**，页面不做二次加工；口径与解析细节见 ``backend/services/ms/ms_kpi_report_service.py``
 顶部 docstring（多层合并表头、目标行、PerSite 90% 占比口径等）。
 
 端点（``kind`` 缺省 = wo_sla）：
@@ -21,7 +21,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from backend.services import ms_kpi_report_service as svc
+from backend.services.ms import ms_kpi_report_service as svc
 
 logger = logging.getLogger(__name__)
 

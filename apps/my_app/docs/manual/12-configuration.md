@@ -12,7 +12,7 @@
 | 收件人 | 收件人存储 + `email_reports/` 下的名单文件 | 否 |
 | 远程主机 | `backend/data/settings.json` 的 `remote_host` | 否 |
 | 排程（cron） | 主库 `task_schedule_config` 表 | 否 |
-| 任务参数 | 任务配置文件（`services/task_configs_registry.py` 注册 36 张卡片） | 否（保存后自动重启 worker 组，见 3.1） |
+| 任务参数 | 任务配置文件（`services/task/task_configs_registry.py` 注册 36 张卡片） | 否（保存后自动重启 worker 组，见 3.1） |
 
 ## 二、`.env` / 环境变量（改这些要重启）
 
@@ -89,7 +89,7 @@ my_app 没有自己的账号体系，登录靠回调门户校验。这组键决�
 
 **通知**：`WHATSAPP_*`、`TWILIO_*`、`PHONE`/`SMS_SERVICE_PROVIDER`、SMTP 系列、微信/OpenClaw 相关（走 `services/weixin_notifier.py`）。
 
-**任务健康告警**（`services/task_health_alert.py`，2026-09-18 新增）：`TASK_HEALTH_ALERT_ENABLED`（默认 `1`，置 `0`/`false` 静音，维护窗口用）、`TASK_HEALTH_ALERT_RENOTIFY_HOURS`（同一异常持续多久后重提，默认 `24`）。告警去重状态文件：`TMP/task_health_alert_state.json`（可安全删：删后下轮会把当前异常当新异常再通知一次，不影响判定）。
+**任务健康告警**（`services/task/task_health_alert.py`，2026-09-18 新增）：`TASK_HEALTH_ALERT_ENABLED`（默认 `1`，置 `0`/`false` 静音，维护窗口用）、`TASK_HEALTH_ALERT_RENOTIFY_HOURS`（同一异常持续多久后重提，默认 `24`）。告警去重状态文件：`TMP/task_health_alert_state.json`（可安全删：删后下轮会把当前异常当新异常再通知一次，不影响判定）。
 
 **其他**：`GEMINI_API_KEY`（指标解释文本生成）、`CALL_CHAIN_DEPTH`（新鲜度巡检调用链深度）、`BATT_FRESH_HOURS`/`BATT_STALE_DAYS`/`BATT_SOC_LOW`/`BATT_HEALTH_*`（电池看板的"新鲜度/低电量/健康度"阈值——**页面上的数字直接受这些值影响**）。
 
@@ -111,7 +111,7 @@ my_app 没有自己的账号体系，登录靠回调门户校验。这组键决�
 
 ### 3.1 任务配置卡片（Settings →「任务配置」）
 
-36 张卡片由 `backend/services/task_configs_registry.py` 注册。规则：
+36 张卡片由 `backend/services/task/task_configs_registry.py` 注册。规则：
 
 - **页面显示的默认值不是抄写的**：每张卡的 `defaults_factory` 从服务模块常量现读（例如 `_main_kpi_defaults`、`_sp_defaults`），所以页面上的默认值就是代码在用的值，不会与代码漂移。
 - **优先级**：环境变量 > 配置文件（页面编辑） > 代码默认。覆盖都发生在**模块导入期**，因此由 HOST/PORT 拼出来的派生常量（`PM_REFERER`、`HISTORY_REFERER`、`LOGIN_URL`/`DASHBOARD_URL`、`ALARM_REFERER`）必须写在覆盖块**之后**，否则页面上改主机没用。

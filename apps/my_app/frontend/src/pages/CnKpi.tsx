@@ -53,7 +53,7 @@ interface CnWidget {
 }
 
 /** 这个组件卡片「数怎么来」的说明，逐行拼自接口既有字段（不重算任何数字）。
- *  分层取数与粒度推断的实现见 backend/services/cn_kpi_service.py（_detect_granularity / _fetch_widget）。 */
+ *  分层取数与粒度推断的实现见 backend/services/cn/cn_kpi_service.py（_detect_granularity / _fetch_widget）。 */
 function widgetExplainText(w: CnWidget, t: (k: string, p?: Record<string, string | number>) => string): string {
   if (w.error) return ''
   return [

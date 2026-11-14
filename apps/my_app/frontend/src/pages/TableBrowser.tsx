@@ -24,8 +24,8 @@ interface TableInfo {
 /** 「本地权威表」—— 内容只写本地 SQLite（`db/app.db`），而本页读的是**当前主库**。
  *
  *  **为什么要有这份清单**（2026-10-23，用户报「数据库里有，tables 页面的 credentials 是空的」）：
- *   `backend/services/credential_store.py::_get_conn` 与
- *   `backend/services/email_recipient_store.py` 刻意用裸 `sqlite3.connect` 写本地库；
+ *   `backend/services/credential/credential_store.py::_get_conn` 与
+ *   `backend/services/email/email_recipient_store.py` 刻意用裸 `sqlite3.connect` 写本地库；
  *   `backend/scripts/sync_pg_to_sqlite.py` 的 `SKIP_TABLES` 又把这三张表排除在 PG→SQLite
  *   同步之外（2026-09-18 那次「每小时 :45 凭据被抹成空」的事故就是漏了这一步）。
  *   于是 PG 里只有 SQLAlchemy 建的空壳表（`0 行`），而本页在 `MY_APP_DB_MODE=pg` 下

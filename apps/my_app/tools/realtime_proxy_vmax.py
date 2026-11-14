@@ -40,7 +40,7 @@ TARGET_HOST = "https://10.123.255.12:26180"
 
 
 def _load_cred(key, default_user, default_secret, env_user, env_secret):
-    """从 backend.services.credential_store 读取凭据，取不到时回落到内置默认值。
+    """从 backend.services.credential.credential_store 读取凭据，取不到时回落到内置默认值。
 
     优先级由 credential_store.get_credential 决定：环境变量 > credentials 表 > 代码默认值。
     """
@@ -54,7 +54,7 @@ def _load_cred(key, default_user, default_secret, env_user, env_secret):
             if str(cand) not in sys.path:
                 sys.path.insert(0, str(cand))
             try:
-                from backend.services.credential_store import get_credential
+                from backend.services.credential.credential_store import get_credential
 
                 u, s = get_credential(key, default_user, default_secret, env_user, env_secret)
                 return u, s

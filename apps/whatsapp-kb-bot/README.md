@@ -1232,7 +1232,7 @@ my_app 不可用时整体降级到本地 SQLite 副本，并在回复里**如实
    每个 `update_date` 各存一份当日快照，全表累积 **21 万行**；
    **只有 `update_date = max(update_date)` 的那一份才是当前库存**（约 2100 行）。
    直接对全表 `SUM` 会得到当前库存的好几倍（把历史快照全加了一遍）。
-   my_app 的 `backend/services/native_catalog.py:1952` 用的是同一口径。
+   my_app 的 `backend/services/native/native_catalog.py:1952` 用的是同一口径。
 2. **单位列名一会儿带空格一会儿不带。**
    `inventory_details` 的列叫 **`Unit `**（**带尾随空格**），
    `inband_details` / `outband_details` 的叫 **`Unit`**（没有空格）——
@@ -2187,7 +2187,7 @@ python scripts/docx-to-md.py 输入.docx 输出.md
 
 ```bash
 npm run serve-http          # 手动前台起（调试用）
-# 生产：由 my_app 后端按需拉起，见 backend/services/portal_qa_ctl.py
+# 生产：由 my_app 后端按需拉起，见 backend/services/portal/portal_qa_ctl.py
 ```
 
 | 接口 | 说明 |

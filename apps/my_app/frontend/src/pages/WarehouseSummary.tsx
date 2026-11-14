@@ -7,7 +7,7 @@ import { getSpReportRows, getSpReportSummary, type SpReportKind } from '../api'
 import { useI18n, numLocale } from '../i18n'
 import { WH } from '../theme'
 import { CardBase, StatCard } from '../components/cards'
-// 数字悬浮口径说明（AGENTS.md 三.3c）。口径对过 backend/services/sp_report_service.py 的
+// 数字悬浮口径说明（AGENTS.md 三.3c）。口径对过 backend/services/sp/sp_report_service.py 的
 // _warehouse_summary() / _frequent_materials()（仓库集合取 Outbound ∪ Inventory，缺失侧计 0）。
 import { ExplainLabel } from '../components/MetricExplain'
 import DraggableClickModal from '../components/DraggableClickModal'
@@ -30,7 +30,7 @@ const { Text } = Typography
  * `?page=com_report` 背后的同一份工作簿），不新增数据源、不做二次加工：
  *   - `warehouse_summary`      段①的仓库行 + Total 行（后端口径）
  *   - `frequent_materials`     段②的 Top N + Total 行（后端口径）
- * 口径见 backend/services/sp_report_service.py 顶部 docstring。
+ * 口径见 backend/services/sp/sp_report_service.py 顶部 docstring。
  *
  * 下钻：段①的消耗单元格 → Outbound 明细（按仓库 + 时间窗筛）；
  *       段②的物料行   → Summary-Current 明细（按物料名筛）。

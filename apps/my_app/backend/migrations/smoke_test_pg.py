@@ -52,7 +52,7 @@ COMPILE_TARGETS = [
     "backend/routers/alarm_dashboard.py",
     "backend/routers/tables.py",
     "backend/dialect_helpers.py",
-    "backend/services/task_runner.py",
+    "backend/services/task/task_runner.py",
     "backend/migrations/smoke_test_pg.py",
 ]
 

@@ -225,7 +225,7 @@ def main(argv=None) -> int:
     # 鉴权模块是重依赖（pandas / requests / database），延迟到真正要连 UME 时才导入：
     # 这样 --help 与口径纯逻辑检查在没有后端全套依赖的机器上也能跑。
     try:
-        from backend.services.ipran_ume_kpi_service import HOST, PORT, UmeSessionClient
+        from backend.services.ipran.ipran_ume_kpi_service import HOST, PORT, UmeSessionClient
     except ImportError as exc:
         print(json.dumps({"error": "缺少运行依赖，请用项目 Python 环境执行",
                           "detail": _safe_err(exc)}, ensure_ascii=False, indent=2))

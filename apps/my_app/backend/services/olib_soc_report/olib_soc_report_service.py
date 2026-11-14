@@ -1160,7 +1160,7 @@ def deliver_mail(cfg: Dict[str, Any], xlsx: Optional[str], summary: Dict[str, An
     if not xlsx or not Path(xlsx).exists():
         return {"sent": False, "skipped": "没有可发送的 Excel"}
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except Exception:                                                    # noqa: BLE001
         get_credential = None                                            # type: ignore[assignment]
     sender = mail.get("sender") or ""

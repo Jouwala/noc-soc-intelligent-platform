@@ -19,7 +19,7 @@
  *     2026-09-15 与 2026-10-23 各踩过一次。
  *
  * 本脚本把「export → ingest → 重启」串成一步，并由 my_app 的定时任务在每次
- * 规则采集完成后调用（见 `backend/services/whatsapp_kb_service.py`）。
+ * 规则采集完成后调用（见 `backend/services/whatsapp/whatsapp_kb_service.py`）。
  *
  * ## 为什么用「指纹」而不是每次都重建
  *

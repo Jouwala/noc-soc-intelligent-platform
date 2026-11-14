@@ -484,7 +484,7 @@ def test_credential_group_count_in_security_doc():
     `gp_ran_control` / `gp_ran_master` 三个分组。用户按文档去「系统设置 → 凭据」
     排查时，会以为这三组不存在。
     """
-    src = _read("backend/services/credential_store.py")
+    src = _read("backend/services/credential/credential_store.py")
     keys = sorted(set(re.findall(r'"key":\s*"([a-z0-9_]+)"', src)))
     n = len(keys)
     doc = _read("docs/manual/05-security-and-credentials.md")
@@ -588,7 +588,7 @@ def test_pg_freshness_covers_pushdown_tables():
       - `db_freshness_check.REMOTE_CHECKS` 查的是远端库水位（远端一直新 → 永远绿）；
       - `LOCAL_CHECKS` 里那条「ipran 本地回退库」指的是 pg 模式下早就不写的 sqlite 文件；
       - 判据本身只问「最新 Begin Time 够不够新」，天生看不见「中间少了 20 天」。
-    补齐手段见 `backend/services/pg_schema_freshness.md`。
+    补齐手段见 `backend/services/db/pg_schema_freshness.md`。
 
     守三件事：
       1. `PUSH_DOWN_TABLES` 里每张表都在 `PG_SCHEMA_CHECKS[].tables` 里 ——
@@ -607,7 +607,7 @@ def test_pg_freshness_covers_pushdown_tables():
     uncovered = sorted(set(tables) - checked)
     assert not uncovered, (
         f"这些表被看板取数层按时间下推（会决定页面默认看几天），却不在 "
-        f"backend/services/pg_schema_freshness.py 的 PG_SCHEMA_CHECKS 里，"
+        f"backend/services/db/pg_schema_freshness.py 的 PG_SCHEMA_CHECKS 里，"
         f"于是本机库断档没人知道: {uncovered}"
     )
 
@@ -621,7 +621,7 @@ def test_pg_freshness_covers_pushdown_tables():
     backend_src = _read("backend/services/dashboard_service.py")
     assert '"coverage": _coverage_from_widgets' in backend_src, (
         "dashboard_service 不再输出 meta.coverage —— 缺档就不再可见了，"
-        "见 backend/services/pg_schema_freshness.md"
+        "见 backend/services/db/pg_schema_freshness.md"
     )
     fe_src = _read("frontend/src/pages/NativeBoard.tsx")
     assert "nb.coverageTitle" in fe_src and 'type="warning"' in fe_src, (

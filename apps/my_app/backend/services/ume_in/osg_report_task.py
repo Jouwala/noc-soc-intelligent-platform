@@ -92,7 +92,7 @@ def run_ume_in_osg_report(days_back=None, win_start=None, win_end=None,
 
     # ---- 3. 发信（Orange EWS，附件 = 刚生成的 Excel）----
     try:
-        from backend.services import kpi_email_report
+        from backend.services.email import kpi_email_report
         email_res = kpi_email_report.run_ume_in_osg_report_email(
             report_path=build_res.get("output"), to=to, cc=cc)
     except Exception as e:  # noqa: BLE001

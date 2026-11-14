@@ -45,7 +45,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.database import get_raw_connection
 from backend.dialect_helpers import list_table_names, table_columns, upsert
-from backend.services.eflow_alarm_service import ALARM_CODE_CONDS
+from backend.services.eflow.eflow_alarm_service import ALARM_CODE_CONDS
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +81,11 @@ _alarm_cache: dict = {"at": 0.0, "payload": None}
 # 同一张单按物料/序列号拆成多行。实测 23 行未关闭只对应 12 张不同的单，
 # 于是「未关闭出库单」与界面上的数字对不上。
 #
-# 现在唯一口径在 backend/services/sp_common.py：词表、粒度（COUNT DISTINCT 单号）、
+# 现在唯一口径在 backend/services/sp/sp_common.py：词表、粒度（COUNT DISTINCT 单号）、
 # 判据全部从那里取。本文件**不再**自己定义词表 —— 这里保留名字只是为了让
 # 既有 import（若有）与阅读路径不断裂。
-from backend.services import sp_common as _sp
-from backend.services.sp_common import (  # noqa: E402  （放在常量区，import 集中）
+from backend.services.sp import sp_common as _sp
+from backend.services.sp.sp_common import (  # noqa: E402  （放在常量区，import 集中）
     SP_CLOSED_WORDS,
     SP_IGNORED_WORDS,
     SP_NOT_OPEN_WORDS,
@@ -326,7 +326,7 @@ def _sp_open_counts(conn):
 
     2026-10-18 起改为 ``COUNT(DISTINCT "Inbound No."/"Outbound No.")``：
     表是明细行，同一张单按物料/序列号拆成多行，按行数会系统性高估「未关闭单数」。
-    见 ``backend/services/sp_common.py`` 的模块 docstring。
+    见 ``backend/services/sp/sp_common.py`` 的模块 docstring。
     """
     total_unclosed = 0
     detail = {}

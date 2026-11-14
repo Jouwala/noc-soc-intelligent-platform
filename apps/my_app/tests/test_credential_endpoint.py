@@ -20,8 +20,8 @@ import json
 
 import pytest
 
-from backend.services import credential_store as CS
-from backend.services import credential_tester as CT
+from backend.services.credential import credential_store as CS
+from backend.services.credential import credential_tester as CT
 
 
 @pytest.fixture()

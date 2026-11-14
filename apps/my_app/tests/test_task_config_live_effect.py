@@ -9,7 +9,7 @@
     `Scripts/python.exe` 的 site-packages 没进 sys.path，缺 pandas/sqlalchemy →
     defaults_factory 静默 ImportError → 36 张卡全部"读不到"，那是假失败。
 
-背景：Settings →「任务配置」的 36 张卡片由 `backend/services/task_configs_registry.py`
+背景：Settings →「任务配置」的 36 张卡片由 `backend/services/task/task_configs_registry.py`
 注册，每张卡的 schema 同时驱动页面渲染与后端校验，defaults_factory 从服务模块常量取
 默认值。这个链路有四类只有真跑一遍才会暴露的问题，本文件逐类设防：
 
@@ -56,8 +56,8 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.services import task_config_files as tcf  # noqa: E402
-import backend.services.task_configs_registry  # noqa: F401,E402
+from backend.services.task import task_config_files as tcf  # noqa: E402
+import backend.services.task.task_configs_registry  # noqa: F401,E402
 
 # live 标记（重构方案 §11.1）：本文件走真实写入口改真实任务配置（每卡 <1s 后还原，
 # 见文件头注释），CI 离线集 `pytest -m "not live"` 不跑它；跑法见文件头注释。
@@ -82,7 +82,7 @@ except Exception as e:
 
 # 派生常量探针：const 必须包含这些 schema 路径对应哨兵值（must_contain 写的是 schema 键名）
 PROBES = {
-    "ran_ume_daily": [{"name": "PM_REFERER", "module": "backend.services.ran_ume_service",
+    "ran_ume_daily": [{"name": "PM_REFERER", "module": "backend.services.ran.ran_ume_service",
                        "const": "PM_REFERER", "must_contain": ["host", "port"]}],
     "mw_ume_kpi_sync": [{"name": "HISTORY_REFERER",
                          "module": "backend.services.mw_ume.mw_ume_kpi_service",
@@ -91,9 +91,9 @@ PROBES = {
                             "module": "backend.services.mw_ume.mw_ume_kpi_service",
                             "const": "HISTORY_REFERER", "must_contain": ["host", "port"]}],
     "site_outage_screenshot": [
-        {"name": "DASHBOARD_URL", "module": "backend.services.site_outage_service",
+        {"name": "DASHBOARD_URL", "module": "backend.services.site.site_outage_service",
          "const": "DASHBOARD_URL", "must_contain": ["host", "port"]},
-        {"name": "LOGIN_URL", "module": "backend.services.site_outage_service",
+        {"name": "LOGIN_URL", "module": "backend.services.site.site_outage_service",
          "const": "LOGIN_URL", "must_contain": ["host", "port"]}],
 }
 

@@ -689,8 +689,8 @@ main_text = (ROOT / "backend" / "main.py").read_text(encoding="utf-8")
 check("路由已在 main.py 挂载", "olib_soc_dashboard.router" in main_text
       and "olib_soc_dashboard," in main_text)
 try:
-    from backend.services import task_configs_registry as _tcr             # noqa: F401 (注册副作用)
-    from backend.services.task_config_files import get_resource
+    from backend.services.task import task_configs_registry as _tcr             # noqa: F401 (注册副作用)
+    from backend.services.task.task_config_files import get_resource
     _res = get_resource("olib_soc_vmax_report")
 except Exception:                                                        # noqa: BLE001
     _res = None

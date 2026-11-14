@@ -117,11 +117,11 @@ eFlow 管的是运维工单全生命周期，核心对象 7 类：
 
 | 用途 | 路径 |
 |---|---|
-| eFlow API 客户端 | `D:\01_RPA\Task\my_app\backend\services\eflow_api_client.py` |
-| 同步服务 | `D:\01_RPA\Task\my_app\backend\services\sync_from_eflow_api.py` |
+| eFlow API 客户端 | `D:\01_RPA\Task\my_app\backend\services\eflow\eflow_api_client.py` |
+| 同步服务 | `D:\01_RPA\Task\my_app\backend\services\eflow\sync_from_eflow_api.py` |
 | 集成方案文档 | `D:\01_RPA\Task\my_app\backend\services\eFlow_API集成方案.md` |
 | TT 严重级别规则引擎 | `D:\01_RPA\Task\my_app\backend\services\eflow_rules\` |
-| 告警服务 | `D:\01_RPA\Task\my_app\backend\services\eflow_alarm_service.py` |
+| 告警服务 | `D:\01_RPA\Task\my_app\backend\services\eflow\eflow_alarm_service.py` |
 | eFlow 原始库 | `D:\01_RPA\Task\my_app\data\eflow\eflow.sqlite3` |
 | 早期登录脚本 | `D:\01_RPA\Task\eflow_python\eflow_login.py.txt` |
 

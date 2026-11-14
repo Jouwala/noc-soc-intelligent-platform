@@ -16,7 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.services import task_runner as tr  # noqa: E402
+from backend.services.task import task_runner as tr  # noqa: E402
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def tmp_db(monkeypatch):
     p = Path(tempfile.mktemp(suffix=".db"))
     monkeypatch.setenv("MY_APP_DB_MODE", "sqlite")
     import backend.database as _db
-    from backend.services import task_stats as _ts
+    from backend.services.task import task_stats as _ts
     monkeypatch.setattr(_db, "DB_MODE", "sqlite", raising=False)
     monkeypatch.setattr(tr, "DB_PATH", p)
 
@@ -210,19 +210,19 @@ def test_chain_from_file_locates_without_import(tmp_db):
     """#7：纯静态解析源文件即可定位 file:line，不需要导入目标模块。
 
     2026-09-27：`_chain_from_file` 已随 "Phase 4 拆分" 迁至
-    `backend.services.task_introspect`，`task_runner` 只再导出了
+    `backend.services.task.task_introspect`，`task_runner` 只再导出了
     `_auto_call_chain` / `_annotate_call_chain`（见 task_runner.py:31-37），
     所以这里改为直接从新模块取，而不是断言它还在 task_runner 上。
     """
-    from backend.services import task_introspect as ti
-    chain = ti._chain_from_file("backend.services.task_runner", "run_task", 1)
+    from backend.services.task import task_introspect as ti
+    chain = ti._chain_from_file("backend.services.task.task_runner", "run_task", 1)
     assert chain, "run_task 应能解析出下游调用"
     assert any(".py:" in n for n in chain), chain
 
 
 def test_module_file_returns_none_for_missing(tmp_db):
     """同名迁移：`_module_file` 现在位于 task_introspect（同名同语义）。"""
-    from backend.services import task_introspect as ti
+    from backend.services.task import task_introspect as ti
     assert ti._module_file("no.such.module.__xyz__") is None
     assert ti._module_file("") is None
 

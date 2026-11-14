@@ -332,7 +332,7 @@ _exclude_cache: Dict[str, object] = {}
 def _fetch_exclude_xlsx_bytes() -> bytes:
     """FTP 内存下载 TT_Exclude.xlsx（凭据由 remote_ftp.creds_for 按路径前缀决定）。"""
     try:
-        from backend.services.remote_ftp import creds_for
+        from backend.services.remote.remote_ftp import creds_for
         from backend.config.remote_host import get_ftp_host
     except ImportError:
         from remote_ftp import creds_for  # type: ignore
@@ -356,7 +356,7 @@ def get_exclude_info(force_refresh: bool = False) -> Dict:
 
     ==================== 2026-10-06 起改为「库优先」 ====================
     真相源从 FTP 上的 `TT_Exclude.xlsx` 改为数据库表 `app.tt_exclude`
-    （人工上传维护，见 `services/tt_exclude.py`）。原因：xlsx 名单是隐形的、
+    （人工上传维护，见 `services/tt/tt_exclude.py`）。原因：xlsx 名单是隐形的、
     无法审计，且「拉取时间 ≠ 内容时间」会让人把「名单过时导致 NUR 全 0」
     误判成「算错了」（真实踩坑）。
 
@@ -382,7 +382,7 @@ def get_exclude_info(force_refresh: bool = False) -> Dict:
 
     # ---- 1) 库优先 ----
     try:
-        from backend.services import tt_exclude as _tx
+        from backend.services.tt import tt_exclude as _tx
         tickets_db = _tx.fetch_tickets()
         if tickets_db is not None:
             meta = _tx.fetch_meta()

@@ -15,7 +15,7 @@ import { useI18n, numLocale } from '../i18n'
 import { useTheme, WH } from '../theme'
 import DraggableClickModal from '../components/DraggableClickModal'
 // 数字悬浮口径说明（AGENTS.md 三.3c）。sp_report 与 com_report 共用本文件，改一次两页同效。
-// 口径对过 backend/services/sp_report_service.py 的 _summary_current_stats() / _overlay_db_open_counts()。
+// 口径对过 backend/services/sp/sp_report_service.py 的 _summary_current_stats() / _overlay_db_open_counts()。
 import { ExplainIcon, ExplainPopover } from '../components/MetricExplain'
 import ColumnPicker from '../components/ColumnPicker'
 import { exportReport, safeFileName, type CellValue } from '../utils/excelReport'
@@ -27,7 +27,7 @@ const { Text } = Typography
  *
  * 数据源：任务 `sp_report_generate`（SP 备件报表生成，每天 05:15）产出的汇总
  * 工作簿 `data/sp_email/<前缀> <时间戳>.xlsx` —— 与邮件/WhatsApp 发出去的是
- * 同一份文件，页面不做二次加工；口径见 backend/services/sp_report_service.py。
+ * 同一份文件，页面不做二次加工；口径见 backend/services/sp/sp_report_service.py。
  *
  * 两份报表（SpareParts / Consumables）结构完全一致，只是文件名前缀与明细列略有
  * 差异，因此本组件按 `kind` 参数化，由两个极薄的页面包装（见 SpReport.tsx /

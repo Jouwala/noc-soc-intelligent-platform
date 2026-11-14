@@ -2,10 +2,10 @@
 
 为「WhatsApp 定时发图」Chrome 扩展（`extensions/whatsapp_sender_extension/`）提供
 图片拉取与「待发作业」的 HTTP 接口。它复用
-`backend/services/whatsapp_service.py`（即 `/myapp/?page=sync` 的 **WhatsApp Message Send** 任务）
+`backend/services/whatsapp/whatsapp_service.py`（即 `/myapp/?page=sync` 的 **WhatsApp Message Send** 任务）
 的图片目录与群组/备注配置，但**不走 Playwright**——发送由扩展在已登录的 WhatsApp Web 标签页里完成。
 业务逻辑（扫描图片 / 备注规则 / 作业状态机）都在
-`backend/services/whatsapp_ext_service.py`；本路由只做 HTTP 薄封装。
+`backend/services/whatsapp/whatsapp_ext_service.py`；本路由只做 HTTP 薄封装。
 
 ## 端点
 
@@ -40,7 +40,7 @@
 ### GET `/api/whatsapp/ext/job`
 **扩展作业的统一认领口**。扩展只轮询这一个端点，但它下面有**两个**作业源：
 定时发图（`whatsapp_ext_service`）与 TT 告警文本（`tt_alarm_job`），
-由 `backend/services/whatsapp_job_claim.py` 收敛，**同一时刻最多认领一个作业**，
+由 `backend/services/whatsapp/whatsapp_job_claim.py` 收敛，**同一时刻最多认领一个作业**，
 发图优先。返回体一律带 `pending: true` 与 `kind`：
 
 发图作业（`kind = "image"`，源自带 `items`）：

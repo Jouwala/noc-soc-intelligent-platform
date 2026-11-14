@@ -16,7 +16,7 @@ vmax_report_client.py —— VMAX vReport（RDK "pluto" 报表引擎）取数客
    里 = JSEncrypt.encryptLong：**RSA PKCS#1 v1.5 分块（每块 117 字节原文明文）+ 静态公钥**，
    每块密文 128B → 左补零到 256 个十六进制字符 → 拼起来按 4bit/字符转 base64。
    静态公钥与 mars 历史查询 (`/query/v2/history`) 用的是同一把（见
-   backend/services/vmax_cxo_daily_cache.py 的 _MARS_PUB_B64 注释），已与线上一致。
+   backend/services/cxo/vmax_cxo_daily_cache.py 的 _MARS_PUB_B64 注释），已与线上一致。
 
    注意 `X-Content-Type` 这个头是必须的：缺了它 RDK 服务端不会解密，脚本拿到的是
    `{"encryptedStr": "..."}` 外壳，于是读 `param.condition.times` 报
@@ -423,7 +423,7 @@ class VmaxReportClient:
         """门户登录（仅 direct 模式需要；proxy 模式由代理持有会话）。"""
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import padding
-        from backend.services import credential_store
+        from backend.services.credential import credential_store
 
         # ⚠ default_secret 传空串（2026-10-04）：原先这里写死了 vmax_cxo 组的
         # 口令明文（入库，AGENTS.md 四.2），也是 credential_store 的重复副本。

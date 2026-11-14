@@ -55,7 +55,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from backend.database import get_raw_connection
 from backend.dialect_helpers import list_table_names
 # 复用既有口径：周划分、月份边界、默认阈值 —— 不另起一套
-from backend.services.site_availability_service import (
+from backend.services.site.site_availability_service import (
     DEFAULT_THRESHOLD,
     month_days,
     month_weeks,

@@ -30,7 +30,7 @@ const NB_CLIENT_TTL_MS = 10 * 60 * 1000
  * 原生看板（my-finebi 全部看板 → my_app 原生页，泛化版）
  * --------------------------------------------------------------------
  * 一套组件渲染 17 个看板 / 187 个图表，看板定义全部来自后端
- * backend/services/native_catalog.py（自动提取自 my-finebi）。
+ * backend/services/native/native_catalog.py（自动提取自 my-finebi）。
  * 本页**不依赖 my-finebi 进程**：数据经 /api/native-boards/{slug}
  * → 远端只读 SQL API。
  *

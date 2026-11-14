@@ -77,7 +77,7 @@ app = os.environ["ALARMS_APP_DIR"]
 site = os.environ["ALARMS_SITE"]
 sys.path.insert(0, app); os.chdir(app)
 try:
-    from backend.services.eflow_alarm_service import _fetch_alarm_pipeline
+    from backend.services.eflow.eflow_alarm_service import _fetch_alarm_pipeline
 except Exception as e:
     print("IMPORT_FAIL: %s" % e, file=sys.stderr); sys.exit(3)
 try:

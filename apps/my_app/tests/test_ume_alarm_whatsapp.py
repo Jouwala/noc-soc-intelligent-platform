@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """ZTE UME 告警推送单测：配置解析、筛选口径、去重/状态表、消息渲染。
 
-对应 `backend/services/ume_alarm_config.py` / `ume_alarm_store.py` /
+对应 `backend/services/ume_alarm/ume_alarm_config.py` / `ume_alarm_store.py` /
 `ume_alarm_whatsapp_service.py`。不发真实网络请求（客户端在测试里被替身替换）。
 
 锁的是三类**极易踩**的错：
@@ -13,11 +13,11 @@ import json
 
 import pytest
 
-from backend.services import ume_alarm_client as CL
-from backend.services import ume_alarm_config as C
-from backend.services import ume_alarm_store as store
-from backend.services import ume_alarm_whatsapp_service as S
-from backend.services.ume_alarm_client import norm_alarm_code
+from backend.services.ume_alarm import ume_alarm_client as CL
+from backend.services.ume_alarm import ume_alarm_config as C
+from backend.services.ume_alarm import ume_alarm_store as store
+from backend.services.ume_alarm import ume_alarm_whatsapp_service as S
+from backend.services.ume_alarm.ume_alarm_client import norm_alarm_code
 
 
 def _p(conf, env=None):

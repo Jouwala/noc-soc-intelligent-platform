@@ -42,7 +42,7 @@ if str(ROOT) not in sys.path:
 
 from backend.config.remote_host import get_api_base_url          # noqa: E402
 from backend.database import DB_MODE, PG_DATABASE_URL, get_raw_connection  # noqa: E402
-from backend.services.ipran_ume_kpi_service import (            # noqa: E402
+from backend.services.ipran.ipran_ume_kpi_service import (            # noqa: E402
     DB_PATH, _norm_begin_time, mirror_rows_to_local,
 )
 

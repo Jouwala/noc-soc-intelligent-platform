@@ -253,7 +253,7 @@ def norm_alarm_code_text(v) -> str:
     两条路各错各的（本次就是：匹配侧正则写坏、展示侧压根没归一化），
     所以别把其中一个当成另一个的等价物 —— 改一处务必核对另一处。
 
-    与 `Task/my_app/backend/services/tt_alarm_message.py:42` 的 `norm_alarm_code`
+    与 `Task/my_app/backend/services/tt/tt_alarm_message.py:42` 的 `norm_alarm_code`
     语义对齐（那边只去一次 '.0'，此处去 '.000' 等多零形态）。
     """
     if v is None:
@@ -303,7 +303,7 @@ def build_value_frame(row: dict) -> dict:
     # `norm_alarm_code_text` 处理 —— 两处都要正确，否则会出现
     # 「规则判命中 9910、消息里却显示 9910.0」的错位。
     #
-    # 语义与 `Task/my_app/backend/services/tt_alarm_message.py:42` 的
+    # 语义与 `Task/my_app/backend/services/tt/tt_alarm_message.py:42` 的
     # `norm_alarm_code` 一致（那边只去一次 '.0'，此处去 '.000' 等多零形态）。
     alarm_code = re.sub(r'\.0+$', '', alarm_code)
 

@@ -50,7 +50,7 @@ def _runtime_weixin_credentials():
     支持页面修改后免重启生效。不传默认值：`weixin` 组已带默认值。
     """
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         from credential_store import get_credential
     return get_credential("weixin")

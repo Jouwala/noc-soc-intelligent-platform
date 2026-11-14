@@ -23,8 +23,8 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.services import email_recovery as er  # noqa: E402
-from backend.services import email_task_coverage as etc  # noqa: E402
+from backend.services.email import email_recovery as er  # noqa: E402
+from backend.services.email import email_task_coverage as etc  # noqa: E402
 from backend.scripts import sync_pg_to_sqlite as sps  # noqa: E402
 
 
@@ -308,7 +308,7 @@ def test_dual_mode_tables_are_not_skipped():
 # ------------------------------------------- mailbox_cleanup 不得假绿
 
 def test_mailbox_all_folders_failed_is_an_error(monkeypatch):
-    from backend.services import mailbox_cleanup as mc
+    from backend.services.cleanup import mailbox_cleanup as mc
     monkeypatch.setattr(mc, "get_account", lambda: object())
     monkeypatch.setattr(mc, "get_total_count", lambda acct: (0, ["inbox", "sent"]))
     result = mc.run_mailbox_cleanup()
@@ -317,7 +317,7 @@ def test_mailbox_all_folders_failed_is_an_error(monkeypatch):
 
 
 def test_mailbox_genuinely_empty_is_ok(monkeypatch):
-    from backend.services import mailbox_cleanup as mc
+    from backend.services.cleanup import mailbox_cleanup as mc
     monkeypatch.setattr(mc, "get_account", lambda: object())
     monkeypatch.setattr(mc, "get_total_count", lambda acct: (0, []))
     result = mc.run_mailbox_cleanup()
@@ -326,7 +326,7 @@ def test_mailbox_genuinely_empty_is_ok(monkeypatch):
 
 
 def test_mailbox_partial_read_failure_is_reported(monkeypatch):
-    from backend.services import mailbox_cleanup as mc
+    from backend.services.cleanup import mailbox_cleanup as mc
     monkeypatch.setattr(mc, "get_account", lambda: object())
     monkeypatch.setattr(mc, "get_total_count", lambda acct: (120, ["sent"]))
     result = mc.run_mailbox_cleanup()

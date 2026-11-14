@@ -55,5 +55,5 @@
 - 纯 Python 标准库（`os`/`shutil`/`pathlib`/`logging`），无新增第三方依赖，
   沿用项目根 `requirements.txt` 即可（services 目录无独立 requirements 先例，
   同 `log_cleanup.py`）。
-- 手动执行：`python backend/services/tmp_cleanup.py`（会打印结果 JSON 与总耗时秒数）。
+- 手动执行：`python backend/services/cleanup/tmp_cleanup.py`（会打印结果 JSON 与总耗时秒数）。
 - 定时入口 `run_tmp_cleanup()` 返回汇总 dict，禁止 `sys.exit`。

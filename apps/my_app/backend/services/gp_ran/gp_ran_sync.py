@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional
 
 # 本机 stdout 默认 cp1252，打印中文会抛 UnicodeEncodeError（.qoder/rules/shell_safe.md §2）。
 # worker 把任务日志重定向到文件时同样会踩，所以放在模块导入期而不是 __main__ 里。
-# 同 backend/services/get_sp_table.py:54-58 的做法。
+# 同 backend/services/sp/get_sp_table.py:54-58 的做法。
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")

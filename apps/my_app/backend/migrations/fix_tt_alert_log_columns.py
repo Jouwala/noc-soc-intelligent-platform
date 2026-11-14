@@ -58,7 +58,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import transfer_lib as tl  # noqa: E402  (get_pg_url / pg_quote / load_env)
 
 from backend.database import get_sqlite_connection  # noqa: E402
-from backend.services.tt_alarm_store import (  # noqa: E402
+from backend.services.tt.tt_alarm_store import (  # noqa: E402
     LOG_COLUMNS, LOG_PK, COLUMN_TYPES,
 )
 

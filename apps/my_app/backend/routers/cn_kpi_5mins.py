@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """CN KPI 5 分钟看板 API（?page=cn_kpi_5mins）。
 
-数据源与统计口径见 backend/services/cn_kpi_5mins_service.py 顶部说明。
+数据源与统计口径见 backend/services/cn/cn_kpi_5mins_service.py 顶部说明。
 
 GET /api/cn-kpi-5mins/overview
     ?force=1    跳过 30s 缓存，强制重新取数
@@ -20,7 +20,7 @@ import logging
 
 from fastapi import APIRouter, Query
 
-from backend.services import cn_kpi_5mins_service as svc
+from backend.services.cn import cn_kpi_5mins_service as svc
 
 logger = logging.getLogger("cn_kpi_5mins")
 

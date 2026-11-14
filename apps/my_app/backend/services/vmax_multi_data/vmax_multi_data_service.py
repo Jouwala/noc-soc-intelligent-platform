@@ -308,7 +308,7 @@ def persist_remote(result: Dict[str, Any], persist_cfg: Dict[str, Any]) -> Dict[
     if not persist_cfg.get("write_remote_db"):
         return {"skipped": True}
     try:
-        from backend.services.db_writer_client import write_data
+        from backend.services.db.db_writer_client import write_data
     except Exception as exc:                                             # noqa: BLE001
         return {"error": "db_writer_client 不可用: %s" % exc}
     columns = ["report_key", "report_part", "granularity", "window_begin", "window_end",

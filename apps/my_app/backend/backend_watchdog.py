@@ -537,7 +537,7 @@ def _spawn_backend():
     proc = subprocess.Popen(
         # B4 安全整改（2026-10-01）：绑定收回到回环。
         # 原因：后端把「socket 对端是 127.0.0.1」当作管理员信任
-        # （backend/services/portal_auth.py + security.py）。此前监听 0.0.0.0，
+        # （backend/services/portal/portal_auth.py + security.py）。此前监听 0.0.0.0，
         # 任何"把外部请求转成回环对端"的本机反代入口（如曾绑 0.0.0.0 的 vite preview:7090）
         # 都能让 LAN 上的匿名请求直接拿到管理员身份并读走凭据库。
         # 对外访问一律经 nginx（.20 本机 80 端口）反代到本回环，因此收回环不影响正常使用。

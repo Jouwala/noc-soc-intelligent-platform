@@ -40,7 +40,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.services import whatsapp_kb_service as wks  # noqa: E402
+from backend.services.whatsapp import whatsapp_kb_service as wks  # noqa: E402
 
 NODE = shutil.which("node")
 

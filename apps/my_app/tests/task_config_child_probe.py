@@ -16,8 +16,8 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.services import task_config_files as tcf  # noqa: E402
-import backend.services.task_configs_registry  # noqa: F401,E402
+from backend.services.task import task_config_files as tcf  # noqa: E402
+import backend.services.task.task_configs_registry  # noqa: F401,E402
 
 if os.environ.get("ZZ_IGNORE_CONFIG") == "1":
     # 各服务都是在导入期 `from ...task_config_files import load_json_config`，

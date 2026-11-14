@@ -37,7 +37,7 @@ PMCACHE_KEEP_DAYS = 1  # _pmcache 保留最近 N 天（含今天）；日聚合�
 #   ⚠ 位置要求：必须在下面用到这些常量的函数定义之前（默认参数在 def 时绑定）。
 # ============================================================
 try:
-    from backend.services.task_config_files import apply_config_overrides
+    from backend.services.task.task_config_files import apply_config_overrides
 except ImportError:
     from task_config_files import apply_config_overrides  # type: ignore
 

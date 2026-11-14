@@ -5,4 +5,4 @@
 # - 标准库       （os / time / logging / datetime / pathlib / urllib.parse）
 # 业务复用：
 # - backend.security.require_protected
-# - backend.services.whatsapp_service.SITE_OUTAGE_DIR / GROUPS
+# - backend.services.whatsapp.whatsapp_service.SITE_OUTAGE_DIR / GROUPS

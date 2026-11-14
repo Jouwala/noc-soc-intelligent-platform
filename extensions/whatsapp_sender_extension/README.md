@@ -2,7 +2,7 @@
 
 my_app 的第二种 WhatsApp 发送通道：直接运行在**用户已登录的 WhatsApp Web 标签页**里，
 定时把 `site_outage` 截图发送到配置好的群组。与后端任务 **WhatsApp Message Send**
-（`backend/services/whatsapp_service.py`，Playwright 自启浏览器）**并行存在**，
+（`backend/services/whatsapp/whatsapp_service.py`，Playwright 自启浏览器）**并行存在**，
 共用同一份图片目录与群组/备注配置。
 
 > **2026-09-29 起同时支持纯文本发送**，用于 **eFlow P1 告警 WhatsApp 推送**
@@ -152,7 +152,7 @@ my_app 的第二种 WhatsApp 发送通道：直接运行在**用户已登录的 
 发图是「粘图 → 备注」，发文本是「粘文本」。
 
 > **文本作业与发图作业是两个独立的作业文件**（`data/tt_alert_job.json` /
-> `data/whatsapp_ext_job.json`），由 `backend/services/whatsapp_job_claim.py`
+> `data/whatsapp_ext_job.json`），由 `backend/services/whatsapp/whatsapp_job_claim.py`
 > 收敛成一个认领口。**同一时刻最多认领一个作业**，发图优先 —— 扩展的发送是
 > 串行且带 `running` 锁的，把并发问题推给浏览器端会很难排查。
 >
@@ -201,10 +201,10 @@ my_app 的第二种 WhatsApp 发送通道：直接运行在**用户已登录的 
 - 备注：环境变量 `WHATSAPP_CAPTIONS`（按序配对），缺省为 `*文件名*`。
 - 图片目录：`backend/services/data/site_outage/`（排除名字含 `debug` 的文件）。
 
-以上与原任务完全一致，见 `backend/services/whatsapp_service.py`。
+以上与原任务完全一致，见 `backend/services/whatsapp/whatsapp_service.py`。
 
 > **TT 告警文本**的群组/时间窗/级别/告警码**不走上面这组环境变量**，
-> 见 `backend/services/tt_alarm_config.py` 与
+> 见 `backend/services/tt/tt_alarm_config.py` 与
 > `docs/manual/04-task-system.md` 的 `tt_alarm_whatsapp_alert` 小节；
 > 群组名可在「设置 → 任务配置 → eFlow P1 Alarm WhatsApp Push」里改。
 

@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("eflow_push_rule_collector")
 
-from backend.services.eflow_api_client import (
+from backend.services.eflow.eflow_api_client import (
     ensure_login, get_session_headers, _http_request, HOST, PORT
 )
 

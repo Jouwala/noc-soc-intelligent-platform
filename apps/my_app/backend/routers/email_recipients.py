@@ -6,7 +6,7 @@ email_recipients.py - 邮件收件人名单管理 API 路由
 - PUT  /api/email-recipients          按 key 更新主送/抄送（写 db/app.db email_recipients 表）
 - POST /api/email-recipients/reset     按 key 恢复默认（删除记录，下次发送回退读原名单）
 
-存储实现见 backend/services/email_recipient_store.py。
+存储实现见 backend/services/email/email_recipient_store.py。
 与 routers/credentials.py 保持一致的接口风格。
 """
 
@@ -15,7 +15,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.services.email_recipient_store import (
+from backend.services.email.email_recipient_store import (
     EMAIL_RECIPIENT_GROUPS,
     _GROUP_INDEX,
     list_email_recipients,

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""EWS 健康探测（**只读**，绝不发信）。供 backend/services/email_recovery.py 调用。
+"""EWS 健康探测（**只读**，绝不发信）。供 backend/services/email/email_recovery.py 调用。
 
 在 stdout 末行输出单行 JSON：
 
@@ -160,7 +160,7 @@ def main() -> int:
     # ---- 1) 凭据一致性 ----
     store_pwd = ""
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
         _u, store_pwd = get_credential(
             "owa_mail", "", "",
             env_user="OWA_USERNAME", env_secret="OWA_PASSWORD",

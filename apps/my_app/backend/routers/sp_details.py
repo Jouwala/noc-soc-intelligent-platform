@@ -5,7 +5,7 @@
 数据来自任务 ``sp_email_details``（SP Spare Parts Details Report Email）每天
 生成的合并工作簿 ``data/sp_email/data/SP Details Report <时间戳>.xlsx``
 （sheet：Inventory / Inbound / Outbound / Transfer），口径见
-``backend/services/sp_details_service.py`` 顶部 docstring —— 页面展示的与邮件
+``backend/services/sp/sp_details_service.py`` 顶部 docstring —— 页面展示的与邮件
 附件是**同一份文件**，不做二次加工。
 
 端点：
@@ -21,7 +21,7 @@ import logging
 
 from fastapi import APIRouter, Query
 
-from backend.services import sp_details_service as svc
+from backend.services.sp import sp_details_service as svc
 
 logger = logging.getLogger(__name__)
 

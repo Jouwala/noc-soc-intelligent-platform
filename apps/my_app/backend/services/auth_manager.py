@@ -9,7 +9,7 @@ auth_manager.py - 多任务共享鉴权管理模块
 
 用法:
     from auth_manager import get_auth
-    from backend.services.credential_store import get_credential
+    from backend.services.credential.credential_store import get_credential
 
     _user, _pass = get_credential("zte_ume")   # 口令不写在代码/文档里
     auth = get_auth(host="10.100.28.27", port=28001,
@@ -1437,7 +1437,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=28001)
     # 命令行未指定时，从凭据存储读取（环境变量 > 数据库 > 默认值）
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         try:
             from credential_store import get_credential

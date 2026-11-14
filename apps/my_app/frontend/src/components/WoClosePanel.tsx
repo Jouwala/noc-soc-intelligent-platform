@@ -2,7 +2,7 @@
  * WoClosePanel —— WO 清理（批量关闭 WaitConfirm 工单）
  * =============================================================================
  * 挂在 eflow_qa 页面左栏。链路与字段全部来自 2026-10-01 的实机抓包验证
- * （backend/services/eflow_wo_close.py 模块注释有完整记录）：
+ * （backend/services/eflow/eflow_wo_close.py 模块注释有完整记录）：
  *   ① POST /eflow-wo/base/detail?woId=  → 找待办 Confirm op 的 id
  *   ② POST /eflow-wo/base/process       → opEntity{id, operationResult:"7"}
  *   ③ 回读 detail 复核 Closed

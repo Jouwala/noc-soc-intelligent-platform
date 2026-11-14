@@ -44,7 +44,7 @@ schemas/   预留，实际为空
 
 1. **Pydantic 模型内联在 router**（如 `routers/credentials.py:37`），`schemas/__init__.py` 是空文件。新增请求体模型请放在对应 router 里，与现状一致。
 2. **部分 router 直接裸 SQL 取数**，未经 service：`routers/tables.py`（10 处）、`routers/gis.py`（9 处）、`routers/alarm_dashboard.py`（7 处）调用 `get_raw_connection`。新功能不建议模仿，但重构这三处要留意回归成本。
-3. **超大文件仍然存在**，行数（已验证）：`services/ms_sla_report.py` 1697、`services/eflow_data_mapper.py` 1505、`services/ran_ume_network_kpi.py` 1481、`services/task_runner.py` 1164、`routers/gis.py` 895、`routers/alarm_dashboard.py` 843。GIS 只拆出了无路由的辅助模块 `gis_geometry.py`，路由本身未拆。
+3. **超大文件仍然存在**，行数（已验证）：`services/ms/ms_sla_report.py` 1697、`services/eflow/eflow_data_mapper.py` 1505、`services/ran/ran_ume_network_kpi.py` 1481、`services/task/task_runner.py` 1164、`routers/gis.py` 895、`routers/alarm_dashboard.py` 843。GIS 只拆出了无路由的辅助模块 `gis_geometry.py`，路由本身未拆。
 4. **外部系统客户端的容错四件套（超时 / 重试 / 错误类型 / 健康检查）统一契约在 `services/ext_client.py`**（第二轮重构接入，2026-11-13）：统一基类 `ExtClientError`（仍是 `RuntimeError`）、有界 `RetryPolicy` + `call_with_retry`（非幂等调用必须 `retry=False`）、结构化 `run_health_check`。存量客户端传输层各不相同（原始 socket / urllib / requests / paramiko），**不强行统一传输**，按「改到哪个接哪个」逐个补缺项；已接入 `openwebui_client` / `db_writer_client` / `ume_alarm_client` / `eflow_api_client`，各客户端的盘点矩阵与接入约定以 `ext_client.py` 的模块 docstring 为准，不要在本手册再抄一份。
 
 ## 前端架构

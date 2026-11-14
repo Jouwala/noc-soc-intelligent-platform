@@ -97,7 +97,7 @@ RT_GR = os.environ.get("MW_UME_KPI_RT_GR", "900")
 def _runtime_credentials():
     """运行时获取凭据（环境变量 > credential_store > 模块默认值）。"""
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         try:
             from credential_store import get_credential
@@ -171,7 +171,7 @@ MW_UME_KPI_TASKS = [{"key": "FINBI"}]
 _MW_CONFIG_PATH = Path(__file__).resolve().parents[1] / "mw_ume_config.json"
 
 try:
-    from backend.services.task_config_files import load_json_config, normalize_query_configs
+    from backend.services.task.task_config_files import load_json_config, normalize_query_configs
     _MW_CONF = load_json_config(_MW_CONFIG_PATH)
 except ImportError:
     from task_config_files import load_json_config, normalize_query_configs  # type: ignore

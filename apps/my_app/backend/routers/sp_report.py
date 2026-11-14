@@ -8,7 +8,7 @@
 工作簿 ``data/sp_email/<前缀> <时间戳>.xlsx``（各含 Summary-Current /
 Summary-Changed / Inbound / Outbound / Inventory 五张 sheet）—— 与邮件/WhatsApp
 发出去的是**同一个文件**，页面不做二次加工。口径见
-``backend/services/sp_report_service.py`` 顶部 docstring。
+``backend/services/sp/sp_report_service.py`` 顶部 docstring。
 
 端点（``kind`` 缺省 = spareparts）：
 - GET /api/sp-report/summary   统计卡片 + 各 sheet 元信息 + 每日矩阵 + 口径说明
@@ -24,7 +24,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from backend.services import sp_report_service as svc
+from backend.services.sp import sp_report_service as svc
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def sp_report_summary(kind: str = Query(svc.DEFAULT_KIND, description=_KIND_DESC
     结构对齐 ``WarehouseSummaryReport.xlsx`` 的两段表：
     ``warehouse_summary``（WH/DOP × 库存·全量消耗·本月·本周，含 Total 行）与
     ``frequent_materials``（高频消耗物料 Top N + 全量 Total 行）。
-    口径见 ``backend/services/sp_report_service.py`` 顶部 docstring。
+    口径见 ``backend/services/sp/sp_report_service.py`` 顶部 docstring。
     """
     try:
         return svc.get_summary(kind)

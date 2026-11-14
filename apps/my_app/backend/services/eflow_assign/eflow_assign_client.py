@@ -41,7 +41,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend.services import eflow_api_client as api
+from backend.services.eflow import eflow_api_client as api
 from backend.services.eflow_assign import eflow_site as _site
 from backend.services.eflow_assign.assign_config import norm_code
 

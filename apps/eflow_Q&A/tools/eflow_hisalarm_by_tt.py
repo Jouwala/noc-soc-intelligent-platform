@@ -62,11 +62,11 @@ def fetch_day(target_date, limit_days, tt_no):
 
     返回 (命中行列表, 拉取总行数)。
     """
-    from backend.services.eflow_api_client import (
+    from backend.services.eflow.eflow_api_client import (
         _http_request, ensure_login, get_session_headers, parse_response,
         _safe_json_loads, HOST, PORT,
     )
-    from backend.services.eflow_alarm_service import (
+    from backend.services.eflow.eflow_alarm_service import (
         HIS_ALARM_API_PATH, HIS_ALARM_CONDITION, ALARM_REFERER,
         _normalize_alarm_rows,
     )

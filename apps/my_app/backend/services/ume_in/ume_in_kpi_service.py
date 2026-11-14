@@ -218,7 +218,7 @@ KPI_SPECS = [
 #   fail_cols/extra_cols 三元组用数组表示，解包语义不变）。
 # ============================================================
 try:
-    from backend.services.task_config_files import apply_config_overrides
+    from backend.services.task.task_config_files import apply_config_overrides
 except ImportError:  # 脚本直跑
     from task_config_files import apply_config_overrides  # type: ignore
 
@@ -295,7 +295,7 @@ def _en(mapping, zh, fallback=None):
 def _runtime_credentials():
     """运行时凭据：环境变量 > credential_store > 模块默认值。"""
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except ImportError:
         return USERNAME, PASSWORD
     return get_credential("ume_in", USERNAME, PASSWORD)
@@ -887,7 +887,7 @@ def _num(v):
 def _table_exists(conn) -> bool:
     """判断主表是否存在（区分「表还没建」与「读表失败」）。
 
-    沿用 `backend/services/tt_alarm_trigger.py:242-258` 的双模写法：sqlite 查
+    沿用 `backend/services/tt/tt_alarm_trigger.py:242-258` 的双模写法：sqlite 查
     sqlite_master，PG 查 information_schema 并限定当前 search_path（本项目
     search_path 覆盖 app/eflow/lte_pl 等多个 schema，不加限定会命中同名异构表）。
     """

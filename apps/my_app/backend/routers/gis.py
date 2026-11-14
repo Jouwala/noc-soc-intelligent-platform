@@ -680,7 +680,7 @@ def _resolve_tt_priorities(tt_nos, conn):
         need_net = [t for t in missing if t not in cache]
         if need_net:
             try:
-                from backend.services.eflow_data_mapper import fetch_tt_live_batch
+                from backend.services.eflow.eflow_data_mapper import fetch_tt_live_batch
                 live = fetch_tt_live_batch(need_net) or {}
             except Exception as e:  # noqa: BLE001 —— 外部系统故障不应打断页面
                 logger.warning("TT 优先级实时补漏失败，回退镜像结果：%s", e)
@@ -973,7 +973,7 @@ def _live_tt_details(tt_nos) -> dict:
     need = [t for t in (tt_nos or []) if t not in cache]
     if need:
         try:
-            from backend.services.eflow_data_mapper import fetch_tt_live_batch
+            from backend.services.eflow.eflow_data_mapper import fetch_tt_live_batch
             live = fetch_tt_live_batch(need) or {}
         except Exception as e:  # noqa: BLE001 —— 外部系统故障不应打断页面
             logger.warning("TT 实时查询失败，回退本地镜像：%s: %s", type(e).__name__, e)
@@ -1499,7 +1499,7 @@ def _load_site_kpis(site_id: str, site_detail: dict, days: int = 60) -> dict:
 
     # 站点可用率：跨月回溯最近 days 天（原实现只取当月，月初只剩 1~2 个点）。
     try:
-        from backend.services import site_availability_service as avail_svc
+        from backend.services.site import site_availability_service as avail_svc
         norm_name = getattr(avail_svc, "norm_name", lambda value: str(value or "").strip().lower())
         end_day = datetime.now().date()
         start_day = end_day - timedelta(days=max(1, days) - 1)
@@ -2441,7 +2441,7 @@ def get_realtime_priority_alarms(
 #      （lat/lng 非空非 0 + 告警 sid IN + 同一个 _build_filter_where），
 #      高级筛选是纯前端行为（loadSites 只发 region），所以筛选参数在这里由
 #      前端显式传给本端点、由后端复算口径。
-#   3. 重逻辑全部在 backend/services/gis_rca_service.py（≤500 行约束），本层只做取数。
+#   3. 重逻辑全部在 backend/services/gis/gis_rca_service.py（≤500 行约束），本层只做取数。
 
 # 未归因告警明细行数上限（2026-10-21b）：与 oss/priority 下钻的默认 limit 同档。
 # 截断**显式**暴露在 uncovered_truncated，绝不静默（AGENTS.md 三.1b）。
@@ -2481,7 +2481,7 @@ def _realtime_rca_payload(filters: Dict[str, Optional[str]], site_name: Optional
     site_name：站点名子串，语义与前端 siteNameFilter 一致（trim + 不区分大小写
     的子串匹配）；LIKE 通配符做 ESCAPE，防 '100%' 之类输入改变匹配语义。
     """
-    from backend.services.gis_rca_service import compute_rca
+    from backend.services.gis.gis_rca_service import compute_rca
 
     S = _detect_gis_schema()
     if not S["site_table"]:
@@ -2635,7 +2635,7 @@ def post_realtime_rca_narrative(body: RcaNarrativeIn):
     provider=='local' / 无 key / 调用异常 → 返回 local_summary + note，
     永不抛错误页给用户。
     """
-    from backend.services.gis_rca_service import rca_narrative
+    from backend.services.gis.gis_rca_service import rca_narrative
 
     filters = {
         "trm_type": body.trm_type, "site_type": body.site_type,
@@ -2822,7 +2822,7 @@ def _fetch_topology(with_util: bool) -> dict:
       把 `?page=mwRealTime` 的最新 15 分钟粒度利用率贴到这些线上，让 GIS 页不必切页
       就能看出哪条微波链路吃紧。两套数据主键不同（KML 用站名、KPI 用 IP）且链路集合
       不重合，**实测只有约一半的线能匹配上**，故：
-        - 匹配策略与「宁可少标绝不猜标」的理由见 services/gis_mw_overlay.py 模块头注释；
+        - 匹配策略与「宁可少标绝不猜标」的理由见 services/gis/gis_mw_overlay.py 模块头注释；
         - 匹配不上的线 util=None / level='no_kpi'，**保留原 KML 线色**，
           前端据此显示为「无 KPI 数据」而不是绿色（无数据 ≠ 正常）；
         - 额外返回 util_meta 统计，让「为什么只有一半线有颜色」在界面上可解释。
@@ -2876,7 +2876,7 @@ def _fetch_topology(with_util: bool) -> dict:
     if with_util:
         try:
             from backend.services.mw_ume.mw_ume_topology import get_realtime_topology
-            from backend.services.gis_mw_overlay import match_links
+            from backend.services.gis.gis_mw_overlay import match_links
             rt = get_realtime_topology(top_n=10)
             links, util_meta = match_links(links, rt.get("nodes") or [], rt.get("edges") or [])
             util_meta["slot"] = (rt.get("meta") or {}).get("selected_date")

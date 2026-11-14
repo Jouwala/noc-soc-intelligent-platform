@@ -71,7 +71,7 @@ export function getFmeRankingSiteDrilldown(params?: Record<string, string | numb
 // ========== CR 变更分析（按 change_category 看计划 / 完成情况）==========
 // 数据源：eflow_cr（eFlow 同步）。后端 backend/routers/cr_analysis.py，
 // 口径（终态词表、按时/延期判定、概览与下钻共用一份 WHERE）见
-// backend/services/cr_analysis_service.py 的模块 docstring。
+// backend/services/cr/cr_analysis_service.py 的模块 docstring。
 export function getCrAnalysisFilters() {
   return api.get('/cr-analysis/filters')
 }
@@ -92,7 +92,7 @@ export function getCrAnalysisDrilldown(params: {
 }
 
 // 审批流程：各步骤的到达量与停留耗时（源表 8 个 *_detail 文本列解析而来）。
-// 步骤顺序是 backend/services/cr_caliber.py 的 WORKFLOW_STEPS **真实时序**。
+// 步骤顺序是 backend/services/cr/cr_caliber.py 的 WORKFLOW_STEPS **真实时序**。
 export function getCrAnalysisWorkflow(params?: { start?: string; end?: string }) {
   return api.get('/cr-analysis/workflow', { params })
 }
@@ -108,7 +108,7 @@ export function getCrAnalysisWorkflowDrilldown(params: {
 // ========== PM 执行分析（按 PM 计划看预防性维护工单的完成 / 超期）==========
 // 数据源：eflow_pm（eFlow 同步）。后端 backend/routers/pm_analysis.py，
 // 口径（字段名陷阱、真实流程顺序、pmt_overdue 语义、概览与下钻共用一份 WHERE）
-// 见 backend/services/pm_caliber.py 的模块 docstring。
+// 见 backend/services/pm/pm_caliber.py 的模块 docstring。
 export function getPmAnalysisFilters() {
   return api.get('/pm-analysis/filters')
 }
@@ -129,7 +129,7 @@ export function getPmAnalysisDrilldown(params: {
 
 // 里程碑：Create → Schedule → Accept → Process → PMManagerApprove →
 // FLMLeaderApprove → Closed（顺序对齐 eFlow 的 Workflow History / queryAllSteps，
-// 见 backend/services/pm_workflow_service.py）。
+// 见 backend/services/pm/pm_workflow_service.py）。
 // pmp_no 与概览计划筛选同口径，前端选中计划号时要一并传，否则里程碑与 KPI 不同批。
 export function getPmAnalysisWorkflow(params?: {
   start?: string; end?: string; pmp_no?: string
@@ -149,7 +149,7 @@ export function getPmAnalysisWorkflowDrilldown(params: {
 // ========== Speedtest 竞对分析（ORANGE vs MTN）==========
 // 数据源：speedtest_data（Speedtest.xlsx 导入）。后端 backend/routers/bm_speedtest.py，
 // 口径（品牌归一、左闭右开时间窗、概览与下钻共用同一份 WHERE）
-// 见 backend/services/bm_speedtest_caliber.py 的模块 docstring。
+// 见 backend/services/bm/bm_speedtest_caliber.py 的模块 docstring。
 export function getBmSpeedtestFilters() {
   return api.get('/bm-speedtest/filters')
 }
@@ -176,7 +176,7 @@ export function getBmSpeedtestDrilldown(params?: {
 
 // ========== Meta 基准报告（ORANGE vs MTN 速率 PK + FDD 网络侧 KPI）==========
 // 数据源：meta_data（Meta_20260923.xlsx 导入）。后端 backend/routers/bm_meta.py，
-// 口径见 backend/services/bm_meta_caliber.py 的模块 docstring。
+// 口径见 backend/services/bm/bm_meta_caliber.py 的模块 docstring。
 // ⚠️ 与 bm-speedtest 是两张不同的表，互不影响，不要合并。
 export function getBmMetaFilters() {
   return api.get('/bm-meta/filters')
@@ -477,7 +477,7 @@ export function getCnKpi5minsOverview(params?: { force?: boolean }) {
 
 // ===== 原生看板（my-finebi 其余看板泛化迁移） =====
 // 一套端点驱动 17 个看板（IP RAN Metro Ring / 可用率 / 2G-3G-4G KPI / MTTR /
-// CM / 备件 / Progress 等），slug 见 backend/services/native_catalog.py。
+// CM / 备件 / Progress 等），slug 见 backend/services/native/native_catalog.py。
 // 数据源经远端只读 SQL API（backend/config/remote_host.py），**不依赖 my-finebi 进程**。
 // params: start/end=YYYY-MM-DD（时间窗口，须成对；留空=各组件原口径全量）
 //         force=true 跳过后端 60s 缓存
@@ -599,7 +599,7 @@ export function syncUmeIn(params?: Record<string, string | number>) {
 
 // SP 物料库存/消耗统计汇总（WH/DOP 汇总报表模板）
 // 数据源：db/app.db inventory_details（每日全量快照，由 sp 数据同步任务写入）
-// 口径见 backend/services/sp_material_summary_service.py 顶部 docstring
+// 口径见 backend/services/sp/sp_material_summary_service.py 顶部 docstring
 // params: anchor_date=YYYY-MM-DD（期初锚点，缺省=当前快照所在自然月 1 号）
 //         current_date=YYYY-MM-DD（期末，缺省=库内 MAX(update_date)）
 export function getSpMaterialSummary(params?: Record<string, string>) {
@@ -618,7 +618,7 @@ export function getSpMaterialDetail(params: Record<string, string>) {
  * 数据源：data/sp_email/data 下由任务 sp_email_details（SP Spare Parts Details
  * Report Email）每天生成的合并工作簿「SP Details Report <时间戳>.xlsx」
  * （sheet：Inventory / Inbound / Outbound / Transfer）—— 与邮件附件是同一份文件，
- * 口径见 backend/services/sp_details_service.py 顶部 docstring。 */
+ * 口径见 backend/services/sp/sp_details_service.py 顶部 docstring。 */
 // 统计卡片 + 各 sheet 元信息 + 数据来源
 export function getSpDetailsSummary() {
   return api.get('/sp-details/summary')
@@ -667,7 +667,7 @@ export function getSpReportFilters(kind: SpReportKind, sheet: string) {
  * 数据源：data/ms_sla 下任务产出的报表工作簿本体（与邮件附件是同一份文件）——
  *   wo_sla       : ZTE OLR MS WOs SLA Achievements Daily Report_<日期>.xlsx（kpi_ms_wo_sla 任务）
  *   contract_kpi : ZTE OLR MS Contract KPIs & WOs Achievement Auto-Reports.xlsx（ms_sla_full 任务）
- * 口径见 backend/services/ms_kpi_report_service.py 顶部 docstring。 */
+ * 口径见 backend/services/ms/ms_kpi_report_service.py 顶部 docstring。 */
 export type MsKpiReportKind = 'wo_sla' | 'contract_kpi'
 
 // 统计卡片 + KPI 矩阵（表头/日行/月行/逐指标统计）+ 分表元信息

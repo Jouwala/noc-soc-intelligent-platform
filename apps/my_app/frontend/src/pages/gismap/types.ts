@@ -194,7 +194,7 @@ export interface TopologyLink {
      把 mwRealTime 的最新 15 分钟粒度利用率贴到 KML 线上。
      后端只对「能确认是同一条物理链路」的线返回数值，其余一律 util=null /
      level='no_kpi'，前端据此保留 KML 原线色 —— 详见
-     backend/services/gis_mw_overlay.py 模块头注释（宁可少标绝不猜标）。 */
+     backend/services/gis/gis_mw_overlay.py 模块头注释（宁可少标绝不猜标）。 */
 
   /** max(tx_util, rx_util)；null = 未匹配到 KPI 数据（**不是** 0） */
   util?: number | null
@@ -262,7 +262,7 @@ export type LayerKey = 'rt_alarm' | 'his_alarm' | 'tt' | 'wo'
 export type TimePreset = 'all' | '7d' | '30d' | '90d' | '180d' | 'custom'
 
 /* ==================== 根因聚合分析（RCA，2026-10-21） ====================
- * 对应后端 GET /gis/realtime/rca（backend/services/gis_rca_service.py）。
+ * 对应后端 GET /gis/realtime/rca（backend/services/gis/gis_rca_service.py）。
  * 三类簇：topology（上游断 → link_path 下挂跟着断）/ same_cause（无链路站
  * 按问题 + 10 分钟窗聚集）/ eFlow 佐证挂 evidence。字段名与后端 JSON 逐字对齐。 */
 

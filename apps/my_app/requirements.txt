@@ -13,7 +13,7 @@ python-multipart>=0.0.6
 pydantic>=2.0.0
 apscheduler>=3.10.0
 requests>=2.28.0
-# httpx：backend/services/portal_auth.py 在模块级 import 它（门户 token 回调），
+# httpx：backend/services/portal/portal_auth.py 在模块级 import 它（门户 token 回调），
 # 且 starlette TestClient 也需要它；此前只在 requirements.lock.txt 里有
 # （httpx==0.28.1），requirements.txt 漏登记，新环境按本清单装完会在 import
 # 后端时 ModuleNotFoundError（2026-11-13 离线基线实测）。

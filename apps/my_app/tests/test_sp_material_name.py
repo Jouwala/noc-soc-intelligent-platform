@@ -7,7 +7,7 @@
 物料在 eFlow 改名后历史单据不回写。`Summary-Current` 以 Material Name 为主键，
 于是同一物料裂成两行、入库/出库/库存被拆开（当天 SpareParts 4 组、86 行受影响）。
 修复是把「按 `Material No.` 取 `sp_material` 最新名」收敛成
-`backend/services/sp_material_name.py` 一处，由报表生成器与明细落库共用。
+`backend/services/sp/sp_material_name.py` 一处，由报表生成器与明细落库共用。
 
 本测试钉死四件事，防止口径再分叉：
 
@@ -24,12 +24,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from backend.services.sp_material_name import (
+from backend.services.sp.sp_material_name import (
     NAME_COL, NO_COL, normalize_dataframe, normalize_rows, norm_key)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = PROJECT_ROOT / "backend" / "services" / "sp_report_gen" / "gernarate_sp_report.py"
-MODULE_SRC = PROJECT_ROOT / "backend" / "services" / "sp_material_name.py"
+MODULE_SRC = PROJECT_ROOT / "backend" / "services" / "sp" / "sp_material_name.py"
 
 LUT = {
     "122630731000": "Chassis (NR9000TR)",                    # 主数据已去掉结尾 |
@@ -140,7 +140,7 @@ def test_normalize_rows_without_material_columns():
 def test_generator_does_not_own_its_master_query():
     """生成器不得自带一套读主数据的实现（口径只能有一份）。"""
     src = GENERATOR.read_text(encoding="utf-8")
-    assert "from backend.services.sp_material_name import" in src
+    assert "from backend.services.sp.sp_material_name import" in src
     assert "def load_material_maps_from_db" not in src, "主数据查询应只在 sp_material_name.py"
     assert 'information_schema' not in src, "生成器里不该再出现库内自省 SQL"
     # 旧实现名不允许复活
@@ -160,7 +160,7 @@ def test_master_refresh_runs_before_generation():
     """Step 0 必须存在：04:55 的主数据快照早于当天白天的改名，报表会用到旧名。"""
     src = GENERATOR.read_text(encoding="utf-8")
     assert "def refresh_material_master()" in src
-    assert "from backend.services.sp_material_sync import run_sp_material_sync" in src
+    assert "from backend.services.sp.sp_material_sync import run_sp_material_sync" in src
     body = src.split("def main()")[1]
     assert "refresh_material_master()" in body.split("sftp_download()")[0]
     # 刷新后必须作废缓存，否则拿到的还是改名前的映射

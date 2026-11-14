@@ -14,7 +14,7 @@
 |---|---|
 | task_id | `tt_mttr_report_generate` |
 | cron | `20 7 * * *`（排在 `eflow_sync`（每小时 :00）之后，读到当天最新一期 hourly Report；要更高频在任务管理页改排程即可，不必改代码） |
-| 入口 | `backend/services/tt_mttr_report.py::run_tt_mttr_report`（零参，返回摘要 dict） |
+| 入口 | `backend/services/tt/tt_mttr_report.py::run_tt_mttr_report`（零参，返回摘要 dict） |
 | category / gateway | `eflow` / `eflow_api`（数据血缘是 eFlow TT；本任务**不调 eFlow API**，只读写本地文件） |
 | worker 分组 | `m`（内务轻任务；与同读该目录的 `liberia_email_1h` 同组） |
 | 实测耗时 | 9.4 秒（源表 37006 行 → 写出 3.14 MB） |
@@ -83,7 +83,7 @@ P1 2026-05 的 16.37 h 超标点被裁出图外，正好把最需要看见的异
 
 | 位置 | 作用 |
 |---|---|
-| `backend/services/tt_mttr_report.py` | 生成逻辑 |
+| `backend/services/tt/tt_mttr_report.py` | 生成逻辑 |
 | `backend/task_registry.py` `TASK_SPECS` | 任务登记（漏了不执行） |
 | `backend/worker_watchdog.py` `GROUP_TASK_MAP` | 分组（漏了永远 pending，`tests/test_worker_group_coverage.py` 会拦） |
 | `backend/routers/email_reports.py` `_SOURCES` | 下载白名单，`patterns` 必须与 `OUTPUT_PREFIX` 一致，否则「列得出、下不动」 |
@@ -93,7 +93,7 @@ P1 2026-05 的 16.37 h 超标点被裁出图外，正好把最需要看见的异
 
 改动后至少做两件事：
 
-1. `python backend/services/tt_mttr_report.py` 直跑，核对返回摘要里的
+1. `python backend/services/tt/tt_mttr_report.py` 直跑，核对返回摘要里的
    `tickets` / `dropped` 是否符合预期（2026-10-04 基线：原始 37006 / 有 WO 13873 / 入报告 13320，
    剔除 未清除 18、负值 1、>=48h 447、Site Category 空 71、2026-01 前 16）；
 2. 用 Excel/WPS COM 打开产物 `CalculateFull()` 后回读 Summary，与 pandas 独立复算逐格对拍

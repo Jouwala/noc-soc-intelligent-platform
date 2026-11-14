@@ -8,11 +8,11 @@
 |---|---|---|---|
 | analysis.py | AnalysisArchive | analysis_archive | scripts/init_db.py |
 | analysis.py | UploadedFile | uploaded_files | main.py |
-| task_schedule.py | TaskScheduleConfig | task_schedule_config | services/task_runner.py |
-| task_execution.py | TaskExecutionLog | task_execution_log | services/task_runner.py |
-| credential.py | Credential | credentials | services/credential_store.py |
-| sp_sync.py | SpSyncLog | sp_sync_log | services/get_sp_table.py |
-| task_queue.py | TaskQueue | task_queue | services/task_runner.py（Phase 3 跨进程任务队列） |
+| task_schedule.py | TaskScheduleConfig | task_schedule_config | services/task/task_runner.py |
+| task_execution.py | TaskExecutionLog | task_execution_log | services/task/task_runner.py |
+| credential.py | Credential | credentials | services/credential/credential_store.py |
+| sp_sync.py | SpSyncLog | sp_sync_log | services/sp/get_sp_table.py |
+| task_queue.py | TaskQueue | task_queue | services/task/task_runner.py（Phase 3 跨进程任务队列） |
 
 ## 2. 独立库（各自 Base，不参与主库 Alembic）
 

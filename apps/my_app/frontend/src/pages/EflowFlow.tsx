@@ -12,7 +12,7 @@
  *       GET /api/eflow-flow/graph?lang=zh
  *       GET /api/eflow-flow/rules
  * 判定口径与 NOC 分析 / 单 TT 复盘报告**同源**（都读 ocrule_details），
- * 详见 backend/services/eflow_flow.py 头部说明。
+ * 详见 backend/services/eflow/eflow_flow.py 头部说明。
  *
  * 约定（见 AGENTS.md）：
  *   ✅ 卡片一律用 components/cards，不 import antd 的 Card
@@ -47,7 +47,7 @@ import { exportReport, type ReportSheetSpec } from '../utils/excelReport'
 
 const { Text, Link } = Typography
 
-/* ---- 与后端 backend/services/eflow_flow.py 返回结构对齐的类型 ---- */
+/* ---- 与后端 backend/services/eflow/eflow_flow.py 返回结构对齐的类型 ---- */
 type FlowRule = {
   id: string
   name: string
@@ -62,7 +62,7 @@ type FlowRule = {
   description: string
   update_time: string
   push_path: string
-  /* 以下由 backend/services/eflow_flow_rules.py 按本单条件求值后附加 */
+  /* 以下由 backend/services/eflow/eflow_flow_rules.py 按本单条件求值后附加 */
   match?: boolean | null
   match_state?: 'matched' | 'fallback' | 'not_matched' | 'undecidable' | 'no_data' | ''
   match_details?: string
@@ -366,7 +366,7 @@ export default function EflowFlow() {
 
   /** TT 主流程节点数（排除 WO 子流程泳道）。
    *  「已走步骤」只统计主流程：后端 _actual_path 的 order 只取 _FLOW_NODES，
-   *  WO 节点走的是另一个 reached_ids（见 backend/services/eflow_flow.py:778）。
+   *  WO 节点走的是另一个 reached_ids（见 backend/services/eflow/eflow_flow.py:778）。
    *  原写法用 graph.nodes.length 当分母，会把 5 个 WO 节点也计入「全程步骤」。 */
   const ttNodeCount = useMemo(
     () => (graph?.nodes || []).filter(n => n.stage !== 'wo' && !n.id.startsWith('wo_')).length,

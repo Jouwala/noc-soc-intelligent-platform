@@ -92,7 +92,7 @@ def test_encrypt():
     # 与线上已验证的 mars 实现（vmax_cxo_daily_cache._encrypt_param）语义一致：
     # 两者分块边界可能不同（114/117 对 117/117），但都能被服务端逐块解密后拼接，
     # 因此只校验「同为 128B 整数倍密文且非空」。
-    from backend.services import vmax_cxo_daily_cache as cxo
+    from backend.services.cxo import vmax_cxo_daily_cache as cxo
     mars_raw = base64.b64decode(cxo._encrypt_param(plain))
     check("与 mars 历史实现同为 128B 分块密文",
           len(mars_raw) % 128 == 0 and len(raw) % 128 == 0 and mars_raw != raw)

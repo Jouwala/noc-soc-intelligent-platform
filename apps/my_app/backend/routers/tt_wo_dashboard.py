@@ -1438,7 +1438,7 @@ def workflow_definition():
     —— 里程碑数字来自本地库，只有「阶段顺序」依赖这里。
     """
     try:
-        from backend.services.eflow_workflow_service import workflow_summary
+        from backend.services.eflow.eflow_workflow_service import workflow_summary
         return workflow_summary()
     except Exception as e:
         # 本模块没有模块级 logger（历史写法一律 logging.getLogger(__name__)），

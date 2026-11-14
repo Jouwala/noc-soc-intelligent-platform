@@ -25,7 +25,7 @@
  * **只有 update_date = max(update_date) 的那一份才是当前库存**（约 2100 行）。
  *
  * 直接 SUM 全表会得到 90 万这种离谱数字（把所有历史快照加了一遍）。
- * my_app 的 backend/services/native_catalog.py:1952 用的是同一口径，
+ * my_app 的 backend/services/native/native_catalog.py:1952 用的是同一口径，
  * 两边若不一致，对账结果就会对不上。
  *
  * ## ⚠️ 列名有坑：单位列一会儿带空格一会儿不带

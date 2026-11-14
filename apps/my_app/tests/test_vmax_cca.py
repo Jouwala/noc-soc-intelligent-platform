@@ -144,29 +144,29 @@ def _make_client(monkey_credentials=("user", "pwd"), responses=()):
     client._logged_in = False
     # _login 内部延迟 import credential_store —— 用 sys.modules 打桩。
     # 注意：只换 sys.modules 不够 —— 若之前已有测试真实 import 过
-    # credential_store，父包 backend.services 上已绑定真实模块属性，
-    # `from backend.services import credential_store` 会直接取该属性而不查
+    # credential_store，父包 backend.services.credential 上已绑定真实模块属性，
+    # `from backend.services.credential import credential_store` 会直接取该属性而不查
     # sys.modules（全量跑时 7 例因此报 VmaxCcaNotConfigured，单文件跑时却全绿）。
     # 所以父包属性也要一并打桩；收尾时两处一起还原（原本没 import 过的要删掉，
     # 不能把桩留在 sys.modules 里污染后面的测试）。
     import types
-    import backend.services as _pkg
-    orig_modules = sys.modules.get("backend.services.credential_store")
+    import backend.services.credential as _pkg
+    orig_modules = sys.modules.get("backend.services.credential.credential_store")
     orig_pkg_attr = getattr(_pkg, "credential_store", None)
-    stub = types.ModuleType("backend.services.credential_store")
+    stub = types.ModuleType("backend.services.credential.credential_store")
     stub.get_credential = lambda *a, **k: monkey_credentials
-    sys.modules["backend.services.credential_store"] = stub
+    sys.modules["backend.services.credential.credential_store"] = stub
     _pkg.credential_store = stub
     return client, (orig_modules, orig_pkg_attr)
 
 
 def _restore_credential_store(orig):
-    import backend.services as _pkg
+    import backend.services.credential as _pkg
     orig_modules, orig_pkg_attr = orig
     if orig_modules is not None:
-        sys.modules["backend.services.credential_store"] = orig_modules
+        sys.modules["backend.services.credential.credential_store"] = orig_modules
     else:
-        sys.modules.pop("backend.services.credential_store", None)
+        sys.modules.pop("backend.services.credential.credential_store", None)
     if orig_pkg_attr is not None:
         _pkg.credential_store = orig_pkg_attr
     else:

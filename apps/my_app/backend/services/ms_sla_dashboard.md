@@ -10,7 +10,7 @@
 
 ## 调用位置
 
-`backend/services/ms_sla_report.py` 的 `run_contract_kpis_report()`（任务 `ms_sla_full`，
+`backend/services/ms/ms_sla_report.py` 的 `run_contract_kpis_report()`（任务 `ms_sla_full`，
 每 6 小时）在报表导出上传完成后调用 `write_dashboard_data(datasets)`。
 
 写库失败仅记入任务结果（`dashboard_error` 字段），不影响 Excel 更新 / 邮件发送主流程。
@@ -46,7 +46,7 @@ NUR 原始值 = 比率（0~1），前端展示 ×100000（与 NurDashboard 口�
 
 ```powershell
 cd d:\01_RPA\Task\my_app
-python -m backend.services.ms_sla_dashboard
+python -m backend.services.ms.ms_sla_dashboard
 ```
 
 ## 依赖

@@ -5,7 +5,7 @@
  * 与 `crAnalysis/crTypes.ts` 同构（两个页面共用一套「类型/常量」「图表」
  * 「列定义」「弹窗」四件套），便于对照维护。
  *
- * 类型与后端 `backend/services/pm_analysis_service.py` 的返回结构一一对应；
+ * 类型与后端 `backend/services/pm/pm_analysis_service.py` 的返回结构一一对应；
  * 改后端返回结构时**必须**同步这里。
  * ========================================================================== */
 
@@ -59,7 +59,7 @@ export type Overview = {
   steps: StepRow[]
 }
 
-/* ---- 里程碑（backend/services/pm_workflow_service.py 的返回结构） ----
+/* ---- 里程碑（backend/services/pm/pm_workflow_service.py 的返回结构） ----
  *
  * 顺序**严格对齐 eFlow 的 Workflow History**（`queryAllSteps`，payload
  * `eflow-pm-task`）：

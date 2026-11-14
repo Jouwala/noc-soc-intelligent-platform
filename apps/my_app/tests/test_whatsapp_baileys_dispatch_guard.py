@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Baileys 单作业文件互斥守卫单测（backend/services/whatsapp_send_baileys_service.py）。
+"""Baileys 单作业文件互斥守卫单测（backend/services/whatsapp/whatsapp_send_baileys_service.py）。
 
 ## 为什么值得锁
 
@@ -20,7 +20,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.services import whatsapp_send_baileys_service as bsvc
+from backend.services.whatsapp import whatsapp_send_baileys_service as bsvc
 
 
 @pytest.fixture

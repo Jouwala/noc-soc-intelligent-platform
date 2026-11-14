@@ -20,7 +20,7 @@ APScheduler 到点 (backend 进程内)
 - **cron 可以被库里覆盖**：默认值写在 `default_cron`，实际排程读 `task_schedule_config` 表（`task_runner.py:232-440`），所以在"任务管理"页改排程会立即生效且重启不丢。
   - ⚠️ **库里有值时它永远优先**（`task_runner.py:521` `current_cron = saved_cron if saved_cron else default_cron`）。因此**只改 `task_registry.py` 的 `default_cron` 对已存在的任务完全无效，且不留痕迹** —— 2026-10-04 改 `sp_online_sync`、2026-10-11 改三个 WhatsApp 发送任务时都踩过（以为改了、实际仍按库里的旧值跑）。要改生效值：用任务管理页、或 `POST /api/tasks/{id}/schedule`、或删掉该任务的 `task_schedule_config` 行让它回落到代码默认。
   - 下表列的是 **`default_cron`（代码默认值）**，**不是**当前生效值。二者可能不同（2026-10-11 巡检：22 个任务存在 code≠库 的覆盖）。核对三方一致性用 `TMP/_check_task_cron_drift.py`。
-- 另有一套**任务配置文件框架** `services/task_configs_registry.py:1-30`，优先级 `环境变量 > 配置文件 > 默认值`，用于任务的业务参数（不是排程）。
+- 另有一套**任务配置文件框架** `services/task/task_configs_registry.py:1-30`，优先级 `环境变量 > 配置文件 > 默认值`，用于任务的业务参数（不是排程）。
 - **状态回传是纯 HTTP 轮询，没有 WebSocket**：`/api/tasks`、`/api/tasks/{id}/status|history|stats`。
 - **降级模式**：未设 `MY_APP_TASK_QUEUE=1` 时，任务退回调度器进程内线程执行（`task_runner.py:527-553`），不经过队列、也不由 worker 认领。生产启停脚本会注入该开关（`backend_watchdog.py:137`）。
 
@@ -153,7 +153,7 @@ APScheduler 到点 (backend 进程内)
 > 14. `component-api.md` 里的前端页面数 / 通用组件数 = 磁盘实际 `.tsx` 文件数；
 > 15. `AGENTS.md` 里标的关键文件体积与磁盘实际值相符（容差 ±25%）；
 > 16. **每个页面都有按页刷新设置**（2026-11-04 新增的项目硬要求）：`PAGE_META` 里每个自研页面都必须在 `App.tsx` 的 `AR_PAGE_DEFAULTS` 登记建议间隔、间隔必须是 `AR_OPTIONS` 档位，且不得再出现按页禁用刷新控件的白名单（细则见 `AGENTS.md` 三.3d 与 `16-new-page-guide.md` 3.4d）。
-> 17. **看板下推的每张表都要有本机 PG 巡检，且回看天数与看板默认窗口同档**（2026-11-05 新增）：`dashboard_service.PUSH_DOWN_TABLES` ⊆ `pg_schema_freshness.PG_SCHEMA_CHECKS[].tables`、`lookback_days` == `PUSH_DOWN_DAYS`，并且 `dashboard_service` 仍在输出 `meta.coverage`、`NativeBoard` 仍常驻渲染缺档告警。背景：IP RAN 看板 11-04 改读本机 PG，而镜像只追头部水位，「近 31 天只有 10 天有数」这种洞当时**任何巡检都查不到**（远端一直绿、判据只问最新时间），见 `backend/services/pg_schema_freshness.md`。
+> 17. **看板下推的每张表都要有本机 PG 巡检，且回看天数与看板默认窗口同档**（2026-11-05 新增）：`dashboard_service.PUSH_DOWN_TABLES` ⊆ `pg_schema_freshness.PG_SCHEMA_CHECKS[].tables`、`lookback_days` == `PUSH_DOWN_DAYS`，并且 `dashboard_service` 仍在输出 `meta.coverage`、`NativeBoard` 仍常驻渲染缺档告警。背景：IP RAN 看板 11-04 改读本机 PG，而镜像只追头部水位，「近 31 天只有 10 天有数」这种洞当时**任何巡检都查不到**（远端一直绿、判据只问最新时间），见 `backend/services/db/pg_schema_freshness.md`。
 >
 > **三道防线，同一份代码，不规则分叉**：
 >
@@ -197,7 +197,7 @@ APScheduler 到点 (backend 进程内)
 | `overdue_dependency` | `overdue` 的**子集**：最新一次失败是「外部依赖不可用」（EWS / DbWriter 落库 API / 网络超时）而非任务自身停摆 | 2026-09-18 新增。`overdue` 仍保留该任务（用于算 `status` 与 STALE 清单），本类只把告警**聚合成一条**并改文案，见下。2026-11-06 起还会按**实际故障源**（DbWriter/EWS/网络）给不同处置指引 |
 | `empty_output` | 最近 `EMPTY_OUTPUT_CONSECUTIVE`（默认 2）次**成功**执行，`result_json` 自报产出都是 0 条（按 `EMPTY_OUTPUT_CHECKS` 登记的任务与字段） | 2026-11-06 新增。补「跑了、绿了、什么都没产出」这一类：前面四类全都覆盖不到（有记录、有分组、无滞留、每小时都成功）。起因是 `vmax_multi_data_sync` 连续 34 天 `rows=0` 却每轮 `success=1`。判据必须能区分「明确是 0」与「没有自报条数」，否则任务改字段名会变成永久误报 |
 
-2026-09-18 之前这些结果**只进日志没人看**（本次停摆两天是用户先发现的），故新增 `backend/services/task_health_alert.py` 把 findings 推到人前：
+2026-09-18 之前这些结果**只进日志没人看**（本次停摆两天是用户先发现的），故新增 `backend/services/task/task_health_alert.py` 把 findings 推到人前：
 
 - **翻转去重**：以 `kind:task_id` 为键，状态文件 `TMP/task_health_alert_state.json`（原子写 tmp + `os.replace`）。新增异常通知一次、恢复通知一次，不再每小时刷屏；
 - **持续重提**：同一异常持续超过 `TASK_HEALTH_ALERT_RENOTIFY_HOURS`（默认 24h）再提一次；
@@ -220,7 +220,7 @@ APScheduler 到点 (backend 进程内)
 **修复（两层防御）**：
 
 1. **测试侧堵源**：fixture 补 `monkeypatch.setattr(tr, "notify_task_failure_email", ...)`，与微信通知一起屏蔽；`test_get_task_stats_and_failures` 的失败聚合断言改用**非测试 ID**，并新增「`__t_` 任务不得出现在聚合里」的契约断言。
-2. **运维视图隔离**：`backend/services/task_stats.py` 新增 `TEST_TASK_PREFIX = "__t_"`，在面向运维/前端的查询里排除测试任务 —— `get_recent_failures`（失败聚类 + active/recovered/needs_attention 分层）、`get_task_history`（最近历史）、`get_global_history`（含内存兜底）、`_fetch_latest_runs`（任务卡片最新记录）。`get_task_stats` / `get_task_history_by_task` 是**按 ID 精确查**，不过滤，以免破坏测试自身断言。
+2. **运维视图隔离**：`backend/services/task/task_stats.py` 新增 `TEST_TASK_PREFIX = "__t_"`，在面向运维/前端的查询里排除测试任务 —— `get_recent_failures`（失败聚类 + active/recovered/needs_attention 分层）、`get_task_history`（最近历史）、`get_global_history`（含内存兜底）、`_fetch_latest_runs`（任务卡片最新记录）。`get_task_stats` / `get_task_history_by_task` 是**按 ID 精确查**，不过滤，以免破坏测试自身断言。
 3. **`run_task` 新增 `is_test` 开关**（`register_task(..., is_test=...)`，默认 `False`）：测试任务仍正常落库（便于测试断言 `task_execution_log`），但**跳过微信/邮件/降级通知**。默认不影响线上行为。
 
 > 约定：单元测试注册的任务一律以 `__t_` 开头。
@@ -362,7 +362,7 @@ WebSocket 被服务端关闭（`code=428`，与 408/500 同属日常抖动，实
    `result.sent_pairs`，并在 `skip_pairs` 命计时**不扣单作业配额**。
    收尾判据扩成「有一个群收到 **或** 全部命中去重台账且无错误」—— 后者是为了
    让全去重的重投报成功，否则它会触发 Playwright 回退，把已送达的图再发一遍。
-2. `backend/services/whatsapp_send_baileys_service.py` `_retry_skip_pairs`：
+2. `backend/services/whatsapp/whatsapp_send_baileys_service.py` `_retry_skip_pairs`：
    仅当「上一份作业已终态且当初判失败」+「result 里有 sent_pairs」+「本次 items
    与上次逐条指纹完全一致（指纹在投递时记录进 `items[].fingerprint`，两边都现读
    磁盘是测不出字节变过的）」+「旧作业完成距今小于
@@ -547,7 +547,7 @@ SQLite 先整库备份到 `db/app.db.bak_tscfix_<时间戳>`）。目标状态�
 python tools/reconcile_task_schedule_state.py            # 期望：需改动 0 行 / 两侧一致
 sqlite3 db/app.db "SELECT COUNT(*), SUM(enabled), SUM(manually_stopped) FROM task_schedule_config"
 # 与 PG 上同样一条查询结果一致，且 SQLite 侧 indexes 里有 ux_task_schedule_config_task_id
-python -c "import sys; sys.path.insert(0,'.'); from backend.services.task_runner import log_schedule_store_drift as d; print('漂移', d())"
+python -c "import sys; sys.path.insert(0,'.'); from backend.services.task.task_runner import log_schedule_store_drift as d; print('漂移', d())"
 # 期望 0；非 0 就是还有进程按旧代码单边写（worker 没重启）
 ```
 
@@ -556,7 +556,7 @@ python -c "import sys; sys.path.insert(0,'.'); from backend.services.task_runner
 #### SP 报表任务的双通道回退（2026-10-11）
 
 `sp_email_details` / `sp_online_report_send` / `sp_whatsapp_report` 三个任务**不再直接**
-调 Playwright，改为经 `backend/services/whatsapp_dispatch.send_with_fallback` 编排：
+调 Playwright，改为经 `backend/services/whatsapp/whatsapp_dispatch.send_with_fallback` 编排：
 **Baileys 主通道 → Playwright 回退**（回退判据：投递失败 / 超时 / 零确认 / 任一单项有错）。
 编排层细节与设计理由见 `architecture.md` 第八节决策记录。
 
@@ -588,12 +588,12 @@ python -c "import sys; sys.path.insert(0,'.'); from backend.services.task_runner
 1. **排期避开空档**：`incident_overview_sync` 的生效 cron 改为 `20 * * * *`（经
    `POST /api/tasks/{id}/schedule` 落到 `task_schedule_config`），注册表
    `backend/task_registry.py` 的 `default_cron` 一并改掉，避免新环境回到整点。
-2. **把「源正在重算」与「源断了」分开判定**：`services/incident_overview_sync.py` 取不到文件时先看
+2. **把「源正在重算」与「源断了」分开判定**：`services/incident/incident_overview_sync.py` 取不到文件时先看
    本地最新副本年龄，`NO_SOURCE_GRACE_MINUTES=90` 内返回 `success + skipped + note`（不告警），
    超龄才算失败并把年龄写进错误信息。`services/finebi_report_sync.py` 同理：单个目录本轮没有 Excel
    而本机已有历史副本 → 只记进 `missing`，**不再把整任务拖红**（一个目录的空档会连带其余已同步成功的
    报表一起被判失败）；本机连历史副本都没有才算 `error`。
-3. **让"数据陈旧"本身可见**：`services/db_freshness_check.py` 新增 `FILE_CHECKS`（第 2b 类检查），
+3. **让"数据陈旧"本身可见**：`services/db/db_freshness_check.py` 新增 `FILE_CHECKS`（第 2b 类检查），
    按本机最新文件的落盘年龄判定文件型看板源（首条即事件总览的 `data/incident_overview/incident_overview_*.xlsx`，
    `max_age_hours=2.0`）。**取数任务红/绿 与 页面数据是几小时前的 是两件事**——2026-09-30 那次只有人
    看到任务告警，没人看到"页面停在 15:03 那份"。
@@ -643,7 +643,7 @@ python -c "import sys; sys.path.insert(0,'.'); from backend.services.task_runner
 | **整文件 `copyfile` 覆盖生产库** | **成功（即使库正被占用）** | ← 这就是修法的依据 |
 
 **修法：不再直连远端库，改为「本地构建 + 整文件推送」**
-（`backend/services/sp_mirror_push.py`）。
+（`backend/services/sp/sp_mirror_push.py`）。
 在本机临时目录建一个新库（`journal_mode=delete`、单文件），再用 `shutil.copyfile`
 整文件覆盖过去 —— **整文件覆盖不需要 SMB 字节锁**，因此远端持库也不影响。
 
@@ -805,7 +805,7 @@ USSD 的日表当时只剩 2026-08-25~27 三行，而月表里有完整的 6 个
 > 旧机制（每 15 分钟扫它的 3 小时窗口）端到端时延 45~75 分钟，对 P1 太慢。
 > `realtime_alarm` 新鲜度（生产 `*/1` 同步，2026-10-15 起独立 `x` 组）+ 本任务 5 分钟轮询 + 实时查单，
 > 首推时延压到分钟级。触发扫描的完整口径见
-> `backend/services/tt_alarm_trigger.py` 的模块 docstring；三层单据来源
+> `backend/services/tt/tt_alarm_trigger.py` 的模块 docstring；三层单据来源
 > （实时/镜像/触发行）的取舍见 `tt_alarm_sources.py`。
 
 > **⚠️ 2026-10-15 事故：这张触发源表每分钟曾真的消失约 0.14 秒。**
@@ -856,7 +856,7 @@ USSD 的日表当时只剩 2026-08-25~27 三行，而月表里有完整的 6 个
 > `Task/whatsapp-kb-bot/scripts/tt-analyze.py`（2175 行，纯标准库 + openpyxl）：
 > 那是**群里机器人回答问题时用的同一个引擎**，两份分析逻辑并存必然分叉，
 > 而「群里的分析」与「告警推送里的分析」不一致是最难排查的那类问题。
-> 封装见 `backend/services/tt_alarm_render.py`。
+> 封装见 `backend/services/tt/tt_alarm_render.py`。
 >
 > **引擎读的是 SQLite 副本 `db/app.db`，不是生产的 PG**（`tt-analyze.py:57`），
 > 而该副本由 `pg_to_sqlite_sync` 刷新（2026-09-29 时是**每小时第 45 分**；生效 cron 现被库里
@@ -893,7 +893,7 @@ USSD 的日表当时只剩 2026-08-25~27 三行，而月表里有完整的 6 个
 
 **这张单的四个口径都可在页面上配置** —— 「设置 → 任务配置 → `eFlow P1 Alarm WhatsApp Push`」
 （配置文件 `backend/services/tt_alert_whatsapp_config.json`，注册在
-`backend/services/task_configs_registry.py`，读写实现见 `backend/services/task_config_files.py`）：
+`backend/services/task/task_configs_registry.py`，读写实现见 `backend/services/task/task_config_files.py`）：
 
 | 配置项 | 页面标签 | 留空 / 默认的含义 |
 | --- | --- | --- |
@@ -930,13 +930,13 @@ USSD 的日表当时只剩 2026-08-25~27 三行，而月表里有完整的 6 个
 重报（20 分钟停滞再推）**不发**邮件。两列非空即「已发过」，**永不重发**。
 
 **收件人不写死在代码里** —— 走已有的「Settings → 邮件收件人」页
-（`backend/services/email_recipient_store.py` 的 `tt_alarm_p1_email` 组，
+（`backend/services/email/email_recipient_store.py` 的 `tt_alarm_p1_email` 组，
 默认 `dong.xinmin@zte.com.cn`）。该页是收件人的**唯一真相源**：页面保存值优先、
 30 秒缓存生效、无需重启。开关是任务配置页的 `mail_enabled`
 （环境变量 `TT_ALERT_MAIL_ENABLED`，默认开）。
 
 **通道是项目的 Orange 邮箱**（发件人 `ztenoc.olr@orange.com`，凭据组 `owa_mail`），
-不是 126 —— 用户 2026-10-06 明确指定。实现见 `backend/services/tt_alarm_mailer.py`。
+不是 126 —— 用户 2026-10-06 明确指定。实现见 `backend/services/tt/tt_alarm_mailer.py`。
 
 > ⚠️ **汇总不能挂在活跃告警循环上（本特性最容易做错的一点）**：告警一清除，该单就
 > 从 `realtime_alarm` **彻底消失**（2026-10-06 实测：4 个已清除单在实时表里 **0 命中**，
@@ -1036,7 +1036,7 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 > 写进 `whatsapp-kb-bot/data/notify_job.json`，常驻的 `src/notify.js`（Baileys，
 > WhatsApp WebSocket 协议，凭据独立于问答 bot）轮询消费，`sendMessage()` 返回的
 > **服务端 message id** 就是发送回执。切换理由与两通道对比见
-> `backend/services/wa_notify_service.py` 的模块 docstring；通道在线检查、投递前
+> `backend/services/whatsapp/wa_notify_service.py` 的模块 docstring；通道在线检查、投递前
 > 心跳预检也都在该模块。
 > 无论何时，**只有推送进程回报的 `sent` 列表里的 `tt_no` 才会被置 `'Y'`** —— 超时或
 > 未确认一律写 `'N'` + `last_error`，**绝不写假 `'Y'`**；一条都没确认发出的轮次会
@@ -1052,17 +1052,17 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 
 | 文件 | 职责 |
 | --- | --- |
-| `backend/services/tt_alarm_whatsapp_service.py` | 编排与**发送决策** `decide_push()`（任务入口 `run_tt_alarm_whatsapp_alert`） |
-| `backend/services/tt_alarm_trigger.py` | **触发扫描**：realtime_alarm 里带 TT 的白名单告警 + 表新鲜度检查 |
-| `backend/services/tt_alarm_sources.py` | **单据来源层**：实时查单 / 本地镜像兜底 / 三层合并 |
-| `backend/services/tt_alarm_config.py` | 配置读取、归一化、「留空」语义 |
-| `backend/services/tt_alarm_message.py` | 消息渲染（纯函数，**降级模板**：头部 7 行 + 重报横幅） |
-| `backend/services/tt_alarm_render.py` | **主渲染路径**：子进程调 kb-bot 分析引擎出完整消息 |
-| `backend/services/tt_alarm_store.py` | 日志表建表、幂等补列（含邮件幂等列）与读写 |
-| `backend/services/tt_alarm_mailer.py` | **邮件发送通道**（Orange EWS，进程内直发，失败不抛异常） |
-| `backend/services/tt_alarm_mail_body.py` | 邮件正文构造（首次通报 / 结束汇总，纯函数） |
-| `backend/services/wa_notify_service.py` | **Baileys 发送通道**（投递/回报/心跳/通道预检） |
-| `backend/services/eflow_data_mapper.py` | 实时查单实现（`fetch_tt_live_batch`，base/list 分页遍历） |
+| `backend/services/tt/tt_alarm_whatsapp_service.py` | 编排与**发送决策** `decide_push()`（任务入口 `run_tt_alarm_whatsapp_alert`） |
+| `backend/services/tt/tt_alarm_trigger.py` | **触发扫描**：realtime_alarm 里带 TT 的白名单告警 + 表新鲜度检查 |
+| `backend/services/tt/tt_alarm_sources.py` | **单据来源层**：实时查单 / 本地镜像兜底 / 三层合并 |
+| `backend/services/tt/tt_alarm_config.py` | 配置读取、归一化、「留空」语义 |
+| `backend/services/tt/tt_alarm_message.py` | 消息渲染（纯函数，**降级模板**：头部 7 行 + 重报横幅） |
+| `backend/services/tt/tt_alarm_render.py` | **主渲染路径**：子进程调 kb-bot 分析引擎出完整消息 |
+| `backend/services/tt/tt_alarm_store.py` | 日志表建表、幂等补列（含邮件幂等列）与读写 |
+| `backend/services/tt/tt_alarm_mailer.py` | **邮件发送通道**（Orange EWS，进程内直发，失败不抛异常） |
+| `backend/services/tt/tt_alarm_mail_body.py` | 邮件正文构造（首次通报 / 结束汇总，纯函数） |
+| `backend/services/whatsapp/wa_notify_service.py` | **Baileys 发送通道**（投递/回报/心跳/通道预检） |
+| `backend/services/eflow/eflow_data_mapper.py` | 实时查单实现（`fetch_tt_live_batch`，base/list 分页遍历） |
 
 ## 任务凭据分组对应表
 
@@ -1115,9 +1115,9 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 | 漏跑补投 | `MISS_GRACE_MIN=15`、`MISS_MIN_INTERVAL_MIN=30`（时效窗口内完全没有执行记录才补投） | 同上 |
 | 邮件类不参与补投 | 由 EWS 恢复补发机制 `email_recovery` 负责，默认排除 | `task_registry.py:320` |
 | 失败通知 | 微信 + 邮件双通道；**2026-11-07 起加延迟语义（C）**：能被 auto_retry 重投的任务，自上次成功以来的连续失败次数 < `FAILURE_ALERT_DEFER_STREAK`（默认 2）时只记日志不发通知（等 5 分钟重投自愈），达阈值 / 不可重投任务 / 失败记录落库异常才立即告警；开关 `FAILURE_ALERT_DEFER=0` 恢复旧「失败即告警」。取证：`outputs/cnn_kpi_sync_5mins_失败复盘_2026-11-07.md`（远端 watchdog 强杀窗口内 auto_retry 均自愈成功，旧逻辑却每天发 1~3 封失败告警） | `task_runner.py`（`_should_defer_failure_alert` / `_consecutive_failures`） |
-| 漏跑/停摆通知 | 每小时巡检后按 `kind:task_id` 翻转去重推送（24h 重提） | `services/task_health_alert.py` |
+| 漏跑/停摆通知 | 每小时巡检后按 `kind:task_id` 翻转去重推送（24h 重提） | `services/task/task_health_alert.py` |
 | 保留期 | 队列与执行日志保留 **7 天**（`TASK_LOG_RETENTION_DAYS` 可调，默认 7；2026-09-11 由 3 天放宽） | `task_runner.py:880-893`、`worker.py:479-484` |
-| 低频任务「最近运行」兜底 | 月/周级任务的执行记录会被上面 7 天保留期清掉，任务列表因而显示 **No Record / 未记录**（`sync.statUnknown`）。修法：在 `TASK_SPECS` 给该任务加 `recent_runs_provider=(模块路径, 函数名)`，`task_stats._fetch_latest_runs()` 在**日志表无该任务记录时**才调用提供者，从任务自己的产物库补回最近几次运行（唯一主源仍是 `task_execution_log`）。参考 `olib_soc_vmax_report` → `olib_soc_report_service.recent_runs_for_task` | `services/task_stats.py`（`register_recent_runs_provider`）、`task_registry.py`（`register_all_tasks`）、`backend/services/olib_soc_report/README.md` §12 |
+| 低频任务「最近运行」兜底 | 月/周级任务的执行记录会被上面 7 天保留期清掉，任务列表因而显示 **No Record / 未记录**（`sync.statUnknown`）。修法：在 `TASK_SPECS` 给该任务加 `recent_runs_provider=(模块路径, 函数名)`，`task_stats._fetch_latest_runs()` 在**日志表无该任务记录时**才调用提供者，从任务自己的产物库补回最近几次运行（唯一主源仍是 `task_execution_log`）。参考 `olib_soc_vmax_report` → `olib_soc_report_service.recent_runs_for_task` | `services/task/task_stats.py`（`register_recent_runs_provider`）、`task_registry.py`（`register_all_tasks`）、`backend/services/olib_soc_report/README.md` §12 |
 
 重试的判定不是"失败就重跑"，而是**先看数据缺口是否已被后续成功执行补上**；超过 24h 硬上限直接放弃（`task_registry.py:320`）。
 

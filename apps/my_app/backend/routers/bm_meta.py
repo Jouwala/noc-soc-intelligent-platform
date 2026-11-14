@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Meta 基准报告 API（ORANGE vs MTN 速率 PK + FDD 网络侧 KPI）。
 
-口径见 `backend/services/bm_meta_caliber.py`（唯一真相源）。
+口径见 `backend/services/bm/bm_meta_caliber.py`（唯一真相源）。
 本路由只做参数校验与错误兜底，**不写任何业务口径**。
 """
 import logging
@@ -10,8 +10,8 @@ from datetime import date
 
 from fastapi import APIRouter, Query
 
-from backend.services import bm_meta_caliber as cal
-from backend.services import bm_meta_service as svc
+from backend.services.bm import bm_meta_caliber as cal
+from backend.services.bm import bm_meta_service as svc
 
 logger = logging.getLogger("bm_meta")
 

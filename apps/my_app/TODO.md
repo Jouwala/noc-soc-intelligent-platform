@@ -30,7 +30,7 @@ my_app 处于**稳定运行**阶段（后端 7038 + 多组 worker + 双看门狗
       同一 SMB 目录新建库、甚至切成 WAL，只要**没有远端持有者**，本机读写都正常；
       真正症结是远端有活进程长期持有该库 `-shm` 的**字节范围锁**，而 SMB 无法代理该语义，
       于是本机每次 `open` 都永久阻塞（`timeout`/`busy_timeout` 对此无效）。
-      **修法**：改为「本地构建 + 整文件推送」（`backend/services/sp_mirror_push.py`）——
+      **修法**：改为「本地构建 + 整文件推送」（`backend/services/sp/sp_mirror_push.py`）——
       本机建新库再 `copyfile` 整文件覆盖，**整文件覆盖不需要字节锁**（实测库被占用时也能覆盖成功）。
       **实测结果**：两轮生产运行 `mirror_success=true`、`mirror_errors=[]`、5 张表齐全，
       镜像耗时 **507.9s（失败） → 2.6s（成功）**，整轮 525.75s → 21s。
@@ -51,7 +51,7 @@ my_app 处于**稳定运行**阶段（后端 7038 + 多组 worker + 双看门狗
 
 - [x] **`db_ps_cs_cn` 本地 0 字节占位文件的处置 —— 已完成（2026-09-30 核实）。**
       `db_ps_cs_cn.sqlite3` 是**远端逻辑库名**（远端 `E:\01_RPA\LBR_Tools\KPI\`），
-      `RemoteDBReader`（`backend\services\remote_db_reader.py`）只把库名经 HTTP 传给远端，
+      `RemoteDBReader`（`backend\services\remote\remote_db_reader.py`）只把库名经 HTTP 传给远端，
       **从不触碰本地文件**。全树已无同名本地占位（`find . -name 'db_ps_cs_cn*'` 为空），
       误当数据源的风险不复存在。
 
@@ -143,7 +143,7 @@ my_app 处于**稳定运行**阶段（后端 7038 + 多组 worker + 双看门狗
 - [ ] **`frontend\src\pages\BmMeta.tsx` 998 行，新建即超 500 行上限（AGENTS.md 第三节原则 2）。**
       2026-09-30 新增 BM Meta 基准页时实测：页面本身 + 3 张竞对卡 + 趋势图 + 下钻弹窗 +
       Excel 导出全写在同一个文件里。**不是注释膨胀**（口径说明集中在
-      `services\bm_meta_caliber.py`，页面里只有接线注释）。
+      `services\bm\bm_meta_caliber.py`，页面里只有接线注释）。
       **动作（下一个动这个页面的任务顺手做，别专门排期）**：把下钻弹窗与
       「胜场/领先」判定块拆成 `pages/bmMeta/` 子组件，页面只留状态编排。
       **验收**：`npm run check:i18n` 与 `npm run build` 通过，`/api/bm-meta/*` 四个端点响应不变。

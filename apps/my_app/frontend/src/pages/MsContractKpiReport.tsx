@@ -8,7 +8,7 @@
  *   WOs SLA achievement Report     与 ?page=ms_wo_sla 那份逐字同构
  *   FineBI Dashboard Planing       FineBI 看板建设规划清单
  *   利比里亚自动化报表              自动化报表清单（优先级/频率/团队/推动方式）
- * 解析口径见 backend/services/ms_kpi_report_service.py 顶部 docstring。
+ * 解析口径见 backend/services/ms/ms_kpi_report_service.py 顶部 docstring。
  *
  * 页面结构：总览卡片 → 分类达标 → 27 个 KPI 卡（按 Operation / Network / PerSite 三个
  * 页签分类，点击看日趋势）→ 4 个页签

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """cmdb_site_update.py - CMDB 站点同步比对（Email Reports →「站点同步」页签）
 
-配套任务：`eflow_site_update`（backend/services/eflow_site_update_task.py）。
+配套任务：`eflow_site_update`（backend/services/eflow/eflow_site_update_task.py）。
 
 - GET /api/cmdb-site-update/summary   上次运行摘要 + modify 目录产出文件清单
 - GET /api/cmdb-site-update/download  下载产出文件（只允许 modify 目录内）
@@ -19,7 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from backend.services import eflow_site_update_task as task
+from backend.services.eflow import eflow_site_update_task as task
 
 logger = logging.getLogger(__name__)
 

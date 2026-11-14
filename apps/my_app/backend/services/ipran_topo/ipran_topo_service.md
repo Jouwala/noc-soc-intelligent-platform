@@ -38,7 +38,7 @@
   前端只传 layer key，**不接受任意 lid**，映射在 `layers.LAYERS` 白名单里；
   分层 / 站名清洗 / 带宽解析按层配置在 `layers.py`，聚合逻辑里不堆 if-else。
   除 ipran 外三层的口径都是合理默认，待探层校准（第 7 节）。
-- 鉴权复用 `backend/services/ipran_ume_kpi_service.py::UmeSessionClient`，凭据组 `ipran_ume`。
+- 鉴权复用 `backend/services/ipran/ipran_ume_kpi_service.py::UmeSessionClient`，凭据组 `ipran_ume`。
 - 站点坐标取 PG/SQLite 的 `kml_mw_links`（`kind='site'`）。它是
   `frontend/public/mw_ume_orange_links.geojson` 的源表，由
   `backend/services/mw_ume/mw_links_store.py` 从 KML 写入。

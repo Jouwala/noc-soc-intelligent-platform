@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """P1 TT 通报**邮件通道**单测。
 
-对应 `backend/services/tt_alarm_mailer.py`、`tt_alarm_mail_body.py`，以及
+对应 `backend/services/tt/tt_alarm_mailer.py`、`tt_alarm_mail_body.py`，以及
 `tt_alarm_whatsapp_service` 里的两个发信触发点。
 
 ## 这里锁的是什么
@@ -30,10 +30,10 @@ from datetime import datetime
 
 import pytest
 
-from backend.services import tt_alarm_mail_body as B
-from backend.services import tt_alarm_mailer as M
-from backend.services import tt_alarm_store as store
-from backend.services import tt_alarm_whatsapp_service as S
+from backend.services.tt import tt_alarm_mail_body as B
+from backend.services.tt import tt_alarm_mailer as M
+from backend.services.tt import tt_alarm_store as store
+from backend.services.tt import tt_alarm_whatsapp_service as S
 
 
 def _now():
@@ -619,7 +619,7 @@ class TestServiceMailTriggers:
 # ==========================================================
 class TestMailConfig:
     def test_default_is_enabled(self, monkeypatch):
-        from backend.services import tt_alarm_config as C
+        from backend.services.tt import tt_alarm_config as C
         cfg = C.parse_config({}, "test", env={})
         assert cfg["mail_enabled"] is True
 
@@ -628,21 +628,21 @@ class TestMailConfig:
         ("true", True), ("1", True), ("YES", True),
     ])
     def test_env_overrides_file(self, monkeypatch, val, expected):
-        from backend.services import tt_alarm_config as C
+        from backend.services.tt import tt_alarm_config as C
         cfg = C.parse_config({"mail_enabled": not expected}, "test",
                              env={C.ENV_MAIL_ENABLED: val})
         assert cfg["mail_enabled"] is expected
         assert cfg["mail_enabled_from"] == "env"
 
     def test_file_value_used(self):
-        from backend.services import tt_alarm_config as C
+        from backend.services.tt import tt_alarm_config as C
         cfg = C.parse_config({"mail_enabled": False}, "test", env={})
         assert cfg["mail_enabled"] is False
         assert cfg["mail_enabled_from"] == "file"
 
     def test_garbage_keeps_mail_on(self):
         """配置写错不该让邮件通道**静默**关闭。"""
-        from backend.services import tt_alarm_config as C
+        from backend.services.tt import tt_alarm_config as C
         cfg = C.parse_config({"mail_enabled": "maybe"}, "test", env={})
         assert cfg["mail_enabled"] is True
 
@@ -663,7 +663,7 @@ class TestNoRealMailFromTests:
 
     def test_conftest_guard_is_installed(self, _block_real_email):
         """conftest 的全局替身必须生效 —— 否则下面几条都是空测。"""
-        from backend.services import tt_alarm_mailer as M
+        from backend.services.tt import tt_alarm_mailer as M
         # 直接调用应当被拦截并记录，而不是真的连 EWS
         assert M.send_mail("s", "b", to="nobody@example.invalid") is True
         assert len(_block_real_email) == 1
@@ -683,7 +683,7 @@ class TestNoRealMailFromTests:
         """
         import importlib.util
         import sys as _sys
-        from backend.services import tt_alarm_mailer as M
+        from backend.services.tt import tt_alarm_mailer as M
         assert "pytest" in _sys.modules, "本用例前提：跑在 pytest 下"
 
         spec = importlib.util.spec_from_file_location("_tt_mailer_probe", M.__file__)
@@ -702,7 +702,7 @@ class TestNoRealMailFromTests:
 
     def test_channel_helpers_exist(self):
         """确认用的是 Orange EWS 通道（用户明确否决 126）。"""
-        from backend.services import tt_alarm_mailer as M
+        from backend.services.tt import tt_alarm_mailer as M
         assert "orange" in M.DEFAULT_EWS_SERVER
         assert "orange" in M.DEFAULT_SMTP_ADDRESS
 
@@ -788,8 +788,8 @@ class TestRealTicketMailCount:
         因为过滤发生在服务层，不在 store 层。本用例跑真实的
         `run_tt_alarm_whatsapp_alert()`，并断言只有首推那单发了邮件。
         """
-        from backend.services import tt_alarm_sources as src
-        from backend.services import tt_alarm_trigger as trig
+        from backend.services.tt import tt_alarm_sources as src
+        from backend.services.tt import tt_alarm_trigger as trig
 
         now = datetime.now()
         # TT_A 是老单（日志里 send_count=1 → 本轮 reminder_no=2 = 重报）
@@ -844,7 +844,7 @@ class TestRealTicketMailCount:
         若这里失守（例如将来有人改用未去重的来源），同一单就会在一轮内
         append 多次 mail_targets，于是"一轮发 N 封同内容" —— 正是用户担心的情形。
         """
-        from backend.services import tt_alarm_trigger as trig
+        from backend.services.tt import tt_alarm_trigger as trig
         import inspect as _inspect
         src = _inspect.getsource(trig.fetch_triggered_tts)
         assert "seen" in src and "tt_no in seen" in src, \

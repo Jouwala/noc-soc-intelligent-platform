@@ -14,7 +14,7 @@
 | GET | /api/details | 明细查询（inband/outband/inventory） |
 
 ## 依赖
-- `backend.services.sp_dashboard`：看板计算逻辑（复用 app_sp_optimized.py）
-- `backend.services.get_sp_table`：SP 表读取（懒加载）
+- `backend.services.sp.sp_dashboard`：看板计算逻辑（复用 app_sp_optimized.py）
+- `backend.services.sp.get_sp_table`：SP 表读取（懒加载）
 
 无新增第三方依赖。

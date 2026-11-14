@@ -98,7 +98,7 @@ def resolve_dsn(cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     sec_default = str(conf.pop("password", "") or "")
     # 凭据分组里声明的默认值（与「设置 → 凭据管理」显示的一致），避免两处各写一份密码
     try:
-        from backend.services.credential_store import CREDENTIAL_GROUPS
+        from backend.services.credential.credential_store import CREDENTIAL_GROUPS
         group = next((g for g in CREDENTIAL_GROUPS if g.get("key") == cred_key), None) or {}
         user_default = user_default or str(group.get("default_user") or "")
         sec_default = sec_default or str(group.get("default_secret") or "")
@@ -118,7 +118,7 @@ def resolve_dsn(cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         dsn["port"] = DEFAULT_DSN["port"]
 
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
     except Exception:                                                    # noqa: BLE001
         try:
             from credential_store import get_credential                  # 直接跑本文件时

@@ -33,7 +33,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend.services import eflow_api_client as api
+from backend.services.eflow import eflow_api_client as api
 
 logger = logging.getLogger("eflow_assign_site")
 

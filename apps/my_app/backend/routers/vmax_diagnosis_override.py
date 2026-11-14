@@ -69,7 +69,7 @@ from pydantic import BaseModel, Field
 from backend.database import get_raw_connection
 from backend.dialect_helpers import table_columns
 from backend.routers.vmax_xdr_common import mask_msisdn
-from backend.services.portal_auth import require_user
+from backend.services.portal.portal_auth import require_user
 from backend.services.vmax_cca.vmax_cca_client import normalize_msisdn
 
 logger = logging.getLogger(__name__)
