@@ -20,7 +20,7 @@ MY_APP = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(MY_APP))
 sys.path.insert(0, str(MY_APP / "backend"))
 
-from backend.services import kpi_email_report as kpi  # noqa: E402
+from backend.services.email import kpi_email_report as kpi  # noqa: E402
 
 
 def main() -> int:

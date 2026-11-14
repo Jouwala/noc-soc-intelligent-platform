@@ -131,8 +131,8 @@ limitations under the License.
 
 | 包 | 代码引用 | 说明 |
 | --- | --- | --- |
-| `twilio` | `backend\services\incident_overview_service.py:667`、`:709` | **未在任何 requirements 中登记**。代码走 `try/except` 兜底，缺失时返回「库未安装」，属**静默降级** —— 虚拟助手的电话/短信功能实际不可用。若启用需安装并配置 `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER`。之所以不列入必需依赖：缺失不影响启动，按需安装更合适 |
-| `python-calamine` | `backend\services\ipran_ume_kpi_service.py:686`（`engine='calamine'`） | **未登记且无兜底** —— pandas 的 calamine 引擎需要此独立包，缺失会**直接抛错**。⚠️ 若该任务在目标环境启用，必须补装并登记进 lock；当前未锁是待确认该任务的启用范围 |
+| `twilio` | `backend\services\incident\incident_overview_service.py:667`、`:709` | **未在任何 requirements 中登记**。代码走 `try/except` 兜底，缺失时返回「库未安装」，属**静默降级** —— 虚拟助手的电话/短信功能实际不可用。若启用需安装并配置 `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER`。之所以不列入必需依赖：缺失不影响启动，按需安装更合适 |
+| `python-calamine` | `backend\services\ipran\ipran_ume_kpi_service.py:686`（`engine='calamine'`） | **未登记且无兜底** —— pandas 的 calamine 引擎需要此独立包，缺失会**直接抛错**。⚠️ 若该任务在目标环境启用，必须补装并登记进 lock；当前未锁是待确认该任务的启用范围 |
 
 ---
 

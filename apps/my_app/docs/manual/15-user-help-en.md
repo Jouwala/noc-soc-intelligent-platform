@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-13.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-14.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -87,59 +87,59 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 
 | Task | task_id | Default cron | Group | Workflow script |
 | --- | --- | --- | --- | --- |
-| eFlow Data Sync | `eflow_sync` | `22 * * * *` | n | `services/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")` |
-| eFlow Daily Full Sync | `eflow_sync_full` | `0 1 * * *` | n | `services/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")` |
-| RAN UME Daily Report | `ran_ume_daily` | `0 2 * * *` | u | `services/ran_ume_service.py → run_ran_ume_full_task` |
-| Site Outage Screenshot | `site_outage_screenshot` | `0 1 * * *` | m | `services/site_outage_service.py → run_site_outage_screenshot` |
-| WhatsApp Message Send | `whatsapp_send` | `0 3 * * *` | m | `services/whatsapp_service.py → run_whatsapp_send` |
-| WhatsApp Message Send (Extension) | `whatsapp_send_ext` | `0 3 * * *` | m | `services/whatsapp_ext_service.py → run_whatsapp_send_ext` |
-| WhatsApp Message Send (Baileys) | `whatsapp_send_baileys` | `0 4 * * *` | m | `services/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys` |
-| eFlow P1 Alarm WhatsApp Push | `tt_alarm_whatsapp_alert` | `2-59/5 * * * *` | m | `services/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert` |
-| MS SLA Full Sync | `ms_sla_full` | `0 5 * * *` | n | `services/ms_sla_service.py → run_full_sync` |
-| DC Server Alarm WhatsApp Push | `ume_alarm_whatsapp_alert` | `* * * * *` | m | `services/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp` |
+| eFlow Data Sync | `eflow_sync` | `22 * * * *` | n | `services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")` |
+| eFlow Daily Full Sync | `eflow_sync_full` | `0 1 * * *` | n | `services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")` |
+| RAN UME Daily Report | `ran_ume_daily` | `0 2 * * *` | u | `services/ran/ran_ume_service.py → run_ran_ume_full_task` |
+| Site Outage Screenshot | `site_outage_screenshot` | `0 1 * * *` | m | `services/site/site_outage_service.py → run_site_outage_screenshot` |
+| WhatsApp Message Send | `whatsapp_send` | `0 3 * * *` | m | `services/whatsapp/whatsapp_service.py → run_whatsapp_send` |
+| WhatsApp Message Send (Extension) | `whatsapp_send_ext` | `0 3 * * *` | m | `services/whatsapp/whatsapp_ext_service.py → run_whatsapp_send_ext` |
+| WhatsApp Message Send (Baileys) | `whatsapp_send_baileys` | `0 4 * * *` | m | `services/whatsapp/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys` |
+| eFlow P1 Alarm WhatsApp Push | `tt_alarm_whatsapp_alert` | `2-59/5 * * * *` | m | `services/tt/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert` |
+| MS SLA Full Sync | `ms_sla_full` | `0 5 * * *` | n | `services/ms/ms_sla_service.py → run_full_sync` |
+| DC Server Alarm WhatsApp Push | `ume_alarm_whatsapp_alert` | `* * * * *` | m | `services/ume_alarm/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp` |
 | Fiber Break Alarm Auto Assign | `eflow_fiber_assign` | `3-59/5 * * * *` | m | `services/eflow_fiber/fiber_assign_service.py → run_fiber_assign` |
 | 5G Site Alarm Auto Assign | `eflow_5g_assign` | `8-59/5 * * * *` | m | `services/eflow_5g/g5_assign_service.py → run_5g_assign` |
-| CMDB Site Sync Diff | `eflow_site_update` | `0 7 * * *` | m | `services/eflow_site_update_task.py → run_eflow_site_update` |
-| eFlow Realtime Alarm Sync | `eflow_active_alarm` | `*/1 * * * *` | x | `services/eflow_api_client.py → fetch_and_save_active_alarm` |
-| eFlow History Alarm Sync | `eflow_history_alarm` | `0 */3 * * *` | n | `services/eflow_api_client.py → fetch_and_save_history_alarm` |
+| CMDB Site Sync Diff | `eflow_site_update` | `0 7 * * *` | m | `services/eflow/eflow_site_update_task.py → run_eflow_site_update` |
+| eFlow Realtime Alarm Sync | `eflow_active_alarm` | `*/1 * * * *` | x | `services/eflow/eflow_api_client.py → fetch_and_save_active_alarm` |
+| eFlow History Alarm Sync | `eflow_history_alarm` | `0 */3 * * *` | n | `services/eflow/eflow_api_client.py → fetch_and_save_history_alarm` |
 | eFlow TT Rules Collect & Match Check | `eflow_tt_rules_check` | `20 4 * * *` | n | `services/eflow_rules/eflow_tt_rules_check_task.py → run_eflow_tt_rules_check` |
-| RAN Main KPI Sync | `main_kpi_sync` | `0 4 * * *` | u | `services/ran_ume_main_kpi.py → run_main_kpi_sync` |
-| RAN Cell Availability 1-Day Sync | `cell_availability_sync` | `30 4 * * *` | u | `services/ran_cell_availability_sync.py → run_cell_availability_sync` |
-| RAN Cells KPI Sync | `cells_kpi_sync` | `50 4 * * *` | u | `services/ran_cells_kpi_sync.py → run_cells_kpi_sync` |
-| RAN Network KPI Sync | `network_kpi_sync` | `0 5 * * *` | u | `services/ran_ume_network_kpi.py → run_network_kpi_sync` |
+| RAN Main KPI Sync | `main_kpi_sync` | `0 4 * * *` | u | `services/ran/ran_ume_main_kpi.py → run_main_kpi_sync` |
+| RAN Cell Availability 1-Day Sync | `cell_availability_sync` | `30 4 * * *` | u | `services/ran/ran_cell_availability_sync.py → run_cell_availability_sync` |
+| RAN Cells KPI Sync | `cells_kpi_sync` | `50 4 * * *` | u | `services/ran/ran_cells_kpi_sync.py → run_cells_kpi_sync` |
+| RAN Network KPI Sync | `network_kpi_sync` | `0 5 * * *` | u | `services/ran/ran_ume_network_kpi.py → run_network_kpi_sync` |
 | Availability Recon Rebuild | `avail_recon_sync` | `10 6 * * *` | u | `services/avail/avail_recon_sync.py → run_avail_recon_sync` |
-| BP Cells Report Sync | `bp_report_sync` | `20 6 * * *` | u | `services/bp_report_sync.py → run_bp_report_sync` |
-| CNN UME KPI Sync | `cnn_kpi_sync` | `0 6 * * *` | n | `services/ccn_ume_kpi_service.py → run_cnn_kpi_sync` |
-| CNN UME KPI 5-Min Sync | `cnn_kpi_sync_5mins` | `*/15 * * * *` | n | `services/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins` |
-| SP Spare Data Sync | `sp_data_sync` | `10 * * * *` | s | `services/get_sp_table.py → run_sp_data_sync` |
-| iPRAN UME KPI Sync | `ipran_kpi_sync` | `0 * * * *` | u | `services/ipran_ume_kpi_service.py → run_ipran_kpi_sync` |
-| Liberia Site-Down 1H Report Email | `liberia_email_1h` | `15 * * * *` | m | `services/liberia_email_report.py → run_1h_report` |
-| Liberia Site-Down 8H Report Email | `liberia_email_8h` | `20 */8 * * *` | m | `services/liberia_email_report.py → run_8h_report` |
-| MS Contract KPIs Daily Report Email | `kpi_ms_contract` | `30 5 * * *` | m | `services/kpi_email_report.py → run_ms_contract_kpi` |
-| MS WOs SLA Daily Report Email | `kpi_ms_wo_sla` | `35 5 * * *` | m | `services/kpi_email_report.py → run_ms_wo_sla` |
-| SpareParts Report Email | `kpi_sp_spareparts` | `45 9 * * *` | m | `services/kpi_email_report.py → run_sp_spareparts` |
-| Comsumables Report Email | `kpi_sp_consumables` | `50 9 * * *` | m | `services/kpi_email_report.py → run_sp_consumables` |
-| SP Report Generate | `sp_report_generate` | `15 5 * * *` | m | `services/kpi_email_report.py → run_sp_report_generate` |
-| SP Weekly Report (Monday → Sunday) | `sp_weekly_report` | `0 7 * * mon` | m | `services/kpi_email_report.py → run_sp_weekly_report` |
-| SP Spare Parts Details Report Email | `sp_email_details` | `5 7 * * *` | m | `services/kpi_email_report.py → run_sp_details_email` |
-| SP Spare Parts Details Files Email | `sp_details_files_email` | `5 10 * * *` | m | `services/kpi_email_report.py → run_sp_details_files_email` |
-| Comsumables&SpareParts Report Whatsapp | `sp_whatsapp_report` | `55 7 * * *` | m | `services/kpi_email_report.py → run_sp_whatsapp_report` |
-| SP Material Stock & Consumption Report Email | `sp_material_report` | `45 7 * * *` | m | `services/kpi_email_report.py → run_sp_material_stock_consumption` |
-| MS Network Availability Daily Report Email | `kpi_ran_availability` | `30 9 * * *` | m | `services/kpi_email_report.py → run_ran_availability` |
-| Email Recovery after EWS Restored | `email_recovery` | `*/10 * * * *` | m | `services/email_recovery.py → run_email_recovery_task` |
+| BP Cells Report Sync | `bp_report_sync` | `20 6 * * *` | u | `services/bp/bp_report_sync.py → run_bp_report_sync` |
+| CNN UME KPI Sync | `cnn_kpi_sync` | `0 6 * * *` | n | `services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync` |
+| CNN UME KPI 5-Min Sync | `cnn_kpi_sync_5mins` | `*/15 * * * *` | n | `services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins` |
+| SP Spare Data Sync | `sp_data_sync` | `10 * * * *` | s | `services/sp/get_sp_table.py → run_sp_data_sync` |
+| iPRAN UME KPI Sync | `ipran_kpi_sync` | `0 * * * *` | u | `services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync` |
+| Liberia Site-Down 1H Report Email | `liberia_email_1h` | `15 * * * *` | m | `services/email/liberia_email_report.py → run_1h_report` |
+| Liberia Site-Down 8H Report Email | `liberia_email_8h` | `20 */8 * * *` | m | `services/email/liberia_email_report.py → run_8h_report` |
+| MS Contract KPIs Daily Report Email | `kpi_ms_contract` | `30 5 * * *` | m | `services/email/kpi_email_report.py → run_ms_contract_kpi` |
+| MS WOs SLA Daily Report Email | `kpi_ms_wo_sla` | `35 5 * * *` | m | `services/email/kpi_email_report.py → run_ms_wo_sla` |
+| SpareParts Report Email | `kpi_sp_spareparts` | `45 9 * * *` | m | `services/email/kpi_email_report.py → run_sp_spareparts` |
+| Comsumables Report Email | `kpi_sp_consumables` | `50 9 * * *` | m | `services/email/kpi_email_report.py → run_sp_consumables` |
+| SP Report Generate | `sp_report_generate` | `15 5 * * *` | m | `services/email/kpi_email_report.py → run_sp_report_generate` |
+| SP Weekly Report (Monday → Sunday) | `sp_weekly_report` | `0 7 * * mon` | m | `services/email/kpi_email_report.py → run_sp_weekly_report` |
+| SP Spare Parts Details Report Email | `sp_email_details` | `5 7 * * *` | m | `services/email/kpi_email_report.py → run_sp_details_email` |
+| SP Spare Parts Details Files Email | `sp_details_files_email` | `5 10 * * *` | m | `services/email/kpi_email_report.py → run_sp_details_files_email` |
+| Comsumables&SpareParts Report Whatsapp | `sp_whatsapp_report` | `55 7 * * *` | m | `services/email/kpi_email_report.py → run_sp_whatsapp_report` |
+| SP Material Stock & Consumption Report Email | `sp_material_report` | `45 7 * * *` | m | `services/email/kpi_email_report.py → run_sp_material_stock_consumption` |
+| MS Network Availability Daily Report Email | `kpi_ran_availability` | `30 9 * * *` | m | `services/email/kpi_email_report.py → run_ran_availability` |
+| Email Recovery after EWS Restored | `email_recovery` | `*/10 * * * *` | m | `services/email/email_recovery.py → run_email_recovery_task` |
 | Packet Loss Sync | `packet_loss_sync` | `30 6 * * *` | u | `services/packet_loss_service.py → run_packet_loss_sync` |
-| Packet Loss Daily Report Email | `packet_loss_email` | `45 6 * * *` | u | `services/kpi_email_report.py → run_packet_loss_email` |
-| IP RAN M6K-FW Chart Email | `ipran_m6k_chart_email` | `45 6 * * *` | m | `services/ipran_chart_service.py → run_ipran_m6k_chart_email` |
-| CNN Free Rating Chart Email | `ccn_free_rating_chart_email` | `45 7 * * *` | m | `services/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email` |
+| Packet Loss Daily Report Email | `packet_loss_email` | `45 6 * * *` | u | `services/email/kpi_email_report.py → run_packet_loss_email` |
+| IP RAN M6K-FW Chart Email | `ipran_m6k_chart_email` | `45 6 * * *` | m | `services/ipran/ipran_chart_service.py → run_ipran_m6k_chart_email` |
+| CNN Free Rating Chart Email | `ccn_free_rating_chart_email` | `45 7 * * *` | m | `services/cnn/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email` |
 | MTN MOU Daily Traffic Email | `mtn_mou_daily_email` | `0 7 * * *` | m | `services/mtn_mou_chart_service.py → run_mtn_mou_chart_email` |
 | FW Throughput KPI Sync + Chart Email | `fw_kpi_sync` | `15 7 * * *` | n | `services/fw_kpi/fw_kpi_services.py → run_fw_kpi_sync` |
 | Battery KPI Sync | `battery_kpi_sync` | `5 * * * *` | u | `services/battary_kpi_fetch/battery_kpi_service.py → run_battery_kpi_sync` |
 | Battery KPI Email | `battery_email` | `10 7,19 * * *` | m | `services/battary_kpi_fetch/battery_kpi_service.py → run_battery_email` |
-| Mailbox Storage Guard | `mailbox_cleanup` | `0 * * * *` | m | `services/mailbox_cleanup.py → run_mailbox_cleanup` |
-| Incident Overview Data Sync | `incident_overview_sync` | `20 * * * *` | m | `services/incident_overview_sync.py → run_incident_overview_sync` |
-| DB Data Freshness Check | `db_freshness_check` | `15 * * * *` | m | `services/db_freshness_check.py → run_db_freshness_check` |
+| Mailbox Storage Guard | `mailbox_cleanup` | `0 * * * *` | m | `services/cleanup/mailbox_cleanup.py → run_mailbox_cleanup` |
+| Incident Overview Data Sync | `incident_overview_sync` | `20 * * * *` | m | `services/incident/incident_overview_sync.py → run_incident_overview_sync` |
+| DB Data Freshness Check | `db_freshness_check` | `15 * * * *` | m | `services/db/db_freshness_check.py → run_db_freshness_check` |
 | Auth Health Check | `auth_health_check` | `0 7 * * *` | m | `scripts/auth_health_check.py → run_auth_health_check` |
-| MTTR/TT Wide Table Rebuild | `mttr_tt_sync` | `40 7 * * *` | m | `services/mttr_tt_sync.py → run_mttr_tt_sync` |
+| MTTR/TT Wide Table Rebuild | `mttr_tt_sync` | `40 7 * * *` | m | `services/tt/mttr_tt_sync.py → run_mttr_tt_sync` |
 | Progress Wide Table Rebuild | `progress_sync` | `50 7 * * *` | m | `services/progress_sync.py → run_progress_sync` |
 | Failed Task Auto Retry | `auto_retry_failed` | `*/10 * * * *` | m | `services/auto_retry.py → run_auto_retry_task` |
 | RAN CM Cell Data Sync | `cm_data_sync` | `30 8 * * *` | u | `services/cm_data/cm_data_export.py → run_cm_data_sync` |
@@ -148,27 +148,27 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | MW UME KPI Realtime Sync | `mw_ume_kpi_sync_rt` | `*/15 * * * *` | w | `services/mw_ume/mw_ume_kpi_service.py → run_mw_ume_kpi_sync_rt` |
 | CN EMS KPI Cache Sync | `ems_kpi_cache_sync` | `*/15 * * * *` | c | `services/cn_ems/ems_kpi_service.py → run_ems_kpi_cache_sync` |
 | CN EMS KPI Daily CSV | `ems_kpi_daily` | `20 0 * * *` | c | `services/cn_ems/ems_kpi_service.py → run_ems_kpi_daily` |
-| CXO Dashboard Cache Sync | `cxo_dashboard_cache_sync` | `*/10 * * * *` | v | `services/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync` |
-| VMAX CXO Daily Value Archive | `vmax_cxo_daily_sync` | `15 * * * *` | v | `services/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync` |
+| CXO Dashboard Cache Sync | `cxo_dashboard_cache_sync` | `*/10 * * * *` | v | `services/cxo/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync` |
+| VMAX CXO Daily Value Archive | `vmax_cxo_daily_sync` | `15 * * * *` | v | `services/cxo/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync` |
 | VMAX Multi-Report KPI Collect | `vmax_multi_data_sync` | `45 * * * *` | v | `services/vmax_multi_data/vmax_multi_data_service.py → run_vmax_multi_data_sync` |
 | SOC Multi-Dim Trend Sync | `soc_trend_sync` | `40 * * * *` | v | `services/soc_trend/soc_trend_sync.py → run_soc_trend_sync` |
 | OLIB SOC Dashboard KPI Sync | `olib_soc_kpi_daily_sync` | `20 6 * * *` | m | `services/olib_soc_report/olib_soc_report_service.py → run_olib_soc_kpi_sync` |
 | OLIB SOC VMAX Routine Report | `olib_soc_vmax_report` | `30 7 1 * *` | m | `services/olib_soc_report/olib_soc_report_service.py → run_olib_soc_report` |
 | Customer Service KPI Sync | `ume_in_kpi_sync` | `45 5 * * *` | n | `services/ume_in/ume_in_kpi_service.py → run_ume_in_kpi_sync` |
 | Customer Service KPI + OSG Weekly Report Email | `ume_in_osg_report` | `30 6 * * *` | n | `services/ume_in/osg_report_task.py → run_ume_in_osg_report（内部依次调 ume_in_kpi_service + t_osg_build.py）` |
-| SP Online Ticket Sync | `sp_online_sync` | `35 */6 * * *` | n | `services/sp_online_sync.py → run_sp_online_sync` |
-| SP Material Master Sync | `sp_material_sync` | `55 4 * * *` | n | `services/sp_material_sync.py → run_sp_material_sync` |
-| SP Online Open Tickets Report Generate | `sp_online_report_generate` | `0 6 * * *` | m | `services/kpi_email_report.py → run_sp_online_report_generate` |
-| SP Online Open Tickets Report Send | `sp_online_report_send` | `35 6 * * *` | m | `services/kpi_email_report.py → run_sp_online_report` |
+| SP Online Ticket Sync | `sp_online_sync` | `35 */6 * * *` | n | `services/sp/sp_online_sync.py → run_sp_online_sync` |
+| SP Material Master Sync | `sp_material_sync` | `55 4 * * *` | n | `services/sp/sp_material_sync.py → run_sp_material_sync` |
+| SP Online Open Tickets Report Generate | `sp_online_report_generate` | `0 6 * * *` | m | `services/email/kpi_email_report.py → run_sp_online_report_generate` |
+| SP Online Open Tickets Report Send | `sp_online_report_send` | `35 6 * * *` | m | `services/email/kpi_email_report.py → run_sp_online_report` |
 | eFlow Alarm Rules Collect | `eflow_alarm_rules_collect` | `59 23 */3 * *` | n | `services/eflow_rules/eflow_Alarm_Rule_Collector.py → run_eflow_alarm_rules` |
 | eFlow Push Rules Collect | `eflow_push_rules_collect` | `59 23 */3 * *` | n | `services/eflow_rules/eflow_Push_Rule_Collector.py → run_eflow_push_rules` |
 | eFlow Push Rules Check | `eflow_push_rules_check` | `10 5 * * 2` | n | `services/eflow_rules/eflow_push_rules_check_task.py → run_eflow_push_rules_check` |
-| WhatsApp KB Sync (Push Rules) | `whatsapp_kb_sync_push_rules` | `4 0 */3 * *` | n | `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
-| WhatsApp KB Sync (Alarm Rules) | `whatsapp_kb_sync_alarm_rules` | `4 0 */3 * *` | n | `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
-| WhatsApp KB Sync (TT Level Rules) | `whatsapp_kb_sync_tt_rules` | `35 4 * * *` | n | `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
-| Log Files Cleanup | `log_cleanup` | `17 3 * * *` | m | `services/log_cleanup.py → run_log_cleanup` |
-| TMP Directory Cleanup | `tmp_cleanup` | `47 3 * * *` | m | `services/tmp_cleanup.py → run_tmp_cleanup` |
-| TTs and MTTR Report Generate | `tt_mttr_report_generate` | `20 7 * * *` | m | `services/tt_mttr_report.py → run_tt_mttr_report` |
+| WhatsApp KB Sync (Push Rules) | `whatsapp_kb_sync_push_rules` | `4 0 */3 * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
+| WhatsApp KB Sync (Alarm Rules) | `whatsapp_kb_sync_alarm_rules` | `4 0 */3 * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
+| WhatsApp KB Sync (TT Level Rules) | `whatsapp_kb_sync_tt_rules` | `35 4 * * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
+| Log Files Cleanup | `log_cleanup` | `17 3 * * *` | m | `services/cleanup/log_cleanup.py → run_log_cleanup` |
+| TMP Directory Cleanup | `tmp_cleanup` | `47 3 * * *` | m | `services/cleanup/tmp_cleanup.py → run_tmp_cleanup` |
+| TTs and MTTR Report Generate | `tt_mttr_report_generate` | `20 7 * * *` | m | `services/tt/tt_mttr_report.py → run_tt_mttr_report` |
 | RAN User Identity Lists (VoLTE/N78) | `gp_ran_user_sync` | `20 13 * * *` | g | `services/gp_ran/gp_ran_sync.py → run_gp_ran_user_sync` |
 | IPT Site Power Collect | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN Element Management Sync | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
@@ -178,7 +178,7 @@ Workflow & maintenance notes per task:
 #### eFlow Data Sync（`eflow_sync`）
 
 - Default cron: `22 * * * *`　|　worker group: **n**
-- Workflow script: `services/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")`
+- Workflow script: `services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="delta")`
 
 **What it does**: Incrementally sync TT/WO/CR/PM/Site/Person from the ZTE eFlow API
 
@@ -196,7 +196,7 @@ Workflow & maintenance notes per task:
 #### eFlow Daily Full Sync（`eflow_sync_full`）
 
 - Default cron: `0 1 * * *`　|　worker group: **n**
-- Workflow script: `services/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")`
+- Workflow script: `services/eflow/sync_from_eflow_api.py → sync_from_eflow_api(mode="full")`
 
 **What it does**: Full-window backfill (default since 2026-01-01) to cover delta gaps and refresh reports. Wide windows fetch TT/WO in segments; a missing TT/WO now fails the task
 
@@ -216,7 +216,7 @@ Workflow & maintenance notes per task:
 #### RAN UME Daily Report（`ran_ume_daily`）
 
 - Default cron: `0 2 * * *`　|　worker group: **u**
-- Workflow script: `services/ran_ume_service.py → run_ran_ume_full_task`
+- Workflow script: `services/ran/ran_ume_service.py → run_ran_ume_full_task`
 
 **What it does**: Fetch RAN UME PM data, generate the Daily Availability KPI report, upload via FTP
 
@@ -234,7 +234,7 @@ Workflow & maintenance notes per task:
 #### Site Outage Screenshot（`site_outage_screenshot`）
 
 - Default cron: `0 1 * * *`　|　worker group: **m**
-- Workflow script: `services/site_outage_service.py → run_site_outage_screenshot`
+- Workflow script: `services/site/site_outage_service.py → run_site_outage_screenshot`
 
 **What it does**: Auto-screenshot the ERA/Regular/ALL views of the Site Outage Monitor board
 
@@ -252,7 +252,7 @@ Workflow & maintenance notes per task:
 #### WhatsApp Message Send（`whatsapp_send`）
 
 - Default cron: `0 3 * * *`　|　worker group: **m**
-- Workflow script: `services/whatsapp_service.py → run_whatsapp_send`
+- Workflow script: `services/whatsapp/whatsapp_service.py → run_whatsapp_send`
 
 **What it does**: Send Site Outage screenshots and files to WhatsApp groups (Playwright automation)
 
@@ -268,7 +268,7 @@ Workflow & maintenance notes per task:
 #### WhatsApp Message Send (Extension)（`whatsapp_send_ext`）
 
 - Default cron: `0 3 * * *`　|　worker group: **m**
-- Workflow script: `services/whatsapp_ext_service.py → run_whatsapp_send_ext`
+- Workflow script: `services/whatsapp/whatsapp_ext_service.py → run_whatsapp_send_ext`
 
 **What it does**: Extension-based WhatsApp sending: dispatches a send job; a browser extension sends it in the logged-in WhatsApp Web (coexists with the Playwright version)
 
@@ -284,7 +284,7 @@ Workflow & maintenance notes per task:
 #### WhatsApp Message Send (Baileys)（`whatsapp_send_baileys`）
 
 - Default cron: `0 4 * * *`　|　worker group: **m**
-- Workflow script: `services/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys`
+- Workflow script: `services/whatsapp/whatsapp_send_baileys_service.py → run_whatsapp_send_baileys`
 
 **What it does**: Third WhatsApp image-sending channel: dispatches via the Baileys protocol directly (no browser/Playwright), parallel to the Playwright/extension versions; disabled by default — enable manually from the Task Manager page (Baileys violates WhatsApp ToS, so manual approval is required before enabling)
 
@@ -306,7 +306,7 @@ Workflow & maintenance notes per task:
 #### eFlow P1 Alarm WhatsApp Push（`tt_alarm_whatsapp_alert`）
 
 - Default cron: `2-59/5 * * * *`　|　worker group: **m**
-- Workflow script: `services/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert`
+- Workflow script: `services/tt/tt_alarm_whatsapp_service.py → run_tt_alarm_whatsapp_alert`
 
 **What it does**: Trigger-based push: every 5 min (phase 2-59/5, offset 2 min from the upstream sync) scan realtime_alarm for TT-linked P1 alarms inside the trigger window, live-fetch eFlow for each ticket, first-push, then re-notify every 20 min while the ticket has no update (with a REMINDER banner), and stop when the alarm clears. Send status (sent? how many times) is recorded in eflow_tt_whatsapp_alert_log
 
@@ -328,7 +328,7 @@ Workflow & maintenance notes per task:
 #### MS SLA Full Sync（`ms_sla_full`）
 
 - Default cron: `0 5 * * *`　|　worker group: **n**
-- Workflow script: `services/ms_sla_service.py → run_full_sync`
+- Workflow script: `services/ms/ms_sla_service.py → run_full_sync`
 
 **What it does**: SLA metrics sync + Contract KPIs report update (self-contained, no external files)
 
@@ -346,7 +346,7 @@ Workflow & maintenance notes per task:
 #### DC Server Alarm WhatsApp Push（`ume_alarm_whatsapp_alert`）
 
 - Default cron: `* * * * *`　|　worker group: **m**
-- Workflow script: `services/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp`
+- Workflow script: `services/ume_alarm/ume_alarm_whatsapp_service.py → run_ume_alarm_whatsapp`
 
 **What it does**: Pulls the current alarm snapshot from the ZTE UME NMS (10.121.8.2) every minute and pushes to the configured group only when an exact "alarm-code:severity" pair matches (default 89029:major, 89006:major); uncleared alarms are re-notified at the configured interval (with a REMINDER banner) and alarms that disappear upstream get a "recovered" notice; the first round only registers and sends nothing (to avoid flooding the group with the backlog)
 
@@ -428,7 +428,7 @@ Workflow & maintenance notes per task:
 #### CMDB Site Sync Diff（`eflow_site_update`）
 
 - Default cron: `0 7 * * *`　|　worker group: **m**
-- Workflow script: `services/eflow_site_update_task.py → run_eflow_site_update`
+- Workflow script: `services/eflow/eflow_site_update_task.py → run_eflow_site_update`
 
 **What it does**: Diffs the CMDB master data (newest ZTE OLR MS Master Site Database under my_app/db) against the eflow baseline and the PG master_site_db baseline, producing colour-coded A/M/D workbooks (eflow_site_update.xlsx / master_site_db .xlsx / import copies / sync report). Generates review files only - never writes to eflow or PostgreSQL
 
@@ -448,7 +448,7 @@ Workflow & maintenance notes per task:
 #### eFlow Realtime Alarm Sync（`eflow_active_alarm`）
 
 - Default cron: `*/1 * * * *`　|　worker group: **x**
-- Workflow script: `services/eflow_api_client.py → fetch_and_save_active_alarm`
+- Workflow script: `services/eflow/eflow_api_client.py → fetch_and_save_active_alarm`
 
 **What it does**: Fetch realtime alarms from eFlow FM Active API, save to CSV + SQLite (every minute)
 
@@ -469,7 +469,7 @@ Workflow & maintenance notes per task:
 #### eFlow History Alarm Sync（`eflow_history_alarm`）
 
 - Default cron: `0 */3 * * *`　|　worker group: **n**
-- Workflow script: `services/eflow_api_client.py → fetch_and_save_history_alarm`
+- Workflow script: `services/eflow/eflow_api_client.py → fetch_and_save_history_alarm`
 
 **What it does**: Fetch last-7-day history alarms from eFlow FM History API, filter by TT ID, save to CSV + SQLite
 
@@ -503,7 +503,7 @@ Workflow & maintenance notes per task:
 #### RAN Main KPI Sync（`main_kpi_sync`）
 
 - Default cron: `0 4 * * *`　|　worker group: **u**
-- Workflow script: `services/ran_ume_main_kpi.py → run_main_kpi_sync`
+- Workflow script: `services/ran/ran_ume_main_kpi.py → run_main_kpi_sync`
 
 **What it does**: RAN UME Main KPI history sync (2G/3G/4G × Cells/Sites/Group/NW), export Excel + incremental SQLite update + FTP upload
 
@@ -520,7 +520,7 @@ Workflow & maintenance notes per task:
 #### RAN Cell Availability 1-Day Sync（`cell_availability_sync`）
 
 - Default cron: `30 4 * * *`　|　worker group: **u**
-- Workflow script: `services/ran_cell_availability_sync.py → run_cell_availability_sync`
+- Workflow script: `services/ran/ran_cell_availability_sync.py → run_cell_availability_sync`
 
 **What it does**: RAN UME cell availability daily KPI sync (FDD/UMTS/GSM/TDD templates), writes ran_kpi_avalability_1day.sqlite3 + FTP upload
 
@@ -537,7 +537,7 @@ Workflow & maintenance notes per task:
 #### RAN Cells KPI Sync（`cells_kpi_sync`）
 
 - Default cron: `50 4 * * *`　|　worker group: **u**
-- Workflow script: `services/ran_cells_kpi_sync.py → run_cells_kpi_sync`
+- Workflow script: `services/ran/ran_cells_kpi_sync.py → run_cells_kpi_sync`
 
 **What it does**: Daily RAN UME cell data sync (2G/3G/4G), aggregate Cells KPI (target 99.65%) into ran_cells_kpi.sqlite3, current month only
 
@@ -549,13 +549,13 @@ Workflow & maintenance notes per task:
 
 **Maintenance**:
 
-- Definitions live at the top of services/ran_cells_kpi_service.py; 2G uses channel ratio, 3G/4G use service time / 86400
+- Definitions live at the top of services/ran/ran_cells_kpi_service.py; 2G uses channel ratio, 3G/4G use service time / 86400
 - The RAN Cells KPI dashboard reads the materialized DB first, falling back to live aggregation of ran_kpi_avalability_1day.sqlite3
 
 #### RAN Network KPI Sync（`network_kpi_sync`）
 
 - Default cron: `0 5 * * *`　|　worker group: **u**
-- Workflow script: `services/ran_ume_network_kpi.py → run_network_kpi_sync`
+- Workflow script: `services/ran/ran_ume_network_kpi.py → run_network_kpi_sync`
 
 **What it does**: RAN UME Network KPI (Zeenshan) history sync (2G/3G/4G × Group/NW), export Excel + SQLite import + FTP upload
 
@@ -590,7 +590,7 @@ Workflow & maintenance notes per task:
 #### BP Cells Report Sync（`bp_report_sync`）
 
 - Default cron: `20 6 * * *`　|　worker group: **u**
-- Workflow script: `services/bp_report_sync.py → run_bp_report_sync`
+- Workflow script: `services/bp/bp_report_sync.py → run_bp_report_sync`
 
 **What it does**: Read per-cell 4G PRB/throughput/traffic plus hourly active users from RAN_UME, recompute Bad Performance cells by the umlaut busy-hour caliber (daily/weekly/monthly), refresh local data/bp_report.sqlite3 and reconcile against the Excel ground truth
 
@@ -604,8 +604,8 @@ Workflow & maintenance notes per task:
 
 **Maintenance**:
 
-- The single source of truth for the caliber is services/bp_caliber.py: daily (busy-hour three values), weekly 4/7, monthly 3/4
-- WARNING: Average DL Active User Number is available ONLY at hourly granularity. At daily grain UME returns HTTP 200 with a valid queryid but SILENTLY DROPS that column and raises no error, hence the dedicated channel in services/bp_active_user.py (C373384373 + 1638004469342 + 1638004469332). When it cannot be fetched the day stays is_bp=NULL (undecidable) and is NEVER counted as 0
+- The single source of truth for the caliber is services/bp/bp_caliber.py: daily (busy-hour three values), weekly 4/7, monthly 3/4
+- WARNING: Average DL Active User Number is available ONLY at hourly granularity. At daily grain UME returns HTTP 200 with a valid queryid but SILENTLY DROPS that column and raises no error, hence the dedicated channel in services/bp/bp_active_user.py (C373384373 + 1638004469342 + 1638004469332). When it cannot be fetched the day stays is_bp=NULL (undecidable) and is NEVER counted as 0
 - WARNING: UME returns numeric values as strings and PRB carries a percent sign (e.g. "2.46%"), so strip the % and divide by 100; also itemsposition must be all zeros -- using [0,1,2] makes UME reject the query with 0001619999
 - WARNING: PRB utilization is a FRACTION in the source table (0-1, observed max 0.9751), so the threshold is 0.80, not 80; using 80 makes the condition never fire and raises no error
 - WARNING: the source column name "E-UTRAN\xa0FDD\xa0Cell Name" uses NO-BREAK SPACEs; with plain spaces SQLite does not error but treats the double-quoted identifier as a string literal, turning the whole column into its own name text (bp_caliber.assert_columns_exist / assert_no_literal_fallback guard exactly this)
@@ -616,7 +616,7 @@ Workflow & maintenance notes per task:
 #### CNN UME KPI Sync（`cnn_kpi_sync`）
 
 - Default cron: `0 6 * * *`　|　worker group: **n**
-- Workflow script: `services/ccn_ume_kpi_service.py → run_cnn_kpi_sync`
+- Workflow script: `services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync`
 
 **What it does**: CNN UME core-network KPI sync (xGW License/CPU/Voice/VLR/Data/3G/4G/Free Rating), API write to DB CNN
 
@@ -632,7 +632,7 @@ Workflow & maintenance notes per task:
 #### CNN UME KPI 5-Min Sync（`cnn_kpi_sync_5mins`）
 
 - Default cron: `*/15 * * * *`　|　worker group: **n**
-- Workflow script: `services/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins`
+- Workflow script: `services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins`
 
 **What it does**: Same source and account as "CNN UME KPI Sync", but at fine granularity (5-minute for 5 templates, 15-minute for 3) with a yesterday-00:00-to-now window; writes into new 5mins_* tables in DB CNN for the Day0/Day1/Day7 overlay on the CN KPI 5-minute board. Daily/monthly tables are untouched
 
@@ -648,12 +648,12 @@ Workflow & maintenance notes per task:
 - WARNING: the task keeps a "0 rows → skip this table and do not fail" fallback (the original cnn_kpi_sync raises on 0 rows — this task deliberately differs) so an upstream tier change cannot make it fail every 15 minutes
 - WARNING: one run takes about 105 s (Free Rating alone has 14k rows/day); if it approaches 15 minutes, lower the concurrency or widen the schedule
 - Runs in group n alongside cnn_kpi_sync so the two never log into the same account and kick each other off
-- The only consumer is ?page=cn_kpi_5mins (services/cn_kpi_5mins_service.py reads the 5mins_* tables)
+- The only consumer is ?page=cn_kpi_5mins (services/cn/cn_kpi_5mins_service.py reads the 5mins_* tables)
 
 #### SP Spare Data Sync（`sp_data_sync`）
 
 - Default cron: `10 * * * *`　|　worker group: **s**
-- Workflow script: `services/get_sp_table.py → run_sp_data_sync`
+- Workflow script: `services/sp/get_sp_table.py → run_sp_data_sync`
 
 **What it does**: Pull 5 spare-part reports from SFTP (Inbound/Outbound/Inventory/OC Rule/Transfer) into app.db, then mirror into FineBI WareHouseDashBoard inventory.db
 
@@ -677,7 +677,7 @@ Workflow & maintenance notes per task:
 #### iPRAN UME KPI Sync（`ipran_kpi_sync`）
 
 - Default cron: `0 * * * *`　|　worker group: **u**
-- Workflow script: `services/ipran_ume_kpi_service.py → run_ipran_kpi_sync`
+- Workflow script: `services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync`
 
 **What it does**: iPRAN UME M6000 router KPI sync (HQ M6K-FW etc.), export Excel + SQLite import + FTP upload
 
@@ -693,7 +693,7 @@ Workflow & maintenance notes per task:
 #### Liberia Site-Down 1H Report Email（`liberia_email_1h`）
 
 - Default cron: `15 * * * *`　|　worker group: **m**
-- Workflow script: `services/liberia_email_report.py → run_1h_report`
+- Workflow script: `services/email/liberia_email_report.py → run_1h_report`
 
 **What it does**: Email the Liberia Orange Site Down hourly Report (inline charts + Excel) to recipient lists
 
@@ -710,7 +710,7 @@ Workflow & maintenance notes per task:
 #### Liberia Site-Down 8H Report Email（`liberia_email_8h`）
 
 - Default cron: `20 */8 * * *`　|　worker group: **m**
-- Workflow script: `services/liberia_email_report.py → run_8h_report`
+- Workflow script: `services/email/liberia_email_report.py → run_8h_report`
 
 **What it does**: Email the Liberia Orange Site Down 8-hour Report (inline charts + Excel) to recipient lists
 
@@ -726,7 +726,7 @@ Workflow & maintenance notes per task:
 #### MS Contract KPIs Daily Report Email（`kpi_ms_contract`）
 
 - Default cron: `30 5 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_ms_contract_kpi`
+- Workflow script: `services/email/kpi_email_report.py → run_ms_contract_kpi`
 
 **What it does**: Email the MS Contract KPIs Achievements Daily Report (local data + remote recipient list)
 
@@ -743,7 +743,7 @@ Workflow & maintenance notes per task:
 #### MS WOs SLA Daily Report Email（`kpi_ms_wo_sla`）
 
 - Default cron: `35 5 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_ms_wo_sla`
+- Workflow script: `services/email/kpi_email_report.py → run_ms_wo_sla`
 
 **What it does**: Email the MS WOs SLA Achievements Daily Report (local data + remote recipient list)
 
@@ -759,7 +759,7 @@ Workflow & maintenance notes per task:
 #### SpareParts Report Email（`kpi_sp_spareparts`）
 
 - Default cron: `45 9 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_spareparts`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_spareparts`
 
 **What it does**: Email the SpareParts report (local sp_email data + remote shared recipient list)
 
@@ -775,7 +775,7 @@ Workflow & maintenance notes per task:
 #### Comsumables Report Email（`kpi_sp_consumables`）
 
 - Default cron: `50 9 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_consumables`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_consumables`
 
 **What it does**: Email the Comsumables (consumables) report (local sp_email data + remote shared list)
 
@@ -791,7 +791,7 @@ Workflow & maintenance notes per task:
 #### SP Report Generate（`sp_report_generate`）
 
 - Default cron: `15 5 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_report_generate`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_report_generate`
 
 **What it does**: Refresh the sp_material master from eFlow first, then download spare-part data from SFTP and generate Comsumables & SpareParts Inbound&Outbound&Inventory reports into data/sp_email; Material Name in details and raw snapshots is resolved by Material No. from the master (latest name)
 
@@ -810,7 +810,7 @@ Workflow & maintenance notes per task:
 #### SP Weekly Report (Monday → Sunday)（`sp_weekly_report`）
 
 - Default cron: `0 7 * * mon`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_weekly_report`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_weekly_report`
 
 **What it does**: Every Monday 07:00 build the SP weekly report for the previous full natural week (last Monday 00:00 – Sunday 23:59) and email it; both the file name and the subject carry the period
 
@@ -832,7 +832,7 @@ Workflow & maintenance notes per task:
 #### SP Spare Parts Details Report Email（`sp_email_details`）
 
 - Default cron: `5 7 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_details_email`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_details_email`
 
 **What it does**: Merge the 4 spare-part detail files (inventory/inband/outband/transfer) under data/sp_email/data into one Excel (sheets: Inventory/Inbound/Outbound/Transfer) and email it; after the email, send the same Excel as a document to the WhatsApp group WH&SP Management
 
@@ -852,7 +852,7 @@ Workflow & maintenance notes per task:
 #### SP Spare Parts Details Files Email（`sp_details_files_email`）
 
 - Default cron: `5 10 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_details_files_email`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_details_files_email`
 
 **What it does**: Daily 10:05: send the 6 spare-part detail files under data/sp_email/data to NOC as ONE EMAIL PER FILE, subject "Liberia OLR W.H <file name> <date time>"
 
@@ -877,7 +877,7 @@ Workflow & maintenance notes per task:
 #### Comsumables&SpareParts Report Whatsapp（`sp_whatsapp_report`）
 
 - Default cron: `55 7 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_whatsapp_report`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_whatsapp_report`
 
 **What it does**: Daily 07:55: send the same assets used by the Comsumables / SpareParts report emails (consolidated XLSX + report PNGs) to the WhatsApp group WH&SP Management
 
@@ -896,7 +896,7 @@ Workflow & maintenance notes per task:
 #### SP Material Stock & Consumption Report Email（`sp_material_report`）
 
 - Default cron: `45 7 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_material_stock_consumption`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_material_stock_consumption`
 
 **What it does**: Daily 07:45: export the SP material stock & consumption summary (same scope as the page=sp_material page) to a UNIFIED_EXCEL_V1 Excel attachment plus an inline PNG of the same table, and email it
 
@@ -916,7 +916,7 @@ Workflow & maintenance notes per task:
 #### MS Network Availability Daily Report Email（`kpi_ran_availability`）
 
 - Default cron: `30 9 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_ran_availability`
+- Workflow script: `services/email/kpi_email_report.py → run_ran_availability`
 
 **What it does**: Email the MS Network Availability Daily Report (remote FTP images + remote list, no Excel attachment)
 
@@ -932,7 +932,7 @@ Workflow & maintenance notes per task:
 #### Email Recovery after EWS Restored（`email_recovery`）
 
 - Default cron: `*/10 * * * *`　|　worker group: **m**
-- Workflow script: `services/email_recovery.py → run_email_recovery_task`
+- Workflow script: `services/email/email_recovery.py → run_email_recovery_task`
 
 **What it does**: Probes EWS every 10 minutes; once restored, re-sends email tasks that failed due to EWS timeouts in the last 3 hours
 
@@ -967,7 +967,7 @@ Workflow & maintenance notes per task:
 #### Packet Loss Daily Report Email（`packet_loss_email`）
 
 - Default cron: `45 6 * * *`　|　worker group: **u**
-- Workflow script: `services/kpi_email_report.py → run_packet_loss_email`
+- Workflow script: `services/email/kpi_email_report.py → run_packet_loss_email`
 
 **What it does**: Send the Packet Loss dashboard daily email (local screenshot + latest report xlsx + remote recipients) via the OWA account
 
@@ -983,7 +983,7 @@ Workflow & maintenance notes per task:
 #### IP RAN M6K-FW Chart Email（`ipran_m6k_chart_email`）
 
 - Default cron: `45 6 * * *`　|　worker group: **m**
-- Workflow script: `services/ipran_chart_service.py → run_ipran_m6k_chart_email`
+- Workflow script: `services/ipran/ipran_chart_service.py → run_ipran_m6k_chart_email`
 
 **What it does**: Query HQ_M6K_FW_bnctp_15mins from ipran_ume_kpi.sqlite3, generate 3 utilization line charts by ME+SmartGroup and email them
 
@@ -1000,7 +1000,7 @@ Workflow & maintenance notes per task:
 #### CNN Free Rating Chart Email（`ccn_free_rating_chart_email`）
 
 - Default cron: `45 7 * * *`　|　worker group: **m**
-- Workflow script: `services/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email`
+- Workflow script: `services/cnn/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email`
 
 **What it does**: Query FREE_RATING_GROUP_TEMPLATE_OSS_update_UME from db_ps_cs_cn.sqlite3, generate 4 bar charts by MO and email them
 
@@ -1085,7 +1085,7 @@ Workflow & maintenance notes per task:
 #### Mailbox Storage Guard（`mailbox_cleanup`）
 
 - Default cron: `0 * * * *`　|　worker group: **m**
-- Workflow script: `services/mailbox_cleanup.py → run_mailbox_cleanup`
+- Workflow script: `services/cleanup/mailbox_cleanup.py → run_mailbox_cleanup`
 
 **What it does**: Hourly Exchange mailbox guard: when count >500 AND usage >70%, hard-delete the 200 oldest emails to avoid the storage-limit warning
 
@@ -1101,7 +1101,7 @@ Workflow & maintenance notes per task:
 #### Incident Overview Data Sync（`incident_overview_sync`）
 
 - Default cron: `20 * * * *`　|　worker group: **m**
-- Workflow script: `services/incident_overview_sync.py → run_incident_overview_sync`
+- Workflow script: `services/incident/incident_overview_sync.py → run_incident_overview_sync`
 
 **What it does**: Hourly at minute 20: pull the latest incident_overview.xlsx from all subfolders of FineBI FTP /webroot/WEB-INF/schedule/TT_WO/, stored as versioned files + a current.json pointer
 
@@ -1119,7 +1119,7 @@ Workflow & maintenance notes per task:
 #### DB Data Freshness Check（`db_freshness_check`）
 
 - Default cron: `15 * * * *`　|　worker group: **m**
-- Workflow script: `services/db_freshness_check.py → run_db_freshness_check`
+- Workflow script: `services/db/db_freshness_check.py → run_db_freshness_check`
 
 **What it does**: Hourly freshness audit of remote DBs (via db_writer_api), local fallback DBs, and local file-based sources (FTP-pulled Excel files) by their on-disk age; outputs call chain and guidance when stale
 
@@ -1155,7 +1155,7 @@ Workflow & maintenance notes per task:
 #### MTTR/TT Wide Table Rebuild（`mttr_tt_sync`）
 
 - Default cron: `40 7 * * *`　|　worker group: **m**
-- Workflow script: `services/mttr_tt_sync.py → run_mttr_tt_sync`
+- Workflow script: `services/tt/mttr_tt_sync.py → run_mttr_tt_sync`
 
 **What it does**: Rebuild the mttr_tt wide table (Eflow_TT_FB + OLR_CELLS/Site_Maintainer_Category reference) into local data/mttr_tt.sqlite3 for the MTTR board (daily/weekly/monthly)
 
@@ -1167,7 +1167,7 @@ Workflow & maintenance notes per task:
 
 **Maintenance**:
 
-- Definitions parsed from FineDB dataset 4bc5a679, documented at the top of services/mttr_tt_sync.py; MTTR2 is non-null only when 0<MTTR1<48h
+- Definitions parsed from FineDB dataset 4bc5a679, documented at the top of services/tt/mttr_tt_sync.py; MTTR2 is non-null only when 0<MTTR1<48h
 - excel_ds.sqlite3 is a static 114KB reference frozen from my-finebi (unchanged since 2026-08-31); re-export it if the FineBI Excel datasets ever change
 - Before 2026-09-21 a manual ETL in the retired my-finebi project maintained this table; with no scheduler it froze at 2026-08-31
 
@@ -1310,7 +1310,7 @@ Workflow & maintenance notes per task:
 #### CXO Dashboard Cache Sync（`cxo_dashboard_cache_sync`）
 
 - Default cron: `*/10 * * * *`　|　worker group: **v**
-- Workflow script: `services/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync`
+- Workflow script: `services/cxo/cxo_dashboard_cache.py → run_cxo_dashboard_cache_sync`
 
 **What it does**: Every 10 min pull all CXO dashboard APIs via the local 8790 VMAX proxy and merge them per-endpoint into a last-known-good cache (empty fetch keeps the old value) as the dashboard fallback
 
@@ -1329,7 +1329,7 @@ Workflow & maintenance notes per task:
 #### VMAX CXO Daily Value Archive（`vmax_cxo_daily_sync`）
 
 - Default cron: `15 * * * *`　|　worker group: **v**
-- Workflow script: `services/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync`
+- Workflow script: `services/cxo/vmax_cxo_daily_cache.py → run_vmax_cxo_daily_sync`
 
 **What it does**: Hourly: batch-pull the last 8 days of 1-hour detail for 50 KPIs (compressed into 8 multi-column requests) via the 8790 VMAX proxy, aggregate to daily values for the tabbed daily board (~3 weeks of review)
 
@@ -1459,7 +1459,7 @@ Workflow & maintenance notes per task:
 #### SP Online Ticket Sync（`sp_online_sync`）
 
 - Default cron: `35 */6 * * *`　|　worker group: **n**
-- Workflow script: `services/sp_online_sync.py → run_sp_online_sync`
+- Workflow script: `services/sp/sp_online_sync.py → run_sp_online_sync`
 
 **What it does**: Every 6 hours: fetch online tickets from the eFlow SP APIs (sp-outbound/sp-inbound/sp-transfer) into the matching tables. Takes the union of the original filter and the all-status filter so a filter contradicting its own results can never silently pick the wrong data. Tables mirror the upstream snapshot: a full rebuild removes tickets that have vanished upstream
 
@@ -1481,7 +1481,7 @@ Workflow & maintenance notes per task:
 #### SP Material Master Sync（`sp_material_sync`）
 
 - Default cron: `55 4 * * *`　|　worker group: **n**
-- Workflow script: `services/sp_material_sync.py → run_sp_material_sync`
+- Workflow script: `services/sp/sp_material_sync.py → run_sp_material_sync`
 
 **What it does**: Fetch the full material master from the eFlow SP API (eflow-sp-material) into app.db table sp_material (upsert by materialNo). The table mirrors the upstream snapshot: a full rebuild removes materials that vanished upstream
 
@@ -1500,7 +1500,7 @@ Workflow & maintenance notes per task:
 #### SP Online Open Tickets Report Generate（`sp_online_report_generate`）
 
 - Default cron: `0 6 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_online_report_generate`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_online_report_generate`
 
 **What it does**: Build the open-ticket Inbound/Outbound reports (PNG+XLSX, sorted by Create Time desc): Inbound from the details xlsx, Outbound from table sp_outbound tracking WaitingForUpdate / WaitingForReturn / WaitingForConfirm
 
@@ -1518,7 +1518,7 @@ Workflow & maintenance notes per task:
 #### SP Online Open Tickets Report Send（`sp_online_report_send`）
 
 - Default cron: `35 6 * * *`　|　worker group: **m**
-- Workflow script: `services/kpi_email_report.py → run_sp_online_report`
+- Workflow script: `services/email/kpi_email_report.py → run_sp_online_report`
 
 **What it does**: Send the open-ticket report: email (inline Inbound/Outbound PNG + XLSX attachments, default SP shared recipient list) + WhatsApp groups
 
@@ -1595,7 +1595,7 @@ Workflow & maintenance notes per task:
 #### WhatsApp KB Sync (Push Rules)（`whatsapp_kb_sync_push_rules`）
 
 - Default cron: `4 0 */3 * *`　|　worker group: **n**
-- Workflow script: `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
+- Workflow script: `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_push_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
 
 **What it does**: Fired after the push-rules collect: compares rule xlsx fingerprints and only re-exports docs, rebuilds the index and restarts whatsapp-kb-bot when something actually changed
 
@@ -1614,7 +1614,7 @@ Workflow & maintenance notes per task:
 #### WhatsApp KB Sync (Alarm Rules)（`whatsapp_kb_sync_alarm_rules`）
 
 - Default cron: `4 0 */3 * *`　|　worker group: **n**
-- Workflow script: `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
+- Workflow script: `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
 
 **What it does**: Triggers a KB sync after the alarm-rules collect; compression rules come from eflow_alarm_rules.xlsx and unchanged runs are skipped
 
@@ -1632,7 +1632,7 @@ Workflow & maintenance notes per task:
 #### WhatsApp KB Sync (TT Level Rules)（`whatsapp_kb_sync_tt_rules`）
 
 - Default cron: `35 4 * * *`　|　worker group: **n**
-- Workflow script: `services/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
+- Workflow script: `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs`
 
 **What it does**: Triggers a KB sync after the daily 04:20 TT level-rules collect; level rules come from eflow_TT_rules.xlsx
 
@@ -1649,7 +1649,7 @@ Workflow & maintenance notes per task:
 #### Log Files Cleanup（`log_cleanup`）
 
 - Default cron: `17 3 * * *`　|　worker group: **m**
-- Workflow script: `services/log_cleanup.py → run_log_cleanup`
+- Workflow script: `services/cleanup/log_cleanup.py → run_log_cleanup`
 
 **What it does**: Daily purge of log files older than the retention window (7 days by default, LOG_RETENTION_DAYS) under my_app/log, plus date-suffixing of legacy names no process writes to
 
@@ -1667,7 +1667,7 @@ Workflow & maintenance notes per task:
 #### TMP Directory Cleanup（`tmp_cleanup`）
 
 - Default cron: `47 3 * * *`　|　worker group: **m**
-- Workflow script: `services/tmp_cleanup.py → run_tmp_cleanup`
+- Workflow script: `services/cleanup/tmp_cleanup.py → run_tmp_cleanup`
 
 **What it does**: Two-stage reclaim of temp artifacts older than the retention window (7 days) under my_app/TMP: same-volume move into TMP/_quarantine_YYYYMMDD/ first (restorable), real delete only after another 7 days
 
@@ -1686,7 +1686,7 @@ Workflow & maintenance notes per task:
 #### TTs and MTTR Report Generate（`tt_mttr_report_generate`）
 
 - Default cron: `20 7 * * *`　|　worker group: **m**
-- Workflow script: `services/tt_mttr_report.py → run_tt_mttr_report`
+- Workflow script: `services/tt/tt_mttr_report.py → run_tt_mttr_report`
 
 **What it does**: Builds the TTs and MTTR (Hour) monthly workbook from the latest Site Down hourly Report, downloadable from the "TTs and MTTR" tab of the report files page
 
@@ -1790,7 +1790,7 @@ Workflow & maintenance notes per task:
 | **Missed-run backfill** | Tasks that should have fired but have no execution record at all are backfilled once (MISS_GRACE_MIN=15; email tasks excluded — handled by EWS recovery). |
 | **Stale pending expiry** | A pending row unclaimed for over 6 hours (typical cause: the task was never registered in a worker group) is marked failed with an execution-log entry, freeing the single-flight slot it held — otherwise one stale row would block every later trigger of that task. |
 | **Failure notification** | Failures notify via WeChat + email (services/weixin_notifier.py supports openclaw/wecom/serverchan/pushplus). |
-| **Missed-run / stall alert** | db_freshness_check computes five health findings hourly (ungrouped / no execution record within the cron-scaled window / stuck queue / overdue since last success / succeeded but produced zero output); services/task_health_alert.py pushes them to WeChat + email, notifying once per new anomaly and once on recovery, re-raising after 24h (added 2026-09-18; the “succeeded but zero output” finding was added 2026-11-06 after vmax_multi_data_sync reported success every run while yielding 0 rows for 34 consecutive days, which the original four findings could not catch). |
+| **Missed-run / stall alert** | db_freshness_check computes five health findings hourly (ungrouped / no execution record within the cron-scaled window / stuck queue / overdue since last success / succeeded but produced zero output); services/task/task_health_alert.py pushes them to WeChat + email, notifying once per new anomaly and once on recovery, re-raising after 24h (added 2026-09-18; the “succeeded but zero output” finding was added 2026-11-06 after vmax_multi_data_sync reported success every run while yielding 0 rows for 34 consecutive days, which the original four findings could not catch). |
 | **Process self-healing** | backend_watchdog / worker_watchdog supervise processes: port probing, crash backoff (backend degrades to a 5-minute slow retry after 10 consecutive crashes instead of giving up; worker is still removed after 10); heartbeats in log/heartbeat_*.json stale >3 min → force kill & restart. |
 | **Retention** | task_queue & task_execution_log are kept 3 days (auto-cleaned), no manual work. |
 
@@ -1975,7 +1975,7 @@ The "SLA only" cut of the MS Operation KPI Dashboard: the WOs SLA block with WO 
 
 MS WOs SLA Daily Report: daily detail matrix of WO SLA attainment (Total / Within SLA / Achieve), reading the same file that the daily "MS WOs SLA Daily Report" email is built from.
 
-- Data source: data/ms_sla/ZTE OLR MS WOs SLA Achievements Daily Report_<date>.xlsx (landed daily by the kpi_ms_wo_sla task); the page does no further processing — see backend/services/ms_kpi_report_service.py for the parsing caliber
+- Data source: data/ms_sla/ZTE OLR MS WOs SLA Achievements Daily Report_<date>.xlsx (landed daily by the kpi_ms_wo_sla task); the page does no further processing — see backend/services/ms/ms_kpi_report_service.py for the parsing caliber
 - Layout: overview cards (monthly tickets / meeting SLA / attainment / failing metrics) -> 5 TTR metric cards -> daily attainment trend (with each target line) -> daily detail matrix (same layout as the Excel)
 - Click a matrix column header to open the trend drill-down for that metric
 - **Every figure explains itself on hover** (2026-11-03): the overview cards, the monthly value and the "N/M days met" of each metric card, and the trend dialog can all be hovered. Three points that are most often misread - the monthly value is the **raw** Month row of the workbook (no division is recomputed); the denominator of "N/M days met" is the **number of day rows in the matrix**, not the days of the calendar month (undelivered days are not counted); and Total / Within SLA / Achieve in the overview are **three independent raw columns**, so Achieve is not necessarily Within ÷ Total
@@ -2441,7 +2441,7 @@ Spare Parts Inbound & Outbound & Inventory summary: the same workbook emailed / 
 - "Columns" is configurable per sheet and remembered locally; the row-detail modal always shows every column
 - **Every number explains itself on hover** (2026-11-04): the seven quantity cards say "this value = the raw Total-row cell of Summary-Current · some column", and warn that **a missing or non-numeric column comes back as 0.0 from the backend** — so a 0 can be a real zero or an empty column; "Materials" is a **row count, not de-duplicated material numbers**; "Urgent" counts **rows** whose Alert Level equals Urgent Replenish, a different unit from its Qty neighbours — do not subtract one from the other
 - The "open documents" bubble states it comes from the **live database** (same caliber as the SPMS figure on the MsPortal QC panel), because the workbook is a 05:55 snapshot while the DB lands at 07:00; all other statistics stay on the Excel snapshot so the page matches the emailed attachment
-- **Material Name comes from the sp_material master (latest name)**, effective 2026-11-06: in the upstream detail this column is the name captured when the document was exported, and eFlow renames never rewrite history, so one material splits into two Summary-Current rows with inbound/outbound/inventory broken apart. Step 0 refreshes the master from eFlow and Step 2.5 overwrites the five details plus the five raw snapshots by Material No. (implementation: backend/services/sp_material_name.py). Consequence: a rename after 05:15 lands in the next day’s report — the page reads that same report, so a single page never shows two spellings.
+- **Material Name comes from the sp_material master (latest name)**, effective 2026-11-06: in the upstream detail this column is the name captured when the document was exported, and eFlow renames never rewrite history, so one material splits into two Summary-Current rows with inbound/outbound/inventory broken apart. Step 0 refreshes the master from eFlow and Step 2.5 overwrites the five details plus the five raw snapshots by Material No. (implementation: backend/services/sp/sp_material_name.py). Consequence: a rename after 05:15 lands in the next day’s report — the page reads that same report, so a single page never shows two spellings.
 
 #### com_report（`com_report`）
 

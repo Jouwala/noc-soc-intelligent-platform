@@ -63,7 +63,7 @@
 
 ## 例外：仍然硬绑 SQLite 的代码
 
-`backend/services/credential_store.py:263-266` 用 `sqlite3` 直连 `db/app.db` 读写凭据表，**绕过 `MY_APP_DB_MODE`**。后果：
+`backend/services/credential/credential_store.py:263-266` 用 `sqlite3` 直连 `db/app.db` 读写凭据表，**绕过 `MY_APP_DB_MODE`**。后果：
 
 - PG 模式下凭据仍然存在本地 `app.db`，不随 PG 备份走；
 - 只备份 PG 会丢凭据，只备份 `app.db` 会丢业务数据。备份策略见 `13-operations.md`。
@@ -93,9 +93,9 @@
 
 | 点位 | 说明 |
 | --- | --- |
-| `backend/services/credential_store.py:696` | 凭据表，故意裸连（理由写在 `:683` 注释） |
-| `backend/services/email_recipient_store.py:341` | 收件人表，同上（理由写在 `:334` 注释） |
-| `backend/services/task_runner.py:412` / `435` / `495` / `561` | `task_schedule_config` 读写；判定只读本地这一份，PG 侧只是双写镜像 |
+| `backend/services/credential/credential_store.py:696` | 凭据表，故意裸连（理由写在 `:683` 注释） |
+| `backend/services/email/email_recipient_store.py:341` | 收件人表，同上（理由写在 `:334` 注释） |
+| `backend/services/task/task_runner.py:412` / `435` / `495` / `561` | `task_schedule_config` 读写；判定只读本地这一份，PG 侧只是双写镜像 |
 
 ### B. 独立工具直读 `app.db`（2 处）
 
@@ -108,12 +108,12 @@
 | 点位 | 说明 |
 | --- | --- |
 | `backend/services/avail_ms_service.py:189` | 可用率库 `AVAIL_DB`，`mode=ro` |
-| `backend/services/bp_report_store.py:184` | `connect(read_only=True)` 分支，`mode=ro` |
+| `backend/services/bp/bp_report_store.py:184` | `connect(read_only=True)` 分支，`mode=ro` |
 | `backend/services/dashboard_service.py:282` | 传入的本机库路径，`mode=ro` + `query_only` |
-| `backend/services/db_freshness_check.py:418` / `432` | 新鲜度巡检任意库文件，`mode=ro` |
-| `backend/services/mttr_tt_sync.py:143` | 读源库，`mode=ro` |
-| `backend/services/ran_cells_kpi_service.py:60` | `_connect_ro`：不用 `file:` URI（避 UNC 路径坑），改用 `PRAGMA query_only=ON` |
-| `backend/services/site_availability_service.py:326` | 本地可用率库 `mode=ro`；注释已说明 PG 模式走封装会被误映射 schema |
+| `backend/services/db/db_freshness_check.py:418` / `432` | 新鲜度巡检任意库文件，`mode=ro` |
+| `backend/services/tt/mttr_tt_sync.py:143` | 读源库，`mode=ro` |
+| `backend/services/ran/ran_cells_kpi_service.py:60` | `_connect_ro`：不用 `file:` URI（避 UNC 路径坑），改用 `PRAGMA query_only=ON` |
+| `backend/services/site/site_availability_service.py:326` | 本地可用率库 `mode=ro`；注释已说明 PG 模式走封装会被误映射 schema |
 | `backend/services/soc_trend/soc_trend_store.py:51` | `connect(readonly=True)` 分支，`mode=ro` |
 | `backend/services/sp_report_gen/generate_sp_weekly_report.py:243` | `mode=ro`，timeout=10 |
 
@@ -122,18 +122,18 @@
 | 点位 | 目标库 / 说明 |
 | --- | --- |
 | `backend/services/battary_kpi_fetch/battery_kpi_service.py:300` | `battery_kpi.sqlite3` |
-| `backend/services/bp_report_store.py:187` | `connect(read_only=False)` 分支 |
+| `backend/services/bp/bp_report_store.py:187` | `connect(read_only=False)` 分支 |
 | `backend/services/cm_data/cm_data_export.py:1906` | `cm_cell_data.sqlite3` |
 | `backend/services/fw_kpi/fw_kpi_services.py:520` | 候选路径循环打开 FW 库（TODO 原文点名点位，行号已由 488 漂移至此） |
-| `backend/services/get_sp_table.py:574` | 镜像同步路径，带 `MIRROR_CONNECT_TIMEOUT` |
+| `backend/services/sp/get_sp_table.py:574` | 镜像同步路径，带 `MIRROR_CONNECT_TIMEOUT` |
 | `backend/services/gp_ran/gp_ran_store.py:52` | 本模块独占旁路库（理由写在文件头 `:12`） |
-| `backend/services/native_board_mirror_sync.py:147` | 本机镜像库 `_open_local`，自设 PRAGMA |
+| `backend/services/native/native_board_mirror_sync.py:147` | 本机镜像库 `_open_local`，自设 PRAGMA |
 | `backend/services/olib_soc_report/olib_soc_kpi_store.py:167` / `171` | olib 专用 store 库 |
 | `backend/services/olib_soc_report/olib_soc_report_service.py:1028` / `1104` | `olib_soc_report.sqlite3` |
-| `backend/services/ran_cell_availability_sync.py:376` / `463` / `470` | `ran_kpi_avalability_1day.sqlite3` ⚠️ 未设 timeout |
-| `backend/services/ran_cells_kpi_service.py:570` | 物化库 `ran_cells_kpi.sqlite3` ⚠️ 未设 timeout |
+| `backend/services/ran/ran_cell_availability_sync.py:376` / `463` / `470` | `ran_kpi_avalability_1day.sqlite3` ⚠️ 未设 timeout |
+| `backend/services/ran/ran_cells_kpi_service.py:570` | 物化库 `ran_cells_kpi.sqlite3` ⚠️ 未设 timeout |
 | `backend/services/soc_trend/soc_trend_store.py:54` | 写分支，自设 WAL + `busy_timeout` |
-| `backend/services/sp_mirror_push.py:124` | 推送用单文件镜像，自设 `journal_mode=delete` ⚠️ 未设 timeout |
+| `backend/services/sp/sp_mirror_push.py:124` | 推送用单文件镜像，自设 `journal_mode=delete` ⚠️ 未设 timeout |
 | `backend/services/vmax_multi_data/vmax_multi_data_service.py:230` / `278` | `vmax_multi_data.sqlite3` |
 
 ### E. 临时 / 产物文件（5 处）
@@ -146,7 +146,7 @@
 
 ### G. 迁移与离线工具（10 处，人工执行、不在运行期）
 
-`backend/migrations/fix_tt_alert_log_columns.py:210`、`reconcile.py:161`（`mode=ro`）、`transfer_lib.py:97`；`backend/services/backfill_new_group_history.py:79`、`backfill_old_group_history.py:86`（均 `mode=ro`）；`tools/backfill_manual_stop_flag.py:81`、`fix_task_schedule_dupes.py:77`、`reconcile_task_schedule_state.py:163` / `209`、`sync_manual_stop_to_pg.py:32`。
+`backend/migrations/fix_tt_alert_log_columns.py:210`、`reconcile.py:161`（`mode=ro`）、`transfer_lib.py:97`；`backend/services/backfill/backfill_new_group_history.py:79`、`backfill_old_group_history.py:86`（均 `mode=ro`）；`tools/backfill_manual_stop_flag.py:81`、`fix_task_schedule_dupes.py:77`、`reconcile_task_schedule_state.py:163` / `209`、`sync_manual_stop_to_pg.py:32`。
 
 ### 核查结论（2026-11-13）
 
@@ -297,8 +297,8 @@ WHERE n.nspname = '<schema>' AND cl.relname = '<表>' AND c.contype IN ('p','u')
 
 ### eflow 双库归属：`eflow_tt` 只认主库
 
-- **唯一活写源**：`backend/services/sync_from_eflow_api.py` 的 `sync_from_eflow_api()` 经 `get_raw_connection(str(DB_PATH))`（`:665`）只写主库（sqlite 模式 = `db/app.db`，PG 模式 = `app` schema），覆盖 `eflow_tt` / `eflow_wo` / `eflow_cr` / `eflow_pm` / `eflow_site` / `person`；文件头已声明「不再依赖外部 eflow.sqlite3 中间文件」（`:1-4`）。**读这些表一律读主库。**
-- **`data/eflow/eflow.sqlite3` 的同名表不是同步结果**：它是旧流水线遗留快照 + 报告中间库。`eflow_data_mapper.save_to_sqlite()`（`backend/services/eflow_data_mapper.py:827`）在 sqlite 模式下仍会整表 `replace` 写入（报告生成副产品），PG 模式下已明确跳过。新代码**不得**把 eflow.sqlite3 当作 `eflow_tt` 的数据源——读到的是某次报告生成时的快照，会静默过期。
+- **唯一活写源**：`backend/services/eflow/sync_from_eflow_api.py` 的 `sync_from_eflow_api()` 经 `get_raw_connection(str(DB_PATH))`（`:665`）只写主库（sqlite 模式 = `db/app.db`，PG 模式 = `app` schema），覆盖 `eflow_tt` / `eflow_wo` / `eflow_cr` / `eflow_pm` / `eflow_site` / `person`；文件头已声明「不再依赖外部 eflow.sqlite3 中间文件」（`:1-4`）。**读这些表一律读主库。**
+- **`data/eflow/eflow.sqlite3` 的同名表不是同步结果**：它是旧流水线遗留快照 + 报告中间库。`eflow_data_mapper.save_to_sqlite()`（`backend/services/eflow/eflow_data_mapper.py:827`）在 sqlite 模式下仍会整表 `replace` 写入（报告生成副产品），PG 模式下已明确跳过。新代码**不得**把 eflow.sqlite3 当作 `eflow_tt` 的数据源——读到的是某次报告生成时的快照，会静默过期。
 - **告警两表是例外**：`realtime_alarm` / `history_alarm` 由 `eflow_alarm_service` 双写主库与 eflow 副本，页面只读主库；双 schema 下的换表风险与落地写法见上文「新增 upsert 目标前的自检」中的告警段。
 - **物理文件仍有合法读者**（sqlite 模式）：`packet_loss_service` 读其中站点信息（`backend/services/packet_loss_service.py:64`；PG 模式经 `get_raw_connection` 映射到 `eflow` schema），`apps/eflow_Q&A/tools/gen_datadict.py` 用它生成数据字典。删文件或停掉中间库写入前，先处理这两处。
 - 结论出处：`PROJECT_DOCS.md` §2 Phase 0.5 / 0.7（2026-08 查代码闭环，历史档案）；本节是现状固化，后续以本节为准。

@@ -79,7 +79,7 @@
 
 ### EflowFlow（`?page=eflow_flow`）
 - 数字：节点标注 `active_rule_count/rule_count`（`:282`）、KPI「已走步骤」`reached_ids.length`（`:667-669`）、「流程规则」`graph.rules_total`（`:676-678`）、卡头「生效 N / 共 N」（`:750-751`）。
-- 算法（`backend/services/eflow_flow.py`）：规则来自 `ocrule_details` 全表无 WHERE（`_load_rules:250`）；`rule_count`=按 (name,rule_type,trigger_step) 去重且 triggerStep 命中声明列表且 `wo_type==eflow-tt/eflow-wo`（`:574-597`）；`active_rule_count`=`status=="ACTIVE"` 严格大小写（`:598`）；`rules_total=len(rules)` 整表（`:647`）；`reached_ids`：**alarm/create 无条件打点**（`:692-701`）。
+- 算法（`backend/services/eflow/eflow_flow.py`）：规则来自 `ocrule_details` 全表无 WHERE（`_load_rules:250`）；`rule_count`=按 (name,rule_type,trigger_step) 去重且 triggerStep 命中声明列表且 `wo_type==eflow-tt/eflow-wo`（`:574-597`）；`active_rule_count`=`status=="ACTIVE"` 严格大小写（`:598`）；`rules_total=len(rules)` 整表（`:647`）；`reached_ids`：**alarm/create 无条件打点**（`:692-701`）。
 - 已有：无 CalcChainNote/MetricExplain，仅 ECharts 节点 tooltip。
 
 ### NocAnalyst（`?page=noc_analyst`）

@@ -37,8 +37,8 @@ _start_ts = time.time()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.database import get_raw_connection
-from backend.services import task_runner
-from backend.services.task_runner import DB_PATH, _ensure_queue_table
+from backend.services.task import task_runner
+from backend.services.task.task_runner import DB_PATH, _ensure_queue_table
 from backend.task_registry import register_all_tasks, preload_common_deps
 
 logger = logging.getLogger("task_worker")

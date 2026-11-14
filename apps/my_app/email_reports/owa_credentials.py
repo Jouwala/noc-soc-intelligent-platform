@@ -72,7 +72,7 @@ def store_credentials() -> tuple[str, str]:
     """
     _ensure_importable()
     try:
-        from backend.services.credential_store import get_credential
+        from backend.services.credential.credential_store import get_credential
         user, pwd = get_credential(
             "owa_mail", "", "",
             env_user="OWA_USERNAME", env_secret="OWA_PASSWORD",

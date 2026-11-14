@@ -8,7 +8,7 @@
 | `7090` | vite preview（前端） | `0.0.0.0` | `start_hidden.ps1:244` |
 | `5432` | PostgreSQL 16 | 视 `listen_addresses` | 自启脚本用 `pg_ctl` 拉起 |
 | `8787`/`8790` | 实时代理（FMS / VMAX） | **仅 `127.0.0.1`** | backend 启动线程 |
-| `9269` | 网页问答服务（whatsapp-kb-bot） | **仅 `127.0.0.1`** | backend 按需拉起（`services/portal_qa_ctl.py`） |
+| `9269` | 网页问答服务（whatsapp-kb-bot） | **仅 `127.0.0.1`** | backend 按需拉起（`services/portal/portal_qa_ctl.py`） |
 | 无端口 | worker × 10 组（u/n/s/w/v/m/c/x/g/p） | — | `worker_watchdog.py` |
 
 > ⚠️ **7038/7090 与 MTN_Comsal 项目共用**，两套不能同时运行（PROJECT_DOCS.md 局域网章节原文即如此）。端口被占时 `start_hidden.ps1` 会 FAIL 并提示先 `stop.bat` 或加 `-Force`（:166-168）。
@@ -18,7 +18,7 @@
 门户 `/v3/olbrportal/` 右下角的问答挂件走 `POST /api/portal-qa/ask`（`backend/routers/portal_qa.py`），
 后端再转发到本机 `127.0.0.1:9269` 的 whatsapp-kb-bot 问答服务（`Task/whatsapp-kb-bot/src/http-server.js`）。
 
-- **不常驻**：只有第一次 `GET /api/portal-qa/health` 或 `POST .../ask` 时，`backend/services/portal_qa_ctl.py`
+- **不常驻**：只有第一次 `GET /api/portal-qa/health` 或 `POST .../ask` 时，`backend/services/portal/portal_qa_ctl.py`
   才会 `node --env-file-if-exists=.env src/http-server.js` 起它（`CREATE_NO_WINDOW`，不建计划任务）。
   端口活着但 `/health` 不健康时会先杀掉再重起一次。
 - **改了 bot 源码要重启它**：杀掉占用 9269 的 node 进程即可，下一次提问/健康检查会自动重拉
@@ -141,7 +141,7 @@ Select-String -Path log\backend_runtime_*.log -Pattern '任务开始执行|任�
 
 **机制**：my_app 自身没有账号体系，登录链路是
 「门户签发 token → 深链 `?t=` 带进 my_app → my_app **回调门户 `/me`** 校验 → 换 myapp 会话 Cookie」
-（`backend/services/portal_auth.py` 的 `verify_portal_token()`，被 `portal-login` 调用）。
+（`backend/services/portal/portal_auth.py` 的 `verify_portal_token()`，被 `portal-login` 调用）。
 
 这条链的最后一跳要访问门户，地址由 **`UNIPLAM_ME_URL`** 决定，默认值是
 `http://127.0.0.1:9267/uniplam/api/auth/me`（`portal_auth.py:77`）——
@@ -324,7 +324,7 @@ $j | ConvertTo-Json -Depth 6 | Set-Content $p -Encoding UTF8
 **已做的修复**（2026-10-01）：
 
 1. **僵尸自动回收** —— `running` 超过 `STALE_RUNNING_SECONDS`（默认 3600s）未回报的作业
-   允许重新认领；判定口径收敛在 `backend/services/job_staleness.py`，
+   允许重新认领；判定口径收敛在 `backend/services/task/job_staleness.py`，
    **发图源与告警文本源共用**（两者状态机同构，必须同改）。
    阈值必须**远大于**正常发送耗时，否则多实例会重复发同一批告警。
 2. **告警没发出去就吵** —— 有 due 单却一条都没确认发送时，任务产出 `warnings`，
@@ -431,7 +431,7 @@ Node 侧 watcher（`src/qrLogin.js`）读到后**把旧凭据整体改名备份*
 前端每 2s 轮询 `/api/whatsapp/login/status` 并用 `qrcode` 渲染成图片（二维码约 20s 自动轮换）。
 
 - 接口：`GET /api/whatsapp/login/status?device=notify|bot`、`POST /api/whatsapp/login/qr`（服务见
-  `backend/services/whatsapp_login_service.py`、路由 `backend/routers/whatsapp_login.py`）。
+  `backend/services/whatsapp/whatsapp_login_service.py`、路由 `backend/routers/whatsapp_login.py`）。
 - 出码通道文件与 `notify_job.json` 同目录、同条约定；`qr_status.json` 里两个设备各占一个键，互不覆盖。
 - `notify.js` 原先把「隐藏运行时出码」直接 `exit(1)`，现**当本次出码由网页请求触发时不退出**，
   否则计划任务隐藏窗口场景下网页扫码永远走不通。
@@ -1177,7 +1177,7 @@ worker 是多进程（u/n/v/m/c），**导入顺序不受控**，于是"配了 1
 
 > ⚠️ **这条修复当时并未真正生效（2026-10-04 晚发现并修正认知）**：
 > 生效 cron 的真相源有**两个**，数据库 `task_schedule_config.cron` **永远优先**于
-> 代码 `default_cron`（`backend/services/task_runner.py:327` 的三目运算）。
+> 代码 `default_cron`（`backend/services/task/task_runner.py:327` 的三目运算）。
 > 当时数据库里 `sp_online_sync` 仍是旧的 `35 * * * *`，所以**实际仍按小时跑**，
 > 登录频率并没有降下来。详见下面的「调度覆盖」小节。
 > 现在的防线只剩一条真的：`AUTH_TOKEN_TTL=86400`（24 小时）。
@@ -1856,7 +1856,7 @@ HKCU\...\Run      → start_hidden.vbs → start_hidden.ps1 -Quiet
 
 #### 🔴 `_wait_export_ready` 轮询 × 重试 × 并发（已修）
 
-`backend/services/eflow_api_client.py:739` 是"等 eFlow 生成导出文件"的轮询。
+`backend/services/eflow/eflow_api_client.py:739` 是"等 eFlow 生成导出文件"的轮询。
 改前参数 `max_wait=300, interval=10` → **每条管道轮询 30 次**；TT/WO/CR/PM
 **四条管道全部用默认值**（`eflow_data_mapper.py:276,447,484,522`），并且
 `_http_request` 自身还带 `HTTP_MAX_RETRIES=3` 的指数退避重试
@@ -1896,7 +1896,7 @@ HKCU\...\Run      → start_hidden.vbs → start_hidden.ps1 -Quiet
 **生效 cron 的真相源有两个，数据库永远优先**：
 
 ```python
-# backend/services/task_runner.py:327
+# backend/services/task/task_runner.py:327
 saved_cron, saved_enabled = _load_schedule_config(task_id)
 current_cron = saved_cron if saved_cron else default_cron   # ← 数据库赢
 ```
