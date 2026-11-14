@@ -1,0 +1,102 @@
+# PR 合并后回写任务状态：PR 合入 main 后，把对应任务 Issue 的收尾动作
+# 机械化——打 state:merged 标签、摘掉其余 state: 标签、发 PR_MERGED 评论、
+# 关闭 Issue。协议里这一步原本由 Muse 1 手工发（agent-protocol.md 第二
+# 节第 12 类消息），TASK-07 起由本工作流自动执行，评论的机器可读头
+# from 记为 github-actions（自动化执行者），Muse 1 只做最终汇总
+# （dispatch-rules.md 第四节）。
+#
+# 关联 Issue 的解析顺序（取第一个命中）：
+#   1. PR 正文里的 Closes / Fixes / Resolves #N（GitHub 原生关闭关键词，
+#      命中时 Issue 在合并瞬间已被 GitHub 自动关闭，本工作流补标签与评论）；
+#   2. PR 正文里的 agent 消息头 task: #N；
+#   3. 分支名 agent/task-<N>-…。
+# 三者都解析不到 → 只记日志跳过（非任务 PR，如人工提的杂项 PR，不动）。
+#
+# 安全阀：
+#   - 只处理 merged == true 且 base 为 main 的 PR；
+#   - Issue 已关闭且已带 state:merged 时整体跳过，重复触发不重复评论；
+#   - 只动解析出的那一个 Issue，不批量扫其他 Issue。
+
+name: pr-merged-writeback
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  writeback:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 回写任务状态并关闭 Issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/$REPO"
+          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')
+
+          ISSUE_NUMBER="$(echo "$PR_BODY" | grep -ioE '(closes|fixes|resolves)[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' | head -n 1 || true)"
+          if [ -z "$ISSUE_NUMBER" ]; then
+            ISSUE_NUMBER="$(echo "$PR_BODY" | grep -oE 'task:[[:space:]]*#[0-9]+' | grep -oE '[0-9]+' | head -n 1 || true)"
+          fi
+          if [ -z "$ISSUE_NUMBER" ]; then
+            ISSUE_NUMBER="$(echo "$HEAD_REF" | sed -nE 's#^agent/task-([0-9]+)(-|$).*#\1#p' | head -n 1 || true)"
+          fi
+          if [ -z "$ISSUE_NUMBER" ]; then
+            echo "PR #$PR_NUMBER 解析不到关联任务 Issue，跳过回写"; exit 0
+          fi
+          echo "关联任务 Issue：#$ISSUE_NUMBER"
+
+          ISSUE_JSON="$(curl -sS "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER")"
+          ISSUE_STATE="$(echo "$ISSUE_JSON" | jq -r '.state')"
+          ISSUE_LABELS="$(echo "$ISSUE_JSON" | jq -r '.labels[].name')"
+          if [ "$ISSUE_STATE" = "closed" ] && echo "$ISSUE_LABELS" | grep -qx 'state:merged'; then
+            echo "Issue #$ISSUE_NUMBER 已关闭且已回写，跳过"; exit 0
+          fi
+
+          # 摘掉其余 state: 标签（标签名在路径里要 URL 编码）。
+          for LBL in $ISSUE_LABELS; do
+            case "$LBL" in
+              state:merged) ;;
+              state:*)
+                ENC="$(jq -rn --arg v "$LBL" '$v | @uri')"
+                curl -sS -X DELETE "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER/labels/$ENC" > /dev/null || true
+                echo "摘除标签 $LBL"
+                ;;
+            esac
+          done
+
+          # 打上 state:merged。
+          curl -sS -X POST "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER/labels" \
+            --data-binary '{"labels": ["state:merged"]}' > /dev/null
+          echo "已打 state:merged"
+
+          # PR_MERGED 评论（机器可读头 + 人可读正文）。
+          NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          {
+            echo "<!-- agent-msg: PR_MERGED, task: #$ISSUE_NUMBER, from: github-actions, at: $NOW -->"
+            echo "PR_MERGED（自动化回写）：PR #$PR_NUMBER 已合入 main。"
+            echo
+            echo "- 合并提交：\`$MERGE_SHA\`"
+            echo "- 任务状态：state:merged，Issue 随本文关闭"
+            echo "- 说明：本评论由 pr-merged-writeback 工作流自动发出（TASK-07），汇总口径见 dispatch-rules.md 第四节，由 Muse 1 汇总时引用。"
+          } > /tmp/writeback.md
+          jq -n --rawfile body /tmp/writeback.md '{body: $body}' \
+            | curl -sS -X POST "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER/comments" --data-binary @- > /dev/null
+          echo "已发 PR_MERGED 评论"
+
+          # 关闭 Issue（若 GitHub 的 Closes 关键词已先关掉，这里幂等无副作用）。
+          curl -sS -X PATCH "${AUTH[@]}" "$API/issues/$ISSUE_NUMBER" \
+            --data-binary '{"state": "closed", "state_reason": "completed"}' > /dev/null
+          echo "Issue #$ISSUE_NUMBER 已关闭。回写完成。"
