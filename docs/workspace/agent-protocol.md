@@ -91,3 +91,19 @@ state:todo ──(TASK_ACCEPTED)──▶ state:claimed ──(TASK_COMPLETED + 
 - Muse 1 拆分时做文件范围查重：重叠文件范围的任务串行化，高冲突文件强制串行，不并行。
 - 禁直接推 `main`：所有代码走分支 + PR + CI + QA，`auto-merge.yml` 只在 `smoke-passed` + CI 全绿时合并。
 - 分支落后时自动更新分支（`PUT /pulls/{n}/update-branch`），冲突由开发 Agent 自己 rebase 解决，不自动合冲突 PR。
+
+## 七、自动化实现（TASK-07，2026-11-14）
+
+本协议里以下机械动作已由 GitHub Actions 自动执行，实现细节与安全阀见
+`docs/workspace/github-automation.md`：
+
+- 认领（`state:claimed`）后自动建分支、造脚手架提交、开草稿 PR
+  （`issue-to-pr.yml`）——第二节的 PR_CREATED 仍由开发 Agent 在转正式
+  PR 后发，自动化只做脚手架并在 Issue 下留普通评论，不冒充 Agent 消息。
+- CI（quality）失败自动通知 builder（`ci-failure-notify.yml`）——第五节
+  轮询规则的自动补位，只通知、不打标签。
+- main 前进时自动更新落后的 `agent/*` 分支（`auto-merge.yml` 的
+  `update-branches` 作业）——落实第六节的自动更新分支。
+- PR 合并后自动回写任务状态：第 12 类 PR_MERGED 评论由
+  `pr-merged-writeback.yml` 发出（机器可读头 `from: github-actions`），
+  同时打 `state:merged` 并关闭 Issue；Muse 1 只做最终汇总。
