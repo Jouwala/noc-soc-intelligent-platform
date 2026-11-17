@@ -1,4 +1,11 @@
-# 自动合并：CI 全绿 + smoke-passed 标签的 PR 自动合入 main，不经过 Muse、无需人工点批准。
+# 自动合并：CI 全绿 + smoke-passed 标签 + reviewed 标签的 PR 自动合入 main。
+#
+# reviewed 标签由 Muse 1（审阅者/协调者）审完代码后打上；未审的代码不合入。
+# （2026-11-17 补：CI 全绿 + 冒烟通过只证明“能跑”，不证明“代码没问题”；
+# 此前 #109/#110/#112/#113/#114/#115/#117 均在无人审代码的情况下合入，
+# 审核缺失，故补此关口。标签用 GitHub API 或网页打，不经过审批卡。
+# 注意：GitHub 不允许作者批自己的 PR，且全部 PR 均属 Jouwala 同一身份，
+# 故不用“要求审批”而用标签作审核关口。）
 #
 # 冒烟结果由 D:\02 本机 smoke-watcher 贴回：它在 D:\02 冒烟通过后贴评论并给该 PR 打 smoke-passed 标签
 # （标签需先在仓库里建好；打标签用 GitHub API 或网页，不经过 Muse）。
@@ -10,6 +17,10 @@
 # 安全阀：
 #   - 只合 base 为 main、未关闭、非草稿的 PR；
 #   - 有 do-not-merge 标签的一律不合；
+#   - 必须有 reviewed 标签：Muse 1 审完代码后打上，没有该标签一律不合
+#     （2026-11-17：CI 全绿 + 冒烟通过只证明“能跑”，不证明“代码没问题”；
+#     此前 #109/#110/#112/#113/#114/#115/#117 均在无人审代码的情况下合入，
+#     审核缺失，故补此关口）；
 #   - smoke-passed 必须绑定当前 head SHA（TASK-06-A #48）：watcher 冒烟通过时
 #     在 PR 报告评论首行留机器可读标记
 #     <!-- smoke-result: pr-<N> sha-<40位SHA> result=passed -->，
@@ -150,6 +161,7 @@ jobs:
             if [ "$DRAFT" = "true" ]; then echo "草稿，跳过"; continue; fi
             if [ "$BASE" != "main" ]; then echo "目标分支不是 main，跳过"; continue; fi
             if ! has_label 'smoke-passed'; then echo "没有 smoke-passed 标签，跳过"; continue; fi
+            if ! has_label 'reviewed'; then echo "没有 reviewed 标签（Muse 1 未审代码），跳过"; continue; fi
             if has_label 'do-not-merge'; then echo "有 do-not-merge 标签，跳过"; continue; fi
 
             # smoke-passed 的 SHA 绑定校验（TASK-06-A #48）：标签本身不带 SHA，
