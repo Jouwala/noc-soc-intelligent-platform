@@ -386,6 +386,32 @@ def test_issue_event_dispatches_without_pr(fake: FakeGitHub) -> None:
     comments = fake.comments_for(7)
     assert len(comments) == 1
     assert "TASK_ASSIGNED" in comments[0]
+    # 发现 1（PR #127 审核）：Issue 路径的 intro 必须是即时分派文案，
+    # 不能出现并不存在的 "PR #0"。
+    assert "新 Issue 创建 / 依赖 Issue 关闭，触发即时分派" in comments[0]
+    assert "PR #0" not in comments[0]
+
+
+def test_issue_event_then_schedule_does_not_dispatch_twice(fake: FakeGitHub) -> None:
+    """跨来源不重复分派：issues 先派，定时巡检后轮只对账不重派。"""
+    fake.seed_ready_issue(7)
+    first = run_from_env({"REPO": fake.repo, "EVENT": "issues"}, client=fake)
+    assert first["status"] == "dispatched"
+    second = run_from_env({"REPO": fake.repo, "EVENT": "schedule"}, client=fake)
+    assert second["status"] == "no-ready"
+    assert len(fake.refs_with_prefix(CRON_REF_PREFIX)) == 0
+    assert len(fake.markers(7, ASSIGNED)) == 1
+
+
+def test_schedule_then_issue_event_does_not_dispatch_twice(fake: FakeGitHub) -> None:
+    """跨来源不重复分派（反向）：定时先派，Issue 事件后轮只对账不重派。"""
+    fake.seed_ready_issue(7)
+    first = run_from_env({"REPO": fake.repo, "EVENT": "schedule"}, client=fake)
+    assert first["status"] == "dispatched"
+    second = run_from_env({"REPO": fake.repo, "EVENT": "issues"}, client=fake)
+    assert second["status"] == "no-ready"
+    assert len(fake.refs_with_prefix(ISSUE_REF_PREFIX)) == 0
+    assert len(fake.markers(7, ASSIGNED)) == 1
 
 
 def test_issue_event_without_ready_issue_only_logs(fake: FakeGitHub) -> None:

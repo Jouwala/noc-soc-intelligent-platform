@@ -271,6 +271,11 @@ def build_assignment_comment(
             f"任务已自动分派：定时巡检（每小时 :17）发现就绪任务，"
             f"{agent_name} 当前空闲，本任务自动派给 {agent_name}。\n\n"
         )
+    elif reason == "issues":
+        intro = (
+            f"任务已自动分派：新 Issue 创建 / 依赖 Issue 关闭，触发即时分派，"
+            f"{agent_name} 当前空闲，本任务自动派给 {agent_name}。\n\n"
+        )
     else:
         intro = (
             f"任务已自动分派：PR #{pr_number} 合并后，{agent_name} 空闲，"
@@ -462,7 +467,10 @@ def dispatch_scheduled(
     已登记的 ref，只对账不再发第二条评论。
     """
     sha = client.get_branch_sha("main")
-    print(f"[dispatch] {event_name}：main HEAD {sha[:12]}", flush=True)
+    event_label = {"schedule": "定时巡检", "issues": "Issue 事件"}.get(
+        event_name, event_name
+    )
+    print(f"[dispatch] {event_label}：main HEAD {sha[:12]}", flush=True)
     allowed = tuple(builders) if builders is not None else load_builders()
     print(f"[dispatch] 分派白名单：{', '.join(allowed)}", flush=True)
     ready = collect_ready(client, builders=allowed)
