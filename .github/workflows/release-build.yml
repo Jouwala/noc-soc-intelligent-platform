@@ -135,16 +135,30 @@ jobs:
       - name: 构建 ZIP
         run: node ops/deploy/build-zip.mjs --mode full --platform "${{ matrix.platform }}" --version "${{ steps.version.outputs.version }}" --out zip-dist
 
-      - name: 校验 ZIP（可解压 + build-info 合法）
+      - name: 校验 ZIP（可解压 + build-info 合法 + 最小化门禁）
         run: |
           python - <<'PY'
           import glob, json, zipfile
           z = glob.glob('zip-dist/*.zip')[0]
-          bad = zipfile.ZipFile(z).testzip()
+          zf = zipfile.ZipFile(z)
+          bad = zf.testzip()
           assert bad is None, bad
-          info = json.loads(zipfile.ZipFile(z).read('build-info.json'))
+          info = json.loads(zf.read('build-info.json'))
           assert info['version'] and info['commit'] and info['commit'] != 'unknown', info
-          print('ZIP 校验通过:', z, info['version'], info['commit'][:7])
+          assert info.get('copy_role') == 'isolated', info
+          names = set(zf.namelist())
+          # 解压后必须能直接 start：标记 + 安装说明 + 前端产物
+          for must in ['ISOLATED_COPY.flag', '安装与运行说明.md',
+                       'apps/_fe_dist/index.html', 'apps/portal/dist/index.html']:
+              assert must in names, f'缺 {must}'
+          # 最小化：开发资产 / 运行期缓存一律不许出现（白名单外的第二道闸）
+          forbidden = ['.github/', '.claude/', '.githooks/', '.agent-work/', '.workbuddy-ai/',
+                       'docs/', 'apps/my_app/tests/', 'apps/my_app/docs/', 'apps/portal/src/',
+                       'apps/my_app/backend/services/cn_ems/_pmcache/']
+          hit = sorted(n for n in names for p in forbidden if n.startswith(p))
+          assert not hit, f'不该进包: {hit[:10]}'
+          assert not any(n.endswith('.db') or n.endswith('.sqlite3') for n in names), '数据库文件不该进包'
+          print('ZIP 校验通过:', z, info['version'], info['commit'][:7], f'条目 {len(names)}')
           PY
 
       - uses: actions/upload-artifact@v4
@@ -169,13 +183,32 @@ jobs:
           产物：${ZIP_NAME}
           SHA256：${SHA_HEX}
 
-          校验（Windows PowerShell）：
-          Get-FileHash -Algorithm SHA256 ${ZIP_NAME}
-          校验（Linux）：
-          sha256sum -c ${ZIP_NAME}.sha256
+          ## 这个包是什么
 
-          升级前请备份外部数据目录，并读 docs/workspace/部署说明.md；首次启动流程见 Phase 0 报告 §6.7。
-          运行时 ZIP（Python/Node/PG/nginx）另行发布，见 runtime-build 工作流。
+          离线可运行的 NOC/SOC 平台（应用包）。**非必要文件不进包**：不含 CI 配置、
+          agent 笔记、git 钩子、测试、开发手册与运行期缓存；只保留运行所需源码、
+          预构建前端、node_modules、Python wheels、启停脚本与《安装与运行说明》。
+
+          ## 下载后怎么装
+
+          1. 同时下载**同版本**的运行时包 noc-soc-runtime-<版本>-<平台>.zip；
+          2. 应用包与运行时包解压到**同一个目录**（运行时解压到 runtime/ 下），
+             路径不要含中文/空格；
+          3. 装 Python 依赖（离线）：
+             runtime/python312/python.exe -m pip install --no-index --find-links wheels -r apps/my_app/requirements.lock.txt
+          4. 生成自签证书：
+             runtime/python312/python.exe ops/deploy/make-selfsigned-cert.py
+          5. 双击 start.bat；打开 http://localhost:8080/uniplam/ ；
+          6. 首次登录：用户名 admin，初始密码 Admin@12345（**强制改密**）。
+
+          完整步骤、Linux 安装、升级与排障见包根目录的《安装与运行说明.md》。
+
+          ## 校验
+
+          Windows：Get-FileHash -Algorithm SHA256 ${ZIP_NAME}
+          Linux：sha256sum -c ${ZIP_NAME}.sha256
+
+          运行时 ZIP（Python/Node/PG/nginx）由 runtime-build 工作流单独发布。
           EOF
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release upload "${TAG}" zip-dist/* --clobber

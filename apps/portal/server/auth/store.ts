@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createAuthPersistence, type AuthPersistence, type StorageInfo } from '../authDb';
 import { hashPassword, verifyPassword, newId, newSessionToken, newResetToken, hashResetToken } from './password';
@@ -39,11 +38,21 @@ import {
 //    （<dataDir>/portal-auth.db，WAL + 单事务 + 自动滚动备份），老数据首次启动
 //    自动从 users.json / requests.json 迁移；无 node:sqlite 时回退 JSON 文件存储。
 //  - 会话仅存内存：随机 token，12h 滑动续期，服务重启后需重新登录
-//  - 首次启动自动播种 admin（随机密码，控制台打印，强制首次改密）
+//  - 首次启动自动播种 admin（默认密码，控制台不打印明文，强制首次改密）
 //  - 登录失败限流：同来源连续失败 10 次锁 60s
 //
 // 本文件只有状态与业务规则，不含 HTTP 分发（那是 routes.ts）与调用者解析（guard.ts）。
 // ============================================================================
+
+/**
+ * 默认初始管理员密码 —— 只在「全新数据目录第一次播种」时使用。
+ *
+ * ⚠ 修改这里必须同步三处：`安装与运行说明.md`「首次登录」、`ops/deploy/env_template.txt`
+ * 的 `PORTAL_INITIAL_ADMIN_PASSWORD` 注释、门户文档 `docs/development.md` 的鉴权小节。
+ * 首次登录会强制改密（mustChangePassword），所以它只是「让新机器能进得去」的跳板，
+ * 不是长期口令；交付方可把它写进目标机 .env 覆盖成自己的值。
+ */
+export const DEFAULT_INITIAL_ADMIN_PASSWORD = 'Admin@12345';
 
 export class AuthStore {
   private users: StoredUser[] = [];
@@ -65,8 +74,31 @@ export class AuthStore {
     return this.persistence;
   }
 
+  /**
+   * 首次启动播种管理员账号。
+   *
+   * 2026-11-19（发布包交付）：初始密码从「每次随机 + 写文件」改为**可配置的默认密码**。
+   *
+   * 为什么改：旧行为是随机密码写进 `auth-data/initial-admin-password.txt`，安装文档
+   * 只能说「去那个文件里找」——目标机没有运维人员时，这一步经常变成「打不开、没账号」。
+   * 现在：
+   *   1. `PORTAL_INITIAL_ADMIN_PASSWORD` 有值时用它（写在部署根 .env，由启动器导出）；
+   *   2. 否则用 `DEFAULT_INITIAL_ADMIN_PASSWORD`（安装说明里写明）；
+   *   3. 仍然 `mustChangePassword: true` —— 首次登录**强制改密**，改完才进系统；
+   *   4. 仍然把当前密码写进 `initial-admin-password.txt`（600），改完提示删除。
+   *
+   * 安全边界：`auth-data/` 不进发布包（每条机器各自播种）；默认密码只对「尚未
+   * 部署过的新机器」有效，已有的 portal-auth.db 不会被覆盖。请在首次登录后立即改密，
+   * 或用 env 指定一个只有交付双方知道的值。
+   */
   private seedAdmin(): void {
-    const password = crypto.randomBytes(9).toString('base64url');
+    const fromEnv = (process.env.PORTAL_INITIAL_ADMIN_PASSWORD || '').trim();
+    const password = fromEnv.length >= MIN_PASSWORD_LENGTH ? fromEnv : DEFAULT_INITIAL_ADMIN_PASSWORD;
+    if (fromEnv && fromEnv.length < MIN_PASSWORD_LENGTH) {
+      console.warn(
+        `[auth] PORTAL_INITIAL_ADMIN_PASSWORD 短于 ${MIN_PASSWORD_LENGTH} 位，已忽略并使用默认初始密码。`
+      );
+    }
     const admin: StoredUser = {
       id: newId(),
       username: 'admin',
@@ -89,7 +121,11 @@ export class AuthStore {
         { encoding: 'utf-8', mode: 0o600 }
       );
       console.warn(
-        `[auth] 已创建初始管理员 admin。初始密码已写入：${pwdFile}（首次登录强制改密，改完请删除该文件）。为安全起见不再向控制台/日志输出明文口令。`
+        `[auth] 已创建初始管理员 admin。初始密码已写入：${pwdFile}（首次登录强制改密，改完请删除该文件）。` +
+          (fromEnv
+            ? '本次密码来自 PORTAL_INITIAL_ADMIN_PASSWORD。'
+            : '本次使用默认初始密码（见《安装与运行说明》「首次登录」一节），请登录后立即修改。') +
+          '为安全起见不再向控制台/日志输出明文口令。'
       );
     } catch {
       // 写文件失败时也不打印明文；提示操作者可重置密码或查看数据目录。

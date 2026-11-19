@@ -60,6 +60,23 @@ PORTAL_HOST=127.0.0.1
 PORTAL_AUTH_DATA_DIR=
 PORTAL_DEFAULT_FILE=
 
+# ---- 首次登录（管理员账号） ---------------------------------------------------
+# 空库第一次启动时门户会播种 admin 账号。默认密码是 Admin@12345（见
+# 《安装与运行说明.md》「首次登录」一节），首次登录**强制改密**。交付方可以在这里
+# 改成自己的值（至少 8 位）；改完请重启门户（start.bat）才生效。
+# 已有 portal-auth.db 的机器不会重新播种，这里改了也不影响既有账号。
+PORTAL_INITIAL_ADMIN_PASSWORD=
+
+# ---- 解释器覆盖（没有配套 runtime ZIP 时用系统安装的组件）---------------------
+# 默认一律用 <副本根>\runtime\ 下的 python312 / node / postgresql16，nginx 按
+# <根>\nginx-1.28.0\ 再 <根>\runtime\nginx-1.28.0\ 的顺序找。
+# 目标机改用系统安装的 Python / Node / PG 时，把下面几项填成绝对路径；不填则维持默认。
+# 填了 NOC_PYTHON_EXE 后，Python 依赖要装到该解释器：
+#   <NOC_PYTHON_EXE> -m pip install --no-index --find-links wheels -r apps\my_app\requirements.lock.txt
+# NOC_PYTHON_EXE=C:\Python312\python.exe
+# NOC_NODE_EXE=C:\Program Files\nodejs\node.exe
+# NOC_PG_BIN=C:\Program Files\PostgreSQL\16\bin
+
 # ---- 问答助手 / WhatsApp bot 的模型服务 -------------------------------------
 # ⚠ 挂件真正用的是 QA_OWU_BASE，**不是** CHAT_BASE_URL ——
 #   http-server.js:113-125 的 pinOwu() 会覆写 RUNTIME_CONFIG.chatBaseUrl，
