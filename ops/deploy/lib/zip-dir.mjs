@@ -11,7 +11,10 @@
  * 与 libpython3.12.so 等）天生带大量符号链接；解引用会破坏相对路径解析
  * （如 npm-cli.js 用 require('../lib/cli.js')，存成 bin/npm 后路径失效，
  * 2026-11-19 实测）。目标是目录或断链时仍报错。文件权限位按磁盘保留
- * （有任一执行位 → 0o755，否则 0o644；.sh 恒为 0o755），否则解压出的
+ * （有任一执行位 → 0o755，否则 0o644；.sh 恒为 0o755；带 shebang（#!）
+ * 的文件也按 0o755——Windows 没有 POSIX 执行位，chmod 755 落不了盘、
+ * stat 的执行位恒为 0，不认 shebang 会把脚本打成 0o644，release-build
+ * Run 44561485336 win-x64 即因此失败），否则解压出的
  * python/nginx/pg 二进制不可执行。注意：Python zipfile 解包不还原符号
  * 链接（会解成含目标路径的普通文件），须用 unzip / bsdtar 解包。
  */
@@ -20,9 +23,14 @@ import { lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, statSync
 import { dirname, join, resolve } from 'node:path'
 import { writeZip } from './zip-writer.mjs'
 
-function modeOf(st, rel) {
+function modeOf(st, rel, data) {
   if (rel.endsWith('.sh')) return 0o755
-  return (st.mode & 0o111) !== 0 ? 0o755 : 0o644
+  if ((st.mode & 0o111) !== 0) return 0o755
+  // Windows 没有 POSIX 执行位：chmod 755 落不了盘，stat 的执行位恒为 0。
+  // 带 shebang（#!）的是可执行脚本，按 0o755 入包，否则 Windows 打出
+  // 的包解压后脚本不可执行（release-build Run 44561485336 win-x64 失败）。
+  if (data && data.length >= 2 && data[0] === 0x23 && data[1] === 0x21) return 0o755
+  return 0o644
 }
 
 function main() {
@@ -55,7 +63,8 @@ function main() {
         entries.push({ path: `${rel}/`, data: Buffer.alloc(0), mode: 0o755, dir: true })
         walk(abs, rel)
       } else if (st.isFile()) {
-        entries.push({ path: rel, data: readFileSync(abs), mode: modeOf(st, rel), dir: false })
+        const data = readFileSync(abs)
+        entries.push({ path: rel, data, mode: modeOf(st, rel, data), dir: false })
       }
     }
   }
