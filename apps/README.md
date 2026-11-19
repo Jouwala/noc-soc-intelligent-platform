@@ -1,6 +1,6 @@
 # apps — 子系统目录
 
-本仓库的四个子系统都在这里，彼此是**平级目录**，不要再往根上加子系统。
+本仓库的子系统都在这里，彼此是**平级目录**，不要再往根上加子系统。
 
 | 目录 | 是什么 | 技术栈 | 文档入口 |
 | --- | --- | --- | --- |
@@ -8,6 +8,10 @@
 | `apps/portal/` | Liberia NOC/SOC 数据看板统一门户 | React 19 + Vite + Tailwind v4 | `apps/portal/docs/AGENTS.md`、`apps/portal/README.md` |
 | `apps/whatsapp-kb-bot/` | WhatsApp 知识库问答 bot | Node | `apps/whatsapp-kb-bot/docs/` |
 | `apps/eflow_Q&A/` | eFlow 知识库（问答/排障文档，含 `tools/inspect_tt.py`） | Markdown + Python | `apps/eflow_Q&A/README.md` |
+| `apps/agent-worker/` | 多 worker 任务执行器（认领、租约、心跳、取消） | Python | `docs/workspace/agent-protocol.md` |
+| `apps/control-plane/` | 多 worker 中央调度器（任务权威状态） | Python | `docs/workspace/agent-protocol.md` |
+| `apps/Site_outage/` | 掉站相关运行时脚本与浏览器会话 | Python / JS | 目录内 |
+| `apps/_fe_dist/` | my_app 前端构建产物（线上服务目录，不入库、不可删） | — | 见下 |
 
 ## 目录边界（硬性，见 `docs/adr/0001-directory-boundaries.md`）
 
@@ -19,12 +23,15 @@
   `eflow_Q&A`」，`main.py` 启动时还会预热其中的 `tools/inspect_tt.py`。
 - `_fe_dist` **必须在 `my_app` 的上一级**（即 `apps/_fe_dist`）。`vite.config.ts`
   的 `outDir` 是 `../../_fe_dist`，后端 `main.py` 是「向上 3 级 / `_fe_dist`」。
-  构建产物不入库（见根 `.gitignore`），02 里没有这个目录时不要为搬家去建空目录。
+  构建产物不入库（见根 `.gitignore`），但**本树已存在且是线上服务目录**（nginx 直接 alias），
+  不要删、不要为「干净」建空目录。
 - 相对关系总表见 `docs/architecture/module-map.md`；`ops/quality/check_all.ps1`
   第 9 步会断言这三处相对关系。
 
-## 启动（硬性，见 `docs/adr/0002-copy-isolation.md`）
+## 启动（硬性，见 `docs/adr/0003-production-vs-isolated-markers.md`）
 
-- 02 隔离副本**禁止**运行 `apps/my_app/start_hidden.ps1` 和同目录的 `start.bat`
-  （那是生产启动脚本）。隔离启动只走 `ops/deploy/start_all.ps1`。
+- **本仓库就是生产（根有 `PRODUCTION.flag`）**：启停走根 `start.bat` / `stop.bat` →
+  `ops/deploy/portal-ctl.ps1`，它经三个自愈任务调用 `apps/my_app/start_hidden.ps1`
+  与 `apps/portal/start_hidden.ps1`。不要绕过任务链手工起进程。
+- 隔离副本 / 冒烟 runner 才用 `ops/deploy/start_all.ps1`；它在生产树上会直接 throw。
 - 不要把 `apps/my_app/start_hidden.ps1` 之类的生产启动脚本搬到 `ops/deploy`。

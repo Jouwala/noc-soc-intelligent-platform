@@ -36,7 +36,9 @@ def _rows_as_dicts(cursor):
     cols = [d[0] for d in cursor.description]
     return [dict(zip(cols, r)) for r in cursor.fetchall()]
 
-BATT_DB_PATH = Path(r"d:\01_RPA\Task\my_app\data\battery\battery_kpi.sqlite3")
+# 路径按仓库位置推导（2026-11-19 收口）：此前写死 d:\01_RPA\Task\my_app，换机/换目录即读到旧树，
+# 与写库方 backend/services/battary_kpi_fetch/battery_kpi_service.py 的 BATT_DATA_DIR 对齐。
+BATT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "battery" / "battery_kpi.sqlite3"
 
 # 默认阈值（实际以库中 battery_meta 为准，任务写入时会覆盖）
 DEFAULTS = {

@@ -13,8 +13,7 @@ cd D:\02_olbr_portal
 powershell -NoProfile -File ops\quality\check_all.ps1
 ```
 
-完整顺序（9 步）以脚本内注释与《NOC-SOC-Intelligent-Platform最终重构执行方案》
-第 7 节批 E 为准：目录与角色标记（`PRODUCTION.flag` / `ISOLATED_COPY.flag` 二选一，
+完整顺序（9 步）以脚本内注释为准：目录与角色标记（`PRODUCTION.flag` / `ISOLATED_COPY.flag` 二选一，
 两个都在或都不在都拒绝执行）→ `.env` 端口（仅隔离副本）→ 被跟踪文件
 无凭据/数据库 → compileall → ruff → 门户 lint/test → 门户文档守卫 →
 my_app 文档一致性守卫 → 路径断言。第 6 到 8 步在依赖或基线还没准备好时可以

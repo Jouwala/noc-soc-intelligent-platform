@@ -1,6 +1,7 @@
 # 模块地图
 
-> 依据：《NOC-SOC-Intelligent-Platform最终重构执行方案》第 3.1–3.3 节（已核实的现状）。
+> 依据：第一轮重构后的实际目录（2026-11 已核实）。原《最终重构执行方案》已删除，
+> 本文件与代码是现状真相源。
 > 本文件只写相对关系，不写绝对盘符；工作区根在 Windows 02 上是 `D:\02_olbr_portal`。
 
 ## 目录总览
@@ -12,9 +13,13 @@
 │   ├── portal/            # 统一门户（React + Vite + Node 鉴权服务）
 │   ├── whatsapp-kb-bot/   # WhatsApp 知识库问答 bot（Node）
 │   ├── eflow_Q&A/         # eFlow 知识库（Markdown + Python）
+│   ├── agent-worker/      # 多 worker 任务执行器
+│   ├── control-plane/     # 多 worker 中央调度器
+│   ├── Site_outage/       # 掉站相关运行时脚本与浏览器会话
 │   └── _fe_dist/          # my_app 前端构建产物（不入库，运行时服务目录）
 ├── docs/
 ├── ops/
+├── nginx-1.28.0/          # 本机生产 nginx（不入库）
 └── runtime/               # 捆绑运行时（不入库，见 runtime/README.md）
 ```
 
@@ -51,16 +56,18 @@
 - 后端 `apps/my_app/backend/main.py` 是「向上 3 级 / `_fe_dist`」
   （`frontend_dist = Path(__file__).parent.parent.parent / "_fe_dist"`）。
 - 两处对齐，构建产物不入库（根 `.gitignore` 已排除 `apps/_fe_dist/`）。
-  02 里如果还没有这个目录，不要为了搬家去创建空目录；构建后核对它落在
-  `apps/_fe_dist`，防止写进 01 或 RPA。
+  构建后核对它落在 `apps/_fe_dist`，防止写进 01 或 RPA。本树该目录**已存在**，
+  是线上服务目录（`nginx.conf` 直接 alias），不要删、不要为了「干净」重建空目录。
 - `nginx.conf` 用 alias 从磁盘直接读它，不经任何构建步骤；忽略跟踪 ≠ 可以删除。
 
 ## 启动禁令
 
-- 02 **禁止**运行 `apps\my_app\start_hidden.ps1` 和同目录的 `start.bat`
- （那是生产启动脚本，误跑会打断正在看数据的人）。
-- 隔离启动只走 `ops\deploy\start_all.ps1`（方案第 8.3 节）；启动前确认调度器
-  关闭、WhatsApp bot 关闭、`.env` 是 02 的隔离配置，不是从 01 拷来的那份。
+- **生产**（本树，根有 `PRODUCTION.flag`）启停走根 `start.bat` / `stop.bat` →
+  `ops\deploy\portal-ctl.ps1`；它会经三个自愈任务调用 `apps\my_app\start_hidden.ps1`，
+  不要手工绕过任务链直接起进程。误停会打断正在看数据的人。
+- **隔离副本 / 冒烟副本**启动只走 `ops\deploy\start_all.ps1`；它在生产树上会直接 throw
+  （根有 `PRODUCTION.flag` 时）。启动前确认调度器关闭、WhatsApp bot 关闭、
+  `.env` 是隔离配置，不是从 01 拷来的那份。
 - 不要把 `apps/my_app/start_hidden.ps1` 之类的生产启动脚本搬到 `ops/deploy`。
 
 ## 校验

@@ -1573,7 +1573,8 @@ def _load_site_kpis(site_id: str, site_detail: dict, days: int = 60) -> dict:
                     cols = [d[0] for d in cur.description]
                     rows = [dict(zip(cols, r)) for r in cur.fetchall()]
             else:
-                pl_path = Path(r"d:\01_RPA\Task\my_app\data\packet_lost\lte_pl.sqlite3")
+                # 按仓库位置推导（2026-11-19 收口）：写库方 packet_loss_service.py 用的是本树 data/packet_lost。
+                pl_path = Path(__file__).resolve().parents[2] / "data" / "packet_lost" / "lte_pl.sqlite3"
                 if not pl_path.exists():
                     result["warnings"].append("loss_source_missing")
                 else:

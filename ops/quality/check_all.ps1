@@ -1,6 +1,6 @@
-﻿# check_all.ps1 — 02 隔离副本离线质量检查（完整版，第一轮重构批 E）
+# check_all.ps1 — 02 离线质量检查（完整版；原第一轮重构批 E 定稿）
 #
-# 顺序见《NOC-SOC-Intelligent-Platform最终重构执行方案》第 7 节批 E。
+# 步骤顺序见下方「步骤」清单（原《最终重构执行方案》已删除，本脚本自述为准）。
 # 同一份检查也在 CI 里跑（.github/workflows/quality.yml，windows-latest）。
 #
 # 用法（必须在 D:\02_olbr_portal 根目录运行；不在 01、不在 RPA 里跑）：

@@ -27,7 +27,8 @@ def _rows_as_dicts(cursor):
 
 router = APIRouter(prefix="/api/packet-loss-dashboard", tags=["packet-loss-dashboard"])
 
-PL_DB_PATH = Path(r"d:\01_RPA\Task\my_app\data\packet_lost\lte_pl.sqlite3")
+# 路径按仓库位置推导（2026-11-19 收口）：写库方 packet_loss_service.py 用的是本树 data/packet_lost。
+PL_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "packet_lost" / "lte_pl.sqlite3"
 
 STATUS_ORDER = ["Critical[>5]", "Major[1-5]", "Minor[0.5-1]", "Warning[0.1-0.5]", "No Packet loss[<0.1]"]
 

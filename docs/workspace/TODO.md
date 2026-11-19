@@ -80,7 +80,7 @@
       `apps/my_app/TMP/_eflow_reconcile_deleted_20261116.csv`、`_eflow_deleted_{tt,wo,cr}_full_20261116.csv`（TMP 已 gitignore）。
       **待办**：运行中的 `n` 组 worker 仍持有旧模块，需在该组空闲时重启一次，每日 08:00 的 `eflow_sync_full` 才会带对账删除：
       ```
-      cd D:\01_RPA\Task\my_app
+      cd D:\02_olbr_portal\apps\my_app
       python restart_workers.py --groups n --reason "使 eFlow 对账删除生效"
       ```
       回滚手段：`EFLOW_RECONCILE_DELETE=0`（零改码关闭）、或 revert 本次提交。

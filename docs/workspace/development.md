@@ -310,43 +310,48 @@ foreach ($r in $roots) {
 
 ### D. 部署相关
 
-> ⭐ **工作区 / 隔离副本 ≠ 生产**
+> ⭐ **本树就是生产（2026-11-18/19 起）**
 >
 > | | 路径 | 角色 |
 > | --- | --- | --- |
-> | 工作区 / 隔离副本 | `D:\02_olbr_portal` | 改代码的地方（git 仓库 / 文档 / 守卫），也是隔离运行的副本 |
-> | 生产 | `D:\01_olbr_portal` | **实际跑起来的地方**（80/443/7038/7090/9267/5432）。本轮重构不动。 |
+> | 生产 | `D:\02_olbr_portal` | **实际跑起来的地方**（80/443/7038/7090/9267/5432），也是改代码、文档、跑守卫的地方 |
+> | 回退目标（已退役） | `D:\01_olbr_portal` | 切生产前的旧线，只有 `ops\deploy\cutover\rollback-to-01.ps1` 会碰它 |
 >
-> **改完在 `D:\02_olbr_portal` 做完，按 `ops\deploy\README.md` 隔离启动验证；生产本轮不动。**
+> **改完在 `D:\02_olbr_portal` 验证：重建前端 + 重启后端 + 读 live OpenAPI 对照源码；冒烟在项目内 `.smoke` 副本跑，不要在生产树跑 `start_all.ps1`。**
 
-#### D0. 隔离部署（02 副本，不再走主仓库同步）
+#### D0. 生产自检与隔离副本
 
-> ⚠ 从主仓库（`D:\01_RPA`）来的同步已随第一轮重构批 C 停用：根 `sync-now.bat` 已删除，`ops\deploy\sync-engine.mjs` / `sync-policy.mjs` 只保留备查，`sync_from_main.ps1` 禁止对这个新目录跑。不要在这里恢复同步入口。详见 `ops\deploy\README.md`「已停用」一节。
+生产启停走 `ops\deploy\portal-ctl.ps1`（根 `start.bat` / `stop.bat` 按 `PRODUCTION.flag` 分流到它）；
+隔离副本（打包机 / 冒烟 runner）才走 `ops\deploy\start_all.ps1`，端口 nginx 8080/8443、
+my_app 后端 7039 / 前端 7091、门户 9277、PG 55432。
 
-隔离启动只走 `ops\deploy\start_all.ps1`（方案第 8.3 节）：
+在生产树上验证一次改动：
 
 ```powershell
 cd D:\02_olbr_portal
-powershell -NoProfile -ExecutionPolicy Bypass -File ops\deploy\start_all.ps1
+# 1) 重建前端（my_app 产物落 apps\_fe_dist，门户落 apps\portal\dist）
+cd apps\my_app\frontend; npm run build
+cd ..\..\apps\portal; npm run build
+# 2) 由人显式重启后端（不要打断值班看数据），或走 portal-ctl.ps1 -Action restart
+# 3) 读 live OpenAPI，与源码路由/参数对照；不一致就是 split-brain
+Invoke-RestMethod http://127.0.0.1:7038/openapi.json
 ```
-
-启动前确认：调度器关闭，WhatsApp bot 关闭，`.env` 是 02 的隔离配置。端口：nginx 8080/8443、my_app 后端 7039 / 前端 7091、门户 9277、PG 55432。
 
 改完验证两步（重建 + 校验）：
 
 | 步 | 做什么 | 校验点 |
 | --- | --- | --- |
-| 1 | 在副本里重建前端产物（my_app + 统一门户） | `tsc` 与 `vite build` 的**退出码**（不看 stderr —— vite 的进度条走 stderr，PS 5.1 会把它当成错误） |
-| 2 | 校验「副本真的在跑新代码」 | 读 live `/openapi.json`（7039），与副本源码的路由/参数对照；不一致直接点名 `SPLIT-BRAIN` |
+| 1 | 重建前端产物（my_app + 统一门户） | `tsc` 与 `vite build` 的**退出码**（不看 stderr —— vite 的进度条走 stderr，PS 5.1 会把它当成错误） |
+| 2 | 校验「线上真的在跑新代码」 | 读 live `/openapi.json`（7038），与源码的路由/参数对照；不一致直接点名 `SPLIT-BRAIN` |
 
-> **脚本不自动重启服务** —— 重启会打断正在看数据的人（`../AGENTS.md` 第四节第 6 条）。
+> **不要自动重启** —— 重启会打断正在看数据的人（`../AGENTS.md` 第四节第 6 条）。
 > 第 2 步会明确告诉你「后端需要重启才生效」，那时再由人显式重启。
 
 #### D0.1. 手工步骤（脚本不可用时的等价流程）
 
-1. **重建前端**：在副本里 `cd apps\my_app\frontend` → `npm run build`（产物落 `apps\_fe_dist`）；门户 `cd apps\portal` → `npm run build`
+1. **重建前端**：在生产树里 `cd apps\my_app\frontend` → `npm run build`（产物落 `apps\_fe_dist`）；门户 `cd apps\portal` → `npm run build`
 2. **重启后端**：后端是常驻进程，源码换了不会自动生效
-3. **校验**：读 live `/openapi.json`（7039），与副本源码的路由/参数对照；不一致就是 split-brain
+3. **校验**：读 live `/openapi.json`（7038），与源码的路由/参数对照；不一致就是 split-brain
 
 > ⚠ **第 2 步最容易被忘**。2026-11-11 实测 split-brain：前端 chunk 已含 `col_filters`，
 > 而 live 后端的 `/api/tables/{t}/data` OpenAPI 参数里**没有** `col_filters`、也没有
@@ -356,10 +361,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ops\deploy\start_all.ps1
 #### D0.2. 排查线上问题前：先确认「跑的是哪棵树的代码」
 
 ```powershell
-# 后端跑的是哪棵树：看日志目录谁在被写
-Get-ChildItem 'D:\02_olbr_portal\apps\my_app\log\backend_runtime_*.log','D:\01_olbr_portal\Task\my_app\log\backend_runtime_*.log' |
+# 后端跑的是哪棵树：看日志目录谁在被写（现在只应有 02 这一棵）
+Get-ChildItem 'D:\02_olbr_portal\apps\my_app\log\backend_runtime_*.log' |
   Sort-Object LastWriteTime -Descending | Select-Object -First 2 FullName,LastWriteTime
-# nginx 生效的是哪份：看监听 80/443 的进程 ExecutablePath
+# nginx 生效的是哪份：看监听 80/443 的进程 ExecutablePath（必须是 02 的 nginx.exe）
 netstat -ano | Select-String ':80 .*LISTENING'
 Get-CimInstance Win32_Process -Filter "ProcessId=<上一步的pid>" | Select-Object ExecutablePath
 # 前端 serve 的是哪份产物：看 index.html 的入口 chunk 在哪棵树下
@@ -369,24 +374,26 @@ Get-CimInstance Win32_Process -Filter "ProcessId=<上一步的pid>" | Select-Obj
 
 > 2026-11-11 实测：本机**同时**跑着两套 nginx（`D:\01_RPA\nginx-1.28.0` 与
 > `D:\01_olbr_portal\nginx-1.28.0`），80/443 的归属在排查期间来回变过两次。
-> 看到「nginx 突然 502 / 后端连不上」时，**先查归属再查后端**。
+> 看到「nginx 突然 502 / 后端连不上」时，**先查归属再查后端**。2026-11-18/19 起
+> 80/443 固定归 `D:\02_olbr_portal\nginx-1.28.0`，但这条排查顺序仍然有效。
 
 - [ ] nginx 配置改动后 `nginx -t` 通过
-- [ ] **改了 `nginx-1.28.0\conf\` 下任一份配置后，已同步回 `docs\nginx-reference\`**（否则副本立刻变成新的分叉源，见 `docs\新机器部署清单.md` §2）
+- [ ] **改了 `nginx-1.28.0\conf\nginx.conf` 后已备份一份文本**（该目录不入库；改前先复制到 `TMP\`，
+      并记下改了什么 —— 生产配置没有第二份可回滚的版本）
 - [ ] 子路径部署时 `vite.config.ts` 的 `base` 已同步并**重新构建**
 - [ ] 日志轮转任务正常（`install_nginx_log_rotate_task.bat`、`rotate_nginx_logs.ps1`）
 - [ ] 不在值班高峰期重启生产服务（7038/7090/9267）
 - [ ] **换机器 / 新克隆后跑过 `python apps\my_app\tools\clone_doctor.py`**（期望 0 FAIL）
-- [ ] **改动已在隔离副本 `D:\02_olbr_portal` 验证**（重建前端 + 隔离启动 + 读 live OpenAPI 对照；不再走主仓库同步）
+- [ ] **改动已在生产树验证**（重建前端 + 重启后端 + 读 live OpenAPI 对照；冒烟在 `.smoke` 副本）
 
-> **新机器搭建全流程**见 `docs\新机器部署清单.md`：哪些必须上传、哪些必须重建、哪些只能手工拷贝。
+> **新机器搭建 / 打包交付**见 `docs\workspace\zip-build-release.md` 与 `docs\workspace\部署说明.md`。
 > **换机器 / 排查环境缺失时，先跑这一条**（只读，列出全部缺失项与补法）：
 > ```
 > cd apps\my_app && python tools\clone_doctor.py
 > ```
 > 三条最容易踩的：① **真实数据在 PostgreSQL（`MY_APP_DB_MODE=pg`，97 张表 / 310 万行），不是 `db\app.db`**；
 > ② **启动脚本按「有无依赖」选解释器**，仓库内 `Scripts\` 是 8787/8790 实时代理专用的另一个 venv；
-> ③ `nginx-1.28.0\` 二进制不上传，但配置文本已在 `docs\nginx-reference\`。
+> ③ `nginx-1.28.0\` 二进制不入库，新机器按 `ops\deploy\runtime-manifest.json` / 打包流程补。
 > 库迁移用 `apps\my_app\tools\pg_migrate.ps1 dump|restore`。
 > ⚠ **两个实时代理脚本现已迁到 `apps\my_app\tools\`**（`realtime_proxy.py` / `realtime_proxy_vmax.py` /
 > `start-app.mjs`，2026-10-03）。它们原先在 `scripts\` 里被 `/Scripts/` 静默忽略、换机器即丢失。
@@ -400,9 +407,9 @@ Get-CimInstance Win32_Process -Filter "ProcessId=<上一步的pid>" | Select-Obj
 | 陷阱 | 后果 | 正确做法 |
 | --- | --- | --- |
 | 门户 API 用 `/api` | 命中 my_app，POST 回 405 | 用 `PORTAL_API`（`/uniplam/api`） |
-| **在 `D:\01_RPA` 改完代码就以为线上生效了** | **改了没上线**。2026-11-11 用户确认：实际运行的是 `D:\01_olbr_portal`，`D:\01_RPA` 只是编辑区。实测 split-brain：前端 chunk 已含 `col_filters`，live 后端 OpenAPI 里**没有** `col_filters` 参数、也没有 `/column-values` 路由 → 「列头筛选点了没反应」「选值模式永远显示没有可选值」，是**完全坏掉的新功能**而不是报错 | 改完在隔离副本验证：重建前端（`apps\my_app\frontend` → `npm run build`，产物落 `apps\_fe_dist`）+ 重启后端 + 读 live OpenAPI 对照；后端是常驻进程，**源码换了不会自动生效**，该重启时由人显式重启。生产（`D:\01_olbr_portal`）本轮不动 |
-| 只同步源码、不重建前端 | 副本 serve 的是旧产物，界面看起来「没改」 | 同步只搬源码；前端是构建产物。跑 `deploy_to_copy.ps1`（含重建），或手工在副本里 `npm run build` |
-| 同步了、不重启后端 | 前端是新功能，后端是旧接口 → 功能静默失效 | 后端常驻进程，吃不到源码变更。第 3 步校验会点名 `SPLIT-BRAIN` |
+| **改完源码就以为线上生效了** | **改了没上线**。生产就是 `D:\02_olbr_portal` 这一棵树；前端是构建产物、后端是常驻进程。2026-11-11 实测 split-brain：前端 chunk 已含 `col_filters`，live 后端 OpenAPI 里**没有** `col_filters` 参数、也没有 `/column-values` 路由 → 「列头筛选点了没反应」「选值模式永远显示没有可选值」，是**完全坏掉的新功能**而不是报错 | 重建前端（`apps\my_app\frontend` → `npm run build`，产物落 `apps\_fe_dist`）+ 重启后端 + 读 live OpenAPI 对照；该重启时由人显式重启 |
+| 只改源码、不重建前端 | 线上 serve 的是旧产物，界面看起来「没改」 | 前端是构建产物，必须 `npm run build`（my_app 与门户各一次） |
+| 重建了、不重启后端 | 前端是新功能，后端是旧接口 → 功能静默失效 | 后端常驻进程，吃不到源码变更；读 live OpenAPI 会暴露 `SPLIT-BRAIN` |
 | 只加中文 i18n 键 | 英文界面显示 key 原文 | `zh` 与 `en` 两份都加 |
 | my_app 前端产物目录改名 | 后端找不到静态文件，白屏 | 保持 `_fe_dist` |
 | 改了初始看板数据就以为生效 | 被 localStorage 覆盖，看不到 | 清缓存 / 「恢复初始默认看板」 |
@@ -416,7 +423,7 @@ Get-CimInstance Win32_Process -Filter "ProcessId=<上一步的pid>" | Select-Obj
 | 运行产出的 `.md` 当文档入库 | **每天 +1 的提交噪声**，还把业务对话内容写进了版本历史。门户 `apps\portal\scripts\whatsapp_analysis\reports\` 由 node-cron 逐日生成，它自己的 README 写着「所有数据只保存在本机（`data\assistant.db` 与 `reports\`）」，实测已有 26 份在库里。同目录的 `data\` 被根规则的 `data/` 挡住了，`reports\` 因为名字里没有 data 而漏网 —— 规则按**目录名关键字**写，就会漏掉语义相同、名字不同的那一个 | 按「是不是运行产出」判，不按扩展名或目录名关键字判；数据类目录一律显式点名（见门户 `.gitignore` 的 `scripts/whatsapp_analysis/reports/`） |
 
 | 把 db/log 加进版本库 | 956M / 152M 进 git | 已被 `.gitignore` 忽略，别绕开 |
-| 以为「拷 `db\app.db` 就有数据」 | **白忙**：当前 `MY_APP_DB_MODE=pg`（`backend\.env`），真数据在 PostgreSQL `myapp`（2183MB / 97 张表 / 约 310 万行），`db\app.db` 在 pg 模式下**根本没被读**。它是 `MY_APP_DB_MODE=sqlite` 熔断回退（`database.py:23-26`）的落点，不可删但也不够用。且 `alembic\versions\` 5 个迁移里**只有 CREATE INDEX、零 INSERT**，`git ls-files db/` = 0 → **无任何 seed 可重建** | 迁移库用 `apps\my_app\tools\pg_migrate.ps1 dump\|restore`。页面数据实际分三处（PG / `data\*.sqlite3` / `db\app.db`），**漏任一处都是「页面能开但数据空」**。详见 `docs\新机器部署清单.md` §3 |
+| 以为「拷 `db\app.db` 就有数据」 | **白忙**：当前 `MY_APP_DB_MODE=pg`（`backend\.env`），真数据在 PostgreSQL `myapp`（2183MB / 97 张表 / 约 310 万行），`db\app.db` 在 pg 模式下**根本没被读**。它是 `MY_APP_DB_MODE=sqlite` 熔断回退（`database.py:23-26`）的落点，不可删但也不够用。且 `alembic\versions\` 5 个迁移里**只有 CREATE INDEX、零 INSERT**，`git ls-files db/` = 0 → **无任何 seed 可重建** | 迁移库用 `apps\my_app\tools\pg_migrate.ps1 dump\|restore`。页面数据实际分三处（PG / `data\*.sqlite3` / `db\app.db`），**漏任一处都是「页面能开但数据空」**。详见 `docs\workspace\部署说明.md` 第五节 |
 | `pg_dump -n public` 做迁移备份 | **得到一个「成功但空」的备份**。本库的表**根本不在 public** —— `search_path` 是 `app, eflow, lte_pl, battery, ms_sla, fw, ipran_ume, ran_ume, public`，实测 `pg_dump -t 'public.*'` 直接报 `no matching tables were found` | **不加 `-n`**（dump 全部非系统 schema）。`pg_migrate.ps1` 已内建此防护，并会先打印将要备份的 11 个 schema |
 | 用业务账号建库 | `createdb -U myapp` 报「创建数据库权限不够」—— 实测 `myapp` 的 `rolcreatedb=f / rolsuper=f`。**但这不代表业务账号不能恢复数据**：已验证它能建 schema、建表、写入 | 建库用超级用户（`pg_migrate.ps1 restore -SuperUser postgres`），**恢复数据仍用业务账号**；新库 **owner 必须是业务账号** |
 | 把新脚本写进 `apps\my_app\scripts\` | **它会静默不入库**：`apps\my_app\.gitignore:9` 的 `/Scripts/` 在本机大小写不敏感，`scripts\` 一起被忽略。实测 `git check-ignore -v apps/my_app/scripts/x.py` → `apps/my_app/.gitignore:9:/Scripts/`。换机器后别人**根本没有这个文件** | 源码放 **`apps\my_app\tools\`**（已验证不被忽略）。写完先 `git check-ignore -v <路径>` 确认能进库 |
@@ -424,7 +431,7 @@ Get-CimInstance Win32_Process -Filter "ProcessId=<上一步的pid>" | Select-Obj
 | `python -m venv --upgrade <my_app 根>` | **会把 `.gitignore` 覆盖成 venv 的 2 行样板（内容就一个 `*`）**。该 `*` 忽略 `my_app\` 下所有**未跟踪**文件 —— 已跟踪的不受影响，所以 `git status` 看着正常，**但新写的源码永远不出现**（本项目历史上因此连续三周漏提交）。2026-10-03 实际发生 | `.gitignore` 在 HEAD 里是完好的 146 行版本：`git checkout HEAD -- apps/my_app/.gitignore` 即可复原。只想补 launcher 就别跑 venv，改逐包 `pip install --force-reinstall` 或直接复制 `activate.*` 模板 |
 | 把代理会话文件当成普通运行时文件 | `fms_session.json` / `vmax_session.json` 内含两个内网门户的**有效登录 Cookie + csrf**，等同凭据。脚本迁到 `tools\` 后它们**跟着落到 `tools\`**，而旧的 `/Scripts/` 忽略规则**不再覆盖**，一旦 `git add -A` 就会把凭据推到远端 | 已在 `apps\my_app\.gitignore` 加 `/tools/*_session.json`（2026-10-03）。新增同类文件后**务必 `git check-ignore -v` 复核**；文件本身可随时删，下次启动重新登录 |
 | 往仓库里的 `Scripts\` 或 `.venv\` 装依赖 | **装错地方，后端依然起不来**。`start_hidden.ps1` 的解析顺序是「① PATH → ② 4 个硬编码系统路径 → ③ 最后才 `$base\Scripts\pythonw.exe`」，实测 7038 的进程来自 `%LOCALAPPDATA%\Programs\Python\Python312\pythonw.exe`；`.\Scripts\python.exe -c "import fastapi"` 直接 `ModuleNotFoundError`。**注意 `Scripts\` 不是废 venv**：它的 `pyvenv.cfg` 指向 `.workbuddy` 的 Python 3.13，装着 numpy/opencv/pywin32，服务 8787/8790 两个实时代理，**不要清掉** | 先 `python -c "import sys; print(sys.executable)"` 确认**会被选中的**解释器，再往里装 `pip install -r requirements.txt`；Playwright 浏览器另跑 `playwright install`。2026-10-03 起 `start_hidden.ps1` 已改为**按有无依赖探测**并打印选中项，装错地方会显式 `[FAIL]` 而不是只报「45 秒内未监听」 |
-| 新机器缺 nginx 配置 | **页面打不开**，且现象隐蔽（少一条 `location` 只在某个 URL 上 404，不容易联想到配置缺失）。`nginx-1.28.0\` 整目录被根 `.gitignore:264` 忽略，其 `conf\` 下三份配置（`nginx.conf` / `portal_ports.conf` / `portal_eflow_common.conf`，共约 47KB）此前**零入库副本** | 配置文本副本已入库在 `docs\nginx-reference\`（2026-10-03 补）。**改完生效配置并 reload 成功后必须同步回副本** —— 加上 `.19` 那台，实际是**三份**要保持一致 |
+| 新机器缺 nginx 配置 | **页面打不开**，且现象隐蔽（少一条 `location` 只在某个 URL 上 404，不容易联想到配置缺失）。`nginx-1.28.0\` 整目录被根 `.gitignore` 忽略，`conf\` 下三份配置（`nginx.conf` / `portal_ports.conf` / `portal_eflow_common.conf`）**不在版本库** | 改前先把 `conf\` 复制到 `TMP\` 备份，`nginx -t` 通过再 `-s reload`，并记下改了什么。`.19` 那台用的是 `Y:\01_RPA\nginx-1.28.0\conf\nginx.conf`，与本机这份是两份，**不要互相覆盖** |
 | 模块级 `Path(...).mkdir(exist_ok=True)` 建在 `db\`、`data\` 这类被忽略目录下 | **别人 pull 完后端直接起不来**：全新克隆里没有 `db\`，`import backend.routers.upload` 在 `:20` 抛 `FileNotFoundError`，连 `init_db` 都跑不到（2026-09-27 实测，`routers/mw_links.py:27` 同病） | 一律 `mkdir(parents=True, exist_ok=True)`（Node 侧 `{recursive:true}`）；推送后跑 `apps\my_app\TMP\_pull_readiness_check.py` 验一遍 |
 
 ## 六、相关文档
@@ -437,9 +444,8 @@ Get-CimInstance Win32_Process -Filter "ProcessId=<上一步的pid>" | Select-Obj
 | my_app 代码清理 | `apps\my_app\docs\CODE_CLEANUP_GUIDE.md` |
 | 导出规范 | `apps\my_app\docs\EXCEL_EXPORT_STANDARD.md` |
 | 门户构建部署 | `apps\portal\README.md` |
-| **新机器部署清单** | `docs\新机器部署清单.md`（上传/重建/手拷三类清单） |
-| **nginx 配置参考副本** | `docs\nginx-reference\`（改配置后须同步） |
-| 鉴权开关 | `AUTH_SWITCH.md` |
+| 部署 / 打包 / 迁移 | `docs\workspace\部署说明.md`、`docs\workspace\zip-build-release.md` |
+| 鉴权开关 | `apps\my_app\backend\auth_switch.py`（原 `AUTH_SWITCH.md` 不在本仓库） |
 | 架构与数据流 | `architecture.md` |
 | 视觉规则 | `DESIGN.md` |
 

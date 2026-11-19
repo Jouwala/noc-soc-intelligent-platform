@@ -34,7 +34,8 @@ logger = logging.getLogger("ms_sla_dashboard")
 
 router = APIRouter(prefix="/api/ms-sla-dashboard", tags=["ms-sla-dashboard"])
 
-DASH_DB_PATH = Path(r"d:\01_RPA\Task\my_app\data\ms_sla\ms_sla_dashboard.sqlite3")
+# 路径按仓库位置推导（2026-11-19 收口）：写库方 services/ms/ms_sla_dashboard.py 用的是本树 data/ms_sla。
+DASH_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "ms_sla" / "ms_sla_dashboard.sqlite3"
 
 # 看板支持的粒度（顺序即前端页签顺序）。NUR/SLA/WO 由 nur_calc 实时计算，三级齐全；
 # Network / Per-Site 来自快照库 ms_sla_kpi，只有 daily/monthly 两个 dataset，weekly 留空。

@@ -2,7 +2,7 @@
 """
 eflow_qa.py - eFlow 知识库 API
 ==============================
-知识库源目录：D:\\01_RPA\\Task\\eflow_Q&A（可用环境变量 EFLOW_QA_DIR 覆盖）。
+知识库源目录：`<仓库根>\apps\eflow_Q&A`（可用环境变量 EFLOW_QA_DIR 覆盖）。
 纯只读：列目录树 / 读单篇 Markdown / 全文检索，不做任何写操作。
 
 - GET /api/eflow-qa/tree                文档树（含 front-matter 的 状态/来源）
@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/eflow-qa", tags=["eflow-qa"])
 
-# 知识库根目录：默认 Task/eflow_Q&A（本文件位于 my_app/backend/routers/ 下，
-# parents[3] = Task 目录）。迁移部署时用 EFLOW_QA_DIR 覆盖。
+# 知识库根目录：默认 <仓库根>/apps/eflow_Q&A（本文件位于 my_app/backend/routers/ 下，
+# parents[3] = apps 目录）。迁移部署时用 EFLOW_QA_DIR 覆盖。
 _KB_ROOT = Path(
     os.environ.get(
         "EFLOW_QA_DIR",

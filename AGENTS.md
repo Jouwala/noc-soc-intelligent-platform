@@ -1,4 +1,4 @@
-# 01 AGENTS.md —— AI 进入本项目首先需要知道的信息
+# AGENTS.md —— AI 进入本项目首先需要知道的信息
 
 > 基准日期：2026-09-22　|　适用：`D:\02_olbr_portal` 工作区根目录
 > 本目录（`D:\02_olbr_portal`）是 **NOC/SOC Intelligent Platform 工作区的总纲**。各子系统的细节一律看各自的 `AGENTS.md` 与手册，**不要**把子系统细节抄到这里。
@@ -15,11 +15,7 @@
 
 ## 二、工作区地图
 
-**这是一个单体 git 仓库，不是多个仓库。** 已在 `Task\my_app` 下执行 `git rev-parse --show-toplevel` 验证，顶层返回 `D:/01_RPA`。这意味着：
-
-- 一次提交会同时影响工作区里所有子系统；
-- 不存在「门户的提交」「my_app 的提交」这种隔离，提交信息里要用 `feat(portal):` / `fix(assets):` 这类**前缀标明影响面**（沿用既有习惯）；
-- 改动前先 `git status` 看全域未提交变更，避免把别人的在途改动一起卷进你的提交。
+**这是一个独立的 git 仓库，顶层就是 `D:/02_olbr_portal`，与 `D:\01_RPA` 没有 git 关系。** 一次提交会同时影响本仓库里所有子系统，提交信息里要用 `feat(portal):` / `fix(assets):` 这类**前缀标明影响面**（沿用既有习惯）。改动前先 `git status` 看全域未提交变更，避免把别人的在途改动一起卷进你的提交。
 
 ### 主要子系统
 
@@ -29,8 +25,13 @@
 | `apps\portal\` | **Liberia NOC/SOC 数据看板统一门户**（聚合 FineBI 与 my_app 看板） | React 19 + Vite + Tailwind v4 | `apps\portal\docs\AGENTS.md`、`apps\portal\README.md` |
 | `apps\whatsapp-kb-bot\` | **WhatsApp 知识库问答 bot**（与 my_app 同级，叶子名不改） | Node | `apps\whatsapp-kb-bot\docs\` |
 | `apps\eflow_Q&A\` | **eFlow 知识库**（问答/排障文档，含 `tools\inspect_tt.py`） | Markdown + Python | `apps\eflow_Q&A\README.md` |
-| `LBR_Tools\`、`Unified_Tools\`、`openclaw_api_selector\`、`ticket_export_rpa\` | 工具与 RPA 脚本集 | Python / 混合 | 各自目录 |
-| `chrome-win\`、`whatsapp*\`、`scheduler_logs\`、`report\` | 运行时依赖与产出 | — | 一般不直接改。nginx 也在运行时依赖之列：**本机 (.20) 生效目录自 2026-11-18/19 起是 `D:\02_olbr_portal\nginx-1.28.0\`**（切生产后由 02 托管 80/443，已加入 `.gitignore`）；`D:\01_RPA\nginx-1.28.0\` 与 `Y:\01_RPA\nginx-1.28.0\`（**.19 那台**在用）都不要动（见第四节第 6b 条） |
+| `apps\agent-worker\`、`apps\control-plane\` | **多 worker 协作底座**（任务执行器 + 中央调度） | Python | `docs\workspace\agent-protocol.md` |
+| `nginx-1.28.0\` | **本机生产 nginx**（80/443 的实际持有者，已 gitignore） | nginx | 见第四节第 6b 条 |
+| `runtime\` | 捆绑运行时（Python/Node/PG），**只服务隔离副本与打包**；生产用系统 Python / Node / PG 5432 | — | `runtime\README.md` |
+| `docs\`、`ops\`、`desktop_shortcuts\` | 文档、运维脚本、桌面快捷方式生成器 | — | 各自 `README` |
+
+> `D:\01_RPA\nginx-1.28.0\` 已**不再持有本机 80/443**，不要改；`Y:\01_RPA\nginx-1.28.0\`
+> （**.19 那台**在用）同样不要动（见第四节第 6b 条）。
 
 ### ⭐ 编辑区 ≠ 运行副本（2026-11-11 定；2026-11-18/19 切生产后改写）
 
@@ -39,7 +40,7 @@
 | **生产（当前）** | `D:\02_olbr_portal` | 2026-11-18/19 起接管 80/443/7038/7090/9267/9268（PG 5432）。git 仓库、文档、守卫脚本与实际运行的东西**都在这里**；根目录有 `PRODUCTION.flag`。启停走 `ops\deploy\portal-ctl.ps1`（或桌面 `olbr_app` 的三个链接），不要再走 `start_all.ps1`。 |
 | **回退目标（已退役）** | `D:\01_olbr_portal` | 切生产前的旧线，只有 `ops\deploy\cutover\rollback-to-01.ps1` 会碰它。日常**不要再往这里改代码、起服务**。 |
 
-**工作流：在 `D:\02_olbr_portal` 改完 → `node ops\deploy\agent-done-check.mjs` → 改动走 PR；生产启停用 `portal-ctl.ps1 -Action start|stop|status`。** 只同步源码、只重启一个进程都不算验证（见下）。
+**工作流：在 `D:\02_olbr_portal` 改完 → `node ops\deploy\agent-done-check.mjs` → 改动走 PR；生产启停用 `portal-ctl.ps1 -Action start|stop|status`。** 只改源码、只重建前端、只重启一个进程都不算部署完成（见下）。
 
 > ⚠ 从主仓库（`D:\01_RPA`）来的同步已随第一轮重构批 C 停用：根 `sync-now.bat` 已删除，`ops\deploy\sync-engine.mjs` / `sync-policy.mjs` 只保留备查，`sync_from_main.ps1` 禁止对这个新目录跑。不要在这里恢复同步入口。详见 `ops\deploy\README.md`「已停用」一节。
 
@@ -47,22 +48,23 @@
 
 隔离副本（打包机 / 冒烟 runner）的启停仍走 `ops\deploy\start_all.ps1` / `stop_all.ps1`；**生产树上禁止用它们** —— 它们会改 `apps\my_app\backend\.env`、起 55432 的第二套便携 PG、往 8080/8443 起第二套服务。
 
-**为什么不能只「同步源码」**（2026-11-11 实测事故）：
+**为什么「只改源码」「只重建前端」「只重启后端」都不算部署完成**（2026-11-11 实测事故）：
 
-- 同步只搬**源码**；前端是**构建产物**（`apps\_fe_dist`）、后端是**常驻进程**，两者都不吃源码变更。
-- 只同步不重建 → 副本前端仍是旧界面；只重建不重启 → 后端仍是旧接口。
+- 源码改了不会自动生效：前端是**构建产物**（`apps\_fe_dist`），后端是**常驻进程**，两者都不吃源码变更。
+- 只改源码不重建 → 前端仍是旧界面；只重建不重启 → 后端仍是旧接口。
 - **实测 split-brain**：前端 chunk 已含 `col_filters`（列头筛选），而 live 后端的 `/api/tables/{t}/data` OpenAPI 参数里**没有** `col_filters`、也没有 `/column-values` 路由 → 用户看到「列头筛选点了没反应」「选值模式永远显示没有可选值」，是**完全坏掉的新功能**而不是报错。
-- 脚本第 3 步用 live OpenAPI 实测判定，命中不一致直接**非零退出**并点名 `SPLIT-BRAIN`，不会让「我明明同步了」变成排查一小时的谜题。
+- 正确做法：重建前端 + 重启后端 + 读 live OpenAPI 对照源码，三者都做才算数。
 
-**脚本不自动重启服务** —— 重启会打断正在看数据的人（第四节第 6 条）。需要重启时由人显式执行，脚本会提示该重启什么。
+**脚本不自动重启服务** —— 重启会打断正在看数据的人（第四节第 6 条）。需要重启时由人显式执行。
 
-> （历史做法：`sync-now.bat` 曾是 `deploy_to_copy.ps1` 的双击入口，批 C 已随同步链一起停用。）
+> （历史做法：根 `sync-now.bat` 曾把 `D:\01_RPA` 的源码同步进来，批 C 已随同步链一起删除；现在改代码直接在本仓库改。）
 
-> ⚠️ **迁移/换目录时还有一类东西同步器不会搬：`apps\my_app\db\app.db` 里的三张「本地权威表」**
+> ⚠️ **迁移/换目录时，`apps\my_app\db\app.db` 里的三张「本地权威表」不会自动跟过来**
 > —— `credentials`（设置页凭据）、`task_schedule_config`（任务启停/cron）、
 > `email_recipients`（邮件收件人）。它们由应用**固定写 SQLite**（不走 PG），
-> 同步器按策略不搬 `db/`，`sync_pg_to_sqlite.py` 又为避免 DROP 本地数据把它们列进
-> `SKIP_TABLES`，所以「从 PG 重建 app.db」的路径天生带不出它们、也不会报错。
+> `sync_pg_to_sqlite.py` 为避免 DROP 本地数据把它们列进 `SKIP_TABLES`，
+> 所以「从 PG 重建 app.db」的路径天生带不出它们、也不会报错；搬目录/换机若只拷代码与 PG 快照，
+> 这三张表就留在旧机器上。
 > **2026-11-11 实测**：漏搬后 16 个任务同时报「拒绝以空密码登录」、任务管理页的
 > 4 个手动停用任务全变回启用。检查/迁移命令：
 >
@@ -71,20 +73,21 @@
 > python ops\deploy\local_authority_tools.py migrate --source <旧app.db> --target <新app.db>
 > ```
 >
-> `deploy_to_copy.ps1` 的 **Step 1.5** 已自动跑 `check`：缺失即非零退出并打印上面的
-> migrate 命令，不让它再静默落到线上。细节见 `scripts\portable\部署说明.md` 第八节。
+> 迁移/换机时**先跑 `check`**：缺失就不要让新树接线上流量。细节见
+> `docs\workspace\部署说明.md` 第五节。
 
 ### 环境拓扑（速查）
 
 ```
-192.168.100.19:80  (nginx)
+192.168.100.20:80/443  (nginx，本树 nginx-1.28.0)
  ├── /myapp/            → 127.0.0.1:7090   my_app 前端 (vite, base=/myapp/)
  ├── /api/              → 7090 → 127.0.0.1:7038   my_app FastAPI 后端
- ├── /webroot/decision  → FineBI 决策报表平台
  └── /uniplam/          → 9267  统一门户自身（含 /uniplam/api/* 门户后端）
 ```
 
-> 主机名与端口以 `apps\portal\src\config.ts` 为准（那里是**单一真相源**，换机房只改这一处）。细节见 `docs\workspace\architecture.md`。
+> FineBI 不经过本机 nginx：门户里的报表直连 `192.168.100.19/webroot/decision`。
+> 主机名以 `apps\portal\src\config.ts` 的 `FALLBACK_ENV` 为准（换机房只改这一处）；
+> 门户端口 9267、my_app 端口 7038/7090 见各启动脚本。细节见 `docs\workspace\architecture.md`。
 
 ## 三、核心工程原则
 
@@ -97,7 +100,7 @@
 5. **面向并发与故障设计。** 后端主动考虑幂等性、竞态、事务边界、超时、取消、重试、背压和资源释放；不得通过无边界重试、吞错或隐式共享状态掩盖问题。本工作区的 RPA 采集与 worker 任务尤其要显式处理「上游返回半截数据」与重复投递（投递前查重见 `apps\my_app\docs\manual\04-task-system.md`）。
 6. **保障完整前端体验。** 控制渲染成本、异步状态与并发请求，保持清晰的 UI 结构；用户流程必须覆盖加载、空状态、错误、重试、反馈与可访问性。取不到数据显示 `—`，不得显示成 `0`。
 7. **复用稳定的业务语义。** 优先复用已有模块与能力（my_app 的 `components/cards`、`utils/excelReport`、`components/DraggableClickModal` 等统一组件是**强制入口**，细则见 `apps\my_app\AGENTS.md` 第三节第 3 条），但不要仅因外形相似就过早抽象；确需重复实现时，必须在注释中说明其独立演进或暂不抽象的原因。**新增依赖前先核查本处已有依赖** —— 本仓库没有统一的根 `package.json`，`apps\my_app\frontend\package.json` 与门户 `package.json` 各自独立，Python 依赖看各任务目录的 `requirements.txt`（如 `apps\my_app\requirements.txt`）。先查这些文件、库的文档与类型定义，不臆断已有库缺功能；确需引入时选成熟且维护良好的库，不重复实现通用功能。
-8. **为未来维护者保留上下文。** 代码、注释、测试与架构文档是跨越时间的协作媒介。非显然的设计决策、兼容约束、已知缺陷和临时方案，必须记录原因、影响范围、潜在风险与移除条件；技术债务要关联可追踪的归属（`docs\workspace\TODO.md` 条目），**禁止**留下没有上下文的裸 `TODO`。本仓库当前**没有独立 ADR 目录**，重大架构决策请在 `docs\workspace\architecture.md` 追加带日期的决策小节，形成事实上的 ADR，并按 `apps\my_app\AGENTS.md` 第三节第 8 条标注 `文件路径:行号` 出处。
+8. **为未来维护者保留上下文。** 代码、注释、测试与架构文档是跨越时间的协作媒介。非显然的设计决策、兼容约束、已知缺陷和临时方案，必须记录原因、影响范围、潜在风险与移除条件；技术债务要关联可追踪的归属（`docs\workspace\TODO.md` 条目），**禁止**留下没有上下文的裸 `TODO`。本仓库的 ADR 在 `docs\adr\`（0001 目录边界 / 0002 副本隔离 / 0003 生产 vs 隔离标记），重大架构决策也按日期追加到 `docs\workspace\architecture.md` 的决策小节，并按 `apps\my_app\AGENTS.md` 第三节第 8 条标注 `文件路径:行号` 出处。
 9. **确保变更可验证、可观测、可回滚。** 每项改动都应行为可测试、运行状态可观测、故障可定位，并兼顾向后兼容和回滚路径；错误与日志必须保留诊断上下文，但不得泄露敏感信息。回滚手段在本仓库是实打实的：表结构走 `alembic downgrade`，进程有 `worker_watchdog.py` / `backend_watchdog.py` 守护，改大文件前先建 `_bak_<日期>_<说明>` 快照。
 10. **删除优于兼容。** 内部路径重构时直接删除过时实现，**禁止**新增兼容层、deprecated shim 或双写逻辑；对外契约（`/api/*`、`/uniplam/api/*` 等稳定接口与数据库迁移）的兼容性按协议契约单独评估 —— 那是合同义务，不是迁就旧代码。
 

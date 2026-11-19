@@ -12,32 +12,32 @@
 
 ```
                     ┌──────────────────────────────────────────┐
-   用户浏览器 ──────►│  nginx  192.168.100.19:80                │
+   用户浏览器 ──────►│  nginx  192.168.100.20:80 / :443         │
                     └──────────────────────────────────────────┘
                        │            │              │
-        /myapp/        │   /api/    │  /webroot/   │  /uniplam/
+        /myapp/        │   /api/    │  FineBI 直连  │  /uniplam/
                        ▼            ▼              ▼
               ┌─────────────┐  ┌──────────┐  ┌─────────────┐  ┌──────────────┐
               │ my_app 前端 │  │ my_app   │  │  FineBI     │  │ 统一门户     │
-              │ vite :7090  │─►│ 后端     │  │  决策平台    │  │ :9267        │
-              │ base=/myapp/│  │ uvicorn  │  │             │  │ + /uniplam/  │
-              └─────────────┘  │ :7038    │  └─────────────┘  │   api/*      │
-                               └──────────┘                   └──────────────┘
+              │ vite :7090  │─►│ 后端     │  │ .19:       │  │ :9267        │
+              │ base=/myapp/│  │ uvicorn  │  │ :80/webroot │  │ + /uniplam/  │
+              └─────────────┘  │ :7038    │  │  /decision  │  │   api/*      │
+                               └──────────┘  └─────────────┘  └──────────────┘
                                     │
                                     ▼
-                        SQLite (db\app.db 等) / PostgreSQL
+                        SQLite (db\app.db 等) / PostgreSQL 5432
 ```
 
-**关键端口与路径**（换机房时以 `apps\portal\src\config.ts` 为准，那是单一真相源）：
+**关键端口与路径**（FineBI / my_app 主机以 `apps\portal\src\config.ts` 的 `FALLBACK_ENV` 为真相源）：
 
 | 端口/路径 | 归属 | 说明 |
 | --- | --- | --- |
-| `80` | nginx | 对外唯一入口 |
+| `80` / `443` | 本机 nginx | 对外唯一入口（`nginx-1.28.0`，2026-11-18/19 起归本树） |
 | `/myapp/` | my_app 前端 | vite `7090`，`base=/myapp/`，产物目录 `_fe_dist` |
 | `/api/` | my_app 后端 | 经 vite `7090` 转发到 uvicorn `7038` |
-| `/webroot/decision` | FineBI | 决策报表平台 |
-| `/uniplam/` | 统一门户 | 门户前端 + 门户自身后端 API |
-| `9267` | 门户开发端口 | `npm run dev`（**不可**复用 7038/7090） |
+| `/webroot/decision` | FineBI | **直连 `192.168.100.19`**，不经过本机 nginx |
+| `/uniplam/` | 统一门户 | 门户前端 + 门户自身后端 API（`9267`） |
+| `9267` | 门户生产端口 | Express 服务；**不可**复用 7038/7090 |
 | `8765` | 远端 SQLite HTTP 服务 | 如 `db_ps_cs_cn`，经 `RemoteDBReader` 读取 |
 
 > **`/uniplam/api` 与 `/api` 必须分清。** 门户前端若请求绝对路径 `/api/auth/login`，会命中 nginx 的通用 `location /api/` 从而打到 my_app 的 7038，POST 被回成 `405`——这正是"其他电脑经 80 端口登录失败"的历史原因。门户因此必须带应用 base 前缀 `/uniplam/api`。原因原文见 `apps\portal\src\config.ts` 顶部注释。
@@ -147,7 +147,8 @@ uvicorn 后端 (:7038)
 ## 六、安全边界
 
 - 门户鉴权：`server\auth.ts`、`authDb.ts`、`authSwitch.ts`；鉴权用户表在 `auth-data\`（**含加盐密码哈希，已 .gitignore，严禁入库**）。
-- 鉴权开关：`auth-switch.json` + `auth_switch.bat` / `auth_switch.py`，说明见 `AUTH_SWITCH.md`。
+- 鉴权开关：门户侧 `apps/portal/server/authSwitch.ts`（状态 `auth-switch.json`），my_app 侧
+  `apps/my_app/backend/auth_switch.py`。**原来的 `AUTH_SWITCH.md` 不在本仓库**，不要再引用。
 - my_app 安全现状与**已知风险清单**：`apps\my_app\docs\manual\05-security-and-credentials.md`。
 - TLS/凭据：`apps\my_app\backend\security.py`、`security_tls.py`。
 - **文档纪律**：可写配置项名称与环境变量键名，**不得**写口令、Token、授权码、账号。
@@ -160,13 +161,14 @@ uvicorn 后端 (:7038)
 | 远端库本地占位 | 本地 `db_ps_cs_cn.sqlite3` 是 0 字节，误当数据源会得到空结果而非报错 |
 | 裸 `sqlite3.connect` | 绕过统一数据访问层，迁移/改造时会静默坏图 |
 | nginx 路径冲突 | `/api/` 归 my_app；门户必须走 `/uniplam/api/`，写错会 405 |
-| nginx 双份配置 | 本机 (.20) 生效配置在 `D:\01_RPA\nginx-1.28.0\conf\nginx.conf`；`Y:\01_RPA\nginx-1.28.0\conf\nginx.conf` 服务的是 **.19**。**改错一份不生效**，详见下一节 |
+| nginx 双份配置 | 本机 (.20) 生效配置在 `D:\02_olbr_portal\nginx-1.28.0\conf\nginx.conf`；`Y:\01_RPA\nginx-1.28.0\conf\nginx.conf` 服务的是 **.19**。**改错一份不生效**，详见下一节。`D:\01_RPA\nginx-1.28.0\` 自 2026-11-18/19 起已不持有本机 80/443，不要再改 |
 | localStorage 覆盖 | 看板数据本地优先，改了 `initialDashboards.ts` 但用户没清缓存时会"看不到新数据"（需"恢复初始默认看板"） |
 | 硬编码主机 | 主机集中在 `src\config.ts` 的 `DEFAULT_HOST`，其它地方不应再出现 IP |
 
 ## 八、架构决策记录（事实上的 ADR）
 
-> 本仓库无独立 ADR 目录，按 `../AGENTS.md` 第三节第 8 条在此追加带日期的决策小节。
+> 重大架构决策另见 `docs/adr/`（0001 目录边界、0002 副本隔离、0003 生产/隔离角色标记）；
+> 本节继续追加带日期的决策小节，两者同源。
 
 ### 2026-10-05：P1 告警推送由「eflow_tt 定时窗口扫描」改为「realtime_alarm 触发 + eFlow 实时查单」
 
@@ -212,6 +214,10 @@ uvicorn 后端 (:7038)
 旧代码读它不受影响。
 
 ### 2026-10-01：.20 本机 nginx 从网络映射盘 Y: 迁到本地盘 D:
+
+> **现状更新（2026-11-18/19）**：本机 nginx 已随切生产改由 `D:\02_olbr_portal\nginx-1.28.0\`
+> 持有 80/443（ADR 0003）。本节记录的「迁到 `D:\01_RPA\nginx-1.28.0`」是当时的决策，
+> 路径与「哪份生效」的结论**按历史读**；现行生效目录见 `AGENTS.md` 第四节第 6b 条。
 
 **背景。** MSNOC1（.20）的 nginx 原先运行在 `Y:\01_RPA\nginx-1.28.0\` —— 那是网络映射盘
 （`Y:` → `\\192.168.100.19\e`，即 .19 的 E 盘）。**nginx.exe、conf、logs、temp 全部落在 SMB

@@ -1,4 +1,4 @@
-# 01 AGENTS.md —— AI 进入本项目首先需要知道的信息
+# AGENTS.md —— AI 进入本项目首先需要知道的信息
 
 > 基准日期：2026-09-22　|　项目根：`D:\02_olbr_portal\apps\my_app`
 > 上级总纲：`D:\02_olbr_portal\AGENTS.md`（工作区级约束，**先读那个**）
@@ -11,23 +11,28 @@
 
 **权威文档**：`docs\manual\`（16 份手册，**现状以它为准**）。
 
-## 一.5、⭐ 本仓库不再从 RPA 同步（2026-11-13 重构确认）
+## 一.5、⭐ 本仓库就是生产，且不再与 RPA 同步（2026-11-19）
 
 | | 路径 | 角色 |
 | --- | --- | --- |
-| 新仓库 | `Jouwala/noc-soc-intelligent-platform`（`main`） | **改动落地的地方**：`refactor/round-1` 走 PR 合并进 `main` |
-| 重构工作区 | `D:\02_olbr_portal` | **隔离验证的地方**（8080/8443/7039/7091/9277/55432） |
-| 生产 | `D:\01_olbr_portal` | **实际跑起来的地方**（7038/7090/80/443），本轮不动 |
+| 本仓库 | `Jouwala/noc-soc-intelligent-platform`（`main`） | 源码、文档、守卫与实际运行**都在这里**；根有 `PRODUCTION.flag` |
+| 本机生产 | `D:\02_olbr_portal` | **实际跑起来的地方**（80/443/7038/7090/9267/5432） |
+| 回退目标（已退役） | `D:\01_olbr_portal` | 旧生产，只有 `ops\deploy\cutover\rollback-to-01.ps1` 会碰它 |
 
-**不要再用 `deploy_to_copy.ps1` 从 `D:\01_RPA` 同步到这里**：同步链已在批 C 停用（`sync-now.bat` 已删除，`ops\deploy\sync-engine.mjs` / `sync-policy.mjs` 已停用，见 `ops\deploy\README.md`）。改动走新仓库的 PR 流程；部署到 02 用隔离启动 `ops\deploy\start_all.ps1`。
+**不要再用 `deploy_to_copy.ps1` 从 `D:\01_RPA` 同步到这里**：同步链已在批 C 删除
+（`sync-now.bat` 已删除，`ops\deploy\sync-engine.mjs` / `sync-policy.mjs` 已停用，见
+`ops\deploy\README.md`）。改动走本仓库 PR 流程；生产启停走根 `start.bat` / `stop.bat` →
+`ops\deploy\portal-ctl.ps1`（它经自愈任务调用 `apps\my_app\start_hidden.ps1`）。
+隔离副本 / 冒烟才用 `ops\deploy\start_all.ps1`，它在生产树上会直接 throw。
 
-> **为什么不能只同步源码**（2026-11-11 实测教训，仍适用）：同步只搬源码；前端是**构建产物**（`apps\_fe_dist`）、后端是**常驻进程**，两者都不吃源码变更。
+> **为什么「只改源码」「只重建前端」「只重启后端」都不算完成**（2026-11-11 实测教训）：
+> 前端是**构建产物**（`apps\_fe_dist`）、后端是**常驻进程**，两者都不吃源码变更。
 > 2026-11-11 实测 split-brain：前端 chunk 已含 `col_filters`（列头筛选），而 live 后端的
 > `/api/tables/{t}/data` OpenAPI 参数里**没有** `col_filters`、也没有 `/column-values` 路由 →
 > 用户看到「列头筛选点了没反应」「选值模式永远显示没有可选值」，是**完全坏掉的新功能**而不是报错。
 >
-> **启动脚本不自动重启服务**（重启会打断看数据的人）；隔离冒烟的校验不通过时同样非零退出。
-> 细则见工作区根 `docs\workspace\development.md` 第四节 D0。
+> **启动脚本不自动重启服务**（重启会打断看数据的人）；生产验证 = 重建前端 + 重启后端 +
+> 读 live OpenAPI 对照。细则见工作区根 `docs\workspace\development.md` 第四节 D0。
 
 ## 二、新会话上手顺序
 
