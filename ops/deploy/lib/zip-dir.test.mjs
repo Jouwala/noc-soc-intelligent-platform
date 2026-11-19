@@ -1,10 +1,14 @@
 /**
- * zip-dir.mjs 回归测试（Linux 运行时 ZIP，2026-11-19）。
+ * zip-dir.mjs 回归测试（Linux 运行时 ZIP，2026-11-19；Windows 语义补齐同日）。
  *
  * 零第三方依赖，Node 内置 test runner：node --test ops/deploy/lib/zip-dir.test.mjs
  * 覆盖：符号链接按链接条目入包（mode 0o120777，内容为目标路径；解引用会破坏
  * npm-cli.js 这类相对路径解析）、可执行位保留（解压出的 python/nginx/pg
  * 二进制必须可执行）、断链仍报错、两次打包字节一致。
+ * Windows 注意：chmod 755 落不了执行位（只影响只读属性），fixture 里
+ * bin/tool 的 0o755 靠 shebang 规则（见 zip-dir.mjs modeOf）；系统 unzip
+ * 不还原符号链接，故「unzip 解包还原」一条在 win32 下跳过，链接条目本身
+ * 的正确性由第一条用例覆盖。
  */
 
 import assert from 'node:assert/strict'
@@ -23,7 +27,7 @@ function fixture(t) {
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   mkdirSync(join(dir, 'bin'), { recursive: true })
   writeFileSync(join(dir, 'bin', 'tool'), '#!/bin/sh\necho hi\n')
-  chmodSync(join(dir, 'bin', 'tool'), 0o755)
+  chmodSync(join(dir, 'bin', 'tool'), 0o755) // Windows 上此 chmod 落不了执行位；0o755 靠 shebang 规则
   symlinkSync('tool', join(dir, 'bin', 'tool-link'))
   writeFileSync(join(dir, 'bin', 'run.sh'), '#!/bin/sh\necho run\n')
   chmodSync(join(dir, 'bin', 'run.sh'), 0o644)
@@ -64,7 +68,26 @@ test('符号链接按链接条目入包，可执行位保留', (t) => {
   assert.equal(got.modes['plain.txt'], 0o644)
 })
 
-test('unzip 解包还原符号链接，链接可执行', (t) => {
+test('shebang 文件按可执行入包（无执行位时仍为 0o755）', (t) => {
+  const dir = fixture(t)
+  // 无后缀、无执行位、带 shebang：磁盘 mode 0o644，也须按 0o755 入包。
+  // 这是 Windows 上的唯一路径（chmod 755 落不了盘），Linux 上同步验证。
+  writeFileSync(join(dir, 'script'), '#!/usr/bin/env python3\nprint(1)\n')
+  chmodSync(join(dir, 'script'), 0o644)
+  const out = join(dir, 'out.zip')
+  const r = pack(dir, out)
+  assert.equal(r.status, 0, r.stderr)
+  const got = inspectZip(out)
+  assert.equal(got.modes['script'], 0o755)
+})
+
+// Windows 自带 unzip 不把链接条目还原成符号链接（解成普通文件），
+// 还原能力不在本包控制范围；链接条目本身的正确性（mode 0o120777、
+// 内容为目标路径）已由第一条用例覆盖，故本条在 win32 下跳过。
+const SKIP_UNZIP_RESTORE = process.platform === 'win32'
+  ? 'Windows 自带 unzip 不还原符号链接，条目元数据由第一条用例覆盖'
+  : false
+test('unzip 解包还原符号链接，链接可执行', { skip: SKIP_UNZIP_RESTORE }, (t) => {
   const dir = fixture(t)
   const outDir = mkdtempSync(join(tmpdir(), 'zip-dir-test-out-'))
   t.after(() => rmSync(outDir, { recursive: true, force: true }))
