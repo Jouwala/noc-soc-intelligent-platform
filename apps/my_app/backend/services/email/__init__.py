@@ -7,6 +7,7 @@
 - ``email_recipient_store``：收件人存储
 - ``email_recovery``：邮箱凭据恢复
 - ``email_task_coverage``：邮件任务覆盖检查
+- ``ews_deferral``：邮箱通道降级时延后纯发信任务（执行前门禁）
 - ``kpi_email_report``：KPI / SP / RAN 日报邮件任务
 - ``liberia_email_report``：Liberia 站点宕报告邮件任务
 

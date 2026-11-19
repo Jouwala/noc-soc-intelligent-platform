@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { Button, Collapse, List, Modal, Space, Tag, Typography, message } from 'antd'
 import {
   CheckCircleFilled,
+  ClockCircleFilled,
   CloseCircleFilled,
   ExclamationCircleFilled,
   HistoryOutlined,
@@ -165,34 +166,40 @@ export function TaskHistoryModal({
             // 这里按橙色「提示」渲染（2026-11-17 如意要求：提示照旧，但不报错）。
             const pendingCmdb = rj?.status === 'pending_cmdb'
             const cmdbNotice = pendingCmdb ? String(rj?.message || '') : ''
+            // 延后不是失败：邮箱通道降级时本轮没执行，用琥珀色与「失败」区分开
+            const deferred = !run.success && run.trigger === 'deferred'
             return (
             <List.Item style={{
-              background: pendingCmdb
+              background: pendingCmdb || deferred
                 ? 'rgba(250, 173, 20, 0.05)'
                 : (run.success ? 'rgba(82, 196, 26, 0.05)' : 'rgba(255, 77, 79, 0.05)'),
               borderRadius: 'var(--wh-radius-md)',
               padding: 'var(--wh-space-sm) var(--wh-space-md)',
               marginBottom: 'var(--wh-space-xs)',
-              border: `1px solid ${pendingCmdb
+              border: `1px solid ${pendingCmdb || deferred
                 ? 'rgba(250, 173, 20, 0.25)'
                 : (run.success ? 'rgba(82, 196, 26, 0.2)' : 'rgba(255, 77, 79, 0.2)')}`,
             }}>
               <List.Item.Meta
                 avatar={pendingCmdb
                   ? <ExclamationCircleFilled style={{ color: '#faad14', fontSize: '1.125rem' }} />
-                  : (run.success
-                    ? <CheckCircleFilled style={{ color: '#52c41a', fontSize: '1.125rem' }} />
-                    : <CloseCircleFilled style={{ color: '#ff4d4f', fontSize: '1.125rem' }} />)
+                  : deferred
+                    ? <ClockCircleFilled style={{ color: '#faad14', fontSize: '1.125rem' }} />
+                    : (run.success
+                      ? <CheckCircleFilled style={{ color: '#52c41a', fontSize: '1.125rem' }} />
+                      : <CloseCircleFilled style={{ color: '#ff4d4f', fontSize: '1.125rem' }} />)
                 }
                 title={
                   <Space>
-                    <Tag color={pendingCmdb ? 'orange' : (run.success ? 'green' : 'red')}>
+                    <Tag color={pendingCmdb ? 'orange' : deferred ? 'gold' : (run.success ? 'green' : 'red')}>
                       {pendingCmdb
                         ? t('sync.runStatus.pendingCmdb')
-                        : (run.success ? (locale === 'zh' ? '成功' : 'Success') : (locale === 'zh' ? '失败' : 'Failed'))}
+                        : deferred
+                          ? (locale === 'zh' ? '已延后' : 'Deferred')
+                          : (run.success ? (locale === 'zh' ? '成功' : 'Success') : (locale === 'zh' ? '失败' : 'Failed'))}
                     </Tag>
                     <Text style={{ fontSize: '0.75rem', color: WH.textMuted }}>
-                      {run.trigger === 'manual' ? '🔧' : '⏰'} {formatDateTime(run.started_at, { zone: true })}
+                      {run.trigger === 'manual' ? '🔧' : deferred ? '⏸' : '⏰'} {formatDateTime(run.started_at, { zone: true })}
                     </Text>
                   </Space>
                 }
