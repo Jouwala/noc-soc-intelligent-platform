@@ -92,6 +92,8 @@ apps/my_app/docs/           export-ignore
 apps/my_app/tools/          export-ignore
 apps/my_app/monitor_fixes/  export-ignore
 apps/my_app/nginx/          export-ignore
+# 运行期输出/数据（gitignore 已覆盖；这里再兜一层，防「先提交后加规则」回流）
+apps/my_app/outputs/        export-ignore
 apps/portal/docs/           export-ignore
 apps/whatsapp-kb-bot/docs/  export-ignore
 apps/whatsapp-kb-bot/evals/ export-ignore

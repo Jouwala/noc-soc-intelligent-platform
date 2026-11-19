@@ -234,6 +234,20 @@ test('集成：source 组装含回归文件，不含开发资产与运行期缓�
   assert.ok(!files.some((f) => f.includes('/node_modules/')), 'source 模式不该含 node_modules')
 })
 
+test('仓库不得跟踪「已忽略」的过程态文件（.agent-work / .workbuddy-ai / outputs）', (t) => {
+  const root = findRepoRoot()
+  if (!root) t.skip('不在仓库检出内，跳过')
+  // 这批文件是 2026-11-19 用户实测「不该进版本包」的直接来源：
+  //   .agent-work/ 16 个进度档、apps/my_app/outputs/auth_health/ 4 个运行期报告。
+  // 它们都在 .gitignore 里，却因为「先提交、后加规则」仍在库中，于是必然进入
+  // GitHub 自动生成的 Source code ZIP（export-ignore 只能事后补救）。
+  // 这条守卫盯住根因：只要出现「被忽略却仍跟踪」的文件，release-build 就失败。
+  const r = spawnSync('git', ['ls-files', '-ci', '--exclude-standard'], { cwd: root, encoding: 'utf8' })
+  assert.equal(r.status, 0, r.stderr)
+  const tracked = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
+  assert.deepEqual(tracked, [], `这些文件已被 .gitignore 覆盖却仍在版本库里：\n  - ${tracked.join('\n  - ')}`)
+})
+
 test('zip-writer：同一输入两次写出字节相同', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'zip-det-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
