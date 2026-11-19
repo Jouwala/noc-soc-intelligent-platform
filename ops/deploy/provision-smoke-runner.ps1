@@ -39,6 +39,8 @@ param(
     # 副本代码从哪个 ref 取（默认项目当前 HEAD）。合并前验证分支时用
     # -SourceRef refs/heads/<分支>，避免把别人的在途分支当生产代码。
     [string]$SourceRef = 'HEAD',
+    # 跳过完整性标签修复（默认在提权时把副本根改成 Medium；见下方说明）。
+    [switch]$SkipIntegrityFix,
     [switch]$SkipHeadUpdate,
     [switch]$InstallTask
 )
@@ -145,24 +147,52 @@ Write-Host "目标：$Runner"
 Write-Host ('模式：{0}' -f $(if ($Apply) { '真跑（-Apply）' } else { '干跑（只打印计划，不写任何东西）' }))
 Write-Host ''
 
+# ---------- 0.5 完整性标签（项目内副本的关键一步） ----------
+# 工作区根（D:\02_olbr_portal）带有 Low 完整性标签，新目录会继承它。Low 标签的
+# nginx.exe 在 smoke.ps1 的隐藏控制台/私有桌面链里会以 0xC0000142（DLL 初始化失败）
+# 起不来，表现为 start_all 失败。提权时先建副本根并把标签改成 Medium，后续子文件
+# 随继承；未提权时只告警，并打印要执行的命令。
+$isAdmin = $false
+try {
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+} catch { }
+if (-not $SkipIntegrityFix) {
+    if (-not (Test-Path -LiteralPath $Runner)) {
+        if ($Apply) { New-Item -ItemType Directory -Force -Path $Runner | Out-Null }
+    }
+    $label = ''
+    try { $label = (icacls $Runner 2>&1 | Out-String) } catch { }
+    if ($label -match 'Low Mandatory Level') {
+        if ($isAdmin -and $Apply) {
+            Write-Step '把副本根完整性标签改为 Medium（子文件继承）'
+            $null = icacls $Runner /setintegritylevel "(OI)(CI)Medium" 2>&1
+        } else {
+            Write-Warning ('副本根仍是 Low 完整性标签，隐藏控制台冒烟会以 nginx 0xC0000142 失败。' +
+                "请用提权 PowerShell 执行：icacls `"$Runner`" /setintegritylevel (OI)(CI)Medium /T")
+        }
+    }
+}
+
 # ---------- 1. clone / 校验副本自身 ----------
-if (-not (Test-Path -LiteralPath $Runner)) {
+$isClone = Test-Path -LiteralPath (Join-Path $Runner '.git')
+if (-not $isClone) {
+    $existing = @(Get-ChildItem -LiteralPath $Runner -Force -ErrorAction SilentlyContinue)
+    if ($existing.Count -gt 0) {
+        throw "目标已存在且不是 git 副本（且非空），拒绝在该目录上生成：$Runner"
+    }
     Write-Step ('clone 项目 -> {0}（--no-hardlinks，独立对象库；检出 {1}）' -f $Runner, $SourceRef)
     if ($Apply) {
         $null = Invoke-Git -Repo $ProjectRoot -GitArgs @('clone', '--quiet', '--no-hardlinks', '--no-checkout', $ProjectRoot, $Runner)
         $null = Invoke-Git -Repo $Runner -GitArgs @('checkout', '--quiet', '--detach', $projectHead)
     }
 } else {
-    if (-not (Test-Path -LiteralPath (Join-Path $Runner '.git'))) {
-        throw "目标已存在但不是 git 副本（缺 .git），拒绝在该目录上生成：$Runner"
-    }
     if (-not (Test-Path -LiteralPath (Join-Path $Runner 'apps\my_app\backend\main.py'))) {
         throw "目标已存在但不像本项目副本（缺 apps\my_app\backend\main.py）：$Runner"
     }
     Write-Step '副本已存在：只补缺失项（不删、不重置）'
 }
 
-if (-not $Apply -and -not (Test-Path -LiteralPath $Runner)) {
+if (-not $Apply -and -not $isClone) {
     Write-Host ''
     Write-Host '干跑结束：目标还不存在，上面是将会生成的内容。确认后加 -Apply。'
     exit 0
@@ -179,7 +209,6 @@ if ($Apply) {
         Write-Warning "fetch origin $SourceRef 失败（离线或源是裸 SHA？）：$($_.Exception.Message)"
     }
 }
-
 # ---------- 2. 远端（platform 供 watcher fetch PR head；origin 指回项目） ----------
 if ($platformUrl -ne '') {
     $remotes = Invoke-Git -Repo $Runner -GitArgs @('remote')

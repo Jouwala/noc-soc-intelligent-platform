@@ -65,6 +65,11 @@ powershell -NoProfile -File ops\deploy\provision-smoke-runner.ps1 -Apply
 powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-watcher.ps1 -Start
 ```
 
+> ⚠ **完整性标签**：项目内副本会继承工作区根的 **Low** 完整性标签；Low 的 `nginx.exe`
+> 在 `smoke.ps1` 的隐藏控制台链里会以 `0xC0000142`（DLL 初始化失败）起不来，start_all 直接失败。
+> 提权运行时 provision 会把副本根改成 Medium（子文件随继承）；非提权会话生成后按提示补跑
+> `icacls "<项目>\.smoke" /setintegritylevel (OI)(CI)Medium /T`。2026-11-19 实测，改完 watcher 冒烟通过。
+
 副本里有 `.smoke-runner` 标记，`smoke-local.ps1` / `smoke-watcher.ps1` /
 `install-smoke-watcher.ps1` / `smoke-queue-status.ps1` 都以它作为「这是不是
 冒烟副本」的判据；在生产 02 根或旧的 `D:\02_olbr_portal_smoke` 上直接拒绝执行。
