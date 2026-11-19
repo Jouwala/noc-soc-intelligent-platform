@@ -18,6 +18,7 @@
 必须 = 进包；否则一律不进。具体：
 
 - **不进包**：`.github/`、`.claude/`、`.githooks/`、`.agent-work/`、`.workbuddy-ai/`、
+  `.gitignore`、`.gitattributes`、`README.md`、`AGENTS.md`（仓库自身信息）、
   `docs/`、开发手册、`tests/`、代码生成器、冒烟工具、`agent-worker` / `control-plane`、
   浏览器扩展、前端源码（`frontend/src`、`portal/src`）、生产看门狗脚本；
 - **不进包（运行期缓存，此前真实混入过）**：`backend/services/cn_ems/_pmcache`

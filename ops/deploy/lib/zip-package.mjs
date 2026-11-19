@@ -56,6 +56,7 @@ export function deniedFileReason(rel) {
   const base = rel.split('/').pop()
   if (base === 'PG_VERSION') return 'PG 数据目录标记'
   if (base === 'PRODUCTION.flag') return '生产角色标记（交付包只能是隔离副本）'
+  if (base === 'AGENTS.md') return '仓库给 AI 的说明（不是产品内容）'
   if (/^\.env(\..+)?$/.test(base) && base !== '.env.example') return '.env 文件'
   if (/\.(key|pem)$/i.test(base)) return '密钥/证书文件（*.key/*.pem 一律不进包，含 CA 证书——外部 config 提供，待 P1-6 确认）'
   if (/session.*\.json$/i.test(base)) return '会话文件'
@@ -246,7 +247,9 @@ export function assertPackageMinimal(staging) {
   const all = walkFiles(staging, '', new Set(), [])
   for (const rel of all) {
     for (const rule of PACKAGE_FORBIDDEN_PATHS) {
-      if (!rule.prefix.endsWith('/') && (rel === rule.prefix || rel.startsWith(`${rule.prefix}/`))) {
+      if (rule.prefix.endsWith('/') || rule.rootOnly) continue // 目录/根级文件规则已由上面的 existsSync 覆盖
+      // 文件规则同时匹配根目录与任意嵌套（如 apps/my_app/AGENTS.md）。
+      if (rel === rule.prefix || rel.endsWith(`/${rule.prefix}`) || rel.startsWith(`${rule.prefix}/`)) {
         violations.push(`${rel}（${rule.reason}）`)
         break
       }

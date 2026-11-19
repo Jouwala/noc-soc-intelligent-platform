@@ -85,6 +85,13 @@ ops/smoke/*.cmd             -text eol=crlf
 docs/                       export-ignore
 desktop_shortcuts/          export-ignore
 extensions/                 export-ignore
+# 仓库自身的信息文件也不进源码归档（用户 2026-11-19 明确）：git 规则、
+# 仓库 README、给 AI 的 AGENTS 说明都不是产品内容。
+.gitignore                  export-ignore
+.gitattributes              export-ignore
+README.md                   export-ignore
+AGENTS.md                   export-ignore
+**/AGENTS.md                export-ignore
 **/.workbuddy-ai/           export-ignore
 **/.claude/                 export-ignore
 apps/my_app/tests/          export-ignore

@@ -148,13 +148,17 @@ export const PATH_DENIED_DIRS = [
 // 与 deniedFileReason 的分工：那边管「单个文件像不像凭据/垃圾」，这里管
 // 「整类开发资产是否混进了交付包」。
 export const PACKAGE_FORBIDDEN_PATHS = [
-  { prefix: '.github/', reason: 'CI/Issue 模板（开发用）' },
   { prefix: '.git/', reason: '版本库' },
+  { prefix: '.gitignore', reason: '仓库元数据（用户要求不进版本包）', rootOnly: true },
+  { prefix: '.gitattributes', reason: '仓库元数据（用户要求不进版本包）', rootOnly: true },
+  { prefix: '.github/', reason: 'CI/Issue 模板（开发用）' },
   { prefix: '.claude/', reason: 'AI 工具配置' },
   { prefix: '.githooks/', reason: 'git 钩子（开发用）' },
   { prefix: '.agent-work/', reason: 'agent 任务笔记' },
   { prefix: '.agents/', reason: 'agent worktree' },
   { prefix: '.workbuddy-ai/', reason: 'AI 会话记忆' },
+  { prefix: 'AGENTS.md', reason: '仓库给 AI 的说明（不是产品内容）' },
+  { prefix: 'README.md', reason: '仓库首页说明（目标机只看《安装与运行说明.md》）', rootOnly: true },
   { prefix: 'docs/', reason: '开发手册（目标机只保留《安装与运行说明.md》）' },
   { prefix: 'desktop_shortcuts/', reason: '桌面快捷方式生成器' },
   { prefix: 'extensions/', reason: '浏览器扩展（与平台服务无关）' },
