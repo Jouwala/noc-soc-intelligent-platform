@@ -6,7 +6,7 @@
     2026-11-18 02 切换成生产后，冒烟不能再在 02 根目录里跑：它会重建
     apps\_fe_dist、按副本根重写 nginx.conf，并在本副本根下 `nginx -s quit`
     —— 等于每冒烟一次就打断一次生产。当晚的应急做法是把隔离栈挪到项目外
-    的 D:\02_olbr_portal_smoke（见 docs\workspace\cutover-2026-11-20.md）。
+    的 D:\02_olbr_portal_smoke（该副本已于 2026-11-19 删除；见 docs\workspace\cutover-2026-11-20.md）。
     但那是**手工搭出来的树**：clone + 7 个 junction + 手工复制 .env/db/dist，
     仓库里没有任何脚本能重建它；而且它的 junction 又指回项目，
     项目一搬走两边同时坏 —— 违反 README「可独立部署的便携副本」与

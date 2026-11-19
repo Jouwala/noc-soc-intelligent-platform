@@ -69,14 +69,14 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 # 根目录按脚本位置推导：脚本在哪棵就只动哪棵，不写死盘符。
 # 2026-11-18 之前这里写死 'D:\02_olbr_portal'；当晚切生产后副本曾放到项目外
-# （D:\02_olbr_portal_smoke），2026-11-19 起收进项目内（默认 <项目>\.smoke），
+# （D:\02_olbr_portal_smoke，该副本已于 2026-11-19 删除），现在在项目内（默认 <项目>\.smoke），
 # 由 ops\deploy\provision-smoke-runner.ps1 生成，.smoke-runner 是它的身份标记。
 $Root        = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $Tmp         = Join-Path $Root 'TMP'
 $Here        = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # ⛔ 只允许在项目内冒烟副本里跑。缺这个标记说明当前树不是 provision 生成的
-# 副本（例如直接在生产 02 根、或旧的 D:\02_olbr_portal_smoke 上）——那会重建
+# 副本（例如直接在生产 02 根、或旧的项目外副本上）——那会重建
 # 生产前端的 _fe_dist、并按当前根重写 nginx.conf，等于打断线上。
 if (-not (Test-Path -LiteralPath (Join-Path $Root '.smoke-runner'))) {
     Write-Host "拒绝执行：$Root 不是冒烟副本（缺 .smoke-runner）。" -ForegroundColor Red
