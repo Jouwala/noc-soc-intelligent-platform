@@ -346,8 +346,11 @@ Task/nginx_monitor.state
 # `_ppt_probe2/`（*.slide / *.pptx 草稿）与 AI 工作目录 `.workbuddy-ai/`（仅 memory/）
 # 都是过程产物，不是交付源码。按 AGENTS.md 第四节第 7 条，探针应落各子系统 TMP\；
 # 这两处落在工作区根，此前无规则覆盖。
+# 2026-11-19 补：原规则锚在根目录（`/.workbuddy-ai/`），管不到 `apps/*/.workbuddy-ai/`，
+# 于是 portal 与 whatsapp-kb-bot 下的会话记忆随初始提交（2abc71a）进了仓库、还进过源码归档。
+# 那 9 个文件已 `git rm`（内容在 fe943a6 等历史里仍可取），规则改为通配，任何一层再生成都不入库。
 /_ppt_probe*/
-/.workbuddy-ai/
+**/.workbuddy-ai/
 
 # 工具自建的同步备份目录（2026-10-03 新增）
 # `Task/whatsapp-kb-bot/.sync-backup-<时间戳>/` 由同步脚本在覆盖前整目录备份生成，
