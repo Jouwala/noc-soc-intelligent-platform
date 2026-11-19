@@ -13,7 +13,10 @@
     · 以当前用户「交互式」身份运行（S4U 会丢网络凭据，访问不了 GitHub）。
 
   注意：交互式身份意味着**该用户登录后**才会自启；注销/关机后不自启。
-  这是刻意的——D:\02 的冒烟要起停本机的四个子系统，必须在用户会话里跑。
+  这是刻意的——冒烟要起停本机隔离栈（8080/8443/55432），必须在用户会话里跑。
+  任务的工作目录就是「当前这份脚本所在的项目内冒烟副本」：在
+  <项目>\.smoke\ops\deploy 里运行它，注册出来的任务就指向 .smoke；
+  换副本位置后重跑一次本脚本即可（不要手改计划任务里的路径）。
 
   用法：
     powershell -NoProfile -File ops\deploy\install-smoke-watcher.ps1 -Status
@@ -37,7 +40,9 @@ $Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $Watcher = Join-Path $Root 'ops\deploy\smoke-watcher.ps1'
 $PsExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
-if ($Root -notlike '*02_olbr_portal*') { throw "当前目录不是隔离副本（$Root），拒绝执行。" }
+if (-not (Test-Path -LiteralPath (Join-Path $Root '.smoke-runner'))) {
+    throw "当前目录不是项目内冒烟副本（$Root，缺 .smoke-runner）。请在 <项目>\.smoke 里运行；生成副本用 ops\deploy\provision-smoke-runner.ps1 -Apply。"
+}
 if (-not (Test-Path -LiteralPath $Watcher)) { throw "找不到 watcher：$Watcher" }
 
 function Stop-RunningWatchers {

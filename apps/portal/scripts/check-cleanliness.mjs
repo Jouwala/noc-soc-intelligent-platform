@@ -43,7 +43,15 @@ const TRACKED_NOISE = [
 const SOURCE_EXEMPT = [/^src\//, /^server\//]
 
 function gitFiles() {
-  return execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' })
+  // ⚠ Git 钩子里（尤其 linked worktree）会显式设置 GIT_DIR：此时 `git ls-files`
+  // 不再按 cwd 收窄，会列出**整个仓库**。本守卫只看门户目录，必须去掉继承的
+  // GIT_DIR/GIT_WORK_TREE，让 git 自己从 ROOT 向上发现仓库。
+  // 2026-11-19 实测：在 .agent-worktrees/<任务> 里提交时，这条会误列 83 个
+  // 仓库级 `_` 前缀真源码并拦下提交；同一份脚本在普通工作树里是正常的。
+  const env = { ...process.env }
+  delete env.GIT_DIR
+  delete env.GIT_WORK_TREE
+  return execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', env })
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)

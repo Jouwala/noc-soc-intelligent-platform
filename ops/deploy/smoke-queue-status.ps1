@@ -4,7 +4,7 @@
   给 Muse 与值班人快速看队列，不抢 TMP\smoke-watcher.pid、不跑冒烟。
   默认仓库与 watcher 一致：Jouwala/noc-soc-intelligent-platform（remote=platform）。
 
-  用法（D:\02_olbr_portal 根）：
+  用法（在项目内冒烟副本根目录，如 <项目>\.smoke）：
     powershell -NoProfile -File ops\deploy\smoke-queue-status.ps1
     powershell -NoProfile -File ops\deploy\smoke-queue-status.ps1 -Json
 #>
@@ -24,7 +24,9 @@ $PidFile = Join-Path $TmpDir 'smoke-watcher.pid'
 $LogFile = Join-Path $TmpDir 'smoke-watcher.log'
 $LockPath = Join-Path $TmpDir 'smoke.lock'
 
-if ($Root -notlike '*02_olbr_portal*') { throw "当前目录不是 02（$Root），拒绝执行。" }
+if (-not (Test-Path -LiteralPath (Join-Path $Root '.smoke-runner'))) {
+    throw "当前目录不是项目内冒烟副本（$Root，缺 .smoke-runner）；它读的是副本 TMP\ 下的 watcher 状态。"
+}
 
 $Token = $env:SMOKE_GITHUB_TOKEN
 if (-not $Token) { $Token = $env:GITHUB_TOKEN }

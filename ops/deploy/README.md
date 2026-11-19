@@ -15,6 +15,18 @@
   `start` 清掉 `stopped.flag` 后 `schtasks /run` 三个自愈任务（与 5 分钟周期同一路径），再等端口就绪；
   `stop` 走 my_app `stop.bat` + 门户 `stop_services.ps1` + 02 的 `nginx -s quit`；`status` 打端口归属/健康/任务状态。
   桌面入口见同目录 `olbr-start.bat` / `olbr-stop.bat` / `olbr-status.bat`（快捷方式已建）。
+- `post-cutover-check.ps1` + `olbr-check.bat`：**生产检查点（手动执行，刻意不挂定时）**。
+  把 2026-11-19 切换后那次人工复核的检查项固化成一条命令：端口与进程归属（80/443 必须归本树
+  nginx）、HTTP 探活（80/443、7038 health 的 `db_mode=pg`、7090、9267/9268）、openapi 特征路由
+  （证明跑的是本树代码）、近 N 小时任务失败率与 Top 失败任务、17 个原生看板（预热后逐页核对
+  failed / stale / 组件 error / 数据里最新日期）、关键看板数据新鲜度（CXO、CN KPI、OLIB、可用率、
+  MW、丢包、电池、SOC、MS SLA、eFlow）、WhatsApp bot 与 notify 心跳及 4 个计划任务指向、外部
+  EWS 可达性（只报告不判失败）。`-Render` 额外用 Playwright 渲染 10 个看板页抓 console error。
+  **只读为主**：唯一的写操作是触发原生看板预热（`-NoPrewarm` 可关）和在
+  `TMP\post-cutover-check\<时间戳>.json` 落一份报告（不入库）。有 FAIL 时 exit 1。
+  用法：双击 `olbr-check.bat`，或
+  `powershell -NoProfile -ExecutionPolicy Bypass -File ops\deploy\post-cutover-check.ps1 [-Render] [-NoPrewarm] [-SinceHours 12]`。
+  默认 ~20 秒；`-Render` 约 +60 秒。伴生渲染脚本：`post-cutover-render.py`（缺 playwright 自动 SKIP）。
 - `cutover/`：**生产切换（D:\01 → D:\02）专用**
   - `snapshot-prod-state.ps1`：切前只读快照（端口归属 / 守护任务状态 / 02 的 .env
     端口键 / 两侧 nginx.conf / 三表行数），落 `TMP\cutover\<时间戳>\`，不入库；
@@ -34,8 +46,34 @@
   `*.bak_<时间>_from01`（每份只留最近 3 份），运行记录写 `TMP\sync-ui-config.log`；
   目标推导出落在生产目录下时直接拒绝执行。
 - `ensure_portal.ps1`：门户保活（计划任务调用）
+### 冒烟运行副本：`<项目>\.smoke`（2026-11-19 起）
+
+02 现在是生产，冒烟**不能**在生产树里跑：它会重建 `apps\_fe_dist`、按副本根
+重写 `nginx.conf`，并在本副本根下 `nginx -s quit`。2026-11-18 的应急做法是把
+隔离栈放到项目外的 `D:\02_olbr_portal_smoke`，但那份树是手工搭的、仓库里
+没有脚本能重建，junction 还指回项目 —— 违反便携副本自包含的约定。
+
+现在改为项目内副本，由 **`provision-smoke-runner.ps1`** 生成/修复（默认干跑，
+`-Apply` 才写；目标默认 `<项目>\.smoke`，已在 `.gitignore`）：
+
+```powershell
+# 生成 / 修补副本（clone + junction + 复制 nginx/构建产物 + 从生产库克隆 schema
+# 与三张本地权威表）
+powershell -NoProfile -File ops\deploy\provision-smoke-runner.ps1 -Apply
+
+# 改计划任务指向副本（需管理员）
+powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-watcher.ps1 -Start
+```
+
+副本里有 `.smoke-runner` 标记，`smoke-local.ps1` / `smoke-watcher.ps1` /
+`install-smoke-watcher.ps1` / `smoke-queue-status.ps1` 都以它作为「这是不是
+冒烟副本」的判据；在生产 02 根或旧的 `D:\02_olbr_portal_smoke` 上直接拒绝执行。
+
 - `ops/smoke/smoke.ps1`：真正的检查引擎（§8.1–§8.4 + 离线 pytest，PR #26–#43
-  已反复使用）。`smoke-local.ps1` 只是薄壳：UTF-8 BOM 让 PS 5.1 能解析、
+  已反复使用）。只在 `.smoke` 副本里跑；根目录按脚本位置推导，不写死盘符。
+  §8.2 的权威源默认取副本上一级项目根的 `apps\my_app\db\app.db`（可用
+  `-AuthSource` 指定），不再读 `D:\01_olbr_portal` 的旧库。
+  `smoke-local.ps1` 只是薄壳：UTF-8 BOM 让 PS 5.1 能解析、
   `TMP\smoke.lock` 防并发、校验 HEAD == `-HeadSha`、写
   `TMP\smoke-pr-<PR>-<sha7>.md`（干跑写 `.dryrun.md`，不覆盖真跑报告）。
 - `smoke-watcher.ps1`：每 60 秒轮询 GitHub，CI 变绿且无 `smoke-passed` 的
@@ -44,7 +82,7 @@
   （Grok 当年的 checkout 由它接管）；工作树有未提交的已跟踪改动时跳过该 PR，
   不覆盖他人在途工作。Token 依次取 `SMOKE_GITHUB_TOKEN`/`GITHUB_TOKEN`/
   `GH_TOKEN`，都没有时回落本机 `gh auth token`（只在内存，不落盘）。
-  开头有硬守卫：推导出的根目录落在 `D:\01_olbr_portal` 下直接拒绝执行（生产只读）。
+  开头有硬守卫：根目录落在 `D:\01_olbr_portal` 下、或缺 `.smoke-runner` 标记时直接拒绝执行。
 - `install-smoke-watcher.ps1`：把 watcher 注册成常驻计划任务 `OLBR_SmokeWatcher`
   （登录自启、崩溃每分钟重启、单实例）；`-Status` 查、`-Uninstall` 卸、
   **改 `smoke-watcher.ps1` 后跑 `-Start` 重启进程**（否则内存里仍是旧逻辑）。
@@ -65,6 +103,8 @@
 **值班人 / 你本机只看这三处即可，不必开 Agent 盯：**
 
 ```powershell
+cd D:\02_olbr_portal\.smoke   # 以下三个入口都必须在副本根里跑（靠 .smoke-runner 判定）
+
 # 1) watcher 在不在（每周或怀疑挂了时）
 powershell -NoProfile -File ops\deploy\install-smoke-watcher.ps1 -Status
 
@@ -72,7 +112,7 @@ powershell -NoProfile -File ops\deploy\install-smoke-watcher.ps1 -Status
 powershell -NoProfile -File ops\deploy\smoke-queue-status.ps1
 
 # 3) 最近一轮发生了什么（失败时）
-Get-Content D:\02_olbr_portal\TMP\smoke-watcher.log -Tail 30
+Get-Content D:\02_olbr_portal\.smoke\TMP\smoke-watcher.log -Tail 30
 ```
 
 **只有这些情况才值得 @ Agent：** 日志里连续 `smoke-local 退出码=1` 且同一项稳定失败；

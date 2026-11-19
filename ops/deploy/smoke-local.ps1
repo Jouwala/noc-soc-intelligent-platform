@@ -1,12 +1,13 @@
 ﻿<#
-  smoke-local.ps1 — D:\02 本机冒烟（替代 Grok Routine 的冒烟部分）
+  smoke-local.ps1 — 项目内冒烟副本（.smoke）的冒烟薄壳（替代 Grok Routine 的冒烟部分）
   ============================================================================
   目标：把 Grok 每次在 D:\02 上手工跑的 §8.1–§8.4 + 离线 pytest，变成
   一条确定性脚本，0 token、0 LLM 判断。结果格式与 Grok 在 PR 下的
   回帖一致，下游 auto-merge 只认 `smoke-passed` 标签（由 watcher
   在通过后打，本脚本只写报告，不打标签）。
 
-  只在 D:\02_olbr_portal 里跑。真正的检查委托给已验证的
+  只在项目内冒烟副本里跑（默认 <项目>\.smoke，由 ops\deploy\provision-smoke-runner.ps1
+  生成；.smoke-runner 是它的身份标记）。真正的检查委托给已验证的
   ops\smoke\smoke.ps1（隐藏控制台、隔离等待 start_all/stop_all、
   注册表 Delegation 用完即恢复）。本脚本负责：UTF-8 BOM 可被
   PS 5.1 解析、TMP\smoke.lock、校验当前 HEAD 与 -HeadSha 一致
@@ -14,9 +15,9 @@
   冒烟前切到 PR head 并在 finally 里切回）、把结果写成
   TMP\smoke-pr-<PR>-<sha7>.md（干跑写 .dryrun.md，不覆盖真跑报告）。
 
-  用法（必须在 D:\02_olbr_portal 根目录，或用 -File 绝对路径）：
-    powershell -NoProfile -ExecutionPolicy Bypass -File ops\deploy\smoke-local.ps1 -PrNumber 44 -HeadSha <40位>
-    powershell -NoProfile -ExecutionPolicy Bypass -File ops\deploy\smoke-local.ps1 -PrNumber 44 -HeadSha <40位> -DryRun
+  用法（在冒烟副本根目录，或用 -File 绝对路径）：
+    powershell -NoProfile -ExecutionPolicy Bypass -File <项目>\.smoke\ops\deploy\smoke-local.ps1 -PrNumber 44 -HeadSha <40位>
+    powershell -NoProfile -ExecutionPolicy Bypass -File <项目>\.smoke\ops\deploy\smoke-local.ps1 -PrNumber 44 -HeadSha <40位> -DryRun
 
   退出码：0 通过（含「仅已知 NUR 失败被忽略」）；1 冒烟失败；
           2 前置条件不满足（blocked：目录不对、HEAD 不匹配、锁被占用等）。
@@ -438,7 +439,9 @@ $ProductionRoot = 'D:\01_olbr_portal'
 if ($Root.TrimEnd('\') -eq $ProductionRoot -or $Root -like ($ProductionRoot + '\*')) {
     throw "拒绝执行：$Root 落在生产目录 $ProductionRoot 下面。冒烟只在 D:\02_olbr_portal 隔离副本上跑。"
 }
-if ($Root -notlike '*02_olbr_portal*') { throw "当前目录不是隔离副本（$Root），拒绝执行。" }
+if (-not (Test-Path -LiteralPath (Join-Path $Root '.smoke-runner'))) {
+    throw "拒绝执行：$Root 不是项目内冒烟副本（缺 .smoke-runner）。请先跑 ops\deploy\provision-smoke-runner.ps1 -Apply 生成 <项目>\.smoke。"
+}
 if (-not (Test-Path -LiteralPath (Join-Path $Root 'ISOLATED_COPY.flag'))) {
     throw '缺少 ISOLATED_COPY.flag，拒绝执行：当前目录可能不是隔离副本。'
 }

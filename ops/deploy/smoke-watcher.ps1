@@ -1,5 +1,5 @@
 ﻿<#
-  smoke-watcher.ps1 — D:\02 本机冒烟轮询器（替代 Grok Routine 的触发 + 回写）
+  smoke-watcher.ps1 — 项目内冒烟副本（.smoke）的轮询器（替代 Grok Routine 的触发 + 回写）
   ============================================================================
   Grok 链路原来是：CI 变绿 → agent-orchestrator POST webhook → Grok Routine
   在 D:\02 上 detached checkout 到 PR head → 跑冒烟 → 贴评论、打
@@ -9,10 +9,11 @@
 
   ⛔ 生产边界（2026-11-14 用户明确要求）
   ----------------------------------------
-  D:\01_olbr_portal 是生产，**不许动它里面任何东西**。本脚本只在
-  D:\02_olbr_portal 隔离副本里工作；开头有硬守卫，一旦推导出的根目录
-  落在 D:\01 下面就直接拒绝执行。冒烟链路对 D:\01 只有一处只读用途：
-  看 80/443 的 nginx 归属、读它家 app.db 做三表比对，从不写入。
+  D:\01_olbr_portal 是生产，**不许动它里面任何东西**。本脚本只在项目内
+  冒烟副本（默认 <项目>\.smoke，由 ops\deploy\provision-smoke-runner.ps1
+  生成）里工作；开头有硬守卫，根目录落在 D:\01 下面、或缺 .smoke-runner
+  标记都直接拒绝执行。冒烟链路对 01 只剩一处只读用途：开跑前后看 80/443
+  的 nginx 归属是否逐字未变，从不写入。
 
   触发条件（与 agent-orchestrator 的去重逻辑一致）：
     · PR open、非草稿、base 是 main；
@@ -67,7 +68,7 @@
   日志：同时写 stdout 与 TMP\smoke-watcher.log（超过 5MB 轮转为 .1）。
   单实例：TMP\smoke-watcher.pid 守护，发现已有活的 watcher 就直接退出。
 
-  用法（在 D:\02_olbr_portal 根目录）：
+  用法（在冒烟副本根目录，如 <项目>\.smoke）：
     powershell -NoProfile -File ops\deploy\smoke-watcher.ps1 -Once -DryRun
     powershell -NoProfile -File ops\deploy\smoke-watcher.ps1 -Once
     powershell -NoProfile -File ops\deploy\smoke-watcher.ps1 -OnlyPr 45 -Once
@@ -100,7 +101,9 @@ $ProductionRoot = 'D:\01_olbr_portal'
 if ($Root.TrimEnd('\') -eq $ProductionRoot -or $Root -like ($ProductionRoot + '\*')) {
     throw "拒绝执行：推导出的根目录是 $Root，落在生产目录 $ProductionRoot 下面。本链路只在 D:\02_olbr_portal 隔离副本上跑。"
 }
-if ($Root -notlike '*02_olbr_portal*') { throw "当前目录不是隔离副本（$Root），拒绝执行。" }
+if (-not (Test-Path -LiteralPath (Join-Path $Root '.smoke-runner'))) {
+    throw "拒绝执行：$Root 不是项目内冒烟副本（缺 .smoke-runner）。请先跑 ops\deploy\provision-smoke-runner.ps1 -Apply 生成 <项目>\.smoke。"
+}
 if (-not (Test-Path -LiteralPath (Join-Path $Root 'ISOLATED_COPY.flag'))) {
     throw '缺少 ISOLATED_COPY.flag，拒绝执行。'
 }

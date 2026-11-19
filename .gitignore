@@ -386,6 +386,18 @@ Task/PS_CS_CORE_Scripts/openclaw_new.json
 /.agent-worktrees/
 /.agent-work/
 
+# 冒烟运行副本（2026-11-19 起在项目内，默认 <项目>\.smoke）
+# 背景：02 在 2026-11-18 成为生产后，冒烟不能再在生产树里跑（它会重建
+# apps\_fe_dist、并在本副本根下 nginx -s quit）；但把副本放到项目外
+# （D:\02_olbr_portal_smoke）又违反「便携副本完全自包含」的约定。
+# 现在由 ops\deploy\provision-smoke-runner.ps1 在项目内生成/修复，
+# 内含自己的 .git、nginx 副本与 junction（指向本项目 runtime/node_modules）。
+# 忽略跟踪 ≠ 可以删除：它是冒烟门禁的运行体，删了 watcher 就没得跑。
+/.smoke/
+
+# 冒烟副本身份标记（副本根上的 .smoke-runner；上面的 /.smoke/ 只覆盖项目根下同名目录）
+/.smoke-runner
+
 # AI 工具规则真源的本地备份（2026-11-02 新增）
 # `/_agents/` 是规则真源目录（rules\ 入库）；`_backup\` 下是改前完整快照，
 # 按 AGENTS.md 第四节第 7 条「快照一律不进版本库」，只留在本机磁盘。
@@ -574,6 +586,10 @@ apps/my_app/backup/
 # 标记语义已在 docs/workspace/部署说明.md 里写清，故不入库。
 # ─────────────────────────────────────────────────────────────────────────────
 /ISOLATED_COPY.flag
+# PRODUCTION.flag 同理：2026-11-19 起用它区分「这台机跑生产端口 80/443」。
+# post_sync_fix_paths.ps1（git post-checkout 钩子）据此决定是否按 .env 把
+# nginx 看门狗写回隔离端口 8080 —— 没有它，一次 checkout 就会把生产看门狗改坏。
+/PRODUCTION.flag
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 便携 PG 的运行时痕迹

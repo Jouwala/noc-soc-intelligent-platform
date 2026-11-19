@@ -1,9 +1,9 @@
 ﻿<#
   ops\smoke\smoke.ps1 -- 02 隔离副本 PR 冒烟（§8.1~§8.4 + 可选并行 pytest）
   =============================================================================
-  用法（在任意目录调用，脚本只碰 D:\02_olbr_portal）:
-    powershell -NoProfile -ExecutionPolicy Bypass -File D:\02_olbr_portal\ops\smoke\smoke.ps1 -PR 26
-    powershell -NoProfile -ExecutionPolicy Bypass -File D:\02_olbr_portal\ops\smoke\smoke.ps1 -PR 26 -Sha 1998577 -Pytest
+  用法（只能在项目内冒烟副本里跑；默认 <项目>\.smoke，脚本只碰 $Root）:
+    powershell -NoProfile -ExecutionPolicy Bypass -File <项目>\.smoke\ops\smoke\smoke.ps1 -PR 26
+    powershell -NoProfile -ExecutionPolicy Bypass -File <项目>\.smoke\ops\smoke\smoke.ps1 -PR 26 -Sha 1998577 -Pytest
 
   参数:
     -PR <n>                必填，PR 号（只用于结果文件名与报告标题）
@@ -19,7 +19,7 @@
     -KnownFailures <ids>   可选，pytest 节点 id 列表；仅这些失败且无其它 ERROR/失败时冒烟仍算通过
     -NoIgnoreKnownFailures 可选，关闭上述忽略（任何失败都判 FAIL）
 
-  产物（都在 D:\02_olbr_portal\TMP，已在 .gitignore 里）:
+  产物（都在 <副本根>\TMP，已在 .gitignore 里）:
     smoke_result_<PR>_<sha7>.md      检查项 + 分阶段耗时 + 末行(RESULT: PASS / FAIL)
     smoke_pytest_<PR>_<sha7>.out     pytest 完整输出（若 -Pytest）
     smoke_<PR>_<sha7>_*.out/.err     start_all / stop_all / nginx -t / fe-build 日志
@@ -29,7 +29,8 @@
               此时本脚本**不会启动或停止任何进程**就退出
 
   安全约束（对齐方案 §8 隔离冒烟）:
-    · 只动 D:\02_olbr_portal 目录；不改 D:\01、80/443、5432、7038、7090、9267。
+    · 只动冒烟副本根（默认 <项目>\.smoke，由 ops\deploy\provision-smoke-runner.ps1 生成）；
+      不改 D:\01、80/443、5432、7038、7090、9267。
     · 启停只走 ops\deploy\start_all.ps1 / stop_all.ps1（按 pid 文件，不按端口盲杀）。若从无控制台环境启动，会先把本用户默认终端临时改为 Windows Console Host，再以 CREATE_NEW_CONSOLE+SW_HIDE 重启动自身（SMOKE_HEADLESS=1），让全部子进程继承这个隐藏控制台（GetConsoleWindow≠0，避免 Node/npm/powershell 再弹出 Windows Terminal）。跑完立即恢复原默认终端（原值写入 TMP\smoke_console_delegation.bak，异常退出后下次启动会先按该文件恢复）。§8.1 npm run build 改为直接启动进程并等待该进程对象，避免 vite 已完成后仍因残留 node/esbuild 占用重定向句柄而空等 600 秒。
     · stop_all 放在 finally 里：中途失败、脚本被中断也会停本副本进程。
     · 只使用 git 只读命令（rev-parse / diff --name-only），不 commit / push / checkout。
@@ -46,6 +47,9 @@ param(
     [switch]$SkipFeBuild,
     [switch]$ForceFeBuild,
     [string]$BaseRef = '',
+    # §8.2 的权威源（本地权威三表）。默认取冒烟副本上一级项目根的
+    # apps\my_app\db\app.db；换机器/独立副本时显式传入。
+    [string]$AuthSource = '',
     [int]$FeBuildTimeoutSec = 600,
     # 已知失败基线（#111，2026-11-17）：以下两条 NUR 用例按 2026-10-06
     # 快照校准（名单 46 单 / 名单周全量 1107），D:\02 的名单（库表
@@ -63,11 +67,23 @@ $ErrorActionPreference = 'Continue'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-# 根目录按脚本位置推导：02（生产）与冒烟专用副本（D:\02_olbr_portal_smoke）都用同一份脚本。
-# 2026-11-18 之前这里写死 'D:\02_olbr_portal'，导致无法在独立副本上跑冒烟。
+# 根目录按脚本位置推导：脚本在哪棵就只动哪棵，不写死盘符。
+# 2026-11-18 之前这里写死 'D:\02_olbr_portal'；当晚切生产后副本曾放到项目外
+# （D:\02_olbr_portal_smoke），2026-11-19 起收进项目内（默认 <项目>\.smoke），
+# 由 ops\deploy\provision-smoke-runner.ps1 生成，.smoke-runner 是它的身份标记。
 $Root        = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $Tmp         = Join-Path $Root 'TMP'
 $Here        = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# ⛔ 只允许在项目内冒烟副本里跑。缺这个标记说明当前树不是 provision 生成的
+# 副本（例如直接在生产 02 根、或旧的 D:\02_olbr_portal_smoke 上）——那会重建
+# 生产前端的 _fe_dist、并按当前根重写 nginx.conf，等于打断线上。
+if (-not (Test-Path -LiteralPath (Join-Path $Root '.smoke-runner'))) {
+    Write-Host "拒绝执行：$Root 不是冒烟副本（缺 .smoke-runner）。" -ForegroundColor Red
+    Write-Host '请先跑 ops\deploy\provision-smoke-runner.ps1 -Apply 生成 <项目>\.smoke。' -ForegroundColor Red
+    exit 2
+}
+$ProjectRoot = Split-Path -Parent $Root
 
 # ---------------------------------------------------------------------------
 # 无控制台父进程（Agent Shell / 任务计划）下，控制台子系统子进程会被 Win11 默认
@@ -354,10 +370,16 @@ $PyExe       = Join-Path $Root 'runtime\python312\python.exe'
 $AppDir      = Join-Path $Root 'apps\my_app'
 $AuthSrc     = 'D:\01_olbr_portal\Task\my_app\db\app.db'
 $AuthTgt     = Join-Path $Root 'apps\my_app\db\app.db'
+# 权威源（三张本地权威表）：
+#   2026-11-19 之前写死 'D:\01_olbr_portal\Task\my_app\db\app.db' —— 那是**旧生产**，
+#   既在项目外（违反便携副本自包含），又会在 01 退役后让冒烟直接判失败。
+#   现在默认取副本上一级项目根的 app.db（项目内、随 02 当前状态走）；
+#   换机器/独立副本时用 -AuthSource 显式指定。
+$AuthSrc = $(if ($AuthSource -ne '') { $AuthSource } else { Join-Path $ProjectRoot 'apps\my_app\db\app.db' })
 # 只列「必须出现在 check 输出里的表名」。行数**不再硬编码**——2026-11-18 实测踩过：
 # 副本补了一条 email_recipients（10→11，补的是生产本来就有的那条），硬编码的期望值
-# 把一次正确迁移判成了冒烟失败。判据改为「源库可读时两侧必须一致」，
-# 源库为空/不可读时只报告、不判失败（换机器没有 01 副本时不该误伤）。
+# 把一次正确迁移判成了冒烟失败。判据是「源库可读时两侧必须一致」；源库缺失时
+# 预检直接拒绝（退出码 2），不再静默判通过 —— 拿不到真相源的检查等于没做。
 $AuthTables  = @('credentials', 'task_schedule_config', 'email_recipients')
 $TestPorts   = @(8080, 8443, 7039, 7091, 9277, 55432)
 # 后端派生的实时代理（start_all 不写它们的 pid，故 stop_all 停不掉）-- 只记录，不杀
@@ -869,6 +891,7 @@ function Save-Result {
 Start-Stage '0. 预检'
 $refuse = @()
 if (-not (Test-Path -LiteralPath (Join-Path $Root 'ISOLATED_COPY.flag'))) { $refuse += '缺少 ISOLATED_COPY.flag' }
+if (-not (Test-Path -LiteralPath $AuthSrc)) { $refuse += "缺权威源 app.db：$AuthSrc（可用 -AuthSource 指定）" }
 if (-not (Test-Path -LiteralPath $Helper)) { $refuse += "缺少 $Helper" }
 $busy = @()
 foreach ($p in $TestPorts) { $pp = @(Get-ListenPid $p); if ($pp.Count -gt 0) { $busy += ("{0}->{1}" -f $p, ($pp -join ',')) } }
