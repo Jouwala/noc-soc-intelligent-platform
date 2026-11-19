@@ -33,14 +33,14 @@ MY_APP_PROXY_VMAX_PORT=8890
 # ---- my_app -----------------------------------------------------------------
 # pg = 用副本自带的便携 PostgreSQL（推荐，快照就是按它做的）
 # sqlite = 回退到 db/app.db；⚠ 副本**不带** app.db（2.58G），且部分路由硬编码了
-#          d:\01_RPA\... 的 sqlite 路径，换机会失效。除非另行准备数据，否则别改。
+#         部分历史路由硬编码了旧机器的 sqlite 路径，换机会失效。除非另行准备数据，否则别改。
 MY_APP_DB_MODE=pg
 MY_APP_BACKEND_PORT=7039
 # 1 = 不启动 APScheduler。副本必须保持 1：否则采集任务会去连生产上游、
 #     并可能重复投递 WhatsApp/邮件告警（这是分发副本最大的副作用风险）。
 MY_APP_DISABLE_SCHEDULER=1
 # 前端构建产物目录（vite.config.ts:84 读它）。留空则由 start_all.ps1 填成
-# <副本根>\apps\_fe_dist —— 不填会写死到 D:/02_olbr_portal/apps/_fe_dist，换机即白屏。
+# <副本根>\apps\_fe_dist —— 不填会写死到构建机的绝对路径，换机即白屏。
 FE_DIST_OUT=
 
 # ---- 便携 PostgreSQL --------------------------------------------------------
@@ -111,8 +111,8 @@ PORTAL_QA_NODE=
 MY_APP_API_BASE=http://127.0.0.1:7039
 
 # ---- WhatsApp 发图服务（my_app 任务用，副本默认不跑）------------------------
-# 留空则用源码默认值。⚠ CHROME_PATH 默认指向 D:\01_RPA\chrome-win\...，
-# 副本不带 Chrome（779MB），需要发图时自行指向目标机器上的 Chrome。
+# 留空则用源码默认值。⚠ CHROME_PATH 的源码默认值指向旧机器的 Chrome，
+# 副本不带 Chrome（约 779MB），需要发图时自行指向目标机器上的 Chrome。
 CHROME_PATH=
 WHATSAPP_HEADLESS=true
 # 会话目录留空则用相对路径 apps\whatsapp_session（副本不带打包时的登录态）
