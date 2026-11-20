@@ -26,6 +26,8 @@
       不会因为生产新增凭据而误报。
     · 计划任务 OLBR_SmokeMaintenance（每天 04:10）跑 -Daily；
       OLBR_SmokeReprovision（每周日 04:40）跑 -Reprovision -SyncData -CleanTmp。
+    · -InstallTask 优先把任务指向项目根脚本；项目树还没跟上 main 时退回 runner 副本
+      （与 runner 一起更新），并提示以后重跑。worktree 里拒绝注册（临时目录）。
     · 冒烟锁 TMP\smoke.lock 存在时，除 -Status 外一律跳过本轮（不和服务抢）；
       只有「自己就是持锁方」的调用（smoke-local 在冒烟前同步）才用 -IgnoreLock 放行。
 
@@ -40,7 +42,7 @@
   安全：只动 <项目>\.smoke；生产 01 目录、非 runner 目录、runner == 项目根一律拒绝。
         不启动/停止任何服务，不打印任何口令。
 #>
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$RunnerPath = '',
     [switch]$Apply,
@@ -99,6 +101,9 @@ function Write-MaintLog {
     if (-not $Quiet -or $Level -ne 'INFO') { Write-Host $line }
     try {
         if (-not (Test-Path -LiteralPath $TmpDir)) { New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null }
+        if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt 5MB) {
+            Move-Item -LiteralPath $LogFile -Destination ($LogFile + '.1') -Force -ErrorAction SilentlyContinue
+        }
         Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue
     } catch { }
 }
@@ -292,8 +297,18 @@ function Install-MaintTask {
     $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     # 计划任务固定用「项目根」那份，而不是 runner 里随 PR 检出的副本：
     # runner 可能正被 watcher 切到某个 PR head，那份脚本不一定存在/稳定。
+    # 但项目工作树也可能停在旧分支（脚本还没合并进来），此时退回 runner 副本：
+    # runner 平时跟 platform/main，脚本就在里面；等项目树更新后重跑 -InstallTask 指回项目根。
     $scriptPath = Join-Path $ProjectRoot 'ops\deploy\maintain-smoke-runner.ps1'
-    if (-not (Test-Path -LiteralPath $scriptPath)) { throw "找不到项目根下的维护脚本：$scriptPath" }
+    if (-not (Test-Path -LiteralPath $scriptPath)) {
+        $fallback = Join-Path $Runner 'ops\deploy\maintain-smoke-runner.ps1'
+        if (Test-Path -LiteralPath $fallback) {
+            Write-Warn "项目根缺维护脚本，计划任务改指向 runner 副本：$fallback（项目树更新后请重跑 -InstallTask）"
+            $scriptPath = $fallback
+        } else {
+            throw "找不到维护脚本：$ProjectRoot 与 $Runner 都没有 ops\deploy\maintain-smoke-runner.ps1"
+        }
+    }
     $userId = "$env:USERDOMAIN\$env:USERNAME"
     $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)
@@ -314,6 +329,10 @@ function Install-MaintTask {
     )
     foreach ($s in $specs) {
         $action = New-ScheduledTaskAction -Execute $psExe -Argument $s.Args -WorkingDirectory $ProjectRoot
+        if ($WhatIfPreference) {
+            Write-Step ("（WhatIf）将注册 {0}：{1} {2}" -f $s.Name, $psExe, $s.Args)
+            continue
+        }
         Register-ScheduledTask -TaskName $s.Name -Action $action -Trigger $s.Trigger `
             -Settings $settings -Principal $principal -Description $s.Desc -Force | Out-Null
         Write-Step ("已注册计划任务 {0}（{1}）" -f $s.Name, $(if ($s.Name -like '*Reprovision') { '每周日 04:40' } else { '每天 04:10' }))
@@ -356,7 +375,13 @@ if ($Apply -and -not $explicit -and -not $Status -and -not $InstallTask) {
 }
 
 if ($Status) { Assert-Runner; Show-Status; exit 0 }
-if ($InstallTask) { Install-MaintTask; exit 0 }
+if ($InstallTask) {
+    # worktree 是临时检出，注册进去的计划任务在 worktree 删除后就失效 —— 直接拒绝。
+    if ($ProjectRoot -match '\\\.(agents|agent-worktrees)\\') {
+        throw "不要从 worktree 注册计划任务：$ProjectRoot。请在项目根（或 runner 副本）执行 -InstallTask。"
+    }
+    Install-MaintTask; exit 0
+}
 
 Assert-Runner
 

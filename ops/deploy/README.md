@@ -112,8 +112,9 @@ powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-wa
   **接线**：`smoke-local.ps1` 每次真冒烟前自动跑 `-SyncData`（失败不挡冒烟、只记录）；
   计划任务 `OLBR_SmokeMaintenance`（每天 04:10，`-Daily`）与
   `OLBR_SmokeReprovision`（每周日 04:40，`-Reprovision -SyncData -CleanTmp`），
-  用 `-InstallTask` 注册（**要求项目根已含本脚本，即该 PR 合并之后**；
-  `provision-smoke-runner.ps1 -Apply -InstallTask` 也会一并注册）。
+  用 `-InstallTask` 注册（优先指向项目根脚本；项目树还没跟上 `main` 时退回 runner
+  副本并提示后重跑；worktree 里拒绝注册）。`provision-smoke-runner.ps1 -Apply -InstallTask`
+  也会一并注册。
   日志 `TMP\smoke-maintenance.log`。
 - `smoke-reload-watcher.ps1`：改 `smoke-watcher.ps1` 后停旧进程并
   `install-smoke-watcher.ps1 -Start`（避免计划任务 IgnoreNew 仍跑旧代码）。
