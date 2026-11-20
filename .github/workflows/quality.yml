@@ -205,3 +205,30 @@ jobs:
         run: node --test ops/deploy/lib/zip-package.test.mjs ops/deploy/lib/zip-dir.test.mjs
       - name: build-zip 干跑（加载 build-zip + 全模块）
         run: node ops/deploy/build-zip.mjs --mode source --platform linux-x64 --dry-run
+
+  # Issue #189 新增作业（2026-11-20），不改既有作业。
+  # 目的：deploy-mjs-load 只跑 ubuntu-latest，#179 的 zip-dir 符号链接 /
+  # 可执行位两处回归直到 windows-latest 的 release-build 才爆出来。
+  # 本作业与 deploy-mjs-load 跑相同命令（node --check、回归测试、build-zip
+  # 干跑），只把平台换成 Windows：runner 用 windows-latest，build-zip
+  # 干跑参数用 --platform win-x64；shell 仍用 bash（windows-latest 自带
+  # Git Bash，for 循环写法与 ubuntu 作业完全一致）。
+  deploy-mjs-load-windows:
+    name: ops/deploy .mjs 加载检查（Windows）
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: .
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: node --check（语法）
+        run: |
+          for f in ops/deploy/*.mjs ops/deploy/lib/*.mjs; do node --check "$f" || exit 1; done
+      - name: 回归测试（加载 zip-package）
+        run: node --test ops/deploy/lib/zip-package.test.mjs ops/deploy/lib/zip-dir.test.mjs
+      - name: build-zip 干跑（加载 build-zip + 全模块）
+        run: node ops/deploy/build-zip.mjs --mode source --platform win-x64 --dry-run
