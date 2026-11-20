@@ -245,7 +245,7 @@ export const TaskSyncWidget: React.FC = () => {
             href={getMyappLink('email_reports')}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-xs flex items-center gap-1 transition-all shadow-sm shadow-indigo-600/30"
+            className="px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-medium text-xs flex items-center gap-1 transition-all shadow-sm shadow-teal-600/30"
           >
             <Mail className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{t('task.latestReports')}</span>

@@ -54,8 +54,8 @@ export const DesignGuideModal: React.FC<DesignGuideModalProps> = ({ isOpen, onCl
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm text-slate-600 dark:text-slate-300">
           {/* Quick Principle Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50/80 to-purple-50/30 dark:from-indigo-950/40 dark:to-purple-950/20 border border-indigo-100 dark:border-indigo-900/50">
-              <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-semibold mb-2">
+            <div className="p-4 rounded-xl bg-gradient-to-br from-teal-50/80 to-cyan-50/30 dark:from-teal-950/40 dark:to-cyan-950/20 border border-teal-100 dark:border-teal-900/50">
+              <div className="flex items-center gap-2 text-teal-700 dark:text-teal-300 font-semibold mb-2">
                 <Palette className="w-4 h-4" />
                 <span>{t('guide.c1t')}</span>
               </div>
