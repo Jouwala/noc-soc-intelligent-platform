@@ -500,7 +500,8 @@ try {
         $maint = Join-Path $Root 'ops\deploy\maintain-smoke-runner.ps1'
         if (Test-Path -LiteralPath $maint) {
             try {
-                & $psExe -NoProfile -ExecutionPolicy Bypass -File $maint -RunnerPath $Root -SyncData -Apply -Quiet
+                # -IgnoreLock：这把 smoke.lock 是本脚本刚拿到的，维护不该把自己锁在门外。
+                & $psExe -NoProfile -ExecutionPolicy Bypass -File $maint -RunnerPath $Root -SyncData -Apply -IgnoreLock -Quiet
                 Write-Log "冒烟前维护：本地权威表同步退出码=$LASTEXITCODE（详见 TMP\smoke-maintenance.log）"
             } catch {
                 Write-Log "冒烟前维护异常（不挡冒烟）：$($_.Exception.Message)"

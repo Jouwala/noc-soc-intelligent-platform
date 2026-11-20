@@ -26,7 +26,8 @@
       不会因为生产新增凭据而误报。
     · 计划任务 OLBR_SmokeMaintenance（每天 04:10）跑 -Daily；
       OLBR_SmokeReprovision（每周日 04:40）跑 -Reprovision -SyncData -CleanTmp。
-    · 冒烟锁 TMP\smoke.lock 存在时，除 -Status 外一律跳过本轮（不和服务抢）。
+    · 冒烟锁 TMP\smoke.lock 存在时，除 -Status 外一律跳过本轮（不和服务抢）；
+      只有「自己就是持锁方」的调用（smoke-local 在冒烟前同步）才用 -IgnoreLock 放行。
 
   用法（在项目根，或任意目录；脚本按自身位置推导）：
     powershell -NoProfile -File ops\deploy\maintain-smoke-runner.ps1                 # 干跑，只打印计划
@@ -53,6 +54,7 @@ param(
     [switch]$Status,
     [switch]$InstallTask,
     [switch]$Start,
+    [switch]$IgnoreLock,
     [switch]$Quiet
 )
 
@@ -358,7 +360,7 @@ if ($InstallTask) { Install-MaintTask; exit 0 }
 
 Assert-Runner
 
-if (Test-SmokeBusy) {
+if ((Test-SmokeBusy) -and -not $IgnoreLock) {
     Write-Step '检测到 TMP\smoke.lock：冒烟进行中，本轮维护跳过。'
     exit 0
 }
