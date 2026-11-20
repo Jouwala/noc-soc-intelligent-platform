@@ -78,7 +78,7 @@ export const QuickStatsBar: React.FC<QuickStatsBarProps> = ({
           </div>
         </div>
         <div className="mt-1.5 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-          <span className="text-xl sm:text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
+          <span className="text-xl sm:text-2xl font-black text-teal-600 dark:text-teal-400 font-mono">
             {finebiCount}
           </span>
           <span className="text-[10px] sm:text-xs text-slate-400">{t('stats.finebiUnit')}</span>
