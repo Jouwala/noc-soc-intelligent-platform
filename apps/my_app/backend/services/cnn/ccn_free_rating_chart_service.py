@@ -103,9 +103,7 @@ def _resolve_recipients() -> Tuple[list, list]:
 def _query_remote_api(mo: str) -> Optional[pd.DataFrame]:
     """尝试从远程 API 读取数据。"""
     try:
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent))
-        from remote_db_reader import get_remote_reader
+        from backend.services.remote.remote_db_reader import get_remote_reader
         
         reader = get_remote_reader()
         

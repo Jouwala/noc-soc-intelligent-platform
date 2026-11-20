@@ -118,9 +118,7 @@ def _query_remote_api(me: str, measure_obj: str, table_name: str) -> Optional[pd
     - EAV：Counter + Counter Value 列（需 pivot）
     """
     try:
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent))
-        from remote_db_reader import get_remote_reader
+        from backend.services.remote.remote_db_reader import get_remote_reader
         
         reader = get_remote_reader()
         
