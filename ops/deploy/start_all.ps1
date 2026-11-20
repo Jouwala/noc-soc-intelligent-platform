@@ -124,6 +124,24 @@ if (-not (Test-Path -LiteralPath $envFile)) {
 }
 $cfg = Import-DotEnv $envFile
 
+function Get-Cfg {
+    param([string]$Key, [string]$Default = '')
+    if ($cfg.ContainsKey($Key) -and $cfg[$Key]) { return $cfg[$Key] }
+    $existing = [Environment]::GetEnvironmentVariable($Key, 'Process')
+    if ($existing) { return $existing }
+    return $Default
+}
+function Set-Cfg {
+    param([string]$Key, [string]$Value)
+    [Environment]::SetEnvironmentVariable($Key, $Value, 'Process')
+}
+
+# ⚠ 下面两个块必须放在 Set-Cfg 定义**之后**：PowerShell 的 function 语句按执行
+# 顺序生效，不能像编译语言那样先调用后定义。此前它们写在 $cfg 载入处（本段上方），
+# 只要副本里已存在 .env 就会报 "Set-Cfg is not recognized"，start_all 退出 1；
+# 只有在全新解包、还没有 .env 的干跑里才碰巧通过 —— 2026-11-19 冒烟 PR #182
+# 连续 4 轮卡在这里（start_all.err 448 字节），别再挪回去。
+
 # 把 .env 里的**所有**键导出到本进程环境。
 #
 # 此前只导出下面 $derived 里的派生键，于是写在 .env 的普通配置（QA_OWU_BASE、
@@ -153,18 +171,6 @@ foreach ($o in $exeOverrides) {
     Write-Step ("{0} 使用 .env 覆盖: {1}={2}" -f $o.Name, $o.Key, $v)
 }
 $NginxExe = Join-Path $NginxDir 'nginx.exe'
-
-function Get-Cfg {
-    param([string]$Key, [string]$Default = '')
-    if ($cfg.ContainsKey($Key) -and $cfg[$Key]) { return $cfg[$Key] }
-    $existing = [Environment]::GetEnvironmentVariable($Key, 'Process')
-    if ($existing) { return $existing }
-    return $Default
-}
-function Set-Cfg {
-    param([string]$Key, [string]$Value)
-    [Environment]::SetEnvironmentVariable($Key, $Value, 'Process')
-}
 
 $HttpPort = [int](Get-Cfg 'NGINX_HTTP_PORT' '8080')
 $HttpsPort = [int](Get-Cfg 'NGINX_HTTPS_PORT' '8443')
