@@ -1,4 +1,4 @@
-# DotNetEwsSender_Fixed.ps1 - Send via EWS CreateItem (with attachments + inline images)
+﻿# DotNetEwsSender_Fixed.ps1 - Send via EWS CreateItem (with attachments + inline images)
 # ============================================================================
 # Previous version defects:
 #   1. Used SendItem API referencing a message, which is wrong for building a

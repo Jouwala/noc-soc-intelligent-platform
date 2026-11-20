@@ -1,4 +1,4 @@
-# DotNetEwsSender.ps1 - 优化版：跳过草稿本直接发送 EWS 邮件
+﻿# DotNetEwsSender.ps1 - 优化版：跳过草稿本直接发送 EWS 邮件
 # ============================================================================
 # 问题修复：原版本使用 CreateItem (SaveOnly) → CreateAttachment → SendItem，遇到 HTTP 401 权限错误
 # 原因：账户没有创建草稿本的权限（或 Exchange 策略限制）

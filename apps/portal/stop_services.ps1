@@ -1,4 +1,4 @@
-# stop_services.ps1 - stop the liberia-noc_soc portal and its companion
+﻿# stop_services.ps1 - stop the liberia-noc_soc portal and its companion
 #                     WhatsApp local analysis service.
 #
 # Ports: 9267 = portal dev server (vite)

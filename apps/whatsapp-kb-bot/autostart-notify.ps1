@@ -1,4 +1,4 @@
-# Autostart + watchdog for the P1 alert push daemon (src/notify.js).
+﻿# Autostart + watchdog for the P1 alert push daemon (src/notify.js).
 #
 # IMPORTANT: keep this file pure ASCII.
 # PowerShell 5.1 reads a UTF-8-without-BOM script as GBK, so any non-ASCII

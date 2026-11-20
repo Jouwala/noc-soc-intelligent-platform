@@ -1,4 +1,4 @@
-<#
+﻿<#
   sync_from_main.ps1 - thin wrapper around the transactional Node sync engine.
   Source repo is READ-ONLY; the portable copy is the only write target.
   The real logic lives in sync-engine.mjs + sync-policy.mjs (zero npm deps,

@@ -1,4 +1,4 @@
-# Autostart + watchdog for the WhatsApp knowledge-base bot (src/index.js) and
+﻿# Autostart + watchdog for the WhatsApp knowledge-base bot (src/index.js) and
 # the web Q&A assistant (src/http-server.js on :9269).
 #
 # IMPORTANT: keep this file pure ASCII.

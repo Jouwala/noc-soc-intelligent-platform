@@ -1,4 +1,4 @@
-# DotNetEwsSender.ps1 — 通过 .NET HttpWebRequest + NTLM 发送 EWS 邮件
+﻿# DotNetEwsSender.ps1 — 通过 .NET HttpWebRequest + NTLM 发送 EWS 邮件
 # 绕过 Python requests_ntlm 的 NTLM 挂起问题
 #
 # 参数:
