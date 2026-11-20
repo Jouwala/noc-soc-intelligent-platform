@@ -1,4 +1,4 @@
-# post_sync_fix_paths.ps1 -- re-apply copy-local path fixes after a source sync.
+﻿# post_sync_fix_paths.ps1 -- re-apply copy-local path fixes after a source sync.
 #
 # Single source of truth: D:\01_RPA\scripts\portable\post_sync_fix_paths.ps1
 # The copy receives it via the `config` stage of build_olbr_portable.ps1.

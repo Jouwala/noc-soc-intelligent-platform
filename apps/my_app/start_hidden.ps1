@@ -1,4 +1,4 @@
-# start_hidden.ps1 - Hidden startup of my_app (backend / worker / frontend) with result feedback
+﻿# start_hidden.ps1 - Hidden startup of my_app (backend / worker / frontend) with result feedback
 # Usage:
 #   Run directly (double-click / right-click Run with PowerShell):
 #     Starts missing components, writes log\start_hidden_result.txt, shows popup for each [OK]/[WARN]/[FAIL].

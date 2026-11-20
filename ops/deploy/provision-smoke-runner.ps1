@@ -391,11 +391,26 @@ if ($InstallTask) {
     if (-not (Test-Path -LiteralPath $installer)) { throw "找不到 installer：$installer" }
     if (-not $Apply) {
         Write-Step '（干跑）将调用 install-smoke-watcher.ps1 -Start（需要管理员）'
+        Write-Step '（干跑）将调用 maintain-smoke-runner.ps1 -InstallTask（维护任务，需项目根已含该脚本）'
     } else {
         Write-Host ''
         Write-Host '注册计划任务 OLBR_SmokeWatcher（需要管理员；失败请用提权 PowerShell 重跑本命令）'
         & $installer -Start
         if ($LASTEXITCODE -ne 0) { throw "install-smoke-watcher.ps1 失败（exit=$LASTEXITCODE）" }
+
+        # 维护任务与 watcher 一起注册：数据同步、代码跟进、TMP 清理、每周重铺。
+        # 固定用项目根那份脚本 —— runner 的检出随时会被 watcher 切到某个 PR head，
+        # 那不是注册计划任务的稳定来源。
+        $maintScript = Join-Path $ProjectRoot 'ops\deploy\maintain-smoke-runner.ps1'
+        if (Test-Path -LiteralPath $maintScript) {
+            Write-Host ''
+            Write-Host '注册维护任务 OLBR_SmokeMaintenance / OLBR_SmokeReprovision'
+            & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+                -NoProfile -ExecutionPolicy Bypass -File $maintScript -InstallTask
+            if ($LASTEXITCODE -ne 0) { throw "maintain-smoke-runner.ps1 -InstallTask 失败（exit=$LASTEXITCODE）" }
+        } else {
+            Write-Step "跳过维护任务：项目根缺 $maintScript（合并「runner 例行维护」后再跑 -InstallTask）"
+        }
     }
 }
 

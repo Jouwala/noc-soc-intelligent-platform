@@ -118,6 +118,8 @@
 > - 改表结构：`cd apps\my_app` → `alembic revision --autogenerate -m "<模块>-<变更>"` → `alembic upgrade head`（回退 `alembic downgrade base`；动态 eFlow 表不进 migration，见 `apps\my_app\docs\manual\03-data-layer.md`）。
 > - 存量数据搬迁/修复/回填：回填脚本随迁移版本一起提交，`upgrade head` 之后执行并核对行数。
 > - PowerShell 不支持 `&&`，多条命令用 `;` 分隔（细则见 `_agents\rules\shell_safe.md`，`.qoder\rules\` 是指向它的 junction）。
+> - **改 `.ps1` / 新建 `.ps1` 后跑 `node ops\deploy\check-ps1-bom.mjs`**：必须 **UTF-8 + BOM**。Windows PowerShell 5.1 对无 BOM 文件按系统 ANSI 解码，UTF-8 中文注释被拆散后会吞掉引号/括号，整份脚本解析失败（2026-11-19 冒烟 PR #182 实测：`edit` 剥掉 `start_all.ps1` 的 BOM → start_all 连挂四轮）。缺失用 `node ops\deploy\check-ps1-bom.mjs --fix` 补；提交钩子与 CI 都会拦。
+> - **冒烟 runner（`.smoke`）例行维护**：`powershell -NoProfile -File ops\deploy\maintain-smoke-runner.ps1 -Status`。`-Apply` 同步三张本地权威表 + 清理 TMP；`-Apply -Daily` 再加 runner 跟进 `platform/main`；`-Apply -Reprovision [-RebuildDb]` 重新铺装。每次冒烟前 `smoke-local.ps1` 已自动同步数据，生产新增凭据不再把冒烟挡成「代码失败」。
 
 ## 四、给 AI 的硬性约束
 

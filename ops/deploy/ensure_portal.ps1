@@ -1,4 +1,4 @@
-# Portal_EnsureRunning 的计划任务改不了（权限不够），任务仍调用
+﻿# Portal_EnsureRunning 的计划任务改不了（权限不够），任务仍调用
 # D:\01_RPA 里的 start_ensure.bat。那个 bat 转到本脚本。
 # 门户已固定在 apps\portal（纯 ASCII），直接定位，不再按前缀查找。
 $ErrorActionPreference = 'Continue'

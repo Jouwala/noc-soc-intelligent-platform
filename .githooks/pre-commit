@@ -141,4 +141,21 @@ if [ -f "$portal_dir/scripts/check-i18n.mjs" ] && command -v node >/dev/null 2>&
     fail_with_hint "门户 i18n 有漏键 / 看板目录数据缺英文 / en 侧值仍是中文。"
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PowerShell UTF-8 BOM 守卫（2026-11-20 新增）
+#
+# 为什么：所有 .ps1 必须是 UTF-8 + BOM。Windows PowerShell 5.1 没有 BOM 就按
+# 系统 ANSI 代码页（本机 cp936）解码，UTF-8 中文注释被拆散后可能吞掉紧随其后的
+# 引号 / # / 括号，整份脚本语法崩掉，报错还指向几百行外的注释。
+# 而编辑器、git、PowerShell 7 都看不出异常 —— 只有真正用 5.1 跑时才会炸。
+#
+# 2026-11-19 冒烟 PR #182 实测两次：编辑工具把 start_all.ps1 的 BOM 剥掉后，
+# 5.1 解析直接失败，start_all 退出 1，四轮冒烟全卡在同一处。
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [ -f "$repo_root/ops/deploy/check-ps1-bom.mjs" ] && command -v node >/dev/null 2>&1; then
+  node "$repo_root/ops/deploy/check-ps1-bom.mjs" || \
+    fail_with_hint "PowerShell 脚本必须是 UTF-8 + BOM（PS 5.1 否则按 ANSI 解码）。修复：node ops/deploy/check-ps1-bom.mjs --fix"
+fi
+
 exit 0

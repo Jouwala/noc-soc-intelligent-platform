@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  my_portal_ctl.ps1 - single entry point behind every desktop shortcut
 #
 #  WHY THIS FILE EXISTS (do not delete, do not rename):

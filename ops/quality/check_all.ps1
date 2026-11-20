@@ -1,4 +1,4 @@
-# check_all.ps1 — 02 离线质量检查（完整版；原第一轮重构批 E 定稿）
+﻿# check_all.ps1 — 02 离线质量检查（完整版；原第一轮重构批 E 定稿）
 #
 # 步骤顺序见下方「步骤」清单（原《最终重构执行方案》已删除，本脚本自述为准）。
 # 同一份检查也在 CI 里跑（.github/workflows/quality.yml，windows-latest）。
