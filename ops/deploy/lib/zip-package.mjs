@@ -62,7 +62,12 @@ export function deniedFileReason(rel) {
   if (/session.*\.json$/i.test(base)) return '会话文件'
   if (base === 'auth_info.json') return '上游鉴权快照（含有效会话 cookie）'
   if (/^auth.*\.json$/i.test(base)) return '鉴权文件'
-  if (/credential/i.test(base)) return '凭据文件'
+  // 凭据名源码放行（#192）：credential.py 等是 SQLAlchemy/React 源码，不是凭据数据；
+  // 2026-11-20 最小化规则不分扩展名，把 credential.py、routers/credentials.py、
+  // credential_store.py 等静默丢掉，Linux 包 alembic 建表直接失败。只拦非源码
+  // 的凭据数据文件（credentials.json、*.credentials、无扩展名等）；源码里的真
+  // 凭据内容由 scanCredentials 内容扫描兜底。
+  if (/credential/i.test(base) && !/\.(py|js|mjs|cjs|ts|tsx|jsx|md)$/i.test(base)) return '凭据文件'
   if (rel.startsWith('apps/whatsapp-kb-bot/') && base === 'config.json') return 'bot 含密钥配置'
   if (/\.(log|pyc|pyo|sqlite3?|db|sql|dump)$/i.test(base)) return '日志/数据库/快照文件'
   if (/\.bak(_.*)?$|_bak_/i.test(base)) return '手工快照'

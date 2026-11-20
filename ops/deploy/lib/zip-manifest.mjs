@@ -29,11 +29,13 @@ export const RUNTIME_VERSIONS = { python: '3.12.10', node: '24.16.0', postgresql
 // 目录：递归复制（受拒绝规则过滤）。requiredIn: full 仅在 full 模式要求存在。
 //
 // 只列「运行必需」的目录（最小化原则，见文件头）。被刻意排除、且**不是 bug**
-// 的目录：apps/my_app/{tests,docs,tools,monitor_fixes,nginx}、apps/portal/{src,docs}、
+// 的目录：apps/my_app/{tests,docs,tools,monitor_fixes,nginx}、apps/portal/docs、
 // apps/whatsapp-kb-bot/{docs,evals}、apps/agent-worker*、apps/control-plane、
 // extensions、docs、ops/smoke、desktop_shortcuts。
-// 前端源码（apps/my_app/frontend/src 与 public）不在包内：目标机只跑预构建的
-// apps/_fe_dist；vite preview 需要的是 frontend/package.json + vite.config.ts + vite 本身。
+// 前端源码（apps/my_app/frontend/src、apps/portal/src）**进包**（#192）：目标机
+// 只跑预构建产物时不需要，但别人下载自包含运行（入其他国家）要在目标机重新构建
+// 前端；门户 prestart（npm run build）也需要 src。两树合计约 7.5 MiB。
+// vite preview 需要的是 frontend/package.json + vite.config.ts + vite 本身。
 export const INCLUDE_DIRS = [
   { src: 'apps/my_app/backend', requiredIn: 'any' },
   { src: 'apps/my_app/alembic', requiredIn: 'any' },
@@ -57,6 +59,9 @@ export const INCLUDE_DIRS = [
   // WhatsApp 分析页的伴生服务。默认不启动（START_WA_ANALYSIS=0），但它是页面功能，
   // 属于「运行必需」；其 node_modules 必须作为显式条目，否则会被通用遍历丢掉。
   { src: 'apps/portal/scripts/whatsapp_analysis', requiredIn: 'any' },
+  // 前端源码（#192）：别人下载后可在目标机重新构建前端；门户 prestart 也需要 src。
+  { src: 'apps/my_app/frontend/src', requiredIn: 'any' },
+  { src: 'apps/portal/src', requiredIn: 'any' },
   // 构建产物：仅 full 模式（工作流先 npm ci / npm run build / pip download）。
   // node_modules 只走显式条目（通用遍历里一律跳过，避免父目录是否入白名单造成的不一致）。
   { src: 'apps/my_app/frontend/node_modules', requiredIn: 'full' },
@@ -167,9 +172,7 @@ export const PACKAGE_FORBIDDEN_PATHS = [
   { prefix: 'apps/my_app/tools/', reason: '代码生成器' },
   { prefix: 'apps/my_app/nginx/', reason: '生产 nginx 配置（交付包用 nginx.conf.template）' },
   { prefix: 'apps/my_app/monitor_fixes/', reason: '生产看门狗脚本（不随交付包）' },
-  { prefix: 'apps/my_app/frontend/src/', reason: '前端源码（目标机只跑 _fe_dist）' },
   { prefix: 'apps/my_app/frontend/public/', reason: '前端源码（已打进 _fe_dist）' },
-  { prefix: 'apps/portal/src/', reason: '门户源码（目标机只跑 dist）' },
   { prefix: 'apps/portal/docs/', reason: '开发手册' },
   { prefix: 'apps/whatsapp-kb-bot/docs/', reason: '开发手册' },
   { prefix: 'apps/whatsapp-kb-bot/evals/', reason: '评测集（开发用）' },
@@ -185,8 +188,10 @@ export const PACKAGE_FORBIDDEN_PATHS = [
 
 // 回归断言（P0-1）：组装后暂存区内必须存在的文件。缺失即门禁失败，防白名单规则回退。
 // 注：portal/src 的两个文件曾在 2026-11 的 P0-1 事故里被误丢，当时它们随
-// apps/portal/src 进包。最小化后前端源码**不再进包**（目标机只跑 dist），
-// 那两个断言随条目一起移除；PORTAL_SRC 不在包内由 test 的「最小化」用例显式盯住。
+// apps/portal/src 进包。最小化后前端源码一度不再进包（目标机只跑 dist），那两个
+// 断言随条目一起移除；#192（2026-11-20）恢复前端源码进包（别人下载自包含运行，
+// 要在目标机重新构建），断言随之恢复；另加 credential.py 两件（#192 根因：
+// deniedFileReason 不分扩展名静默丢凭据名源码，Linux 包 alembic 建表失败）。
 export const REQUIRED_STAGING_FILES = [
   'apps/my_app/backend/services/db/__init__.py',
   'apps/my_app/backend/services/db/db_freshness_check.py',
@@ -194,6 +199,10 @@ export const REQUIRED_STAGING_FILES = [
   'apps/my_app/backend/services/db/pg_schema_freshness.py',
   'apps/my_app/backend/data/gis/liberia_counties.geojson',
   'apps/my_app/backend/data/gis/liberia_country.geojson',
+  'apps/my_app/backend/models/credential.py',
+  'apps/my_app/backend/routers/credentials.py',
+  'apps/my_app/frontend/src/App.tsx',
+  'apps/portal/src/App.tsx',
   'apps/my_app/frontend/vite.config.ts',
   '安装与运行说明.md',
 ]

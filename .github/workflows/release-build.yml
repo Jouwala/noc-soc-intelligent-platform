@@ -152,12 +152,14 @@ jobs:
           assert info.get('copy_role') == 'isolated', info
           names = set(zf.namelist())
           # 解压后必须能直接 start：标记 + 安装说明 + 前端产物
+          # #192：credential.py（alembic 建表必需）与门户源码入口也必须在包内
           for must in ['ISOLATED_COPY.flag', '安装与运行说明.md',
-                       'apps/_fe_dist/index.html', 'apps/portal/dist/index.html']:
+                       'apps/_fe_dist/index.html', 'apps/portal/dist/index.html',
+                       'apps/my_app/backend/models/credential.py', 'apps/portal/src/App.tsx']:
               assert must in names, f'缺 {must}'
           # 最小化：开发资产 / 运行期缓存一律不许出现（白名单外的第二道闸）
           forbidden = ['.github/', '.claude/', '.githooks/', '.agent-work/', '.workbuddy-ai/',
-                       'docs/', 'apps/my_app/tests/', 'apps/my_app/docs/', 'apps/portal/src/',
+                       'docs/', 'apps/my_app/tests/', 'apps/my_app/docs/',
                        'apps/my_app/backend/services/cn_ems/_pmcache/']
           hit = sorted(n for n in names for p in forbidden if n.startswith(p))
           assert not hit, f'不该进包: {hit[:10]}'

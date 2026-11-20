@@ -119,8 +119,11 @@ if (-not (Test-Path -LiteralPath $envFile)) {
         $envParent = Split-Path $envFile -Parent
         if ($envParent -and -not (Test-Path -LiteralPath $envParent)) { New-Item -ItemType Directory -Path $envParent -Force | Out-Null }
         Copy-Item -LiteralPath $envTpl -Destination $envFile -Force
+        Write-Step "首次启动：已从模板生成 $envFile"
+    } else {
+        # #192：干跑不写文件，别报「已生成」
+        Write-Step "<干跑> 首次启动将从模板生成 $envFile（本次不写文件）"
     }
-    Write-Step "首次启动：已从模板生成 $envFile"
 }
 $cfg = Import-DotEnv $envFile
 

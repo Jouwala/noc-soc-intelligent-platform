@@ -86,8 +86,11 @@ if [ ! -f "$CFG_FILE" ]; then
     _env_parent=$(dirname "$CFG_FILE")
     [ -d "$_env_parent" ] || mkdir -p "$_env_parent"
     cp "$ENV_TPL" "$CFG_FILE"
+    step "首次启动：已从模板生成 $CFG_FILE"
+  else
+    # #192：干跑不写文件，别报「已生成」
+    step "<干跑> 首次启动将从模板生成 $CFG_FILE（本次不写文件）"
   fi
-  step "首次启动：已从模板生成 $CFG_FILE"
 fi
 _cfg_lookup() {
   [ -f "$2" ] || return 1
@@ -368,10 +371,14 @@ else
     sed 's/^/  /' "$TMP_DIR/portable-initdb.out"
   fi
   PG_LOG="$TMP_DIR/portable-pg.log"
+  # #192：PGDG 默认 socket 目录 /var/run/postgresql 非 postgres 用户写不进，
+  # 首次启动会 Permission denied。用包内 TMP 下的目录，启动时建好。
+  PG_SOCK_DIR="$TMP_DIR/pgsock"
   if ! "$PG_CTL" -D "$PGDATA" status >/dev/null 2>&1; then
     # 不能用管道捕获输出：pg_ctl 拉起的 postgres 会继承管道写句柄，
     # 管道永远等不到 EOF（见 .ps1 版注释）。改成输出重定向到文件。
-    "$PG_CTL" -D "$PGDATA" -l "$PG_LOG" -o "-p $PG_PORT -h 127.0.0.1" start >"$TMP_DIR/portable-pg_ctl.out" 2>"$TMP_DIR/portable-pg_ctl.err" || die "pg_ctl start 失败，见 $TMP_DIR/portable-pg_ctl.err"
+    [ -d "$PG_SOCK_DIR" ] || mkdir -p "$PG_SOCK_DIR"
+    "$PG_CTL" -D "$PGDATA" -l "$PG_LOG" -o "-p $PG_PORT -h 127.0.0.1 -k $PG_SOCK_DIR" start >"$TMP_DIR/portable-pg_ctl.out" 2>"$TMP_DIR/portable-pg_ctl.err" || die "pg_ctl start 失败，见 $TMP_DIR/portable-pg_ctl.err"
   fi
   wait_port "$PG_PORT" 30 || die "便携 PG 未在 30s 内监听 $PG_PORT，见 $PG_LOG / $TMP_DIR/portable-pg_ctl.err"
   # 端口 LISTEN != 可连接：PG 恢复阶段会拒绝普通连接，必须轮询到 SELECT 1 真正成功。
