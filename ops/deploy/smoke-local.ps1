@@ -491,6 +491,24 @@ try {
         }
         New-SmokeLock -WaitSec 1800
         $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+
+        # 冒烟前例行维护：把生产的三张本地权威表同步进 runner。
+        # runner 的数据是铺装那一刻的拷贝；生产新增凭据/收件人后它会落后，而
+        # ops\smoke\smoke.ps1 §8.2 要求「三表行数与源一致」—— 会把数据落后误判成
+        # 代码失败（2026-11-20 PR #182：credentials 21 vs 20，修好代码仍被挡一轮）。
+        # 维护只读生产 app.db、只写 runner；失败只记录，不挡冒烟（§8.2 会如实报行数）。
+        $maint = Join-Path $Root 'ops\deploy\maintain-smoke-runner.ps1'
+        if (Test-Path -LiteralPath $maint) {
+            try {
+                & $psExe -NoProfile -ExecutionPolicy Bypass -File $maint -RunnerPath $Root -SyncData -Apply -Quiet
+                Write-Log "冒烟前维护：本地权威表同步退出码=$LASTEXITCODE（详见 TMP\smoke-maintenance.log）"
+            } catch {
+                Write-Log "冒烟前维护异常（不挡冒烟）：$($_.Exception.Message)"
+            }
+        } else {
+            Write-Log "未找到 $maint，跳过冒烟前数据同步（runner 代码可能早于本次维护功能）"
+        }
+
         $smokeArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $SmokePs1, '-PR', "$PrNumber", '-Sha', $ShortSha, '-Pytest')
         if ($SkipFrontendBuild) { $smokeArgs += '-SkipFeBuild' }
         Write-Log ("启动 $SmokePs1 " + ($smokeArgs -join ' '))

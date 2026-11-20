@@ -102,6 +102,18 @@ powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-wa
   （登录自启、崩溃每分钟重启、单实例）；`-Status` 查、`-Uninstall` 卸、
   **改 `smoke-watcher.ps1` 后跑 `-Start` 重启进程**（否则内存里仍是旧逻辑）。
   日志 `TMP\smoke-watcher.log`。
+- `maintain-smoke-runner.ps1`：runner 的例行维护（2026-11-20 新增）。
+  runner 的数据是**铺装那一刻**的拷贝，生产新增凭据后 §8.2「三表行数与源一致」
+  会误报失败（PR #182 实测：credentials 21 vs 20，代码修好后仍被挡一轮）。四项维护：
+  `-SyncData`（生产 app.db → runner，只读生产）、`-UpdateCode`（runner 跟
+  `platform/main`）、`-CleanTmp`（清理 >N 天的冒烟日志/报告/迁移备份，watcher 日志与
+  `smoke.lock` 永不删）、`-Reprovision`（补 junction/配置/构建产物，加 `-RebuildDb`
+  重铺 app.db）。默认干跑，`-Apply` 才执行；`-Status` 看状态。
+  **接线**：`smoke-local.ps1` 每次真冒烟前自动跑 `-SyncData`（失败不挡冒烟、只记录）；
+  计划任务 `OLBR_SmokeMaintenance`（每天 04:10，`-Daily`）与
+  `OLBR_SmokeReprovision`（每周日 04:40，`-Reprovision -SyncData -CleanTmp`），
+  用 `-InstallTask` 注册（**要求项目根已含本脚本，即该 PR 合并之后**）。
+  日志 `TMP\smoke-maintenance.log`。
 - `smoke-reload-watcher.ps1`：改 `smoke-watcher.ps1` 后停旧进程并
   `install-smoke-watcher.ps1 -Start`（避免计划任务 IgnoreNew 仍跑旧代码）。
 
@@ -113,6 +125,8 @@ powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-wa
 | --- | --- | --- |
 | quality 全绿 | GitHub Actions | 0 |
 | 检出 PR、checkout、跑 `smoke.ps1`、贴评论、打 `smoke-passed` | 计划任务 `OLBR_SmokeWatcher` | 0 |
+| 冒烟前同步 runner 的本地权威表 | `smoke-local.ps1` 自动调 `maintain-smoke-runner.ps1 -SyncData` | 0 |
+| runner 数据/代码例行维护、临时文件清理 | 计划任务 `OLBR_SmokeMaintenance` / `OLBR_SmokeReprovision` | 0 |
 | 合并 | `auto-merge.yml`（认评论里的 `smoke-result` + 标签） | 0 |
 
 **值班人 / 你本机只看这三处即可，不必开 Agent 盯：**
