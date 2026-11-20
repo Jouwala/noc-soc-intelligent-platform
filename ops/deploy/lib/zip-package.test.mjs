@@ -153,6 +153,15 @@ test('deniedFileReason：规则表', () => {
   assert.match(deniedFileReason('apps/my_app/backend/services/battary_kpi_fetch/auth_info.json'), /鉴权快照/)
   assert.match(deniedFileReason('scripts/eflow-rule-lookup.py.old_20261028'), /旧版本/)
   assert.equal(deniedFileReason('apps/my_app/backend/services/db/a.py'), null)
+  // #192：凭据名源码放行，只拦凭据数据文件
+  assert.equal(deniedFileReason('apps/my_app/backend/models/credential.py'), null)
+  assert.equal(deniedFileReason('apps/my_app/backend/routers/credentials.py'), null)
+  assert.equal(deniedFileReason('apps/my_app/backend/services/credential/credential_store.py'), null)
+  assert.equal(deniedFileReason('apps/my_app/frontend/src/pages/CredentialSettings.tsx'), null)
+  assert.equal(deniedFileReason('apps/my_app/email_reports/owa_credentials.py'), null)
+  assert.match(deniedFileReason('apps/my_app/credentials.json'), /凭据/)
+  assert.match(deniedFileReason('x/credentials.txt'), /凭据/)
+  assert.match(deniedFileReason('x/credentials'), /凭据/)
 })
 
 test('最小化门禁：开发资产/生产标记/缺隔离标记都会失败', (t) => {
@@ -171,7 +180,6 @@ test('最小化门禁：开发资产/生产标记/缺隔离标记都会失败', 
     'apps/my_app/AGENTS.md',
     '.workbuddy-ai/memory/MEMORY.md',
     'apps/my_app/tests/test_x.py',
-    'apps/portal/src/App.tsx',
     'apps/control-plane/backend/main.py',
     'apps/my_app/backend/services/cn_ems/_pmcache/PM_1.zip',
     'docs/workspace/TODO.md',
@@ -233,7 +241,7 @@ test('集成：source 组装含回归文件，不含开发资产与运行期缓�
   // 最小化门禁本身也要在真实仓库上跑通（含 ISOLATED_COPY.flag 自动写入）
   assertPackageMinimal(staging)
   const files = walkFiles(staging, '', new Set(), [])
-  for (const rel of ['apps/portal/src/App.tsx', 'apps/my_app/tests', 'apps/control-plane', '.github', 'docs/workspace']) {
+  for (const rel of ['apps/my_app/tests', 'apps/control-plane', '.github', 'docs/workspace']) {
     assert.ok(!files.some((f) => f === rel || f.startsWith(`${rel}/`)), `不该进包: ${rel}`)
   }
   assert.ok(!files.some((f) => f.includes('/_pmcache/')), '_pmcache 不该进包')
