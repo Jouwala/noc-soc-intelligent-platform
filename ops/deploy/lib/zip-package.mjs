@@ -16,7 +16,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
   APP_NAME, BASENAME_DENIED_DIRS, FULL_REQUIRED, INCLUDE_DIRS, INCLUDE_FILES,
-  PATH_DENIED_DIRS, REQUIRED_STAGING_FILES, RUNTIME_VERSIONS,
+  PACKAGE_FORBIDDEN_PATHS, PATH_DENIED_DIRS, REQUIRED_STAGING_FILES, RUNTIME_VERSIONS,
 } from './zip-manifest.mjs'
 
 export { APP_NAME, RUNTIME_VERSIONS }
@@ -55,14 +55,19 @@ export function isPathInside(base, target, pathMod = null) {
 export function deniedFileReason(rel) {
   const base = rel.split('/').pop()
   if (base === 'PG_VERSION') return 'PG 数据目录标记'
+  if (base === 'PRODUCTION.flag') return '生产角色标记（交付包只能是隔离副本）'
+  if (base === 'AGENTS.md') return '仓库给 AI 的说明（不是产品内容）'
   if (/^\.env(\..+)?$/.test(base) && base !== '.env.example') return '.env 文件'
   if (/\.(key|pem)$/i.test(base)) return '密钥/证书文件（*.key/*.pem 一律不进包，含 CA 证书——外部 config 提供，待 P1-6 确认）'
   if (/session.*\.json$/i.test(base)) return '会话文件'
+  if (base === 'auth_info.json') return '上游鉴权快照（含有效会话 cookie）'
   if (/^auth.*\.json$/i.test(base)) return '鉴权文件'
   if (/credential/i.test(base)) return '凭据文件'
   if (rel.startsWith('apps/whatsapp-kb-bot/') && base === 'config.json') return 'bot 含密钥配置'
   if (/\.(log|pyc|pyo|sqlite3?|db|sql|dump)$/i.test(base)) return '日志/数据库/快照文件'
   if (/\.bak(_.*)?$|_bak_/i.test(base)) return '手工快照'
+  if (/\.old(_\d+)?$/i.test(base)) return '旧版本残留'
+  if (/^__wtest/i.test(base)) return '临时测试桩'
   if (base === '.DS_Store' || base === 'Thumbs.db') return '系统垃圾文件'
   if (/\.whl$/i.test(base) && !rel.startsWith('wheels/')) return 'wheels/ 之外的 wheel 包'
   if (rel.includes('/pgdata/') || rel.startsWith('pgdata/')) return 'pgdata 数据目录'
@@ -189,12 +194,75 @@ export function assemble({ root, staging, mode }) {
       throw new GateError(`full 模式缺件（工作流须先装依赖/构建/下载 wheels）:\n  - ${missing.join('\n  - ')}`)
     }
   }
+
+  // ZIP 是本项目定义里的「隔离副本」：由发布包解压而来，不是生产树。
+  // start.bat / start_all.ps1 靠这个标记才肯跑（两个标记都没有时一律拒绝）。
+  // 以前这个标记要人工新建，漏了就「解压后双击 start.bat 报缺标志」——现在随包写。
+  writeCopyMarker(staging)
   return { copied, warnings }
 }
+
+/** 交付包的隔离副本标记（固定字节，便于可重复构建）。
+ * 刻意用 ASCII：PS 5.1 的 Get-Content 默认按 ANSI 读无 BOM 的 UTF-8，
+ * 中文会显示成乱码；cmd 同样不保证 UTF-8。这个文件只被 Test-Path 判断，
+ * 但运维会打开看，所以写成英文最稳。
+ */
+export const COPY_MARKER_FILE = 'ISOLATED_COPY.flag'
+const COPY_MARKER_TEXT = [
+  'ISOLATED COPY - written by ops/deploy/build-zip.mjs, do not edit by hand.',
+  '',
+  'This directory is a released package, not the production tree.',
+  'start.bat / stop.bat run ops/deploy/start_all.ps1 with isolated ports',
+  '(8080/8443/7039/7091/9277/55432) and never touch production 80/443.',
+  'A production tree uses PRODUCTION.flag instead. If both or neither',
+  'marker exists, the launchers refuse to start.',
+  '',
+].join('\r\n')
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 排除断言（组装后复核：白名单过滤失效时也能拦住）
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** 写隔离副本标记；已存在时保留原内容（可重复构建要求固定字节，故内容不含时间）。 */
+export function writeCopyMarker(staging) {
+  const abs = join(staging, COPY_MARKER_FILE)
+  if (!existsSync(abs)) writeFileSync(abs, COPY_MARKER_TEXT, 'utf8')
+}
+
+/**
+ * 最小化门禁：包内不得出现开发资产（CI、agent 笔记、测试、手册、源码树、
+ * 运行期缓存……）。白名单写错或有人图省事把整棵工作区塞进来时，这里直接失败。
+ * 与 assertExclusions 的分工见 zip-manifest.mjs 的 PACKAGE_FORBIDDEN_PATHS 注释。
+ */
+export function assertPackageMinimal(staging) {
+  const violations = []
+  // ⚠ 不能用 walkFiles：它会跳过 . 开头的目录，而最该拦的 .github / .claude /
+  // .githooks / .agent-work 恰好都是隐藏目录。目录级前缀直接 existsSync 判。
+  for (const rule of PACKAGE_FORBIDDEN_PATHS) {
+    const abs = join(staging, rule.prefix.replace(/\/$/, ''))
+    if (existsSync(abs)) violations.push(`${rule.prefix}（${rule.reason}）`)
+  }
+  // 文件级兜底：非目录前缀（目前没有）与未来新增的条目仍走一遍遍历。
+  const all = walkFiles(staging, '', new Set(), [])
+  for (const rel of all) {
+    for (const rule of PACKAGE_FORBIDDEN_PATHS) {
+      if (rule.prefix.endsWith('/') || rule.rootOnly) continue // 目录/根级文件规则已由上面的 existsSync 覆盖
+      // 文件规则同时匹配根目录与任意嵌套（如 apps/my_app/AGENTS.md）。
+      if (rel === rule.prefix || rel.endsWith(`/${rule.prefix}`) || rel.startsWith(`${rule.prefix}/`)) {
+        violations.push(`${rel}（${rule.reason}）`)
+        break
+      }
+    }
+  }
+  // 角色标记必须恰好是「隔离副本」：生产标记出现即说明打错了树。
+  if (existsSync(join(staging, 'PRODUCTION.flag'))) violations.push('PRODUCTION.flag（生产标记不许进交付包）')
+  if (!existsSync(join(staging, COPY_MARKER_FILE))) violations.push(`${COPY_MARKER_FILE}（缺失，解压后 start.bat 会拒绝运行）`)
+  if (violations.length) {
+    const shown = violations.slice(0, 20)
+    throw new GateError(`最小化门禁失败（${violations.length} 项不该进包）：\n  - ${shown.join('\n  - ')}${violations.length > shown.length ? '\n  …' : ''}`)
+  }
+}
 
 export function assertExclusions(staging) {
   const violations = []
@@ -375,6 +443,8 @@ export function makeBuildInfo({ version, platform, sha, mtimeMs, alembicHead, zi
     commit_short: (sha ?? 'unknown').slice(0, 7),
     built_at: new Date(mtimeMs).toISOString(),
     platform,
+    copy_role: 'isolated',
+    install_doc: '安装与运行说明.md',
     runtime: RUNTIME_VERSIONS,
     alembic_head: alembicHead,
     artifacts: [zipName],
@@ -382,8 +452,10 @@ export function makeBuildInfo({ version, platform, sha, mtimeMs, alembicHead, zi
 }
 
 const KEY_FILES = [
-  'build-info.json', 'start.bat', 'stop.bat', 'start.sh', 'stop.sh',
+  'build-info.json', 'ISOLATED_COPY.flag', '安装与运行说明.md',
+  'start.bat', 'stop.bat', 'start.sh', 'stop.sh',
   'nginx.conf.template', 'ops/deploy/start_all.ps1', 'ops/deploy/stop_all.ps1',
+  'apps/my_app/frontend/vite.config.ts',
   'apps/_fe_dist/index.html', 'apps/portal/dist/index.html',
 ]
 

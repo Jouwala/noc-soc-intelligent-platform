@@ -31,7 +31,7 @@ start.bat
 #    → http://localhost:9267/uniplam/
 ```
 
-**首次登录**：`auth-data\` 不入库（含加盐密码哈希）。首次启动自动播种 `admin`，随机初始密码写入 `auth-data\initial-admin-password.txt`，首次登录强制改密（改完删该文件）。
+**首次登录**：`auth-data\` 不入库（含加盐密码哈希）。首次启动自动播种 `admin`：初始密码取 `PORTAL_INITIAL_ADMIN_PASSWORD`（写在部署根 `.env`），未设置则用默认值 `Admin@12345`；当前密码同时写入 `auth-data\initial-admin-password.txt`，首次登录强制改密（改完删该文件）。默认值定义在 `server/auth/store.ts` 的 `DEFAULT_INITIAL_ADMIN_PASSWORD`，改它必须同步仓库根《安装与运行说明.md》与 `ops/deploy/env_template.txt`。已有 `portal-auth.db` 时不会重新播种。
 
 **仓库外依赖（决定了门户"能开"还是"能用"）**：门户只是聚合壳，下列服务由 nginx 直接 `alias`/反代到磁盘或外部系统，**刻意不入库**（`AGENTS.md` 第四节第 6b 条：忽略跟踪 ≠ 可删除）。仅 pull 门户、不部署它们时，页面能开、UI 能渲染、TaskSyncWidget 走静态快照兜底，但**所有 my_app 看板直链与 FineBI 报表链接都会 404**：
 

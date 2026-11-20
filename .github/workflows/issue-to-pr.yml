@@ -7,11 +7,12 @@
 #      该行没有时取正文里第一个允许前缀的分支名；都没有时按
 #      agent/task-<编号>-<标题 ASCII slug> 生成（标题无 ASCII 时
 #      退化为 agent/task-<编号>）。
-#   2. 分支不存在 → 从最新 main 用 Git Data API 建一条脚手架提交（只新增
-#      .agent-work/tasks/active/task-<编号>.md 进度文件，见根 AGENTS.md
-#      第五节第 3 条），再建分支引用。这是本工作流的「自动 Commit」：
-#      PR 必须至少领先 base 一个提交才能开，脚手架提交就是这个提交；
-#      后续业务提交仍由开发 Agent 在自己的 VM 上完成。
+#   2. 分支不存在 → 从最新 main 用 Git Data API 建一条**空脚手架提交**
+#      （tree 复用 main、不新增任何文件），再建分支引用。这是本工作流的
+#      「自动 Commit」：PR 必须至少领先 base 一个提交才能开，空提交就是这个提交。
+#      进度文件 `.agent-work/tasks/active/task-<编号>.md` 只写本地（.gitignore
+#      已覆盖，过程态不入库；见 docs/workspace/architecture.md）；后续业务提交
+#      仍由开发 Agent 在自己的 VM 上完成。
 #   3. 该分支没有 open PR → 开一个草稿 PR，描述自动生成（任务说明摘录、
 #      验收要点、自检清单），并带 Closes #<编号>，合并时 GitHub 自动关
 #      Issue；状态回写（state:merged 标签 + PR_MERGED 评论）由
@@ -99,47 +100,23 @@ jobs:
           fi
           echo "目标分支：$BRANCH"
 
-          # ---- 2. 分支不存在则建脚手架提交 + 分支 ----
+          # ---- 2. 分支不存在则建空脚手架提交 + 分支 ----
+          # 2026-11-19（发布包最小化）：不再把进度文件提交进 git。
+          # 原实现写 `.agent-work/tasks/active/task-<n>.md` 并提交，这些「过程态」
+          # 文件被 .gitignore 覆盖却仍随分支合并进 main，最终进入 GitHub 自动生成的
+          # Source code ZIP（用户实测 16 个）。按 architecture.md「.agent-work/ 过程态
+          # 不入库」，进度写本地 .agent-work/（gitignored）即可；这里用**空提交**
+          # 让新分支与 main 有差异、能直接开草稿 PR（空提交 PR 已实测可创建）。
           REF_CODE="$(curl -sS -o /dev/null -w '%{http_code}' "${AUTH[@]}" "$API/git/ref/heads/$BRANCH")"
           if [ "$REF_CODE" = "404" ]; then
             MAIN_SHA="$(curl -sS "${AUTH[@]}" "$API/git/ref/heads/main" | jq -r '.object.sha')"
             MAIN_TREE="$(curl -sS "${AUTH[@]}" "$API/git/commits/$MAIN_SHA" | jq -r '.tree.sha')"
-            STUB_PATH=".agent-work/tasks/active/task-$ISSUE_NUMBER.md"
-            {
-              echo "# 任务 #$ISSUE_NUMBER：$TITLE"
-              echo
-              echo "- Issue：https://github.com/$REPO/issues/$ISSUE_NUMBER"
-              echo "- 分支：\`$BRANCH\`"
-              echo "- 状态：已认领（state:claimed），脚手架由 issue-to-pr 工作流自动生成"
-              echo
-              echo "## 目标"
-              echo
-              head -c 2000 /tmp/issue-body.md
-              echo
-              echo "## 已完成"
-              echo
-              echo "- [x] 认领任务、建分支与草稿 PR（自动化）"
-              echo
-              echo "## 未完成"
-              echo
-              echo "- [ ] 按 Issue 验收标准实现"
-              echo "- [ ] agent-done-check 自检并把命令与结果贴到 Issue 评论"
-              echo
-              echo "## 下一步"
-              echo
-              echo "在本分支提交代码，草稿 PR 转正式后按 agent-protocol 发 TASK_COMPLETED / PR_CREATED 评论。"
-            } > /tmp/stub.md
-            BLOB_SHA="$(jq -n --arg content "$(base64 -w 0 /tmp/stub.md)" '{content: $content, encoding: "base64"}' \
-              | curl -sS -X POST "${AUTH[@]}" "$API/git/blobs" --data-binary @- | jq -r '.sha')"
-            TREE_SHA="$(jq -n --arg base "$MAIN_TREE" --arg path "$STUB_PATH" --arg sha "$BLOB_SHA" \
-              '{base_tree: $base, tree: [{path: $path, mode: "100644", type: "blob", sha: $sha}]}' \
-              | curl -sS -X POST "${AUTH[@]}" "$API/git/trees" --data-binary @- | jq -r '.sha')"
-            COMMIT_SHA="$(jq -n --arg msg "chore(agent): 任务 #$ISSUE_NUMBER 脚手架——进度文件（issue-to-pr 自动生成）" --arg tree "$TREE_SHA" --arg parent "$MAIN_SHA" \
+            COMMIT_SHA="$(jq -n --arg msg "chore(agent): 任务 #$ISSUE_NUMBER 认领脚手架（空提交；进度文件不入库）" --arg tree "$MAIN_TREE" --arg parent "$MAIN_SHA" \
               '{message: $msg, tree: $tree, parents: [$parent]}' \
               | curl -sS -X POST "${AUTH[@]}" "$API/git/commits" --data-binary @- | jq -r '.sha')"
             curl -sS -X POST "${AUTH[@]}" "$API/git/refs" \
               --data-binary "$(jq -n --arg ref "refs/heads/$BRANCH" --arg sha "$COMMIT_SHA" '{ref: $ref, sha: $sha}')" > /dev/null
-            echo "已建分支 $BRANCH（脚手架提交 $COMMIT_SHA）"
+            echo "已建分支 $BRANCH（空脚手架提交 $COMMIT_SHA）"
           else
             echo "分支 $BRANCH 已存在（HTTP $REF_CODE），不重建"
           fi
@@ -190,7 +167,7 @@ jobs:
             echo '<!-- issue-to-pr: done -->'
             echo "自动化（issue-to-pr）：任务脚手架已就绪。"
             echo
-            echo "- 分支：\`$BRANCH\`（从最新 main 建，含脚手架提交：进度文件 \`.agent-work/tasks/active/task-$ISSUE_NUMBER.md\`）"
+            echo "- 分支：\`$BRANCH\`（从最新 main 建，含**空**脚手架提交；进度写本地 .agent-work/，不入库）"
             echo "- 草稿 PR：#$PR_NUMBER（描述已按 Issue 自动生成，含 Closes #$ISSUE_NUMBER）"
             echo
             echo "开发 Agent 在该分支提交代码即可；草稿转正式后走 CI → 冒烟 → 自动合并。"

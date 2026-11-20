@@ -7,12 +7,33 @@
 
 | 产物 | 内容 | 发布节奏 |
 | --- | --- | --- |
-| 应用 ZIP `noc-soc-platform-<版本>-<平台>.zip` | 源码（白名单）+ 预构建前端 + 预装 `node_modules` + wheels/ + 启动脚本 + `build-info.json` + `SHA256SUMS` | 每次发版（SemVer 标签） |
+| 应用 ZIP `noc-soc-platform-<版本>-<平台>.zip` | **运行必需**源码（后端 / 门户 server / bot / eFlow 知识库）+ 预构建前端 + 预装 `node_modules` + `wheels/` + 启停与安装脚本 + 《安装与运行说明.md》 + `ISOLATED_COPY.flag` + `build-info.json` + `SHA256SUMS` | 每次发版（SemVer 标签） |
 | 运行时 ZIP `noc-soc-runtime-<运行时版本>-<平台>.zip` | Python / Node / PostgreSQL / nginx 发行包 | 运行时版本变化时（手动） |
 
 平台后缀：`win-x64`、`linux-x64`。`node_modules` 必须在对应平台的 runner 上 `npm ci`，不得跨平台复用。
 
-不打包的内容（构建脚本断言，命中即失败）：`pgdata`、`.env`、`*.key`/`*.pem`、会话/鉴权/凭据文件、数据库与快照、日志、缓存、`.git`、手工快照。另有凭据扫描（私钥块、JSESSIONID 会话值、密钥/口令赋值），只报位置不打印内容。
+### ⭐ 最小化原则（2026-11-19，用户定）
+
+判据只有一条：**目标机解压后，为了把平台跑起来并登录使用，这个文件是否必须存在？**
+必须 = 进包；否则一律不进。具体：
+
+- **不进包**：`.github/`、`.claude/`、`.githooks/`、`.agent-work/`、`.workbuddy-ai/`、
+  `.gitignore`、`.gitattributes`、`README.md`、`AGENTS.md`（仓库自身信息）、
+  `docs/`、开发手册、`tests/`、代码生成器、冒烟工具、`agent-worker` / `control-plane`、
+  浏览器扩展、前端源码（`frontend/src`、`portal/src`）、生产看门狗脚本；
+- **不进包（运行期缓存，此前真实混入过）**：`backend/services/cn_ems/_pmcache`
+  （27,072 文件 / 618.5 MB，曾把 source 模式从约 5 MB 撑到 84 MB）、
+  `backend/data/native_board_cache`、`backend/data/tt_timeline_cache`、`backend/data/gp_ran`；
+- 由 `zip-manifest.mjs` 的 `PACKAGE_FORBIDDEN_PATHS` 机器守卫，构建时命中即失败
+  （`assertPackageMinimal`）；`release-build.yml` 另在解包后复核一遍（第二道闸）。
+
+同时，GitHub 自动生成的 `Source code (zip)` 用 `.gitattributes` 的 `export-ignore`
+裁掉同一批开发资产 —— 那个归档不受 `build-zip` 白名单控制，是用户下载到
+`.github/` / `.claude/` / `.githooks/` 的来源。
+
+不打包的内容（构建脚本断言，命中即失败）：`pgdata`、`.env`、`*.key`/`*.pem`、
+会话/鉴权/凭据文件、`auth_info.json`、数据库与快照、日志、缓存、`.git`、手工快照。
+另有凭据扫描（私钥块、JSESSIONID 会话值、密钥/口令赋值），只报位置不打印内容。
 
 ## 本地构建
 

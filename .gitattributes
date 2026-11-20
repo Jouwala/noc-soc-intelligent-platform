@@ -60,3 +60,51 @@ liberia-noc_soc-数据看板统一门户/rotate_nginx_logs.ps1  text eol=lf
 ops/deploy/smoke-local.ps1  -text eol=crlf
 ops/smoke/*.ps1             -text eol=crlf
 ops/smoke/*.cmd             -text eol=crlf
+
+# ---------------------------------------------------------------------------
+# GitHub「Download ZIP」/ git archive 裁剪（2026-11-19，发布包最小化）
+#
+# 背景：Release 页面永远会挂一个自动生成的 `Source code (zip)`，它的内容
+# **不受 build-zip.mjs 白名单控制** —— 只要文件被 git 跟踪就会进归档。用户实测
+# 下载到 `.github/`、`.claude/`、`.githooks/`、`.workbuddy-ai/` 等开发元数据，
+# 与「非必要不进版本包」冲突。`export-ignore` 是唯一能裁它的机制（只影响归档，
+# 不影响 clone / CI checkout）。
+#
+# 原则：**运行/构建源码保留**；只裁「开发过程资产」—— CI、agent 笔记、git 钩子、
+# 生成器、测试、手册、桌面快捷方式、浏览器扩展。正式的交付包仍以
+# `noc-soc-platform-*.zip`（build-zip 白名单）为准，那个包不含源码树与
+# node_modules 之外的任何开发资产。
+# ---------------------------------------------------------------------------
+.github/                    export-ignore
+.claude/                    export-ignore
+.githooks/                  export-ignore
+.agent-work/                export-ignore
+.agent-worktrees/           export-ignore
+.agents/                    export-ignore
+.smoke/                     export-ignore
+docs/                       export-ignore
+desktop_shortcuts/          export-ignore
+extensions/                 export-ignore
+# 仓库自身的信息文件也不进源码归档（用户 2026-11-19 明确）：git 规则、
+# 仓库 README、给 AI 的 AGENTS 说明都不是产品内容。
+.gitignore                  export-ignore
+.gitattributes              export-ignore
+README.md                   export-ignore
+AGENTS.md                   export-ignore
+**/AGENTS.md                export-ignore
+**/.workbuddy-ai/           export-ignore
+**/.claude/                 export-ignore
+apps/my_app/tests/          export-ignore
+apps/my_app/docs/           export-ignore
+apps/my_app/tools/          export-ignore
+apps/my_app/monitor_fixes/  export-ignore
+apps/my_app/nginx/          export-ignore
+# 运行期输出/数据（gitignore 已覆盖；这里再兜一层，防「先提交后加规则」回流）
+apps/my_app/outputs/        export-ignore
+apps/portal/docs/           export-ignore
+apps/whatsapp-kb-bot/docs/  export-ignore
+apps/whatsapp-kb-bot/evals/ export-ignore
+ops/smoke/                  export-ignore
+ops/deploy/lib/zip-*.test.mjs export-ignore
+# 根目录的重构方案是内部规划文档，不进源码归档（仓库里仍保留）。
+NOC-SOC-Intelligent-Platform最终重构执行方案.md export-ignore

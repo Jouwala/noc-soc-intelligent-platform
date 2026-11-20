@@ -22,9 +22,9 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeZip } from './lib/zip-writer.mjs'
 import {
-  GateError, assemble, assertExclusions, collectEntries, gitInfo, isPathInside, makeBuildInfo,
-  resolveAlembicHead, resolveMtimeMs, resolveVersion, scanCredentials, sha256Hex,
-  writeSha256Sums, zipFileName, normalizeStaging,
+  GateError, assemble, assertExclusions, assertPackageMinimal, collectEntries, gitInfo,
+  isPathInside, makeBuildInfo, resolveAlembicHead, resolveMtimeMs, resolveVersion,
+  scanCredentials, sha256Hex, writeSha256Sums, zipFileName, normalizeStaging,
 } from './lib/zip-package.mjs'
 
 const USAGE = `用法: node ops/deploy/build-zip.mjs [--mode full|source] [--platform win-x64|linux-x64] [--version vX.Y.Z] [--root DIR] [--staging DIR] [--out DIR] [--mtime ISO] [--dry-run]`
@@ -84,6 +84,8 @@ function main() {
 
   assertExclusions(staging)
   console.log('[build-zip] 排除断言通过')
+  assertPackageMinimal(staging)
+  console.log('[build-zip] 最小化门禁通过（无开发资产 / 已写 ISOLATED_COPY.flag）')
   scanCredentials(staging)
   console.log('[build-zip] 凭据扫描通过')
   const norm = normalizeStaging(staging)

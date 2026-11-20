@@ -13,6 +13,7 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -22,18 +23,41 @@ import { fileURLToPath } from 'node:url'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ZIP_DIR = join(HERE, 'zip-dir.mjs')
 
+const sha256Hex = (buf) => createHash('sha256').update(buf).digest('hex')
+
+/**
+ * 能否创建符号链接。Windows 未开开发者模式且非管理员时会 EPERM —— 那是
+ * 测试环境限制（CI 的 windows runner 以管理员运行），不能让本机整套测试变红。
+ * 不能建时：fixture 不建链接，依赖链接的用例单独 skip。
+ */
+const CAN_SYMLINK = (() => {
+  const dir = mkdtempSync(join(tmpdir(), 'zip-dir-probe-'))
+  try {
+    symlinkSync('probe', join(dir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})()
+const NO_SYMLINK = CAN_SYMLINK ? false : 'Windows 无符号链接权限（需开发者模式或管理员）'
+
 function fixture(t) {
   const dir = mkdtempSync(join(tmpdir(), 'zip-dir-test-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   mkdirSync(join(dir, 'bin'), { recursive: true })
   writeFileSync(join(dir, 'bin', 'tool'), '#!/bin/sh\necho hi\n')
   chmodSync(join(dir, 'bin', 'tool'), 0o755) // Windows 上此 chmod 落不了执行位；0o755 靠 shebang 规则
-  symlinkSync('tool', join(dir, 'bin', 'tool-link'))
+  if (CAN_SYMLINK) symlinkSync('tool', join(dir, 'bin', 'tool-link'))
   writeFileSync(join(dir, 'bin', 'run.sh'), '#!/bin/sh\necho run\n')
   chmodSync(join(dir, 'bin', 'run.sh'), 0o644)
   writeFileSync(join(dir, 'plain.txt'), 'hello\n')
   return dir
 }
+
+/** Windows 没有 python3 命令；ubuntu runner 两者都有。 */
+const PYTHON = process.platform === 'win32' ? 'python' : 'python3'
 
 function pack(dir, out) {
   return spawnSync('node', [ZIP_DIR, dir, out, '--mtime', '2026-11-19T00:46:33+00:00'], { encoding: 'utf8' })
@@ -45,14 +69,15 @@ function inspectZip(out) {
     'z=zipfile.ZipFile(sys.argv[1])',
     'assert z.testzip() is None',
     'info={i.filename: ((i.external_attr>>16) & 0o177777) for i in z.infolist() if not i.is_dir()}',
-    'print(json.dumps({"names": sorted(info), "modes": info, "link": z.read("bin/tool-link").decode(), "tool": z.read("bin/tool").decode()}))',
+    'link = z.read("bin/tool-link").decode() if "bin/tool-link" in info else ""',
+    'print(json.dumps({"names": sorted(info), "modes": info, "link": link, "tool": z.read("bin/tool").decode()}))',
   ].join(';')
-  const r = spawnSync('python3', ['-c', script, out], { encoding: 'utf8' })
+  const r = spawnSync(PYTHON, ['-c', script, out], { encoding: 'utf8' })
   assert.equal(r.status, 0, r.stderr)
   return JSON.parse(r.stdout)
 }
 
-test('符号链接按链接条目入包，可执行位保留', (t) => {
+test('符号链接按链接条目入包，可执行位保留', { skip: NO_SYMLINK }, (t) => {
   const dir = fixture(t)
   const out = join(dir, 'out.zip')
   const r = pack(dir, out)
@@ -84,9 +109,11 @@ test('shebang 文件按可执行入包（无执行位时仍为 0o755）', (t) =>
 // Windows 自带 unzip 不把链接条目还原成符号链接（解成普通文件），
 // 还原能力不在本包控制范围；链接条目本身的正确性（mode 0o120777、
 // 内容为目标路径）已由第一条用例覆盖，故本条在 win32 下跳过。
-const SKIP_UNZIP_RESTORE = process.platform === 'win32'
-  ? 'Windows 自带 unzip 不还原符号链接，条目元数据由第一条用例覆盖'
-  : false
+const SKIP_UNZIP_RESTORE = NO_SYMLINK
+  ? NO_SYMLINK
+  : process.platform === 'win32'
+    ? 'Windows 自带 unzip 不还原符号链接，条目元数据由第一条用例覆盖'
+    : false
 test('unzip 解包还原符号链接，链接可执行', { skip: SKIP_UNZIP_RESTORE }, (t) => {
   const dir = fixture(t)
   const outDir = mkdtempSync(join(tmpdir(), 'zip-dir-test-out-'))
@@ -105,7 +132,7 @@ test('unzip 解包还原符号链接，链接可执行', { skip: SKIP_UNZIP_REST
   assert.equal(run.stdout, 'hi\n')
 })
 
-test('断链符号链接仍报错', (t) => {
+test('断链符号链接仍报错', { skip: NO_SYMLINK }, (t) => {
   const dir = fixture(t)
   symlinkSync('missing-target', join(dir, 'broken'))
   const r = pack(dir, join(dir, 'out.zip'))
@@ -121,7 +148,6 @@ test('两次打包字节一致（确定性）', (t) => {
   const out2 = join(outDir, 'b.zip')
   assert.equal(pack(dir, out1).status, 0)
   assert.equal(pack(dir, out2).status, 0)
-  const r = spawnSync('sha256sum', [out1, out2], { encoding: 'utf8' })
-  const [h1, h2] = r.stdout.trim().split(/\s+/).filter((s, i) => i % 2 === 0)
-  assert.equal(h1, h2)
+  // 不用 sha256sum：Windows 默认没有该命令（Git 的 usr/bin 不一定在 PATH）。
+  assert.equal(sha256Hex(readFileSync(out1)), sha256Hex(readFileSync(out2)))
 })

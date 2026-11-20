@@ -136,6 +136,42 @@ function Set-Cfg {
     [Environment]::SetEnvironmentVariable($Key, $Value, 'Process')
 }
 
+# ⚠ 下面两个块必须放在 Set-Cfg 定义**之后**：PowerShell 的 function 语句按执行
+# 顺序生效，不能像编译语言那样先调用后定义。此前它们写在 $cfg 载入处（本段上方），
+# 只要副本里已存在 .env 就会报 "Set-Cfg is not recognized"，start_all 退出 1；
+# 只有在全新解包、还没有 .env 的干跑里才碰巧通过 —— 2026-11-19 冒烟 PR #182
+# 连续 4 轮卡在这里（start_all.err 448 字节），别再挪回去。
+
+# 把 .env 里的**所有**键导出到本进程环境。
+#
+# 此前只导出下面 $derived 里的派生键，于是写在 .env 的普通配置（QA_OWU_BASE、
+# PORTAL_INITIAL_ADMIN_PASSWORD、START_WA_ANALYSIS…）**根本不生效** —— 用户改了
+# .env 却看不到任何变化，是最难排查的一类问题。模板里的空值不导出（保持默认）。
+# 顺序很重要：先导 .env，再由下面的 $derived 覆盖派生目录/端口（派生值必须由
+# 副本根推导，不能被 .env 或父进程残留值顶掉）。
+foreach ($k in @($cfg.Keys)) {
+    if ($cfg[$k]) { Set-Cfg $k $cfg[$k] }
+}
+
+# 目标机可能没有配套的 runtime ZIP，改用系统安装的 Python / Node / PG。
+# 这三个键允许在 .env 里覆盖 noc-paths.ps1 推出来的默认路径；未设置时行为不变。
+# 例：NOC_PYTHON_EXE=C:\Python312\python.exe
+# （不提供 nginx 目录覆盖：nginx 的 conf/logs/certs 路径由 noc-paths.ps1 一次算出，
+#   启动后再改目录会与已展开的配置错位；需要时把 nginx 放到 <根>\nginx-1.28.0\ 或
+#   <根>\runtime\nginx-1.28.0\，解析器按这个顺序找。）
+$exeOverrides = @(
+    @{ Key = 'NOC_PYTHON_EXE'; Var = 'PyExe'; Name = 'Python' },
+    @{ Key = 'NOC_NODE_EXE'; Var = 'NodeExe'; Name = 'Node' },
+    @{ Key = 'NOC_PG_BIN'; Var = 'PgBin'; Name = 'PostgreSQL bin' }
+)
+foreach ($o in $exeOverrides) {
+    $v = [Environment]::GetEnvironmentVariable($o.Key, 'Process')
+    if ([string]::IsNullOrWhiteSpace($v)) { continue }
+    Set-Variable -Name $o.Var -Value $v
+    Write-Step ("{0} 使用 .env 覆盖: {1}={2}" -f $o.Name, $o.Key, $v)
+}
+$NginxExe = Join-Path $NginxDir 'nginx.exe'
+
 $HttpPort = [int](Get-Cfg 'NGINX_HTTP_PORT' '8080')
 $HttpsPort = [int](Get-Cfg 'NGINX_HTTPS_PORT' '8443')
 $BePort = [int](Get-Cfg 'MY_APP_BE_PORT' '7039')

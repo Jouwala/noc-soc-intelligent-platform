@@ -13,10 +13,10 @@ import path, { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
-  GateError, assemble, assertExclusions, deniedFileReason, isPathInside,
-  scanCredentials, walkFiles,
+  COPY_MARKER_FILE, GateError, assemble, assertExclusions, assertPackageMinimal,
+  deniedFileReason, isPathInside, scanCredentials, walkFiles,
 } from './zip-package.mjs'
-import { BASENAME_DENIED_DIRS, PATH_DENIED_DIRS, REQUIRED_STAGING_FILES } from './zip-manifest.mjs'
+import { BASENAME_DENIED_DIRS, PACKAGE_FORBIDDEN_PATHS, PATH_DENIED_DIRS, REQUIRED_STAGING_FILES } from './zip-manifest.mjs'
 import { writeZip } from './zip-writer.mjs'
 
 function fixture(t, files) {
@@ -30,8 +30,25 @@ function fixture(t, files) {
   return dir
 }
 
-function findRepoRoot() {
-  let dir = dirname(fileURLToPath(import.meta.url))
+/**
+ * 创建符号链接；Windows 未开开发者模式且非管理员时 symlink 抛 EPERM。
+ * 这是**测试环境**限制（CI 的 Windows runner 以管理员运行，能建），
+ * 不该让整个套件在普通开发机上变红：失败时标记 skip 并让调用方 return。
+ */
+function symlinkOrSkip(t, target, path) {
+  try {
+    symlinkSync(target, path)
+    return true
+  } catch (e) {
+    if (e.code === 'EPERM' || e.code === 'EACCES') {
+      t.skip('Windows 无符号链接权限（需开发者模式或管理员），本机跳过')
+      return false
+    }
+    throw e
+  }
+}
+
+function findRepoRoot() {  let dir = dirname(fileURLToPath(import.meta.url))
   for (let i = 0; i < 6; i += 1) {
     if (existsSync(join(dir, 'apps/my_app/backend/main.py'))) return dir
     const parent = dirname(dir)
@@ -92,7 +109,7 @@ test('walkFiles：node_modules 树内嵌套目录与 dist 保留，符号链接�
     'apps/portal/node_modules/foo/dist/index.js': 'x',
     'apps/portal/node_modules/foo/package.json': '{}',
   })
-  symlinkSync(join(root, 'apps/portal/node_modules/foo/package.json'), join(root, 'apps/portal/node_modules/foo/link.js'))
+  if (!symlinkOrSkip(t, join(root, 'apps/portal/node_modules/foo/package.json'), join(root, 'apps/portal/node_modules/foo/link.js'))) return
   const nmRoot = join(root, 'apps/portal/node_modules')
   // 通用拒绝集会丢嵌套目录（旧行为，复现 P1-1）
   const baseDenied = new Set(BASENAME_DENIED_DIRS)
@@ -113,7 +130,7 @@ test('walkFiles：node_modules 树内嵌套目录与 dist 保留，符号链接�
 
 test('walkFiles：普通树内符号链接失败关闭', (t) => {
   const root = fixture(t, { 'a.py': 'x' })
-  symlinkSync(join(root, 'a.py'), join(root, 'link.py'))
+  if (!symlinkOrSkip(t, join(root, 'a.py'), join(root, 'link.py'))) return
   assert.throws(() => walkFiles(root, '', new Set(), []), /符号链接/)
 })
 
@@ -131,7 +148,46 @@ test('deniedFileReason：规则表', () => {
   assert.match(deniedFileReason('apps/whatsapp-kb-bot/config.json'), /bot/)
   assert.equal(deniedFileReason('apps/portal/config.json'), null)
   assert.match(deniedFileReason('x/data.sql'), /快照/)
+  // 2026-11-19 最小化：下列三类曾真实进过包 / 会泄露会话
+  assert.match(deniedFileReason('PRODUCTION.flag'), /生产/)
+  assert.match(deniedFileReason('apps/my_app/backend/services/battary_kpi_fetch/auth_info.json'), /鉴权快照/)
+  assert.match(deniedFileReason('scripts/eflow-rule-lookup.py.old_20261028'), /旧版本/)
   assert.equal(deniedFileReason('apps/my_app/backend/services/db/a.py'), null)
+})
+
+test('最小化门禁：开发资产/生产标记/缺隔离标记都会失败', (t) => {
+  const clean = fixture(t, { 'ok.py': 'print(1)\n', [COPY_MARKER_FILE]: 'copy\r\n' })
+  assertPackageMinimal(clean)
+
+  for (const rel of [
+    '.github/workflows/quality.yml',
+    '.claude/settings.json',
+    '.githooks/pre-commit',
+    '.agent-work/tasks/active/task-1.md',
+    '.gitignore',
+    '.gitattributes',
+    'README.md',
+    'AGENTS.md',
+    'apps/my_app/AGENTS.md',
+    '.workbuddy-ai/memory/MEMORY.md',
+    'apps/my_app/tests/test_x.py',
+    'apps/portal/src/App.tsx',
+    'apps/control-plane/backend/main.py',
+    'apps/my_app/backend/services/cn_ems/_pmcache/PM_1.zip',
+    'docs/workspace/TODO.md',
+  ]) {
+    const bad = fixture(t, { 'ok.py': 'x', [COPY_MARKER_FILE]: 'copy\r\n', [rel]: 'x' })
+    assert.throws(() => assertPackageMinimal(bad), GateError, `应拦下: ${rel}`)
+  }
+
+  // 生产标记混进来 = 打错了树
+  const prod = fixture(t, { 'ok.py': 'x', [COPY_MARKER_FILE]: 'copy\r\n', 'PRODUCTION.flag': 'x' })
+  assert.throws(() => assertPackageMinimal(prod), /生产标记/)
+  // 缺隔离标记 = 解压后 start.bat 会拒绝运行
+  const noMarker = fixture(t, { 'ok.py': 'x' })
+  assert.throws(() => assertPackageMinimal(noMarker), new RegExp(COPY_MARKER_FILE))
+  // 禁止清单本身不能是空表（防止有人「修绿」把它清空）
+  assert.ok(PACKAGE_FORBIDDEN_PATHS.length >= 15)
 })
 
 test('门禁植入：凭据/.env/pgdata 都会被拦截', (t) => {
@@ -159,20 +215,44 @@ test('凭据扫描：node_modules 内示例密钥不误报，自有文件仍拦�
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 集成：真实仓库组装 + 回归 8 文件 + 确定性
+// 集成：真实仓库组装 + 回归文件 + 最小化 + 确定性
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('集成：source 组装含回归 8 文件，不含应用根级数据目录', (t) => {
+test('集成：source 组装含回归文件，不含开发资产与运行期缓存', (t) => {
   const root = findRepoRoot()
   if (!root) t.skip('不在仓库检出内，跳过集成用例')
   const staging = mkdtempSync(join(tmpdir(), 'zip-staging-'))
   t.after(() => rmSync(staging, { recursive: true, force: true }))
   const { copied } = assemble({ root, staging, mode: 'source' })
-  assert.ok(copied.length > 1000, `组装文件过少: ${copied.length}`)
+  // 2026-11-19 最小化后的合理量级：源码约数百个文件（此前含 _pmcache 时是 2.8 万）。
+  assert.ok(copied.length > 200, `组装文件过少: ${copied.length}`)
+  assert.ok(copied.length < 5000, `组装文件异常偏多（疑似运行期缓存/源码树回潮）: ${copied.length}`)
   for (const rel of REQUIRED_STAGING_FILES) assert.ok(existsSync(join(staging, rel)), `缺回归文件: ${rel}`)
   assert.ok(!existsSync(join(staging, 'apps/my_app/db')))
   assert.ok(!existsSync(join(staging, 'apps/my_app/data')))
-  assert.ok(!walkFiles(staging, '', new Set(), []).some((f) => f.includes('/node_modules/')))
+  // 最小化门禁本身也要在真实仓库上跑通（含 ISOLATED_COPY.flag 自动写入）
+  assertPackageMinimal(staging)
+  const files = walkFiles(staging, '', new Set(), [])
+  for (const rel of ['apps/portal/src/App.tsx', 'apps/my_app/tests', 'apps/control-plane', '.github', 'docs/workspace']) {
+    assert.ok(!files.some((f) => f === rel || f.startsWith(`${rel}/`)), `不该进包: ${rel}`)
+  }
+  assert.ok(!files.some((f) => f.includes('/_pmcache/')), '_pmcache 不该进包')
+  assert.ok(!files.some((f) => f.includes('/native_board_cache/')), 'native_board_cache 不该进包')
+  assert.ok(!files.some((f) => f.includes('/node_modules/')), 'source 模式不该含 node_modules')
+})
+
+test('仓库不得跟踪「已忽略」的过程态文件（.agent-work / .workbuddy-ai / outputs）', (t) => {
+  const root = findRepoRoot()
+  if (!root) t.skip('不在仓库检出内，跳过')
+  // 这批文件是 2026-11-19 用户实测「不该进版本包」的直接来源：
+  //   .agent-work/ 16 个进度档、apps/my_app/outputs/auth_health/ 4 个运行期报告。
+  // 它们都在 .gitignore 里，却因为「先提交、后加规则」仍在库中，于是必然进入
+  // GitHub 自动生成的 Source code ZIP（export-ignore 只能事后补救）。
+  // 这条守卫盯住根因：只要出现「被忽略却仍跟踪」的文件，release-build 就失败。
+  const r = spawnSync('git', ['ls-files', '-ci', '--exclude-standard'], { cwd: root, encoding: 'utf8' })
+  assert.equal(r.status, 0, r.stderr)
+  const tracked = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
+  assert.deepEqual(tracked, [], `这些文件已被 .gitignore 覆盖却仍在版本库里：\n  - ${tracked.join('\n  - ')}`)
 })
 
 test('zip-writer：同一输入两次写出字节相同', (t) => {
@@ -188,7 +268,9 @@ test('zip-writer：同一输入两次写出字节相同', (t) => {
   writeZip(entries, out1, { mtimeMs: Date.UTC(2026, 0, 1) })
   writeZip(entries, out2, { mtimeMs: Date.UTC(2026, 0, 1) })
   assert.deepEqual(readFileSync(out1), readFileSync(out2))
-  // 产物可被系统 unzip 校验（zip 结构合法）
-  const r = spawnSync('python3', ['-c', 'import zipfile,sys; assert zipfile.ZipFile(sys.argv[1]).testzip() is None', out1], { encoding: 'utf8' })
+  // 产物可被系统 unzip 校验（zip 结构合法）。Windows 上没有 python3 命令，
+  // 用 `python`；ubuntu runner 两者都有。此前写死 python3 会让本机测试恒失败。
+  const py = process.platform === 'win32' ? 'python' : 'python3'
+  const r = spawnSync(py, ['-c', 'import zipfile,sys; assert zipfile.ZipFile(sys.argv[1]).testzip() is None', out1], { encoding: 'utf8' })
   assert.equal(r.status, 0, r.stderr)
 })
