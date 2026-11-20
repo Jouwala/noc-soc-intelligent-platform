@@ -309,7 +309,7 @@ APScheduler 到点 (backend 进程内)
 | `vmax_cxo_daily_sync` | VMAX CXO天粒度日值归档 | `15 * * * *` | v |
 | `avail_recon_sync` | 可用率核对宽表重建 | `10 6 * * *` | u |
 | `bp_report_sync` | BP Cells Report 更新（RAN_UME 增量 + UME 小时级活跃用户 + 周月重算 + 判定回填） | `20 6 * * *` | u |
-| `tmp_cleanup` | TMP 目录清理 | `47 3 * * *` | m |
+| `tmp_cleanup` | 临时产物清理（TMP 临时产物 + data/ 按次产物） | `47 3 * * *` | m |
 | `mttr_tt_sync` | MTTR/TT 宽表重建 | `40 7 * * *` | m |
 | `progress_sync` | Progress 宽表重建 | `50 7 * * *` | m |
 | `tt_mttr_report_generate` | TTs and MTTR 报表生成（供 EmailReports 页「TTs and MTTR」页签下载） | `20 7 * * *` | m |

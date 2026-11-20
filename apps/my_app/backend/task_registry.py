@@ -1050,15 +1050,21 @@ TASK_SPECS = [
          # 与 ems_kpi_daily(05:20) 同一批早班；配合 refresh_last_days 双保险。
          default_cron="20 6 * * *", category="olib_soc"),
 
-    # 44. TMP 目录定期清理（每天 03:47，2026-09-18 新增）：TMP/ 是临时产物固定去处
-    #     （见 CODE_CLEANUP_GUIDE），但体积没人管，上线首日实测 462MB（4 个
-    #     _diag*_eflow_* 诊断目录占 ~380MB）。两段式回收：超 7 天条目同盘 mv 进
-    #     TMP/_quarantine_YYYYMMDD/（可还原），隔离再超 7 天才真删；服务在用路径
-    #     （charts/dl/状态文件）白名单永不处理。与 log_cleanup(03:17) 错峰。
-    dict(task_id="tmp_cleanup", name="TMP 目录清理", name_en="TMP Directory Cleanup",
+    # 44. 临时产物定期清理（每天 03:47，2026-09-18 新增 TMP；2026-11-20 并入 data/ 残留）
+    #     ① TMP/ 是临时产物固定去处（见 CODE_CLEANUP_GUIDE），但体积没人管，上线首日
+    #        实测 462MB（4 个 _diag*_eflow_* 诊断目录占 ~380MB）。两段式回收：超 7 天
+    #        条目同盘 mv 进 TMP/_quarantine_YYYYMMDD/（可还原），隔离再超 7 天才真删；
+    #        服务在用路径（charts/dl/状态文件）白名单永不处理。与 log_cleanup(03:17) 错峰。
+    #     ② data/ 下的按次产物（网管导出中间文件、Chrome 临时 profile、损坏镜像快照、
+    #        逐次运行摘要、IP 追踪留档）按 data_residue_cleanup.RULES 的逐类保留期回收，
+    #        隔离到 data/_quarantine_YYYYMMDD/ 再超 30 天真删。
+    #        由来：2026-11-20 查出 data/cnn_ume/exports 里躺了 2026-07-31 的导出文件 ——
+    #        写入方改内存模式后不再落盘，而删除逻辑只删「自己刚读到的那一个」，加上
+    #        data/ 被 gitignore 挡住，四个月无人发现。
+    dict(task_id="tmp_cleanup", name="临时产物清理", name_en="Temp Artifacts Cleanup",
          loader=("backend.services.cleanup.tmp_cleanup", "run_tmp_cleanup"),
-         description="隔离 my_app/TMP 下超过保留期（默认7天）的临时产物到 _quarantine_ 目录，隔离满 7 天后彻底删除；白名单保护服务在用路径",
-         description_en="Quarantine TMP entries idle beyond retention (default 7 days) into _quarantine_ dirs, purge quarantine after another 7 days; service paths whitelisted",
+         description="两段式回收 TMP 下超保留期（默认7天）的临时产物，以及 data/ 下按次产物（网管导出中间文件/临时浏览器 profile/损坏镜像快照/逐次运行摘要等，保留期见 RULES 逐类设定）；先隔离到 _quarantine_ 目录，隔离期满才彻底删除，白名单保护服务在用路径",
+         description_en="Two-stage cleanup: quarantine TMP entries idle beyond retention (default 7 days) and per-run byproducts under data/ (UME export intermediates, temp browser profiles, corrupt mirror snapshots, run summaries; per-rule retention), then purge expired quarantine; service paths whitelisted",
          default_cron="47 3 * * *", category="general"),
 
     # 45. TTs and MTTR 月粒度报表生成（每天 07:20，2026-10-04 新增）

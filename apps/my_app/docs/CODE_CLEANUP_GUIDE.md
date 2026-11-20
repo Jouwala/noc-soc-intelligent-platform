@@ -12,6 +12,11 @@
    **会与真实命令同名**的文件名 —— 曾经就是命令重定向误建出这三个文件。
 3. **每季度归档一次**。用 `_myapp_trash_YYYYMMDD` 同盘归档，确认无影响后再整体删除。
    **不要直接 `rm`**，也不要在归档前删除。
+4. **按次产物不要落 `data/`**（2026-11-20 加）。`data/` 是业务库与报表源的地盘，
+   一次性的导出/中间文件落 `TMP/`。确需落 `data/` 的按次产物，必须在
+   `backend/services/cleanup/data_residue_cleanup.py` 的 `RULES` 登记保留期，
+   否则就会变成「写得进去、没人读、没人删」的遗留 ——
+   `data/cnn_ume/exports/` 那两个 2026-07-31 的导出文件就是这么躺了四个月。
 
 ## 2. 目录归属表
 
@@ -21,6 +26,7 @@
 | `TMP/` | 临时产物（服务也用） | 清理其中内容，**保留** `ccn_free_rating_charts/` `fw_charts/` `ipran_charts/` `email_recovery_state.json` |
 | `outputs/` | 交付样例 / 预览 | 可清调试产物，保留正式交付文件 |
 | `data/portal_profiles/_tmp_*` | Chrome 临时 profile | 可清理（异常退出残留） |
+| `data/<系统>/exports/`、`data/_remote_kpi/`、`data/ip_trace/`、`data/olib_soc_report/*.summary.json`、`data/native_board_mirror/*.corrupt_*` | **按次产物**（网管导出中间文件 / 下载缓存 / 抓取留档 / 逐次运行摘要 / 损坏镜像快照） | **自动**：任务 `tmp_cleanup` 按 `backend/services/cleanup/data_residue_cleanup.py` 的 `RULES` 回收（先隔离 30 天再真删） |
 | `log/` | 运行日志 | 归档带日期且已关闭的旧日志 |
 | `**/__pycache__/` `*.pyc` | 编译缓存 | 可清理，自动重建 |
 | `db/` `data/*.sqlite3` | 业务数据 | **否** |
