@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
-"""TMP 目录定期清理（2026-09-18 新增，每日定时任务 tmp_cleanup）
+"""临时产物定期清理（2026-09-18 新增，每日定时任务 tmp_cleanup）
+
+本任务由两个作用域拼成，**同一个 task_id**：
+
+  1. ``my_app/TMP/`` 单级条目（本文件）—— 截图 / 抓包 JSON / 一次性诊断目录；
+  2. ``my_app/data/`` 下的按次产物（``data_residue_cleanup.py``）—— 各网管导出
+     中间文件、Chrome 临时 profile、损坏镜像快照、逐次运行摘要等。
+
+为什么合在一个任务里而不是拆成两个：两者本是同一件事（回收运行时副产物），
+调度窗口也该挨着；而任务总数被 ``docs/manual/04-task-system.md``、站内帮助与
+``tests/test_doc_consistency.py`` 多处核对，拆开只会多一处文档漂移点。
 
 背景
 ----
@@ -187,7 +197,23 @@ def run_tmp_cleanup() -> dict:
         purged, pg_bytes, p_detail = 0, 0, []
         errors.append(f"清空阶段异常: {type(e).__name__}: {e}")
 
+    # 第二阶段：data/ 下的按次产物。规则与保留期都在 data_residue_cleanup.RULES，
+    # 本文件不重复判断 —— 那边只碰显式列出的路径，data/ 里的业务库不会被波及。
+    residue: dict = {}
+    try:
+        from backend.services.cleanup import data_residue_cleanup as _residue
+    except ImportError:  # 直接执行本文件时没有包上下文
+        import data_residue_cleanup as _residue  # type: ignore[no-redef]
+    try:
+        residue = _residue.run_data_residue_cleanup()
+        errors.extend(residue.get("errors") or [])
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"data 残留清理失败: {e}", exc_info=True)
+        residue = {}
+        errors.append(f"data 残留阶段异常: {type(e).__name__}: {e}")
+
     total = moved + purged
+    residue_msg = (residue or {}).get("message", "")
     summary = {
         "success": not errors,
         "tmp_dir": str(TMP_DIR),
@@ -199,12 +225,14 @@ def run_tmp_cleanup() -> dict:
         "purged_mb": round(pg_bytes / 1048576, 2),
         "quarantine_detail": m_detail[:30],
         "purge_detail": p_detail[:30],
+        "data_residue": residue,
         "errors": errors,
         "message": (
             f"TMP 清理（保留 {RETENTION_DAYS} 天）：隔离 {moved} 项 "
             f"{mv_bytes / 1048576:.1f}MB、彻底删除过期隔离 {purged} 项 "
             f"{pg_bytes / 1048576:.1f}MB"
             + ("[DRY RUN 未实际改动]" if DRY_RUN else "")
+            + (f"；{residue_msg}" if residue_msg else "")
         ),
         "elapsed_seconds": round(time.time() - start, 2),
     }

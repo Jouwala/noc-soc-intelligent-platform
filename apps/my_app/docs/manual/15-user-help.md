@@ -1,6 +1,6 @@
 # my_app 使用帮助
 
-> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-19。
+> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-20。
 
 > 站内入口：侧边栏「使用帮助」，或直链 `http://<host>/myapp/?page=help`。
 
@@ -167,7 +167,7 @@
 | WhatsApp 知识库同步（告警规则） | `whatsapp_kb_sync_alarm_rules` | `4 0 */3 * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
 | WhatsApp 知识库同步（TT 级别规则） | `whatsapp_kb_sync_tt_rules` | `35 4 * * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
 | 日志文件清理 | `log_cleanup` | `17 3 * * *` | m | `services/cleanup/log_cleanup.py → run_log_cleanup` |
-| TMP 目录清理 | `tmp_cleanup` | `47 3 * * *` | m | `services/cleanup/tmp_cleanup.py → run_tmp_cleanup` |
+| 临时产物清理 | `tmp_cleanup` | `47 3 * * *` | m | `services/cleanup/tmp_cleanup.py → run_tmp_cleanup` |
 | TTs and MTTR 报表生成 | `tt_mttr_report_generate` | `20 7 * * *` | m | `services/tt/tt_mttr_report.py → run_tt_mttr_report` |
 | RAN 用户身份清单（VoLTE/N78） | `gp_ran_user_sync` | `20 13 * * *` | g | `services/gp_ran/gp_ran_sync.py → run_gp_ran_user_sync` |
 | IPT 站点电源采集 | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
@@ -1674,23 +1674,25 @@
 - Windows 下被进程占用的日志无法外部重命名/删除，只能由写入方按日期分文件——这就是日志名带日期的原因
 - db/app.db（含凭据表）、backend/services/auth_cache/、data/ 下任务产物不在清理范围
 
-#### TMP 目录清理（`tmp_cleanup`）
+#### 临时产物清理（`tmp_cleanup`）
 
 - 默认 cron: `47 3 * * *`　|　worker 组: **m**
 - 工作流脚本: `services/cleanup/tmp_cleanup.py → run_tmp_cleanup`
 
-**功能**: 两段式回收 my_app/TMP 下超过保留期（默认 7 天）的临时产物：先同盘移进 TMP/_quarantine_YYYYMMDD/（可还原），隔离再满 7 天才真删
+**功能**: 两段式回收 TMP 下超保留期（默认 7 天）的临时产物，以及 data/ 下按次产物（网管导出中间文件 / 临时浏览器 profile / 损坏镜像快照 / 逐次运行摘要 / IP 追踪留档，保留期逐类设定）：先同盘移进 _quarantine_YYYYMMDD/（可还原），隔离期满才真删
 
 **工作流与数据流**:
 
-1. 每天 03:47 扫描 TMP/ 下超过保留期的条目
+1. 每天 03:47 扫描 TMP/ 与 data/ 下命中规则的条目
 1. 同盘 mv 进 _quarantine_<日期>/ 隔离（不直接删，留一次反悔机会）
-1. 隔离期满 7 天后彻底删除；服务在用路径按 WHITELIST 跳过
+1. TMP 隔离期满 7 天、data/ 隔离期满 30 天后彻底删除；服务在用路径与白名单规则跳过
 
 **维护要点**:
 
 - TMP/ 是临时产物的固定去处，但体积没人管（上线首日实测 462MB）——清理是必需的
-- charts/dl/状态文件等服务在用路径在 WHITELIST 里，永不处理；新增此类路径要补白名单
+- charts/dl/状态文件等服务在用路径在 TMP 的 WHITELIST 里，永不处理；新增此类路径要补白名单
+- data/ 只处理 data_residue_cleanup.RULES 里显式列出的按次产物 —— data/ 下绝大多数文件是业务库与报表源，通用「超过 N 天就删」是灾难；加一类只加一行 RULES 并写清「谁写的、为什么留着没用」
+- 2026-11-20 起并入 data/ 残留：此前 data/cnn_ume/exports 的 2026-07-31 导出文件躺了四个月无人发现（写入方改内存模式、删除逻辑只删刚读到的那一个、data/ 被 gitignore 挡住）
 - 与 log_cleanup（03:17）错峰，避免同一时段两次全盘扫描
 
 #### TTs and MTTR 报表生成（`tt_mttr_report_generate`）

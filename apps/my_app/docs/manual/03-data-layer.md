@@ -79,6 +79,16 @@
 
 同目录下还有 `data/ran_ume/ran_kpi_daily.sqlite3`、`data/ipran_ume/ipran_ume_kpi.sqlite3`、`data/cnn_ume/`、`data/eflow/eflow.sqlite3`、`data/ran_kpi_avalability_1day.sqlite3` 等，命名沿用历史习惯（含 `avalability` 这类既有拼写错误），**不要顺手改名**——多处 SQL 与任务按字符串引用它们。
 
+### `data/` 下的「按次产物」与保留期（2026-11-20 起）
+
+`data/` 里除了上面这些业务库，还混着**按次写、用完即无用**的副产物（各网管导出的中间 xlsx、Playwright 登录的临时 profile、损坏镜像快照、`olib_soc_report` 的逐次运行摘要、`ip_trace` 抓取留档）。它们由任务 `tmp_cleanup`（`backend/services/cleanup/data_residue_cleanup.py`，每天 03:47）按**逐类保留期**回收：先同盘移进 `data/_quarantine_YYYYMMDD/`（保留相对路径，可原样挪回），隔离满 30 天才真删。
+
+- 规则表在该模块的 `RULES`，**只处理显式列出的 glob**；`data/` 下业务库与报表源一律不碰（通用「超过 N 天就删」在这里是灾难，不是策略）。
+- 加一类新残留：在 `RULES` 加一行，并写清**谁写的、为什么留着没用**；说不清的不许加。
+- **新代码不要往 `data/` 落按次产物**：临时文件落 `TMP/`（见 `docs/CODE_CLEANUP_GUIDE.md`）。确需落 `data/` 的，同步在 `RULES` 登记，否则又会变成下一个「没人读、没人删」的遗留。
+- 背景（2026-11-20 审计）：`data/cnn_ume/exports/` 里两个 2026-07-31 的 UME 导出 xlsx 一直留到 11 月。根因不是忘了写清理，而是写入方改内存模式后不再落盘、删除逻辑只删「自己刚读到的那一个」、`data/` 被 `.gitignore` 挡住导致 `git status` 看不见，三者叠加。
+
+
 ## 裸 `sqlite3.connect` 点位清单（治理登记）
 
 `get_raw_connection`（`backend/database.py:145`）提供三样东西：双模路由（PG 模式按路径映射 schema）、`busy_timeout` / `synchronous` PRAGMA、以及 `with` 退出时提交**并关闭**的连接语义。裸 `sqlite3.connect` 这三样都没有（且 `with sqlite3.connect(...)` 只管事务、不关连接，见 `database.py:107` 的注释）。

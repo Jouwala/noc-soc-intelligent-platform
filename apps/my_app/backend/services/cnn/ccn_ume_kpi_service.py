@@ -93,6 +93,13 @@ HTTP_RETRY_DELAY = float(os.environ.get("CNN_KPI_HTTP_RETRY_DELAY", "1"))
 HTTP_CONNECT_TIMEOUT = float(os.environ.get("CNN_KPI_CONNECT_TIMEOUT", "15"))
 HTTP_READ_TIMEOUT = float(os.environ.get("CNN_KPI_READ_TIMEOUT", "90"))
 
+# 磁盘回退的最大文件年龄（小时）。回退分支（export_results 缺该前缀时）会去
+# data/cnn_ume/exports 里找同名前缀的 xlsx；2026-11-20 审计发现那里躺着
+# 2026-07-31 的旧文件 —— 一旦某次下载失败而其它模板成功，回退就会把四个月前
+# 的数据当今天的数据 upsert 进去且不报错。超过本上限直接拒绝读取并跳过。
+DISK_FALLBACK_MAX_AGE_HOURS = max(
+    1, int(os.environ.get("CNN_KPI_DISK_FALLBACK_MAX_HOURS", "24")))
+
 # PM 接口路径
 HISTORY_PATH = "/api/pm-analysis/v2/history"
 HISTORY_POLL_PATH = "/api/pm-analysis/v1/history"
@@ -1042,6 +1049,15 @@ def import_to_database(export_results: dict = None):
                 continue
             files.sort(key=os.path.getmtime, reverse=True)
             xlsx_file = files[0]
+            age_hours = (time.time() - os.path.getmtime(xlsx_file)) / 3600.0
+            if age_hours > DISK_FALLBACK_MAX_AGE_HOURS:
+                # 宁可不导，也不能把旧数据当新数据写进去（旧文件由 data_residue_cleanup 回收）
+                logger.warning(
+                    "[CNN][DB] %s: 磁盘回退文件已过期（%.1f 小时 > %d 小时上限），"
+                    "拒绝导入以免写入陈旧数据: %s",
+                    table_name, age_hours, DISK_FALLBACK_MAX_AGE_HOURS,
+                    os.path.basename(xlsx_file))
+                continue
             files_to_delete.append(xlsx_file)
             logger.info(f"[CNN][DB] {table_name}: reading {os.path.basename(xlsx_file)}")
             headers, data = read_xlsx(xlsx_file)

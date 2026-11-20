@@ -430,6 +430,19 @@
 
 ### 待定 —— 需要决策后才能排期
 
+- [ ] **`data/` 下还有几类「按次产物」没纳入自动回收，需逐个确认读取方。**（2026-11-20 Muse 记）
+      已经上线的部分：任务 `tmp_cleanup` 现在同时回收 `data/` 下 `data_residue_cleanup.RULES`
+      显式列出的 7 类残留（网管导出中间文件 / Chrome 临时 profile / 损坏镜像快照 /
+      `olib_soc_report` 逐次摘要 / `ip_trace` 留档 / `_remote_kpi` xlsx 缓存），两段式隔离后可还原。
+      **下列目录同样是「每次运行写一份、没有保留期」，但读取方尚未核实，未敢盲加规则：**
+      `data/sp_email/`（18 个带时间戳 xlsx）、`data/in_data/`（13 个 OSG 周报）、
+      `data/battery/backups/`（20 份）、`data/eflow/cmdb_site_update/backup/`（10 份）、
+      `data/eflow/tt_reports/`（9 份）。**待办**：各自确认「是否被按文件名/时间读取」，
+      确认只写不读的，在 `RULES` 加一行即可（每行必须写清谁写的、为什么留着没用）。
+- [ ] **`data/finebi_reports/` 约 30MB 的 FineBI 退役导出是否删除。**（2026-11-20 Muse 记）
+      11 个 xlsx（每个看板一份，`CM Dashboard/WO Dashboard.xlsx` 等），最后写入 2026-11-12，
+      **全库无任何代码引用**（`grep` 过 `.py`/`.ts`/`.tsx`/`.json`），判断为 FineBI 迁移期的手工导出。
+      不是自动产物、也没有保留期规则，所以没纳入自动回收 —— 需确认是否还要留档。
 - [ ] **SQLite → PostgreSQL 迁移是否启动。** 规划已定稿（单 PG 实例 + 每域一个 schema `app_`/`eflow_`、同机 Docker、连接池 `pool_size=20 / max_overflow=10`、低峰切流）。**执行前提**（四项全部落地才可动）：
   1. 回退保证 R7；
   2. 风险 10 / 11 有对策；

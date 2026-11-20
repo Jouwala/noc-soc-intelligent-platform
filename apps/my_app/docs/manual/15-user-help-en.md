@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-19.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-20.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -167,7 +167,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | WhatsApp KB Sync (Alarm Rules) | `whatsapp_kb_sync_alarm_rules` | `4 0 */3 * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_alarm_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
 | WhatsApp KB Sync (TT Level Rules) | `whatsapp_kb_sync_tt_rules` | `35 4 * * *` | n | `services/whatsapp/whatsapp_kb_service.py → run_whatsapp_kb_sync_after_tt_rules → whatsapp-kb-bot/scripts/sync-kb.mjs` |
 | Log Files Cleanup | `log_cleanup` | `17 3 * * *` | m | `services/cleanup/log_cleanup.py → run_log_cleanup` |
-| TMP Directory Cleanup | `tmp_cleanup` | `47 3 * * *` | m | `services/cleanup/tmp_cleanup.py → run_tmp_cleanup` |
+| Temp Artifacts Cleanup | `tmp_cleanup` | `47 3 * * *` | m | `services/cleanup/tmp_cleanup.py → run_tmp_cleanup` |
 | TTs and MTTR Report Generate | `tt_mttr_report_generate` | `20 7 * * *` | m | `services/tt/tt_mttr_report.py → run_tt_mttr_report` |
 | RAN User Identity Lists (VoLTE/N78) | `gp_ran_user_sync` | `20 13 * * *` | g | `services/gp_ran/gp_ran_sync.py → run_gp_ran_user_sync` |
 | IPT Site Power Collect | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
@@ -1674,23 +1674,25 @@ Workflow & maintenance notes per task:
 - On Windows a file held open cannot be renamed/deleted from outside — that is why the writers split logs by date
 - db/app.db (credentials), backend/services/auth_cache/ and data/ task outputs are out of scope
 
-#### TMP Directory Cleanup（`tmp_cleanup`）
+#### Temp Artifacts Cleanup（`tmp_cleanup`）
 
 - Default cron: `47 3 * * *`　|　worker group: **m**
 - Workflow script: `services/cleanup/tmp_cleanup.py → run_tmp_cleanup`
 
-**What it does**: Two-stage reclaim of temp artifacts older than the retention window (7 days) under my_app/TMP: same-volume move into TMP/_quarantine_YYYYMMDD/ first (restorable), real delete only after another 7 days
+**What it does**: Two-stage reclaim of TMP temp artifacts older than the retention window (7 days) plus per-run byproducts under data/ (UME export intermediates, temp browser profiles, corrupt mirror snapshots, run summaries, IP trace dumps; per-rule retention): same-volume move into _quarantine_YYYYMMDD/ first (restorable), real delete only after the quarantine window
 
 **Workflow & data flow**:
 
-1. Daily 03:47 scan TMP/ for entries past retention
+1. Daily 03:47 scan TMP/ and the rule-matched entries under data/
 1. Same-volume mv into _quarantine_<date>/ (nothing deleted outright)
-1. Purge after another 7 days in quarantine; service paths in WHITELIST are skipped
+1. Purge after 7 days in quarantine for TMP, 30 days for data/; service paths and whitelisted rules are skipped
 
 **Maintenance**:
 
 - TMP/ is the designated place for temp artifacts but nothing bounded its size (462MB on day one) — cleanup is required
-- Service paths (charts/dl/state files) are whitelisted and never touched; add new ones to WHITELIST
+- Service paths (charts/dl/state files) are whitelisted in TMP WHITELIST and never touched; add new ones there
+- Under data/ only the byproducts explicitly listed in data_residue_cleanup.RULES are touched — most of data/ holds business DBs and report sources, where a blanket "delete after N days" would be destructive; new classes add one RULES row stating who writes it and why keeping it is useless
+- data/ residue was folded in on 2026-11-20: a 2026-07-31 export sat in data/cnn_ume/exports for four months (writer switched to in-memory mode, delete logic only removed the file it had just read, and data/ is gitignored)
 - Staggered against log_cleanup (03:17) so the two full scans do not overlap
 
 #### TTs and MTTR Report Generate（`tt_mttr_report_generate`）
