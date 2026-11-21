@@ -59,13 +59,7 @@ param(
     # 通过，即从本清单删除。其余失败一律判 FAIL。
     [string[]]$KnownFailures = @(
         'tests/test_nur_exclude_semantics.py::test_Y_subtracts_the_list',
-        'tests/test_nur_exclude_semantics.py::test_Y_is_not_the_list_itself',
-        # 已知失败（#200，2026-11-21）：client_is_local 对 ::ffff:127.0.0.1
-        # 的判定与 backend/security.py _is_loopback 的边界分歧；CI quality.yml
-        # 本就 deselect 这两条。移除条件：修 _is_loopback 使其通过（该决定
-        # 待用户定夺）或确认判定口径后，两条在冒烟 pytest 连跑通过，即删除。
-        'tests/test_client_is_local_trust.py::test_genuine_local_callers_still_allowed',
-        'tests/test_client_is_local_trust.py::test_is_loopback_covers_ipv4_mapped_and_port_forms'
+        'tests/test_nur_exclude_semantics.py::test_Y_is_not_the_list_itself'
     ),
     [switch]$NoIgnoreKnownFailures
 )
