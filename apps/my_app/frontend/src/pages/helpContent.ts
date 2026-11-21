@@ -527,7 +527,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       ],
     },
     cn_hourly_kpi: {
-      desc: 'CN 小时 KPI 看板：xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**视图，可按日期区间（默认最近 7 天、上限 31 天）回看。数据源是 UME 网管「KPI 模板管理」导出件 KPI Template.xlsx（2026-11-17 新建模板批）解析出的 3 个模板，由任务 cn_hourly_kpi_sync 每天 06:20 以 gr=3600 增量拉取，写入 db_ps_cs_cn 的 <模板名>_UME 三张表。口径（2026-11-18 定）：Resource_Utilization 与 Resource_Capacity 两族模板重复，只保留 Utilization 一族；Object Scope=ALL，数据覆盖全部网元。',
+      desc: 'CN 小时 KPI 看板：xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**视图，可按日期区间（默认最近 7 天、上限 31 天）回看。数据源是 UME 网管「KPI 模板管理」导出件 KPI Template.xlsx（2026-11-17 新建模板批）解析出的 4 个模板，另有 1 个模板来自 xlsx 之外（DNS_SUCCESS_RATIO_OSS_updated），共 5 个模板，由任务 cn_hourly_kpi_sync 每天 06:20 以 gr=3600 增量拉取，写入 db_ps_cs_cn 的 <模板名>_UME 五张表。口径（2026-11-18 定，Capacity 于 2026-11-20 加入）：Resource_Utilization 与 Resource_Capacity 两族模板各自内部重复，每族只保留一张承载表（CS_MRFP96），两族都覆盖全部网元；Object Scope=ALL，数据覆盖全部网元。',
       usage: [
         '页面 7 张组件卡：xGW PFCP 会话用量、xGW 会话占用率(%)、xGW 吞吐用量(Mbps)、xGW 吞吐占用率(%)、MGW/MRFP 的 TONE/TC/RTP 利用率(%)；前四张的线是 xGWU22/xGWU122 两个网元（占用率为全 NE 合并的 ALL 线），后三张的线是 MGW_91/MGW_92/MRFP_96 三个网元',
         '日期区间用右上角区间选择器改（含端点），改完立即重新取数；上限 31 天（与回补窗口同档）',
@@ -1289,7 +1289,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       ],
     },
     cn_hourly_kpi: {
-      desc: 'CN Hourly KPI board: an HOURLY-granularity view of xGW session/throughput capacity and MGW/MRFP resource utilization, with a selectable date range (last 7 days by default, up to 31 days). The data comes from 3 templates parsed out of the UME "KPI Template" export file KPI Template.xlsx (templates created 2026-11-17); task cn_hourly_kpi_sync pulls them at gr=3600 every day at 06:20 into the <template>_UME tables in db_ps_cs_cn. Caliber (set 2026-11-18): the Resource_Utilization and Resource_Capacity template families duplicate each other, so only Utilization is kept; Object Scope=ALL, covering every network element.',
+      desc: 'CN Hourly KPI board: an HOURLY-granularity view of xGW session/throughput capacity and MGW/MRFP resource utilization, with a selectable date range (last 7 days by default, up to 31 days). The data comes from 4 templates parsed out of the UME "KPI Template" export file KPI Template.xlsx (templates created 2026-11-17), plus 1 template added from outside the xlsx (DNS_SUCCESS_RATIO_OSS_updated), five in total; task cn_hourly_kpi_sync pulls them at gr=3600 every day at 06:20 into the five <template>_UME tables in db_ps_cs_cn. Caliber (set 2026-11-18, Capacity added 2026-11-20): the Resource_Utilization and Resource_Capacity template families each duplicate internally, so one carrier table is kept per family (CS_MRFP96) and both cover all network elements; Object Scope=ALL, covering every network element.',
       usage: [
         'Seven widget cards: xGW PFCP sessions used, xGW session occupancy(%), xGW throughput used(Mbps), xGW throughput occupancy(%), and MGW/MRFP TONE/TC/RTP utilization(%). The first four plot xGWU22/xGWU122 (occupancy is a single merged ALL line), the last three plot MGW_91/MGW_92/MRFP_96',
         'Change the date range with the range picker (inclusive endpoints); the board refetches immediately and is capped at 31 days (same tier as the backfill window)',
