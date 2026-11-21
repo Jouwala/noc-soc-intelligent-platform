@@ -41,6 +41,8 @@
 | 26 | CN KPI | `cn_kpi` | React |
 | 27 | CN KPI 5分钟 | `cn_kpi_5mins` | React |
 | 27b | CN 小时KPI | `cn_hourly_kpi` | React |
+| 27c | CS CN KPI（语音域） | `cs_cn_kpi` | React |
+| 27d | PS CN KPI（分组域） | `ps_cn_kpi` | React |
 | 28 | 客户业务 KPI | `ume_in_kpi` | React |
 | 29 | CXO 经营看板 | `cxoDashboard` | **iframe** |
 | 30 | VMAX CXO 原版看板 | `vmaxCxoDashboard` | **iframe** |
@@ -5096,18 +5098,28 @@ xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**（gr=3600
 `backend\services\cn_kpl\KPI Template.xlsx`（2026-11-17 新建的 8 个模板批），
 由 `cn_kpl\cn_hourly_kpi_service.py` 解析 `template` sheet 后**复用既有 CNN 查询管线**
 组包（`build_cnn_kpi_payload` → create/poll/export → `read_xlsx_bytes`），
-写库走 `DbWriterClient` upsert 进 `db_ps_cs_cn` 的 `<模板名>_UME` 三张新表。
+写库走 `DbWriterClient` upsert 进 `db_ps_cs_cn` 的 `<模板名>_UME` 表（2026-11-20 起 5 张）。
 
-### 33c.1 口径决定（用户 2026-11-18 定）
+### 33c.1 口径决定（用户 2026-11-18 定，2026-11-20 补 Capacity）
 
-1. **Resource_Utilization 与 Resource_Capacity 两族模板重复，只保留 Utilization 一族**
+1. **Resource_Utilization 与 Resource_Capacity 两族各自重复，各取一张做载体**
    —— 三个 MGW/MRFP Utilization 模板（items/motid/grouplayer 完全一致）取
-   `CS_MRFP96_Resource_Utilization_OSS` 一个即可，实测导出自动包含全部网元
-   （MGW_91/MGW_92/MRFP_96）；Capacity 族为 6 个原始 counter，弃用。
+   `CS_MRFP96_Resource_Utilization_OSS` 一个即可；三个 Capacity 模板同理（同 motid
+   40841、同 6 个原始 counter），取 `CS_MRFP96_Resource_Capacity_OSS`。
+   实测两张导出都自动包含全部网元（MGW_91/MGW_92/MRFP_96），页面按 NE 过滤
+   即得三个模板各自的视图。Capacity 族 2026-11-20 因 CS CN KPI 页要展示
+   资源容量而重新纳入（此前「utilization 已覆盖」的判断只对百分比成立，
+   绝对余量仍需 Capacity 表）。
 2. **Object Scope = ALL**：payload 的 `filterlayer="all"` 即对应此选择。
-3. 参与模板共 3 个：`PS_xGW_Session_Capacity_OSS` / `PS_xGW_Throughput_Capacity_OSS` /
-   `CS_MRFP96_Resource_Utilization_OSS`，全部 gr=3600（一小时档）。
+3. 参与模板共 5 个：`PS_xGW_Session_Capacity_OSS` / `PS_xGW_Throughput_Capacity_OSS` /
+   `CS_MRFP96_Resource_Utilization_OSS` / `CS_MRFP96_Resource_Capacity_OSS` /
+   `DNS_SUCCESS_RATIO_OSS_updated`，全部 gr=3600。DNS 是**不在 xlsx 里**的补采模板
+   （配置取自用户抓到的 UME 请求体：templateid 1649220598196 / motid 4927 /
+   items cn.xgw.49270004 / groupchoice cn_service_group_choice=normal），
+   因此 `load_hourly_configs()` 对它的「xlsx 缺模板」告警按 `XLSX_OPTIONAL` 豁免。
 4. **首次回补一个月**（31 天）：`python -m backend.services.cn_kpl.cn_hourly_kpi_service --days 31`；
+   新增模板可只回补一张：加 `--templates CS_MRFP96_Resource_Capacity_OSS`
+   （每次查询约 1.5~3 分钟，全量 5 个模板约 8~12 分钟）。
    日常由任务 `cn_hourly_kpi_sync` 每天 06:20 增量（默认 2 天窗口）。
 
 ### 33c.2 解析坑（实测踩过，改代码前必读）
@@ -5142,6 +5154,90 @@ xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**（gr=3600
 | `frontend\src\pages\CnHourlyKpi.tsx` | 页面（日期区间 + 7 组件 pivot 线图） |
 | `backend\task_registry.py` | `TASK_SPECS` 登记 `cn_hourly_kpi_sync` |
 | `backend\worker_watchdog.py` | `GROUP_TASK_MAP["n"]` 加入该任务 |
+
+## 33d. CS / PS CN KPI 分组看板（`?page=cs_cn_kpi` / `?page=ps_cn_kpi`，2026-11-20 新增）
+
+把核心网 KPI 按**业务分组**（CS 语音域 / PS 分组域）和**数据来源**（EMS 人工导出 /
+UME 自动同步）重新组织成两个页面。与 33 节 `cn_kpi` 的区别是**不换源**：
+EMS 段只读 `*_EMS` 表、UME 段只读 `*_UME` 表，某张表缺数就空态并写明表名，
+不拿另一条流水线顶替、不填 0 —— 这两个页面要回答的正是「这个数来自哪条流水线」。
+
+### 33d.1 页面结构
+
+| 页面 | 段 | 组件数 | 内容 |
+| --- | --- | --- | --- |
+| CS | EMS | 12 | Voice / VLR / USSD / 位置更新 / License / MTN MOU / 呼出通话保持时长（CHT）/ 呼入·呼出应答率 / 国际 MOU / MGW32 资源利用率 / MGW32 资源占用 |
+| CS | UME | 8 | MRFP96 / MGW92 / MGW91 的 TONE·TC·RTP 利用率与容量（各 3 张）、VLR 用户数、Voice 流量 |
+| PS | EMS | 1 | TDD 流量（GB） |
+| PS | UME | 12 | xGW 吞吐容量、xGW 会话容量、xGW CPU（15 分钟 + 日）、xGW License（15 分钟 + 日）、数据用户（2G/3G/4G/5G）、DNS 成功率、RG-6/11/12/30（日 + 月）、4G FDD、3G FDD |
+
+每个组件返回 `{id,title,pivot,pct,unit,source_table,fixed_range,sql,columns,rows,error,empty,empty_code,truncated,grain}`。
+`pivot=true` 的组件是 `[时间, 序列, 值]` 三列（按 NE / 资源 / RG 组拆线），
+其余是 `[时间, 序列1, 序列2, …]` 宽表。
+
+### 33d.2 口径要点
+
+- **时间键取统计区间左端点**：EMS `substr("Start Time",1,10)`、UME
+  `substr("Begin Time",1,10)`。33 节的 `cn_kpi` 页为对齐老图用的是 `End Time`
+  （区间右端点，标签比统计日早一天），两个新页面按正确口径取。
+- **日表** SUM（流量/用户数）或 AVG（比率）；**小时表**（MGW32、xGW Capacity、
+  xGW License）按天 AVG（容量/利用率不能跨小时相加，也不是峰值）；
+  **15 分钟表**（`5mins_*`）保留原始时间点看毛刺；**月表**（`1month_*`）固定
+  「近 13 个月」，不受页面日期区间影响，卡片标「月粒度」。
+- 上游数值列是 TEXT：`CASE WHEN TRIM(col) GLOB '*[0-9]*' THEN CAST(... AS REAL) END`
+  把空串/非数值变成 NULL（断线），**不会变成 0**。
+- **Byte→GB 统一按 /1e9（1 GB = 10^9 字节）**：2026-11-20 实测上游列确为字节
+  （单日 4G FDD 约 4.2e14 B = 42 万 GB）。旧 CN KPI 页 c5/c6/rg* 写的是 `/1000/1000`
+  （放大 1000 倍），本次已一并改为 `/1000/1000/1000`；两个新页面直接按新口径写。
+- MGW/MRFP 三台网元的 Utilization 与 Capacity 各共用一张表（见 33c.1）：
+  `CS_MRFP96_Resource_Utilization_OSS_UME` / `CS_MRFP96_Resource_Capacity_OSS_UME`，
+  页面按 `NE` 过滤（`MRFP_96` / `MGW_92` / `MGW_91`）。
+
+### 33d.3 空态（`empty_code`）
+
+| code | 含义 | 前端文案 |
+| --- | --- | --- |
+| `no_table` | 远端没有这张表（同步任务还没跑过） | 数据表 X 尚未生成 |
+| `not_collected` | 上游模板没有采集配置（保留给将来新增的模板） | 尚未纳入采集 |
+| `no_rows` | 表在、当前区间无数据 | 当前日期区间内没有数据 |
+
+**DNS 卡已补采（2026-11-20）**：`DNS_SUCCESS_RATIO_OSS_updated` 原先只有模板、
+没有同步配置，卡片一直是空态。现按用户抓到的 UME 请求体补上配置
+（templateid 1649220598196 / motid 4927 / items cn.xgw.49270004 / gr=3600），
+由 `cn_hourly_kpi_sync` 每小时写入 `DNS_SUCCESS_RATIO_OSS_UME`；图上按小时对
+xGWU22 / xGWU122 取算术平均，31 天区间约 700+ 个小时点。
+
+### 33d.4 API 与缓存
+
+- `GET /api/cn-kpi-split/{cs|ps}/overview?start=&end=&force=` —— 按 `sections[]`
+  返回（`ems` / `ume`），`meta` 含 `count/failed/empty/truncated/elapsed_ms/cached`。
+- `GET /api/cn-kpi-split/health` —— 远端只读 API 连通性。
+- 未知 board 返回 404；日期格式非法 / 起止倒置返回 400。
+- 后端 60s 缓存（`CN_KPI_SPLIT_CACHE_TTL` 可覆盖），6 并发。
+  冷启动实测：CS 约 2.5 秒、PS 约 6 秒（两个 15 分钟组件各 5952 行）。
+- 顶栏自动刷新按页记 300 秒；两个页面已登记 `AR_INPLACE_REFRESH_PAGES`，
+  刷新时监听 `myapp-refresh` 静默重取，不重挂载。
+
+### 33d.5 相关文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `backend\services\cn\cn_kpi_split_widgets.py` | 两个看板的组件清单与 SQL（**改口径只改这里**） |
+| `backend\services\cn\cn_kpi_split_service.py` | 取数 / 缓存 / 空态判定（粒度推断见 `_detect_grain`） |
+| `backend\routers\cn_kpi_split.py` | `/api/cn-kpi-split/*` |
+| `frontend\src\pages\cnKpiSplit\CnKpiBoard.tsx` | 两个页面共用的主体（分段 + 卡片 + 导出） |
+| `frontend\src\pages\cnKpiSplit\cnkpiSplitHelpers.tsx` | ECharts option 与卡头 ⓘ 文案 |
+| `frontend\src\pages\CsCnKpi.tsx` / `PsCnKpi.tsx` | 薄壳，只钉 board id |
+| `frontend\src\api.ts` | `getCnKpiSplitOverview()` |
+| `frontend\src\App.tsx` | `PageKey` / `VALID_PAGES` / `PAGE_META` / `DEFAULT_GROUPS` / `AR_PAGE_DEFAULTS` / `AR_INPLACE_REFRESH_PAGES` / 路由 case |
+| `frontend\src\i18n.tsx` | `nav.csCnKpi` / `nav.psCnKpi` 与 `cnkpiSplit.*`（中英双份） |
+| `backend\main.py` | `app.include_router(cn_kpi_split.router)` |
+
+### 33d.6 运维注意
+
+1. 改完后端必须重启 uvicorn（未开 `--reload`），否则 `/api/cn-kpi-split/*` 是 404。
+2. 新增/修改 UME 模板后，先 `--templates <模板名>` 单模板回补，再等每日任务增量。
+3. 远端 `db_ps_cs_cn` 只读：本服务只发 SELECT；写库只由既有同步任务经 `DbWriterClient` 完成。
 
 ## 34. WO 清理 —— 批量关闭待确认工单（`?page=eflow_qa` 左栏，2026-10-01 新增）
 

@@ -56,6 +56,8 @@ export const PAGE_LIST: { key: string; iframe?: boolean }[] = [
   { key: 'cn_kpi' },
   { key: 'cn_kpi_5mins' },
   { key: 'cn_hourly_kpi' },
+  { key: 'cs_cn_kpi' },
+  { key: 'ps_cn_kpi' },
   { key: 'imonitor', iframe: true },
   { key: 'ip_trace', iframe: true },
   { key: 'vmax_user_query' },
@@ -132,6 +134,8 @@ export const NAV_KEY_MAP: Record<string, string> = {
   cn_kpi: 'nav.cnKpi',
   cn_kpi_5mins: 'nav.cnKpi5mins',
   cn_hourly_kpi: 'nav.cnHourlyKpi',
+  cs_cn_kpi: 'nav.csCnKpi',
+  ps_cn_kpi: 'nav.psCnKpi',
   imonitor: 'nav.imonitor',
   ip_trace: 'nav.ipTrace',
   vmax_user_query: 'nav.vmaxUserQuery',
@@ -158,7 +162,7 @@ export const CATEGORIES: { id: string; pages: string[] }[] = [
   { id: 'tasks', pages: ['sync', 'email_reports', 'upload', 'tables', 'overview'] },
   {
     id: 'boards',
-    pages: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'alarmManagement', 'fme_ranking', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'bm_speedtest', 'bm_meta', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'bp_report', 'ran_cells_kpi', 'ran_inventory', 'packet_loss', 'battery', 'ume_in_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'imonitor', 'gis', 'realtime_alarm', 'person', 'incident_overview', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary'],
+    pages: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'alarmManagement', 'fme_ranking', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'bm_speedtest', 'bm_meta', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'bp_report', 'ran_cells_kpi', 'ran_inventory', 'packet_loss', 'battery', 'ume_in_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'imonitor', 'gis', 'realtime_alarm', 'person', 'incident_overview', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary'],
   },
   { id: 'analysis', pages: ['eflow_qa', 'eflow_flow', 'dashboard', 'archive', 'ip_trace', 'vmax_user_query', 'vmax_user_cca', 'ipt_power'] },
   { id: 'workflow', pages: ['ap_center', 'feedback'] },
@@ -534,6 +538,28 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '「导出 Excel」每个组件一张表，按小时展开各网元列，便于对账',
       ],
     },
+    cs_cn_kpi: {
+      desc: 'CS CN KPI 分组看板（语音域）：把 CS 侧的 CN KPI 按**数据来源**分成 EMS（人工导出）与 UME（自动同步）两段，逐项一张图。EMS 段 12 张：Voice / VLR / USSD 成功率 / 位置更新成功率 / License 占用 / MTN MOU / 呼出通话保持时长（CHT）/ 呼入·呼出应答率 / 国际 MOU / MGW32 资源利用率 / MGW32 资源占用；UME 段 8 张：MRFP96·MGW92·MGW91 三个网元的资源利用率与资源容量、VLR 用户数、Voice 流量。数据经远端只读 SQL API 读 db_ps_cs_cn，**不换源**：EMS 段只读 *_EMS 表、UME 段只读 *_UME 表，表缺了就空态并写明表名，不拿另一条流水线顶替、不填 0。',
+      usage: [
+        '页面按 EMS / UME 两段排列，每段标题右侧写明这一段的写入链路与该段空态数量；空态卡片会直接点名缺哪张表',
+        '日期区间作用于所有日/小时/15 分钟组件；**月粒度组件固定近 13 个月**，卡片标题旁有「月粒度」角标',
+        '卡头 ⓘ 写明数据表、实际粒度、返回行数与**后端实际执行的 SQL**（可复制核对）；本页不做二次计算',
+        'MGW91 / MGW92 / MRFP96 三个网元的 Utilization 与 Capacity 分别共用一张 UME 表（三张模板参数相同、Object Scope=ALL），页面按 NE 过滤得到各自视图；Capacity 卡画 used 三条线（可用量在同表且基本恒定，不叠画；used/available 的百分比看同组利用率卡）',
+        '时间键取统计区间**左端点**（EMS 用 Start Time、UME 用 Begin Time），与原 CN KPI 页的 End Time 口径不同，详见「数据口径说明」',
+        '「数据口径说明」默认收起（点标题展开）；「导出 Excel」总览 + 每个组件一张宽表，便于对账',
+      ],
+    },
+    ps_cn_kpi: {
+      desc: 'PS CN KPI 分组看板（分组域）：把 PS 侧的 CN KPI 按**数据来源**分成 EMS（人工导出）与 UME（自动同步）两段。EMS 段：TDD 流量（GB）；UME 段 12 张：xGW 吞吐容量、xGW 会话容量、xGW CPU（15 分钟与日两个粒度）、xGW License 占用（15 分钟与日两个粒度）、数据用户（2G/3G/4G/5G）、DNS 成功率、RG-6/11/12/30 流量（日与月两个粒度）、4G FDD、3G FDD。数据经远端只读 SQL API 读 db_ps_cs_cn，**不换源**：EMS 段只读 *_EMS 表、UME 段只读 *_UME 表，表缺了就空态并写明表名。',
+      usage: [
+        'DNS Success Ratio 卡片自 2026-11-20 起有数：按 UME 请求体补上了 DNS_SUCCESS_RATIO_OSS_updated 的同步配置（templateid 1649220598196 / motid 4927 / items cn.xgw.49270004，gr=3600），由 cn_hourly_kpi_sync 每小时写入 DNS_SUCCESS_RATIO_OSS_UME；图上按小时对 xGWU22 / xGWU122 取算术平均，区间内约有 700+ 个小时点',
+        'xGW CPU / License 各有 15 分钟与日两个粒度：15 分钟卡保留原始时间点看毛刺，日卡是对小时表按天取平均的概览；月粒度 RG 卡固定近 13 个月',
+        'xGW 吞吐/会话容量卡同时画 used 与 authorized 两条线，差值即余量；RG-6/11/12/30 按 Measurement Object 拆成四条线（与 CN KPI 页的四张 RG 卡同源同口径，这里合成一张）',
+        '卡头 ⓘ 写明数据表、实际粒度、返回行数与后端实际执行的 SQL；本页不做二次计算',
+        '「数据口径说明」默认收起（点标题展开）；「导出 Excel」总览 + 每个组件一张宽表，便于对账',
+      ],
+    },
+
     imonitor: {
       desc: 'UME iMonitor 大屏（guard-imonitor-iui，screen_id=1）：把 UME 门户（172.17.208.1:28808）的原版监控大屏原样嵌进 myapp，保留其全部图表与交互。页面经 nginx 8088 反代到上游（门户独立端口方案），首次进入会由注入脚本自动完成 em-portal 登录（账号取自 Settings → 凭据的「UME 客户业务 KPI 门户」，即 ume_in），无需手工输入；登录页的 frame-bust 已在反代里中和、iframe 另加 sandbox，保证登录过程不会把 myapp 外壳冲掉。',
       usage: [
@@ -1274,6 +1300,28 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '"Export Excel" writes one sheet per widget, expanded per NE column by hour, for reconciliation',
       ],
     },
+    cs_cn_kpi: {
+      desc: 'CS CN KPI group board (circuit switched): splits the CS-side CN KPIs by **data source** into an EMS (manual export) section and a UME (automatic sync) section, one chart per KPI. EMS section (12): Voice / VLR / USSD success ratio / location-update success ratio / license occupancy / MTN MOU / outgoing call holding time (CHT) / incoming & outgoing answer ratio / international MOU / MGW32 resource utilization / MGW32 resource usage. UME section (8): MRFP96, MGW92 and MGW91 resource utilization and capacity, VLR subscribers and Voice traffic. Data is read from db_ps_cs_cn over the remote read-only SQL API and **the source is never switched**: the EMS section reads only *_EMS tables, the UME section only *_UME tables; a missing table becomes an empty state naming it, with no substitution and no zero filling.',
+      usage: [
+        'The page is laid out in EMS / UME sections; each section header names its write pipeline and how many of its cards are empty. An empty card names the exact missing table',
+        'The date range applies to every daily/hourly/15-minute widget; **monthly widgets always show the last 13 months** and carry a "Monthly" tag next to the card title',
+        'The card ⓘ states the source table, actual granularity, row count and the **SQL that was actually executed** (copy it to verify); nothing is recomputed on the page',
+        'The MGW91 / MGW92 / MRFP96 Utilization and Capacity cards share one UME table per family (the three templates are parameter-identical and Object Scope=ALL), and the page filters by NE to produce each view; Capacity cards plot the three used series (available values are nearly constant and stay off the chart; see the matching Utilization card for used/available percentages)',
+        'The time key is the **left edge** of the statistic interval (Start Time for EMS, Begin Time for UME) — different from the older CN KPI page, which uses End Time; see "Data caliber notes"',
+        '"Data caliber notes" is collapsed by default (click to expand); "Export Excel" writes an overview plus one wide sheet per widget for reconciliation',
+      ],
+    },
+    ps_cn_kpi: {
+      desc: 'PS CN KPI group board (packet switched): splits the PS-side CN KPIs by **data source** into an EMS (manual export) section and a UME (automatic sync) section. EMS section: TDD traffic (GB). UME section (12): xGW throughput capacity, xGW session capacity, xGW CPU (15-minute and daily), xGW license occupancy (15-minute and daily), data subscribers (2G/3G/4G/5G), DNS success ratio, RG-6/11/12/30 traffic (daily and monthly), 4G FDD and 3G FDD. Data is read from db_ps_cs_cn over the remote read-only SQL API and **the source is never switched**: the EMS section reads only *_EMS tables, the UME section only *_UME tables; a missing table becomes an empty state naming it.',
+      usage: [
+        'The DNS Success Ratio card has data since 2026-11-20: its sync configuration was added from the UME request body (DNS_SUCCESS_RATIO_OSS_updated, templateid 1649220598196 / motid 4927 / items cn.xgw.49270004, gr=3600) and cn_hourly_kpi_sync writes DNS_SUCCESS_RATIO_OSS_UME hourly; the chart averages xGWU22 / xGWU122 per hour, roughly 700+ hourly points in a 31-day range',
+        'xGW CPU / License each have a 15-minute and a daily card: the 15-minute card keeps raw timestamps to expose spikes, the daily card averages the hourly table per day; the monthly RG card always shows the last 13 months',
+        'The xGW throughput/session capacity cards plot used and authorized, whose difference is the headroom; RG-6/11/12/30 are split by Measurement Object into four lines (same source and caliber as the four RG cards on the CN KPI page, merged into one here)',
+        'The card ⓘ states the source table, actual granularity, row count and the SQL that was actually executed; nothing is recomputed on the page',
+        '"Data caliber notes" is collapsed by default (click to expand); "Export Excel" writes an overview plus one wide sheet per widget for reconciliation',
+      ],
+    },
+
     imonitor: {
       desc: 'UME iMonitor screen (guard-imonitor-iui, screen_id=1): embeds the original UME monitoring screen from the UME portal (172.17.208.1:28808) inside myapp, keeping all of its charts and interactions. The page is reverse-proxied to the upstream through nginx port 8088 (the portal dedicated-port scheme); on first visit an injected script signs in to em-portal automatically using the credentials from Settings → Credentials ("UME Customer Service KPI Portal", key ume_in). The login page frame-bust is neutralised in the proxy and the iframe additionally carries a sandbox, so the sign-in flow can never replace the myapp shell.',
       usage: [

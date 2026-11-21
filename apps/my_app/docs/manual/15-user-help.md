@@ -1,6 +1,6 @@
 # my_app 使用帮助
 
-> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-20。
+> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-21。
 
 > 站内入口：侧边栏「使用帮助」，或直链 `http://<host>/myapp/?page=help`。
 
@@ -642,13 +642,13 @@
 - 默认 cron: `20 6 * * *`　|　worker 组: **n**
 - 工作流脚本: `services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync`
 
-**功能**: 从 UME「KPI 模板管理」导出件 KPI Template.xlsx 解析 3 个新模板（PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS），以小时粒度（gr=3600）查询并 API 写入 DB CNN 的 <模板名>_UME 三张表，供「CN 小时KPI」看板按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization/Capacity 两族重复只留 Utilization（用户 2026-11-18 定）
+**功能**: 从 UME「KPI 模板管理」导出件 KPI Template.xlsx 解析 4 个模板（PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS），另按用户抓到的请求体补采 1 个不在 xlsx 里的模板（DNS_SUCCESS_RATIO_OSS_updated，templateid 1649220598196 / motid 4927），共 5 个；以小时粒度（gr=3600）查询并 API 写入 DB CNN 的 <模板名>_UME 五张表，供「CN 小时KPI」「CS CN KPI」与「PS CN KPI」看板按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization 与 Capacity 两族各自重复、各留一张做载体（用户 2026-11-18 定，Capacity 与 DNS 2026-11-20 补入）
 
 **工作流与数据流**:
 
 1. 解析 KPI Template.xlsx（缺文件时用内置兜底配置并告警）
 1. 登录 CNN UME（与 cnn_kpi_sync 共用会话缓存）
-1. 按模板逐个查询小时粒度数据（默认 2 天增量窗口；首次回补 python -m ... --days 31）
+1. 按模板逐个查询小时粒度数据（默认 2 天增量窗口；首次回补 python -m ... --days 31，新增模板可加 --templates <模板名> 单跑）
 1. 写入 db_ps_cs_cn 的 <模板名>_UME 表（upsert，主键 Begin Time+NE(+SERVICE)）
 
 **维护要点**:
@@ -2412,6 +2412,27 @@ CN 小时 KPI 看板：xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**�
 - 页头标签「N/N 个组件有数据」「日期区间」「失败 N」都可悬浮：空态与失败不计入「有数据」
 - 「数据口径说明」默认收起（点标题展开）：模板来源、Utilization/Capacity 取舍、Object Scope=ALL 与利用率公式都在里面
 - 「导出 Excel」每个组件一张表，按小时展开各网元列，便于对账
+
+#### cs_cn_kpi（`cs_cn_kpi`）
+
+CS CN KPI 分组看板（语音域）：把 CS 侧的 CN KPI 按**数据来源**分成 EMS（人工导出）与 UME（自动同步）两段，逐项一张图。EMS 段 12 张：Voice / VLR / USSD 成功率 / 位置更新成功率 / License 占用 / MTN MOU / 呼出通话保持时长（CHT）/ 呼入·呼出应答率 / 国际 MOU / MGW32 资源利用率 / MGW32 资源占用；UME 段 8 张：MRFP96·MGW92·MGW91 三个网元的资源利用率与资源容量、VLR 用户数、Voice 流量。数据经远端只读 SQL API 读 db_ps_cs_cn，**不换源**：EMS 段只读 *_EMS 表、UME 段只读 *_UME 表，表缺了就空态并写明表名，不拿另一条流水线顶替、不填 0。
+
+- 页面按 EMS / UME 两段排列，每段标题右侧写明这一段的写入链路与该段空态数量；空态卡片会直接点名缺哪张表
+- 日期区间作用于所有日/小时/15 分钟组件；**月粒度组件固定近 13 个月**，卡片标题旁有「月粒度」角标
+- 卡头 ⓘ 写明数据表、实际粒度、返回行数与**后端实际执行的 SQL**（可复制核对）；本页不做二次计算
+- MGW91 / MGW92 / MRFP96 三个网元的 Utilization 与 Capacity 分别共用一张 UME 表（三张模板参数相同、Object Scope=ALL），页面按 NE 过滤得到各自视图；Capacity 卡画 used 三条线（可用量在同表且基本恒定，不叠画；used/available 的百分比看同组利用率卡）
+- 时间键取统计区间**左端点**（EMS 用 Start Time、UME 用 Begin Time），与原 CN KPI 页的 End Time 口径不同，详见「数据口径说明」
+- 「数据口径说明」默认收起（点标题展开）；「导出 Excel」总览 + 每个组件一张宽表，便于对账
+
+#### ps_cn_kpi（`ps_cn_kpi`）
+
+PS CN KPI 分组看板（分组域）：把 PS 侧的 CN KPI 按**数据来源**分成 EMS（人工导出）与 UME（自动同步）两段。EMS 段：TDD 流量（GB）；UME 段 12 张：xGW 吞吐容量、xGW 会话容量、xGW CPU（15 分钟与日两个粒度）、xGW License 占用（15 分钟与日两个粒度）、数据用户（2G/3G/4G/5G）、DNS 成功率、RG-6/11/12/30 流量（日与月两个粒度）、4G FDD、3G FDD。数据经远端只读 SQL API 读 db_ps_cs_cn，**不换源**：EMS 段只读 *_EMS 表、UME 段只读 *_UME 表，表缺了就空态并写明表名。
+
+- DNS Success Ratio 卡片自 2026-11-20 起有数：按 UME 请求体补上了 DNS_SUCCESS_RATIO_OSS_updated 的同步配置（templateid 1649220598196 / motid 4927 / items cn.xgw.49270004，gr=3600），由 cn_hourly_kpi_sync 每小时写入 DNS_SUCCESS_RATIO_OSS_UME；图上按小时对 xGWU22 / xGWU122 取算术平均，区间内约有 700+ 个小时点
+- xGW CPU / License 各有 15 分钟与日两个粒度：15 分钟卡保留原始时间点看毛刺，日卡是对小时表按天取平均的概览；月粒度 RG 卡固定近 13 个月
+- xGW 吞吐/会话容量卡同时画 used 与 authorized 两条线，差值即余量；RG-6/11/12/30 按 Measurement Object 拆成四条线（与 CN KPI 页的四张 RG 卡同源同口径，这里合成一张）
+- 卡头 ⓘ 写明数据表、实际粒度、返回行数与后端实际执行的 SQL；本页不做二次计算
+- 「数据口径说明」默认收起（点标题展开）；「导出 Excel」总览 + 每个组件一张宽表，便于对账
 
 #### UME iMonitor 大屏（`imonitor`，iframe 页）
 

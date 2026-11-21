@@ -5,7 +5,7 @@
 
 ## 一、这个项目是什么
 
-**my_app / Data Insight MVP** —— 利比里亚电信网络运维的**自研数据平台**，是整个工作区的数据底座。它负责把上游系统（UME、eFlow、CCN、PM、邮件、WhatsApp 等）的数据采集、入库、计算、展示，并提供 87 个功能页与 85 个定时任务。
+**my_app / Data Insight MVP** —— 利比里亚电信网络运维的**自研数据平台**，是整个工作区的数据底座。它负责把上游系统（UME、eFlow、CCN、PM、邮件、WhatsApp 等）的数据采集、入库、计算、展示，并提供 89 个功能页与 85 个定时任务。
 
 **技术栈**：后端 FastAPI + SQLAlchemy（SQLite / PostgreSQL 双模）+ Alembic + APScheduler；前端 React + Vite；任务由多组 worker 进程执行 + 看门狗守护。
 
@@ -172,7 +172,7 @@
 | `backend\models\`、`schemas\` | ORM 模型与 Pydantic schema |
 | `backend\.env`（不入库） | 运行配置，参照 `.env.example` |
 | `frontend\src\App.tsx`（≈121KB） | 前端主入口与路由/菜单（`PAGE_META` 是页面清单真相源） |
-| `frontend\src\i18n.tsx`（≈783KB） | 中英双字典 |
+| `frontend\src\i18n.tsx`（≈1050KB） | 中英双字典 |
 | `frontend\src\api.ts` | 前端 API 封装 |
 | `frontend\src\theme.ts`、`index.css` | 主题与样式 |
 | `frontend\src\pages\` | 各功能页（60+ 个 `.tsx`） |

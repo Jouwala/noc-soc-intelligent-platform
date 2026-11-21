@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-20.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-21.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -642,13 +642,13 @@ Workflow & maintenance notes per task:
 - Default cron: `20 6 * * *`　|　worker group: **n**
 - Workflow script: `services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync`
 
-**What it does**: Parses 3 templates from the UME "KPI Template" export file KPI Template.xlsx (PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS), queries them at hourly granularity (gr=3600) and writes the <template>_UME tables in DB CNN for the date-rangeable CN Hourly KPI board; Object Scope=ALL covers every NE, and only the Utilization family is kept because Utilization/Capacity duplicate each other (user decision 2026-11-18)
+**What it does**: Parses 4 templates from the UME "KPI Template" export file KPI Template.xlsx (PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS) and adds 1 more that is not in the xlsx from the request body captured by the user (DNS_SUCCESS_RATIO_OSS_updated, templateid 1649220598196 / motid 4927), five in total; it queries them at hourly granularity (gr=3600) and writes the <template>_UME tables in DB CNN for the date-rangeable CN Hourly KPI, CS CN KPI and PS CN KPI boards; Object Scope=ALL covers every NE, and one carrier table is kept per family because Utilization and Capacity each duplicate internally (user decision 2026-11-18; Capacity and DNS added 2026-11-20)
 
 **Workflow & data flow**:
 
 1. Parse KPI Template.xlsx (falls back to embedded configs with a warning if the file is missing)
 1. Log into CNN UME (shares the session cache with cnn_kpi_sync)
-1. Query each template at hourly granularity (2-day incremental window by default; first backfill via python -m ... --days 31)
+1. Query each template at hourly granularity (2-day incremental window by default; first backfill via python -m ... --days 31, or --templates <name> for a single new template)
 1. Upsert into db_ps_cs_cn tables named <template>_UME (PK Begin Time+NE(+SERVICE))
 
 **Maintenance**:
@@ -2411,6 +2411,27 @@ CN Hourly KPI board: an HOURLY-granularity view of xGW session/throughput capaci
 - The header tags "N/N widgets with data", "date range" and "N failed" are hover-explainable too: empty and failed widgets are both excluded from "with data"
 - "Data caliber notes" is collapsed by default (click the title to expand): template origin, the Utilization/Capacity choice, Object Scope=ALL and the utilization formulas are all in there
 - "Export Excel" writes one sheet per widget, expanded per NE column by hour, for reconciliation
+
+#### cs_cn_kpi（`cs_cn_kpi`）
+
+CS CN KPI group board (circuit switched): splits the CS-side CN KPIs by **data source** into an EMS (manual export) section and a UME (automatic sync) section, one chart per KPI. EMS section (12): Voice / VLR / USSD success ratio / location-update success ratio / license occupancy / MTN MOU / outgoing call holding time (CHT) / incoming & outgoing answer ratio / international MOU / MGW32 resource utilization / MGW32 resource usage. UME section (8): MRFP96, MGW92 and MGW91 resource utilization and capacity, VLR subscribers and Voice traffic. Data is read from db_ps_cs_cn over the remote read-only SQL API and **the source is never switched**: the EMS section reads only *_EMS tables, the UME section only *_UME tables; a missing table becomes an empty state naming it, with no substitution and no zero filling.
+
+- The page is laid out in EMS / UME sections; each section header names its write pipeline and how many of its cards are empty. An empty card names the exact missing table
+- The date range applies to every daily/hourly/15-minute widget; **monthly widgets always show the last 13 months** and carry a "Monthly" tag next to the card title
+- The card ⓘ states the source table, actual granularity, row count and the **SQL that was actually executed** (copy it to verify); nothing is recomputed on the page
+- The MGW91 / MGW92 / MRFP96 Utilization and Capacity cards share one UME table per family (the three templates are parameter-identical and Object Scope=ALL), and the page filters by NE to produce each view; Capacity cards plot the three used series (available values are nearly constant and stay off the chart; see the matching Utilization card for used/available percentages)
+- The time key is the **left edge** of the statistic interval (Start Time for EMS, Begin Time for UME) — different from the older CN KPI page, which uses End Time; see "Data caliber notes"
+- "Data caliber notes" is collapsed by default (click to expand); "Export Excel" writes an overview plus one wide sheet per widget for reconciliation
+
+#### ps_cn_kpi（`ps_cn_kpi`）
+
+PS CN KPI group board (packet switched): splits the PS-side CN KPIs by **data source** into an EMS (manual export) section and a UME (automatic sync) section. EMS section: TDD traffic (GB). UME section (12): xGW throughput capacity, xGW session capacity, xGW CPU (15-minute and daily), xGW license occupancy (15-minute and daily), data subscribers (2G/3G/4G/5G), DNS success ratio, RG-6/11/12/30 traffic (daily and monthly), 4G FDD and 3G FDD. Data is read from db_ps_cs_cn over the remote read-only SQL API and **the source is never switched**: the EMS section reads only *_EMS tables, the UME section only *_UME tables; a missing table becomes an empty state naming it.
+
+- The DNS Success Ratio card has data since 2026-11-20: its sync configuration was added from the UME request body (DNS_SUCCESS_RATIO_OSS_updated, templateid 1649220598196 / motid 4927 / items cn.xgw.49270004, gr=3600) and cn_hourly_kpi_sync writes DNS_SUCCESS_RATIO_OSS_UME hourly; the chart averages xGWU22 / xGWU122 per hour, roughly 700+ hourly points in a 31-day range
+- xGW CPU / License each have a 15-minute and a daily card: the 15-minute card keeps raw timestamps to expose spikes, the daily card averages the hourly table per day; the monthly RG card always shows the last 13 months
+- The xGW throughput/session capacity cards plot used and authorized, whose difference is the headroom; RG-6/11/12/30 are split by Measurement Object into four lines (same source and caliber as the four RG cards on the CN KPI page, merged into one here)
+- The card ⓘ states the source table, actual granularity, row count and the SQL that was actually executed; nothing is recomputed on the page
+- "Data caliber notes" is collapsed by default (click to expand); "Export Excel" writes an overview plus one wide sheet per widget for reconciliation
 
 #### UME iMonitor Screen（`imonitor`, iframe page）
 
