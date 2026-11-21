@@ -3145,7 +3145,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'nav.ipranTopo': 'IP RAN 光纤拓扑',
     'nav.emailReports': '任务报告文件',
 
-    // OLIB FO 网络拓扑（?page=olibTopo，2026-11-16）：PDF 原图 + 667 个提取站点（2026-11-17 换 20260623 版 PDF），纯静态参考页
+    // OLIB FO 网络拓扑（?page=olibTopo，2026-11-16）：PDF 原图 + 667 个提取站点（2026-11-17 换 20260623 版物理图；2026-11-21 逻辑图换 20260901 版），纯静态参考页
     'nav.olibTopo': 'OLIB 光纤拓扑',
     // 2026-11-16：顶部四张统计卡已去掉（用户要求），kpi./explain.* 两组键随之删除；
     // 站点 / 骨干核心 / AML 数据中心的数字口径并入页底问号里的「数据口径与来源」。
@@ -3162,8 +3162,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'olibTopo.sites.show': '站点点位：显示',
     'olibTopo.sites.hide': '站点点位：隐藏',
     'olibTopo.hint.physical': 'PDF 导出的矢量图，叠加全部 {n} 个站点点位（近似位置）：灰=普通、红=5G、蓝=ISP、紫=骨干核心；橙色光圈=当前选中站点。矢量线条与文字放大不模糊。滚轮缩放 · 拖动平移 · 右下角缩略图查看全局',
-    'olibTopo.hint.logical': '第 2 页逻辑拓扑原图。已叠加图上能识别的 {n} 个站点标签点位；搜不到点位的站可用详情「全图定位」切到物理图',
-    'olibTopo.hint.core': '骨干示意：按第 2 页逻辑图梳理的核心 IPRAN/DWDM 骨干，点击节点可查看对应站点',
+    'olibTopo.hint.logical': '20260901 版逻辑拓扑原图。已叠加图上能识别的 {n} 个站点标签点位；该站不在逻辑图标签里时，切到「物理拓扑」页签再定位',
+    'olibTopo.hint.core': '骨干示意：按 202503 版逻辑图梳理的核心 IPRAN/DWDM 骨干，点击节点可查看对应站点',
     'olibTopo.minimap.title': '全图导航 · 当前位置',
     'olibTopo.overlay.aria': '{n} 个站点在物理拓扑原图上的位置',
     'olibTopo.overlay.ariaLogical': '{n} 个站点在逻辑拓扑原图上的标签位置',
@@ -3180,7 +3180,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'olibTopo.search.truncated': '仅显示前 {n} 条，请缩小筛选范围',
     'olibTopo.search.empty': '没有匹配的站点，换个关键词试试',
     'olibTopo.search.more': '还有 {n} 个，继续输入以缩小范围',
-    'olibTopo.search.logicalNoPos': '已选中「{name}」。该站未出现在逻辑图标签里，可用详情「全图定位」到物理图查看',
+    'olibTopo.search.logicalNoPos': '已选中「{name}」。该站未出现在逻辑图标签里，切到「物理拓扑」页签后可全图定位',
     'olibTopo.search.coreMiss': '已选中「{name}」。骨干示意只标核心节点，该站不在示意上',
     'olibTopo.site.pos': '原图位置 {x}%, {y}%',
     'olibTopo.tag.core': '骨干核心',
@@ -3213,11 +3213,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'olibTopo.core.notInList': '「{name}」在第 1 页提取名单中未找到同名站点',
     'olibTopo.note.title': '数据口径与来源',
     'olibTopo.note.sec.source': '数据来源',
-    'olibTopo.note.source.1': '物理拓扑 / 逻辑拓扑图来自 Orange Liberia《Orange network topology_20260623.pdf》第 1、2 页，由 PDF 矢量导出为 SVG 后嵌入：线条与文字都是矢量，放大到任意倍数仍然清晰，不是位图截图。',
-    'olibTopo.note.source.2': '站点名单（667 条）与坐标按第 1 页物理图重新提取（2026-11-17 换版）：5G 取图上红色「5G」标记、ISP 取站名里的 ISP；骨干示意仍由第 2 页逻辑图人工梳理（见 networkTopology/topologyData.ts）。',
+    'olibTopo.note.source.1': '物理拓扑图来自 Orange Liberia《Orange network topology_20260623.pdf》第 1 页，逻辑拓扑图来自《OLIB FO_Network_20260901.pdf》（2026-09-01 版，单页逻辑图），都由 PDF 矢量导出为 SVG 后嵌入：线条与文字都是矢量，放大到任意倍数仍然清晰，不是位图截图。',
+    'olibTopo.note.source.2': '站点名单（667 条）与坐标按物理图重新提取（2026-11-17 换版）；逻辑图点位由 20260901 逻辑图的文字对象匹配站名得到（108 个）；5G 取图上红色「5G」标记、ISP 取站名里的 ISP；骨干示意仍按 202503 版逻辑图人工梳理（见 networkTopology/topologyData.ts）。',
     'olibTopo.note.sec.coords': '坐标口径',
     'olibTopo.note.coords.1': '站点的 x / y 是**原图相对位置**的千分比（0~1000），换算成百分比后叠加到原图上；它表示站点在原图上的大致位置，不是 GPS 经纬度。',
-    'olibTopo.note.coords.2': '物理图与逻辑图的页面比例不同，所以点位只叠加在物理图上；逻辑图只用于对照链路与骨干结构。',
+    'olibTopo.note.coords.2': '两张原图的页面比例不同，各自用自己画布的千分比坐标：物理图叠加全部 667 个站点，逻辑图只叠加图上标签能对上站名的那些站点（见 LOGICAL_PINS）。',
     'olibTopo.note.sec.core': '骨干核心与链路',
     'olibTopo.note.core.1': '骨干核心 = 名单里与 CORE_NAMES 同名（忽略大小写/空格）的站点，共 9 个；Sanniquellie 的两种拼写指同一站。',
     'olibTopo.note.core.2': '骨干示意里的链路类型（现有 / 铁路 / P25A / DWDM-IPRAN）按第 2 页图例手工归类，线宽与虚线只区分类型，不代表容量。',
@@ -10198,7 +10198,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'nav.ipranTopo': 'IP RAN Fiber Topology',
     'nav.emailReports': 'Task Report Files',
 
-    // OLIB FO network topology (?page=olibTopo, 2026-11-16): PDF originals + 667 extracted sites (20260623 PDF, replaced 2026-11-17), static reference page
+    // OLIB FO network topology (?page=olibTopo, 2026-11-16): PDF originals + 667 extracted sites (20260623 physical PDF replaced 2026-11-17; logical drawing replaced with the 20260901 edition on 2026-11-21), static reference page
     'nav.olibTopo': 'OLIB FO Topology',
     // 2026-11-16: the four stat cards are gone (user request); the kpi./explain.* keys were
     // removed with them. Site / core / AML data-center definitions now live in the
@@ -10216,8 +10216,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'olibTopo.sites.show': 'Site dots: shown',
     'olibTopo.sites.hide': 'Site dots: hidden',
     'olibTopo.hint.physical': 'Vector drawing exported from the PDF, with all {n} site dots overlaid (approximate positions): grey = regular, red = 5G, blue = ISP, purple = backbone core; the orange ring marks the selected site. Vector lines and text stay sharp at any zoom. Wheel to zoom · drag to pan · the mini map at bottom-right shows the overview',
-    'olibTopo.hint.logical': 'Page-2 logical topology with {n} matched label pins. Sites missing a pin can use "Locate on map" in the detail panel to open the physical view',
-    'olibTopo.hint.core': 'Backbone schematic: core IPRAN/DWDM links traced from the page-2 logical drawing. Click a node to open its matching site',
+    'olibTopo.hint.logical': '20260901 logical topology drawing, with {n} matched label pins. If a site has no label pin, switch to the "Physical topology" tab and locate it there',
+    'olibTopo.hint.core': 'Backbone schematic: core IPRAN/DWDM links traced from the 202503 logical drawing. Click a node to open its matching site',
     'olibTopo.minimap.title': 'Overview · current view',
     'olibTopo.overlay.aria': '{n} site positions on the physical topology',
     'olibTopo.overlay.ariaLogical': '{n} matched label positions on the logical topology',
@@ -10234,7 +10234,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'olibTopo.search.truncated': 'Showing the first {n}; narrow the filter to see more',
     'olibTopo.search.empty': 'No matching site — try another keyword',
     'olibTopo.search.more': '{n} more — keep typing to narrow',
-    'olibTopo.search.logicalNoPos': 'Selected "{name}". This site has no label on the logical map — use "Locate on map" in the detail panel to open the physical view',
+    'olibTopo.search.logicalNoPos': 'Selected "{name}". This site has no label on the logical drawing — switch to the "Physical topology" tab to locate it',
     'olibTopo.search.coreMiss': 'Selected "{name}". The backbone schematic only marks core nodes; this site is not on it',
     'olibTopo.site.pos': 'Map position {x}%, {y}%',
     'olibTopo.tag.core': 'Core',
@@ -10267,11 +10267,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'olibTopo.core.notInList': '"{name}" has no matching site in the page-1 list',
     'olibTopo.note.title': 'Data scope & sources',
     'olibTopo.note.sec.source': 'Sources',
-    'olibTopo.note.source.1': 'The physical / logical drawings come from pages 1-2 of Orange Liberia "Orange network topology_20260623.pdf" and are embedded as vector SVGs exported from the PDF: lines and text stay sharp at any zoom level — this is not a bitmap screenshot.',
-    'olibTopo.note.source.2': 'The 667-site list and coordinates were re-extracted from the page-1 physical drawing (replaced 2026-11-17): 5G comes from the red "5G" markers on the map and ISP from the site name; the backbone schematic is still traced by hand from the page-2 drawing (see networkTopology/topologyData.ts).',
+    'olibTopo.note.source.1': 'The physical drawing comes from page 1 of Orange Liberia "Orange network topology_20260623.pdf"; the logical drawing comes from "OLIB FO_Network_20260901.pdf" (2026-09-01 edition, single-page logical map). Both are embedded as vector SVGs exported from the PDF: lines and text stay sharp at any zoom level — this is not a bitmap screenshot.',
+    'olibTopo.note.source.2': 'The 667-site list and coordinates were re-extracted from the physical drawing (replaced 2026-11-17); logical pins come from matching the 20260901 drawing labels against site names (108 pins); 5G comes from the red "5G" markers and ISP from the site name; the backbone schematic is still traced by hand from the 202503 logical drawing (see networkTopology/topologyData.ts).',
     'olibTopo.note.sec.coords': 'Coordinates',
     'olibTopo.note.coords.1': 'A site x / y is a per-mille figure of the **relative position on the original page** (0-1000), converted to a percentage when overlaid. It is where the site roughly sits on the drawing, not a GPS coordinate.',
-    'olibTopo.note.coords.2': 'The physical and logical pages have different aspect ratios, so dots are only drawn on the physical map; the logical page is used for links and backbone structure only.',
+    'olibTopo.note.coords.2': 'The two drawings have different aspect ratios and each uses per-mille coordinates of its own canvas: the physical map carries all 667 sites, while the logical map only carries the site names it actually labels (see LOGICAL_PINS).',
     'olibTopo.note.sec.core': 'Backbone cores & links',
     'olibTopo.note.core.1': 'Backbone core = sites matching CORE_NAMES (case and spaces ignored), 9 in total; the two spellings of Sanniquellie are the same site.',
     'olibTopo.note.core.2': 'Link types in the schematic (existing / railway / P25A / DWDM-IPRAN) are classified by the page-2 legend; line width and dashes only show the type, not capacity.',

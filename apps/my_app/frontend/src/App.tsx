@@ -127,7 +127,7 @@ const EmailReports = lazy(() => import('./pages/EmailReports'))
 const MwUmeDashboard = lazy(() => import('./pages/MwUmeDashboard'))
 // IP RAN 光纤拓扑（?page=ipran_topo）：UME 层 lid=1293626099480711168 的网元+链路+告警
 const IpranTopo = lazy(() => import('./pages/IpranTopo'))
-// OLIB FO 网络拓扑（?page=olibTopo）：PDF 两页原图 + 667 个提取站点，纯静态参考页
+// OLIB FO 网络拓扑（?page=olibTopo）：物理图 + 20260901 逻辑图 + 667 个提取站点，纯静态参考页
 const NetworkTopology = lazy(() => import('./pages/NetworkTopology'))
 // OLIB 地理网络拓扑（?page=olibTopo_v2）：真实 GPS + 自托管底图 + 骨干链路；v1 保持不动
 const NetworkTopologyV2 = lazy(() => import('./pages/NetworkTopologyV2'))
