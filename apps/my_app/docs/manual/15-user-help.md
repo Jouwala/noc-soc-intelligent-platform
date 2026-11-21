@@ -2403,7 +2403,7 @@ CN KPI 5 分钟看板：把「今天（Day0）」「昨天（Day1）」「7 天�
 
 #### cn_hourly_kpi（`cn_hourly_kpi`）
 
-CN 小时 KPI 看板：xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**视图，可按日期区间（默认最近 7 天、上限 31 天）回看。数据源是 UME 网管「KPI 模板管理」导出件 KPI Template.xlsx（2026-11-17 新建模板批）解析出的 3 个模板，由任务 cn_hourly_kpi_sync 每天 06:20 以 gr=3600 增量拉取，写入 db_ps_cs_cn 的 <模板名>_UME 三张表。口径（2026-11-18 定）：Resource_Utilization 与 Resource_Capacity 两族模板重复，只保留 Utilization 一族；Object Scope=ALL，数据覆盖全部网元。
+CN 小时 KPI 看板：xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**视图，可按日期区间（默认最近 7 天、上限 31 天）回看。数据源是 UME 网管「KPI 模板管理」导出件 KPI Template.xlsx（2026-11-17 新建模板批）解析出的 4 个模板，另有 1 个模板来自 xlsx 之外（DNS_SUCCESS_RATIO_OSS_updated），共 5 个模板，由任务 cn_hourly_kpi_sync 每天 06:20 以 gr=3600 增量拉取，写入 db_ps_cs_cn 的 <模板名>_UME 五张表。口径（2026-11-18 定，Capacity 于 2026-11-20 加入）：Resource_Utilization 与 Resource_Capacity 两族模板各自内部重复，每族只保留一张承载表（CS_MRFP96），两族都覆盖全部网元；Object Scope=ALL，数据覆盖全部网元。
 
 - 页面 7 张组件卡：xGW PFCP 会话用量、xGW 会话占用率(%)、xGW 吞吐用量(Mbps)、xGW 吞吐占用率(%)、MGW/MRFP 的 TONE/TC/RTP 利用率(%)；前四张的线是 xGWU22/xGWU122 两个网元（占用率为全 NE 合并的 ALL 线），后三张的线是 MGW_91/MGW_92/MRFP_96 三个网元
 - 日期区间用右上角区间选择器改（含端点），改完立即重新取数；上限 31 天（与回补窗口同档）
