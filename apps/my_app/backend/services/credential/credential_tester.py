@@ -359,6 +359,55 @@ def _test_sftp_sp(group: dict, user: str, pwd: str, en: bool) -> Tuple[bool, str
         _safe_close(sock)
 
 
+@_register("sftp_su_root")
+def _test_sftp_su_root(group: dict, user: str, pwd: str, en: bool) -> Tuple[bool, str]:
+    """pict SSH → su - root；再 ls OCAuto 目录（只读，不下载）。
+
+    `user`/`pwd` 是本分组（sftp_sp_root）当前值；pict 账号另从 sftp_sp 取。
+    root 不能直接 SFTP 口令登录，所以必须走这条交互提权链。
+    """
+    try:
+        from backend.services.sp.sp_sftp_su import (
+            _host_port, _open_root_shell, _root_exec, _runtime_pict,
+        )
+    except Exception as e:  # noqa: BLE001
+        return False, _disp(en, f"加载 sp_sftp_su 失败: {e}",
+                            f"Failed to load sp_sftp_su: {e}")
+    client = None
+    try:
+        host, port = _host_port()
+        pict_user, pict_pwd = _runtime_pict()
+        if not pict_pwd:
+            return False, _disp(en, "凭据分组 sftp_sp（pict）口令为空",
+                                "Credential group sftp_sp (pict) has empty password")
+        if not pwd:
+            return False, _disp(en, "su 口令为空", "su password is empty")
+        client, chan = _open_root_shell(host, port, pict_user, pict_pwd, pwd)
+        out = _root_exec(
+            chan,
+            "id -un; ls /home/ubuntu/OCAuto/OCAutoOutput 2>&1 | head -3",
+            timeout=float(DEFAULT_TIMEOUT),
+        )
+        if "root" not in out.splitlines()[0:2] and not out.startswith("root"):
+            # id -un 应回 root；宽松一点：只要 ls 没 Permission denied 也算通
+            if "Permission denied" in out:
+                return False, _disp(
+                    en,
+                    f"su 后仍无法读 OCAuto：{out[:200]}",
+                    f"After su still cannot read OCAuto: {out[:200]}",
+                )
+        return True, _disp(
+            en,
+            f"pict→su root 成功（{pict_user}@{host}:{port} → {user or 'root'}）",
+            f"pict→su root succeeded ({pict_user}@{host}:{port} → {user or 'root'})",
+        )
+    except Exception as e:  # noqa: BLE001
+        return False, _disp(en, f"pict→su root 失败: {type(e).__name__}: {e}",
+                            f"pict→su root failed: {type(e).__name__}: {e}")
+    finally:
+        _safe_close(client)
+
+
 # ==================================================================
 # 126 邮箱（SMTP 授权码）
 # ==================================================================

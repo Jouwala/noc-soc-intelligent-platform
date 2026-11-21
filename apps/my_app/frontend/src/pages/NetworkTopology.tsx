@@ -16,6 +16,15 @@
  * 统计卡（数字都在图例与说明里，卡只占首屏），口径说明也从一行收起条改成页面底部
  * 一个问号 —— 首屏全部让给画布，说明按需点开；同日去掉「站点分布」视图。
  *
+ * 2026-11-20 用户要求：本页**去掉 backbone（骨干示意）页签**，只留「物理 / 逻辑」两图。
+ *   · 骨干示意本身没删死代码：v2（?page=olibTopo_v2）仍用同一个 TopologyViewer 的
+ *     core 模式（它有自己的四视图 Segmented），所以由本页通过 views 只声明两档；
+ *   · ?view=core 的旧链接按物理图兜底（readInitialView 不再认 core）。
+ *
+ * 门户内嵌（2026-11-20 起）：Knowledge Q&A 的「MW Topology」页签要物理图、
+ *   「Fiber Topology」页签要逻辑图，所以 maponly 模式不再写死物理图，
+ *   改为认 ?view=（见 readMapOnlyMode + mapOnly 分支）。
+ *
  * 数据与坐标口径见 networkTopology/topologyData.ts 文件头。
  * ========================================================================== */
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -34,7 +43,9 @@ import SiteDetail from './networkTopology/SiteDetail'
 import TopologyLegend from './networkTopology/TopologyLegend'
 import { matchSites } from './networkTopology/siteMatch'
 
-/** 门户 GIS Map 的 IP 页签（`?maponly=1`）只留物理图，搜索框浮在画布上。 */
+/** 门户 GIS Map 的 IP 页签（`?maponly=1`）只留拓扑图，搜索框浮在画布上。
+ *  2026-11-20 起不再固定物理图：门户 Knowledge Q&A 的 Fiber Topology 页签要逻辑图，
+ *  故这里认 `?view=`（只认 physical / logical）。 */
 function readMapOnlyMode(): boolean {
   try {
     const v = new URLSearchParams(window.location.search).get('maponly')
@@ -42,10 +53,13 @@ function readMapOnlyMode(): boolean {
   } catch { return false }
 }
 
+/** 本页可选的视图：2026-11-20 起只剩「物理 / 逻辑」（骨干示意页签已去掉） */
+const PAGE_VIEWS: TopoView[] = ['physical', 'logical']
+
+/** 认 ?view=，非法值（含已下线的 core）一律回落到物理图 */
 function readInitialView(): TopoView {
   const v = new URLSearchParams(window.location.search).get('view')
-  if (v === 'physical' || v === 'logical' || v === 'core') return v
-  return 'physical'
+  return v === 'logical' ? 'logical' : 'physical'
 }
 
 const MAPONLY_CSS = `
@@ -93,7 +107,7 @@ export default function NetworkTopology() {
   const viewer = useRef<TopologyViewerHandle>(null)
   const [mapOnly] = useState(readMapOnlyMode)
 
-  const [view, setView] = useState<TopoView>(() => (readMapOnlyMode() ? 'physical' : readInitialView()))
+  const [view, setView] = useState<TopoView>(readInitialView)
   const [selected, setSelected] = useState<TopoSite | null>(null)
   const [sitesVisible, setSitesVisible] = useState(true)
   const [query, setQuery] = useState('')
@@ -116,8 +130,9 @@ export default function NetworkTopology() {
         <style>{MAPONLY_CSS}</style>
         <TopologyViewer
           ref={viewer}
-          view="physical"
+          view={view}
           onViewChange={() => {}}
+          views={PAGE_VIEWS}
           sitesVisible={sitesVisible}
           onSitesVisibleChange={setSitesVisible}
           selected={selected}
@@ -155,6 +170,7 @@ export default function NetworkTopology() {
                 ref={viewer}
                 view={view}
                 onViewChange={setView}
+                views={PAGE_VIEWS}
                 sitesVisible={sitesVisible}
                 onSitesVisibleChange={setSitesVisible}
                 selected={selected}

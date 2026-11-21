@@ -367,7 +367,7 @@ app.include_router(portal_qc.router)
 # MsPortal 静态门户的看板目录：全局共享一份（所有人读同一份），仅本机可增删改
 # （见 routers/portal_catalog.py）。未登录访客读不到——刻意不进 _PUBLIC_API 白名单。
 app.include_router(portal_catalog.router)
-# CN KPI 看板：原 my-finebi「CN KPI」看板原生重建（18 组件，经远端只读 SQL API 取数，
+# CN KPI 看板：原 my-finebi「CN KPI」看板原生重建（23 组件，经远端只读 SQL API 取数，
 # 不依赖 my-finebi 进程）。数据源/口径见 services/cn/cn_kpi_service.py 顶部说明。
 app.include_router(cn_kpi.router)
 # CN KPI 5 分钟看板：读 cnn_kpi_sync_5mins 任务写入的 5mins_* 表，Day0/Day1/Day7 叠画。

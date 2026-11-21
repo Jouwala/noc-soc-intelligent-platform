@@ -34,7 +34,7 @@ def overview(
     end: str = Query("", description="结束日期 YYYY-MM-DD（不含），留空=今天"),
     force: int = Query(0, description="1=跳过缓存强制刷新"),
 ):
-    """整页数据：18 个组件并发取数（TTL 60s 缓存，按区间分行）。"""
+    """整页数据：23 个组件并发取数（TTL 60s 缓存，按区间分行）。"""
     try:
         return svc.get_overview(force=bool(force), start=start or None, end=end or None)
     except ValueError as e:

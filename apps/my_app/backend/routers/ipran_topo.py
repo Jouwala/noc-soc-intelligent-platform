@@ -22,10 +22,12 @@
 """
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from backend.security import is_privileged, require_protected
 from backend.services.ipran_topo import layers
 from backend.services.ipran_topo import ipran_topo_service as svc
+from backend.services.ipran_topo import topo_layout_store as layout_store
 from backend.services.ipran_topo.layers import DEFAULT_LAYER
 
 logger = logging.getLogger("ipran_topo_api")
@@ -64,3 +66,47 @@ def graph(
                 "warnings": [f"load_failed: {exc}"],
             },
         }
+
+
+# --------------------------- Weathermap 手工布局 ---------------------------
+# 存的是「哪个节点摆在哪」的坐标（760×540 逻辑画布），整层一份；读任何人都可以，
+# 写只允许本机 / 持 X-API-Token（与侧栏菜单布局同一套 require_protected 策略）。
+def _layer_or_400(layer: str):
+    spec = layers.resolve_layer(layer)
+    if spec is None:
+        raise HTTPException(status_code=400, detail=f"未知拓扑层: {layer}")
+    return spec
+
+
+@router.get("/layout")
+def get_layout(request: Request, layer: str = Query(DEFAULT_LAYER)):
+    """读取该层保存的手工布局；没有保存过时 nodes 为空对象（前端回落自动布局）。"""
+    spec = _layer_or_400(layer)
+    nodes, updated_at = layout_store.read_layer(spec.key)
+    return {
+        "layer": spec.key,
+        "nodes": nodes,
+        "updated_at": updated_at,
+        "editable": is_privileged(request),
+    }
+
+
+@router.put("/layout", dependencies=[Depends(require_protected)])
+def put_layout(payload: dict, layer: str = Query(DEFAULT_LAYER)):
+    """整层覆盖保存 `{nodes: {id: [x, y]}}`。"""
+    spec = _layer_or_400(layer)
+    try:
+        nodes, updated_at = layout_store.save_layer(spec.key, (payload or {}).get("nodes"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    logger.info("[ipran-topo/layout] layer=%s 保存 %d 个节点坐标", spec.key, len(nodes))
+    return {"layer": spec.key, "nodes": nodes, "updated_at": updated_at, "editable": True}
+
+
+@router.delete("/layout", dependencies=[Depends(require_protected)])
+def delete_layout(layer: str = Query(DEFAULT_LAYER)):
+    """删除该层手工布局，回到自动布局。"""
+    spec = _layer_or_400(layer)
+    layout_store.reset_layer(spec.key)
+    logger.info("[ipran-topo/layout] layer=%s 已重置为自动布局", spec.key)
+    return {"layer": spec.key, "nodes": {}, "updated_at": None, "editable": True}

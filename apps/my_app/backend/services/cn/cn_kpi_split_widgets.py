@@ -473,3 +473,4 @@ BOARDS: Dict[str, Dict[str, Any]] = {
 def get_board(board: str) -> Dict[str, Any]:
     """取看板定义；未知 board 抛 KeyError（路由转 400）。"""
     return BOARDS[board]
+

@@ -3130,7 +3130,7 @@
   /* ⚠️ 2026-09-29（用户要求「GIS Map 添加并只显示 /myapp/?page=mwRealTime 的地图组件，
      reload 和 openlink 放到最右边」，随后澄清「GIS Map 和 mwRealTime 都要显示」）：
      本栏**内嵌** my_app 的地图页（iframe），当前**五个页签**
-     （2026-11-17 IP 页签移出本栏、去 Knowledge Q&A 当第四页签「Topology」；
+     （2026-11-17 IP 页签移出本栏、去 Knowledge Q&A 当第四页签（2026-11-20 改名「MW Topology」并新增「Fiber Topology」）；
       2026-11-16 IP 页签改为 olibTopo 物理图，2026-11-11 多一个 PL / packet_loss）：
        · gis         —— 「Alarm」（GIS 页）
        · person      —— 「Person」（人员位置地图，2026-10-19 按用户要求加在 Alarm 之后）
@@ -3139,7 +3139,8 @@
                          只显示 Site map 地图卡，筛选条 / KPI 数字卡 / 右侧站点清单
                          由剥离样式隐藏（见 olbr-data.js 的 MAP_TAB_CSS）
        · （olibTopo ——「IP」，2026-11-16~11-17 曾在本栏：物理拓扑原图，现搬去
-          Knowledge Q&A 第四页签「Topology」，见 qaItems() 上方的 topologyItem()）
+          Knowledge Q&A 第四、五页签「MW Topology」/「Fiber Topology」，见 qaItems()
+          上方的 mwTopologyItem() / fiberTopologyItem()）
        · packet_loss —— 「PL」（2026-11-11 加；2026-11-16 按要求改成与其它页签
                          一样的纯地图形态）：横幅 / KPI / 图表 / Top10、卡片头、
                          图层开关与地图控制行全部去掉，只留铺满的 Leaflet 画布；
@@ -5089,30 +5090,49 @@
       status: 'online', freq: '', clicks: 0, icon: 'table'
     };
   }
-  /* ================================================================== 2026-11-17
-     Knowledge Q&A 第四页签「Topology」（用户要求）
+  /* ================================================================== 2026-11-20
+     Knowledge Q&A 的两个拓扑页签：「MW Topology」+「Fiber Topology」（用户要求）
      ----------------------------------------------------------------------------
-     用户要求「GIS Map 的 IP 页签移动到 Knowledge Q&A，页签名字 Topology」：
-     内容不变（my_app 的 ?page=olibTopo 物理拓扑原图，view=physical，可模糊搜站点），
-     只是从地图栏搬进问答栏并改名。与 Master Site 同属「页面固定功能」：
-     用合成条目喂给 qaItems()/qaSrc() 的既有管线，不往目录里塞一条假看板。
+     沿革：2026-11-17 把 GIS Map 的 IP 页签搬进本栏并叫「Topology」，内容是 my_app
+     的 ?page=olibTopo&view=physical（物理拓扑原图，可模糊搜站点）。
+     2026-11-20 用户要求：「topology 改为 MW Topology，并增加页签 Fiber Topology，
+     内容为 olibTopo 的 Logical 页签下的地图」。落实为：
+       · 原 Topology 页签**只改名**为「MW Topology」，内容不动（仍是物理图）；
+       · 新增「Fiber Topology」，内嵌同一页的**逻辑图**（view=logical）。
+     两个页签都是「页面固定功能」：用合成条目喂给 qaItems()/qaSrc() 的既有管线，
+     不往目录里塞假看板。与 Master Site 同一套做法。
      ⚠️ url 用**同源相对路径**：qaSrc 的 my_app 分支统一补 embed=1 / lang / theme，
         并对 olibTopo 追加 maponly=1（与地图栏 mapItems 同一约定：页面只留拓扑画布，
-        搜索框浮在图上；my_app 侧 NetworkTopology.tsx 的 readMapOnlyMode）。
-        条目 url 本身不带 maponly —— qaOpen「打开」进新窗口看到的是完整页。
-     ⚠️ 地图栏 MAP_TABS 已同步删掉该页签（见 olbr-data.js 的 2026-11-17 注释）；
-        'map.ip' 词条与 share-network 图标保留，由本条目复用。
+        搜索框浮在图上）。条目 url 本身不带 maponly —— qaOpen「打开」进新窗口是完整页。
+     ⚠️ **my_app 侧必须先支持 view=logical + maponly=1**：NetworkTopology.tsx 的
+        maponly 分支在 2026-11-20 之前写死物理图，那样 Fiber 页签会「看着像改名没生效」。
+        同日该页也按用户要求去掉了「骨干示意」页签（只剩物理 / 逻辑两档）。
+     ⚠️ 地图栏 MAP_TABS 自 2026-11-17 起就没有该页签（见 olbr-data.js 的注释）；
+        'map.ip' 词条与 share-network 图标保留，由这两个条目复用。
      ⚠️ 团队门户 v3/team_portal 的资产由 scripts/patch_team_portal.py 从上游生成：
-        qa-filter 钩子按矩阵 **map 域的 olibTopo 子键**过滤本页签（fo / bo / flm 勾了、
-        smc / cxo 未勾）—— 页签搬了家，可见性不换域。改完上游必须重跑该脚本，
-        `npm run check:team-scope`（本机 python 不在 PATH 时用 py 直跑四个子脚本）会拦。 */
-  function topologyItem() {
+        qa-filter 钩子按矩阵 **map 域的 olibTopo 子键**同时过滤这两个页签
+        （fo / bo / flm 勾了、smc / cxo 未勾）—— 两个页签同进同出，不换域。
+        改完上游必须重跑该脚本，`npm run check:team-scope` 会拦。 */
+  function mwTopologyItem() {
     return {
       no: -9003, groups: ['Knowledge Q&A'],
-      titleZh: 'Topology（物理拓扑）', titleEn: 'Topology (physical topology)',
+      titleZh: 'MW Topology（物理拓扑）', titleEn: 'MW Topology (physical topology)',
       descZh: 'OLIB 物理拓扑原图（原 GIS Map 的 IP 页签），可模糊搜索站点。',
       descEn: 'OLIB physical topology drawing (formerly the GIS Map IP tab); fuzzy site search supported.',
       platform: 'myapp', url: '/myapp/?page=olibTopo&view=physical',
+      status: 'online', freq: '', clicks: 0, icon: 'share-network'
+    };
+  }
+  /* 2026-11-20 新增：Fiber Topology = 同一页的**逻辑图**（PDF 第 2 页，OLIB FO logical）。
+     no 取 -9004，与 mwTopologyItem 的 -9003 连续；负数只是「不是目录条目」的标记，
+     不参与排序 —— 页签顺序由 qaItems() 的数组顺序决定。 */
+  function fiberTopologyItem() {
+    return {
+      no: -9004, groups: ['Knowledge Q&A'],
+      titleZh: 'Fiber Topology（逻辑拓扑）', titleEn: 'Fiber Topology (logical topology)',
+      descZh: 'OLIB 光纤逻辑拓扑原图（同一 PDF 的第 2 页），可模糊搜索站点。',
+      descEn: 'OLIB fiber logical topology drawing (page 2 of the same PDF); fuzzy site search supported.',
+      platform: 'myapp', url: '/myapp/?page=olibTopo&view=logical',
       status: 'online', freq: '', clicks: 0, icon: 'share-network'
     };
   }
@@ -5124,11 +5144,14 @@
     /* 先算好 Master Site，团队版的 qa-filter 钩子（插在下面 eflow 行之后）会按矩阵
        把它置 null；变量必须声明在钩子之前，否则钩子的赋值会被后面的 var 覆盖。 */
     var masterSite = masterSiteItem();
-    /* 2026-11-17：第四页签 topology（Topology，原 GIS Map 的 IP 页签）同样先算好
+    /* 2026-11-17：第四页签「MW Topology」（原 GIS Map 的 IP 页签）同样先算好
        放进变量 —— 理由同上。团队版按 **map 域的 olibTopo 子键**过滤（见
        scripts/patch_team_portal.py 的 qa-filter 钩子）：页签只是搬了家，
-       可见性沿用原 IP 页签的矩阵口径（fo / bo / flm 勾了），smc / cxo 不出现。 */
-    var topology = topologyItem();
+       可见性沿用原 IP 页签的矩阵口径（fo / bo / flm 勾了），smc / cxo 不出现。
+       2026-11-20：改名为 MW Topology，并新增第五页签 Fiber Topology（逻辑图）。
+       两个变量都要在钩子之前声明 —— 否则钩子里的赋值会被后面的 var 覆盖。 */
+    var mwTopo = mwTopologyItem();
+    var fiberTopo = fiberTopologyItem();
     /* RAG 条目的**识别条件**。历史上有三种 url 形态，必须都能认得出来，
        否则条目被 filter(Boolean) 滤掉、整个 RAG 页签消失（2026-10-24 踩过：
        改地址时只改了下面 qaSrc 的归一目标，漏改这里，导致 RAG 页签不见）：
@@ -5159,13 +5182,17 @@
       if (qaAllow.indexOf('eflow') === -1) eflow = null;
       if (qaAllow.indexOf('rag') === -1) rag = null;
       if (qaAllow.indexOf('master_site') === -1) masterSite = null;
-      /* 2026-11-17：上游第四页签 topology（Topology）＝ 原 GIS Map 的 IP 页签
+      /* 2026-11-17：上游第四页签（当时的「Topology」）＝ 原 GIS Map 的 IP 页签
          （olibTopo）搬过来的。可见性**沿用 map 域的 olibTopo 子键**（fo / bo / flm
          勾了）而不是在 qa 域里另立一行 —— 页签只是搬了家，权限不换域，
          与「谁原来看得到 IP，现在就看得到 Topology」的口径一致。
          ⚠️ map.olibTopo 自 2026-11-16 起已在矩阵里（原 IP 页签的登记），
-            服务端模板合并会带出来，无需新增 qa/topology 键。 */
-      if (!SCOPE.ok('map', 'olibTopo')) topology = null;
+            服务端模板合并会带出来，无需新增 qa/topology 键。
+         2026-11-20：上游把该页签改名「MW Topology」，并新增第五页签
+         「Fiber Topology」（同一页的逻辑图）。**两个页签同进同出**：都挂在这一个
+         判据上 —— 用户要的是"光纤这两个拓扑视图"，没有"只看微波不看光纤"的场景；
+         将来若真要分家，再在 scope-map.json 的 qa 域里各立一键。 */
+      if (!SCOPE.ok('map', 'olibTopo')) { mwTopo = null; fiberTopo = null; }
     }
     /* ⚠️ 2026-11-04（用户要求「Knowledge Q&A 里面的 CCH 单独拆出来」）：
        原第三页签 VMAX 用户查询（短标签 CCH）已搬到独立面板 #cchSlot，
@@ -5177,12 +5204,16 @@
     /* 2026-11-08：追加第三页签 master_site（Master Site）。数组顺序即页签条顺序，
        也决定未指定 state.qaTab 时的默认选中项 —— 这里**加在末尾**，默认仍是 eFlow，
        不改动用户既有的默认浏览习惯；localStorage 里的旧 qaTab 值也不受影响。 */
-    /* 2026-11-17：追加第四页签 topology（Topology，原 GIS Map 的 IP 页签搬过来）。
-       同样加在**末尾**，默认选中仍是 eFlow，localStorage 旧值不受影响。 */
+    /* 2026-11-17：追加第四页签（原 GIS Map 的 IP 页签搬过来）。
+       2026-11-20：该页签改名 MW Topology，并在其后追加第五页签 fiber_topology
+       （Fiber Topology，同一页的逻辑图）。两个都加在**末尾**，默认选中仍是 eFlow，
+       不改动用户既有的默认浏览习惯；localStorage 里的旧 'topology' 值已无对应项，
+       curQa() 会自然回落到 list[0]（eFlow），与当年 'vmax' 下线时同一处理。 */
     return [eflow && { key: 'eflow', item: eflow },
             rag && { key: 'rag', item: rag },
             masterSite && { key: 'master_site', item: masterSite },
-            topology && { key: 'topology', item: topology }].filter(Boolean);
+            mwTopo && { key: 'mw_topology', item: mwTopo },
+            fiberTopo && { key: 'fiber_topology', item: fiberTopo }].filter(Boolean);
   }
   /* 页签上显示的**短标签**（2026-10-12 改）：目录标题太长
      （"RAG Knowledge Q&A (本地知识问答 / Open WebUI)"），
@@ -5196,8 +5227,12 @@
        中英同值（与 qa.tabRag = 'O&A' 同一处理），不是漏翻译。 */
     if (tab.key === 'master_site') return t('qa.tabMasterSite');
     /* 2026-11-17：第四页签短名。用户指定的页签名就是 "Topology"，
-       中英同值（与 Master Site 同一处理），不是漏翻译。 */
-    if (tab.key === 'topology') return t('qa.tabTopology');
+       中英同值（与 Master Site 同一处理），不是漏翻译。
+       2026-11-20：用户把页签名改成 "MW Topology"，短名键随之改为 qa.tabMwTopology
+       （键名跟着显示名走，避免"键叫 topology、显示是 MW Topology"的第二套口径）。 */
+    if (tab.key === 'mw_topology') return t('qa.tabMwTopology');
+    /* 2026-11-20：第五页签短名 "Fiber Topology"，同样是用户点名的写法，中英同值。 */
+    if (tab.key === 'fiber_topology') return t('qa.tabFiberTopology');
     return titleOf(tab.item);
   }
   /* 页签的 title 全称：短名之外仍要让用户看得到完整标题（含说明），
@@ -5226,11 +5261,14 @@
       var sep = (q.indexOf('embed=') !== -1) ? '' : '&embed=1';
       var thm = (state.theme === 'dark' && q.indexOf('theme=') === -1) ? '&theme=dark' : '';
       var lng = (q.indexOf('lang=') !== -1) ? '' : langQs();
-      /* 2026-11-17：Topology 页签（page=olibTopo）与地图栏 mapItems 同一约定补
-         maponly=1 —— iframe 里只留物理拓扑画布、搜索框浮在图上（my_app 侧
+      /* 2026-11-17：拓扑页签（page=olibTopo）与地图栏 mapItems 同一约定补
+         maponly=1 —— iframe 里只留拓扑画布、搜索框浮在图上（my_app 侧
          NetworkTopology.tsx 的 readMapOnlyMode）。条目 url / qaOpen 的新窗口
          **不带**它：点「打开」看到的仍是完整页（与地图栏 mapOpenSrc 剥 maponly
-         同一意图，这里靠"条目 url 本来就不带"实现）。 */
+         同一意图，这里靠"条目 url 本来就不带"实现）。
+         2026-11-20：MW Topology（view=physical）与 Fiber Topology（view=logical）
+         走同一条规则 —— maponly 只决定"只留画布"，**画哪张图由 url 里的 view= 决定**
+         （my_app 侧 2026-11-20 起 maponly 分支也认 view=，此前写死物理图）。 */
       var topo = (q.indexOf('page=olibTopo') !== -1 && q.indexOf('maponly=') === -1) ? '&maponly=1' : '';
       return '/myapp/' + q + sep + topo + thm + lng;
     }

@@ -20,7 +20,9 @@ const { Text } = Typography
  * CN KPI 看板（原 my-finebi「CN KPI」看板原生重建）
  * --------------------------------------------------------------------
  * 数据源：后端 /api/cn-kpi/overview → 远端只读 SQL API（db_ps_cs_cn.sqlite3）。
- * 18 个组件的 SQL 与图表类型逐条对齐 FineBI 原看板（公开链接 iYiQ）。
+ * 18 个组件的 SQL 与图表类型逐条对齐 FineBI 原看板（公开链接 iYiQ）；
+ * 2026-11-20 按业务要求另加 5 个（c14/c15 呼入·呼出应答率、c16 国际 MOU、
+ * c17 MGW32 资源利用率、c18 MGW32 资源占用），整页 23 个组件。
  * 本页**不依赖 my-finebi 进程**。
  *
  * 时间区间：默认近 31 天（与原版一致），可用 RangePicker 自定义起止日期；
@@ -628,6 +630,12 @@ export default function CnKpi() {
           // 2026-11-18：Data Subscribers 改制式命名（2G/3G/4G）并新增 5G(NSA) 序列。
           // 「5G 为什么不进 Total」是**口径解释**（不是异常），按三.3b 放这个收起块里。
           { title: t('cnkpi.calc.secData'), lines: [t('cnkpi.calc.data1'), t('cnkpi.calc.data2')] },
+          // 2026-11-20：呼入 / 呼出应答率。「没有孪生表/月表、停导就空」是**口径解释**
+          // （不是异常），按三.3b 放这个收起块里，不占首屏。
+          { title: t('cnkpi.calc.secCall'), lines: [t('cnkpi.calc.call1'), t('cnkpi.calc.call2')] },
+          // 2026-11-20：国际 MOU + MGW32 资源利用率。两张图都只有人工导出的 _EMS 一张表；
+          // MGW32 是「小时数据按天取平均」，这些都属于「这个数怎么算的」→ 放收起块（三.3b）。
+          { title: t('cnkpi.calc.secMouResource'), lines: [t('cnkpi.calc.mou1'), t('cnkpi.calc.mou2'), t('cnkpi.calc.mou3'), t('cnkpi.calc.cap1'), t('cnkpi.calc.cap2')] },
         ]}
       />
 

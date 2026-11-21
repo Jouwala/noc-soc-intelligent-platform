@@ -23,7 +23,8 @@
  * 自动刷新：已登记 AR_INPLACE_REFRESH_PAGES，监听 myapp-refresh 只静默重取当前层。
  * ========================================================================== */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
-import { Alert, Drawer, Empty, Spin } from 'antd'
+import { Alert, Button, Drawer, Empty, Popconfirm, Segmented, Space, Spin, Switch } from 'antd'
+import { ArrowLeftOutlined, EditOutlined, HeatMapOutlined, ReloadOutlined, UndoOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 
 import { useI18n } from '../i18n'
@@ -33,8 +34,9 @@ import { ExplainIcon, ExplainPopover } from '../components/MetricExplain'
 import CalcChainNote, { type CalcChainSection } from '../components/CalcChainNote'
 import { exportReport } from '../utils/excelReport'
 import { formatDateTime } from '../datetime'
-import { getIpranTopoGraph } from '../api'
+import { getIpranTopoGraph, getIpranTopoLayout, resetIpranTopoLayout, saveIpranTopoLayout } from '../api'
 import TopoCanvas from './ipranTopo/TopoCanvas'
+import WeathermapCanvas from './ipranTopo/WeathermapCanvas'
 import TopoDrillModal, { type DrillKind } from './ipranTopo/TopoDrillModal'
 import TopoGeoMap from './ipranTopo/TopoGeoMap'
 import TopologyControls, { type StatusFilter, type TierFilter } from './ipranTopo/TopologyControls'
@@ -44,7 +46,8 @@ import TopologyMetrics from './ipranTopo/TopologyMetrics'
 import { buildIndex } from './ipranTopo/layouts'
 import { cachedLayout } from './ipranTopo/layoutCache'
 import { analyzeGraph } from './ipranTopo/faultAnalysis'
-import { LAYER_LABEL_KEY, calcSectionKeys, explainKeys, isLayerKey } from './ipranTopo/layerDefs'
+import { LAYER_KEYS, LAYER_LABEL_KEY, calcSectionKeys, explainKeys, isLayerKey } from './ipranTopo/layerDefs'
+import { TRAFFIC_BINS, TRAFFIC_NA_COLOR } from './ipranTopo/trafficScale'
 import type { ColorMode, LayerKey, LayoutKey, Tier, TopoNode, TopoResp } from './ipranTopo/types'
 
 type Drill = { kind: DrillKind; anchor: { x: number; y: number } }
@@ -65,6 +68,12 @@ export default function IpranTopo() {
 
   /* 层：URL 的 &layer= 可深链到单层，非法值回落到 ipran（与后端白名单一致） */
   const [mapOnly] = useState(readMapOnlyMode)
+  /* 第二个视图：Weathermap。地址栏用 &view=weathermap 深链，默认仍是拓扑 */
+  const [view, setView] = useState<'topo' | 'weathermap'>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('view') === 'weathermap' ? 'weathermap' : 'topo'
+    } catch { return 'topo' }
+  })
   const [layer, setLayer] = useState<LayerKey>(() => {
     const v = new URLSearchParams(window.location.search).get('layer')
     return isLayerKey(v) ? v : 'ipran'
@@ -73,6 +82,20 @@ export default function IpranTopo() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [layoutKey, setLayoutKey] = useState<LayoutKey>('force')
+  /* Weathermap 视图单独记布局：在那边切分层/地理不该改掉拓扑视图的选择 */
+  const [wmLayout, setWmLayout] = useState<LayoutKey>('force')
+  /* 默认画全量（100 个点）保持 Weathermap 的密度；关掉只看骨干 22 个点 */
+  const [wmAccess, setWmAccess] = useState(true)
+  /* 手工布局：nodeId -> [x, y]（760×540 逻辑画布）。编辑态拖动、松手保存 */
+  const [wmPos, setWmPos] = useState<Record<string, [number, number]>>({})
+  const wmPosRef = useRef(wmPos)
+  const [wmEdit, setWmEdit] = useState(false)
+  /* null = 还没问到；true/false = 服务端是否允许写（本机 / 持令牌） */
+  const [wmEditable, setWmEditable] = useState<boolean | null>(null)
+  /* loading -> 正在问接口；ready -> 接口可用；missing -> 未部署/未重启，退回本机保存 */
+  const [wmServer, setWmServer] = useState<'loading' | 'ready' | 'missing'>('loading')
+  const [wmSavedAt, setWmSavedAt] = useState<string | null>(null)
+  const [wmSaveMsg, setWmSaveMsg] = useState<'idle' | 'saving' | 'saved' | 'local' | 'forbidden' | 'failed'>('idle')
   const [colorMode, setColorMode] = useState<ColorMode>('tier')
   const [showAllLabels, setShowAllLabels] = useState(false)
   const [foldParallel, setFoldParallel] = useState(true)
@@ -116,18 +139,23 @@ export default function IpranTopo() {
     wantTraffic.current = on
     if (on && !resp?.meta?.traffic) void load()
   }, [colorMode, resp, load])
+  /* Weathermap 视图就是流量视图：进来自动切 traffic（并触发一次 traffic=1 取数） */
+  useEffect(() => {
+    if (view === 'weathermap' && colorMode !== 'traffic') setColorMode('traffic')
+  }, [view, colorMode])
   useEffect(() => {
     const onInplaceRefresh = () => { void load({ silent: true }) }
     document.addEventListener('myapp-refresh', onInplaceRefresh)
     return () => document.removeEventListener('myapp-refresh', onInplaceRefresh)
   }, [load])
-  /* 地址栏保留当前层，便于分享单层链接；replaceState 不产生多余历史，App.tsx 的
-     page 同步用 set('page')，不会丢掉 layer 参数 */
+  /* 地址栏保留当前层与视图，便于分享单层链接；replaceState 不产生多余历史，App.tsx 的
+     page 同步用 set('page')，不会丢掉 layer / view 参数 */
   useEffect(() => {
     const url = new URL(window.location.href)
     url.searchParams.set('layer', layer)
+    url.searchParams.set('view', view)
     window.history.replaceState(window.history.state, '', url)
-  }, [layer])
+  }, [layer, view])
 
   const changeLayer = (k: LayerKey) => {
     if (k === layer) return
@@ -140,6 +168,81 @@ export default function IpranTopo() {
     setSelectedEdge(-1)
     setDrill(null)
   }
+
+  /* 进 Weathermap 视图时读该层保存的手工布局。接口还没部署/没重启时 404，
+     退回本机 localStorage —— 编辑不会因此不可用，只是暂时只有这台机器看得到。 */
+  useEffect(() => {
+    if (view !== 'weathermap') return
+    let alive = true
+    setWmServer('loading')
+    setWmSaveMsg('idle')
+    getIpranTopoLayout(layer).then((r) => {
+      if (!alive) return
+      const d = r.data || {}
+      const nodes = (d.nodes || {}) as Record<string, [number, number]>
+      wmPosRef.current = nodes
+      setWmPos(nodes)
+      setWmSavedAt(d.updated_at || null)
+      setWmEditable(!!d.editable)
+      setWmServer('ready')
+    }).catch(() => {
+      if (!alive) return
+      setWmServer('missing')
+      setWmEditable(true)
+      try {
+        const raw = localStorage.getItem(`myapp_wm_layout_${layer}`)
+        const d = raw ? JSON.parse(raw) : null
+        const nodes = (d?.nodes || {}) as Record<string, [number, number]>
+        wmPosRef.current = nodes
+        setWmPos(nodes)
+        setWmSavedAt(d?.updated_at || null)
+      } catch {
+        wmPosRef.current = {}
+        setWmPos({})
+      }
+    })
+    return () => { alive = false }
+  }, [view, layer])
+
+  const moveWmNode = useCallback((id: string, x: number, y: number) => {
+    const nx: [number, number] = [Math.round(x * 10) / 10, Math.round(y * 10) / 10]
+    /* 先同步更新 ref：松手时 onCommit 紧接着保存，不能等 React 的 setState 落地 */
+    const next = { ...wmPosRef.current, [id]: nx }
+    wmPosRef.current = next
+    setWmPos(next)
+  }, [])
+
+  const saveWm = useCallback(async () => {
+    const nodes = wmPosRef.current
+    const at = new Date().toISOString()
+    try {
+      localStorage.setItem(`myapp_wm_layout_${layer}`, JSON.stringify({ nodes, updated_at: at }))
+    } catch { /* 本机容量满时忽略，服务端保存仍然有效 */ }
+    if (wmServer !== 'ready') {
+      setWmSavedAt(at)
+      setWmSaveMsg('local')
+      return
+    }
+    setWmSaveMsg('saving')
+    try {
+      const r = await saveIpranTopoLayout(layer, nodes)
+      setWmSavedAt(r.data?.updated_at || at)
+      setWmSaveMsg('saved')
+    } catch (e: any) {
+      setWmSaveMsg(e?.response?.status === 403 ? 'forbidden' : 'failed')
+    }
+  }, [layer, wmServer])
+
+  const resetWm = useCallback(async () => {
+    wmPosRef.current = {}
+    setWmPos({})
+    setWmSavedAt(null)
+    setWmSaveMsg('idle')
+    try { localStorage.removeItem(`myapp_wm_layout_${layer}`) } catch { /* ignore */ }
+    if (wmServer === 'ready') {
+      try { await resetIpranTopoLayout(layer) } catch { setWmSaveMsg('failed') }
+    }
+  }, [layer, wmServer])
   const explain = explainKeys(layer)
 
   const nodes = useMemo(() => resp?.nodes ?? [], [resp])
@@ -148,6 +251,10 @@ export default function IpranTopo() {
   const layout = useMemo(
     () => cachedLayout(layoutKey, nodes, idx, edges),
     [layoutKey, nodes, idx, edges],
+  )
+  const wmLayoutData = useMemo(
+    () => cachedLayout(wmLayout, nodes, idx, edges),
+    [wmLayout, nodes, idx, edges],
   )
   const focusSafe = focus >= 0 && focus < nodes.length ? focus : -1
 
@@ -423,6 +530,165 @@ export default function IpranTopo() {
     )
   }
 
+  /* ---------- Weathermap 视图：整屏一张流量图，不摆统计卡与告警榜 ---------- */
+  if (view === 'weathermap') {
+    const tm = meta?.traffic
+    return (
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{
+          flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          background: WH.cardBg, border: `1px solid ${WH.cardBorder}`, borderRadius: 8, padding: '6px 10px',
+        }}>
+          <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => setView('topo')}>
+            {t('ipranTopo.wm.back')}
+          </Button>
+          <Segmented className="wh-seg" size="small" value={layer}
+            onChange={(v) => changeLayer(v as LayerKey)}
+            options={LAYER_KEYS.map((k) => ({ label: t(LAYER_LABEL_KEY[k]), value: k }))} />
+          <Segmented className="wh-seg" size="small" value={wmLayout}
+            onChange={(v) => setWmLayout(v as LayoutKey)}
+            options={[
+              { label: t('ipranTopo.layout.force'), value: 'force' },
+              { label: t('ipranTopo.layout.tier'), value: 'tier' },
+              { label: t('ipranTopo.layout.geo'), value: 'geo' },
+            ]} />
+          <Switch size="small" checked={showAllLabels} onChange={setShowAllLabels}
+            checkedChildren={t('ipranTopo.opt.allLabels')} unCheckedChildren={t('ipranTopo.opt.allLabels')} />
+          <Switch size="small" checked={wmAccess} onChange={setWmAccess}
+            checkedChildren={t('ipranTopo.wm.access')} unCheckedChildren={t('ipranTopo.wm.access')} />
+          <Button size="small" icon={<ReloadOutlined />} loading={loading}
+            onClick={() => void load({ force: true })}>{t('ipranTopo.btn.refresh')}</Button>
+          <Button size="small" type={wmEdit ? 'primary' : 'default'} icon={<EditOutlined />}
+            disabled={wmEditable !== true}
+            onClick={() => setWmEdit((v) => !v)}>
+            {t('ipranTopo.wm.edit')}
+          </Button>
+          {(wmEdit || Object.keys(wmPos).length > 0) && (
+            <Popconfirm
+              title={t('ipranTopo.wm.resetConfirm')}
+              okText={t('ipranTopo.wm.reset')}
+              cancelText={t('common.cancel')}
+              onConfirm={() => void resetWm()}
+            >
+              <Button size="small" icon={<UndoOutlined />} disabled={wmEditable !== true || !Object.keys(wmPos).length}>
+                {t('ipranTopo.wm.reset')}
+              </Button>
+            </Popconfirm>
+          )}
+          {wmEdit && (
+            <span style={{
+              fontSize: 12,
+              color: wmSaveMsg === 'failed' || wmSaveMsg === 'forbidden' ? WH.danger : WH.textDim,
+            }}>
+              {wmSaveMsg === 'saving' ? t('ipranTopo.wm.saving')
+                : wmSaveMsg === 'local' ? t('ipranTopo.wm.localOnly')
+                  : wmSaveMsg === 'forbidden' ? t('ipranTopo.wm.forbidden')
+                    : wmSaveMsg === 'failed' ? t('ipranTopo.wm.saveFailed')
+                      : wmSavedAt ? t('ipranTopo.wm.saved', { at: formatDateTime(wmSavedAt) })
+                        : t('ipranTopo.wm.editHint')}
+            </span>
+          )}
+          <span style={{ marginLeft: 'auto', color: WH.textDim, fontSize: 12 }}>{t('ipranTopo.wm.hint')}</span>
+        </div>
+
+        {error && <Alert type="error" showIcon message={error} />}
+        {topWarns.length > 0 && (
+          <Alert type="warning" showIcon message={<div>{topWarns.map((w, i) => <div key={i}>{w}</div>)}</div>} />
+        )}
+
+        <div style={{
+          flex: '1 1 0%', minHeight: 320, position: 'relative', overflow: 'hidden',
+          background: WH.cardBg, border: `1px solid ${WH.cardBorder}`, borderRadius: 8,
+        }}>
+          {loading && !resp ? (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin /></div>
+          ) : nodes.length === 0 ? (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Empty description={t('ipranTopo.empty')} />
+            </div>
+          ) : (
+            <>
+              <WeathermapCanvas
+                nodes={nodes} edges={edges} idx={idx} layout={wmLayoutData}
+                showAllLabels={showAllLabels} includeAccess={wmAccess} focus={focusSafe} selectedEdge={selectedEdge}
+                positions={wmPos} editable={wmEdit}
+                onMove={moveWmNode} onCommit={() => void saveWm()}
+                onFocus={(i) => { setFocus((prev) => (prev === i ? -1 : i)); setSelectedEdge(-1) }}
+                onSelectEdge={(i) => { setSelectedEdge(i); setFocus(-1) }}
+                onBackground={() => { setFocus(-1); setSelectedEdge(-1) }}
+              />
+              {/* 图例与采样时刻压在画布上，不占地图高度；竖排更接近 NMS 的图例 */}
+              <div style={{ position: 'absolute', left: 10, bottom: 10, pointerEvents: 'none' }}>
+                <div style={{
+                  background: WH.cardBg, border: `1px solid ${WH.cardBorder}`, borderRadius: 6,
+                  padding: '6px 10px 7px', fontSize: 11, minWidth: 118,
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: 3 }}>{t('ipranTopo.legend.traffic')}</div>
+                  {TRAFFIC_BINS.map((b) => (
+                    <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6, lineHeight: '15px' }}>
+                      <span style={{
+                        width: 14, height: 9, background: b.color, display: 'inline-block',
+                        border: `1px solid ${WH.cardBorder}`,
+                      }} />
+                      <span style={{ color: WH.textMuted }}>{b.label}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, lineHeight: '15px', marginTop: 2 }}>
+                    <span style={{ width: 14, borderTop: `2px dashed ${TRAFFIC_NA_COLOR}`, display: 'inline-block' }} />
+                    <span style={{ color: WH.textMuted }}>{t('ipranTopo.legend.trafficNa')}</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{
+                position: 'absolute', right: 10, top: 10, textAlign: 'right', fontSize: 11,
+                color: WH.textMuted, background: WH.cardBg, border: `1px solid ${WH.cardBorder}`,
+                borderRadius: 6, padding: '3px 8px', pointerEvents: 'none',
+              }}>
+                <div>{t('ipranTopo.wm.sampled', {
+                  at: tm?.sampledAt ? formatDateTime(tm.sampledAt) : t('ipranTopo.detail.na'),
+                })}</div>
+                <div>{t('ipranTopo.wm.coverage', {
+                  m: tm?.matchedEdges ?? 0, n: tm?.totalEdges ?? 0,
+                })}</div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* 覆盖不足是异常不是解释：常驻；口径走可展开说明 */}
+        {footWarns.length > 0 && (
+          <Alert type="warning" showIcon style={{ padding: '4px 12px' }} message={
+            <div style={{ fontSize: 12, lineHeight: 1.45 }}>
+              {footWarns.map((w, i) => <div key={i}>{w}</div>)}
+            </div>
+          } />
+        )}
+        <div style={{ flexShrink: 0 }}>
+          <CalcChainNote title={t('ipranTopo.calc.title')} sections={calcSections} />
+        </div>
+
+        <Drawer
+          placement="right"
+          width="min(95vw, 45rem)"
+          open={focusSafe >= 0 || selectedEdge >= 0}
+          onClose={() => { setFocus(-1); setSelectedEdge(-1) }}
+          title={focusSafe >= 0
+            ? t('ipranTopo.focus.title', { name: nodes[focusSafe]?.name ?? '' })
+            : t('ipranTopo.detail.linkTitle')}
+          destroyOnClose
+        >
+          {(focusSafe >= 0 || selectedEdge >= 0) && (
+            <TopologyDetails
+              nodes={nodes} edges={edges} idx={idx} fault={fault}
+              focus={focusSafe} selectedEdge={selectedEdge}
+              onFocus={(i) => { setFocus(i); setSelectedEdge(-1) }}
+            />
+          )}
+        </Drawer>
+      </div>
+    )
+  }
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)',
@@ -451,6 +717,7 @@ export default function IpranTopo() {
         tierFilter={tierFilter} onTier={setTierFilter}
         statusFilter={statusFilter} onStatus={setStatusFilter}
         onZoomIn={() => bumpView('in')} onZoomOut={() => bumpView('out')} onFit={() => bumpView('fit')}
+        onWeathermap={() => setView('weathermap')}
       />
 
       {/* 取数失败 / 降级留在工具条下：用户正在看的数可能不是本次结果。 */}
@@ -634,3 +901,9 @@ export default function IpranTopo() {
     </div>
   )
 }
+
+
+
+
+
+

@@ -71,6 +71,8 @@ export const LIGHT_COLORS = [
 export const WH = {
   bg: 'var(--wh-bg)',
   cardBg: 'var(--wh-card-bg)',
+  // SVG 的 fill 不认渐变（会退化成黑），画布/标签底色用这个实色令牌
+  mapBg: 'var(--wh-map-bg)',
   cardBorder: 'var(--wh-card-border)',
   cardBorderHover: 'var(--wh-card-border-hover)',
   teal: 'var(--wh-teal)',

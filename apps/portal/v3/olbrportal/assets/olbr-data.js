@@ -157,7 +157,8 @@ window.OLBR_DATA = (function () {
             服务端已存过的 catalog.tabLabels 改名记录不会因此失配。 */
       'map.iptPower': 'Power',
        /* 2026-11-10 加：页签名仍是用户点名的 IP，中英两份照写同一串，不翻译。2026-11-16 起内嵌改为 ?page=olibTopo 的物理图。
-          2026-11-17 起 IP 页签移到 Knowledge Q&A 栏并改名 Topology，本栏 MAP_TABS 已无此条；
+          2026-11-17 起 IP 页签移到 Knowledge Q&A 栏，2026-11-20 改名 MW Topology
+          并新增 Fiber Topology，本栏 MAP_TABS 已无此条；
           本词条按 map.alarm / map.loss 的约定保留，将来恢复页签不用重写。 */
        'map.ip': 'IP',
       /* 2026-11-11 加：内嵌 my_app 的 ?page=packet_loss（Packet Loss Map）。
@@ -651,12 +652,19 @@ window.OLBR_DATA = (function () {
          用户指定的页签名就是这个写法，中英同值（与 tabRag = 'O&A' 同一处理），
          不是漏翻译；全称（含"默认 master_site_db"说明）挂 title/aria-label。 */
       'qa.tabMasterSite': 'Master Site',
-      /* 2026-11-17 加：Knowledge Q&A 第四页签「Topology」（用户要求「GIS Map 的
-         IP 页签移动到 Knowledge Q&A，页签名字 Topology」）。原 GIS Map 栏的
-         IP 页签（?page=olibTopo 物理拓扑原图）整体搬过来，显示名按用户点名改为
-         "Topology"，中英同值（与 tabRag = 'O&A' 同一处理，不是漏翻译）；
-         全称仍挂 title/aria-label（见 olbr.js 的 qaTabTitle），悬停可见。 */
-      'qa.tabTopology': 'Topology',
+      /* 2026-11-17 加：Knowledge Q&A 第四页签（用户要求「GIS Map 的 IP 页签
+         移动到 Knowledge Q&A」）。原 GIS Map 栏的 IP 页签（?page=olibTopo 物理
+         拓扑原图）整体搬过来。
+         ⚠️ 2026-11-20（用户要求「topology 改为 MW Topology，并增加页签 Fiber
+            Topology」）：页签显示名由 "Topology" 改为 "MW Topology"（内容不变，
+            仍是物理原图），键名随之从 qa.tabTopology 改为 qa.tabMwTopology ——
+            键跟着显示名走，不留"键叫 topology、显示是 MW Topology"的第二套口径。
+            中英同值（与 tabRag = 'O&A' 同一处理，不是漏翻译）；
+            全称仍挂 title/aria-label（见 olbr.js 的 qaTabTitle），悬停可见。 */
+      'qa.tabMwTopology': 'MW Topology',
+      /* 2026-11-20 加：Knowledge Q&A 第五页签「Fiber Topology」—— 同一页的**逻辑图**
+         （?page=olibTopo&view=logical）。名字是用户点名的写法，中英同值。 */
+      'qa.tabFiberTopology': 'Fiber Topology',
       /* 2026-11-08 改：面板显示名由内部缩写 CCH 换成业务名「客户投诉查询」
          （英文 Customer Complaint Query）。⚠️ 只换显示名 —— 字典键 cch.title、
          矩阵域键 cch、槽位 #cchSlot、函数 cchItem() 等内部标识一律不动。
@@ -930,7 +938,8 @@ window.OLBR_DATA = (function () {
          2026-11-11 起按用户要求缩短为 "Power"，中文那份同步。 */
       'map.iptPower': 'Power',
        /* 2026-11-10 加：页签名仍是用户点名的 IP，中英两份照写同一串，不翻译。2026-11-16 起内嵌改为 ?page=olibTopo 的物理图。
-          2026-11-17 起 IP 页签移到 Knowledge Q&A 栏并改名 Topology，本栏 MAP_TABS 已无此条；
+          2026-11-17 起 IP 页签移到 Knowledge Q&A 栏，2026-11-20 改名 MW Topology
+          并新增 Fiber Topology，本栏 MAP_TABS 已无此条；
           本词条按 map.alarm / map.loss 的约定保留，将来恢复页签不用重写。 */
        'map.ip': 'IP',
       /* 2026-11-11 加，与中文那份同值（用户点名的 "PL"）。 */
@@ -1334,9 +1343,11 @@ window.OLBR_DATA = (function () {
       /* 2026-11-08 加：与 zh 字典同步（说明见中文那份）。用户指定的页签名就是
          'Master Site'，英文界面也不翻译，保持两本字典同值。 */
       'qa.tabMasterSite': 'Master Site',
-      /* 2026-11-17 加：与 zh 字典同步（说明见中文那份）。用户指定的页签名就是
-         "Topology"，英文界面也不翻译，保持两本字典同值。 */
-      'qa.tabTopology': 'Topology',
+      /* 2026-11-17 加 / 2026-11-20 改名：与 zh 字典同步（说明见中文那份）。
+         用户指定的页签名就是 'MW Topology'，英文界面也不翻译，保持两本字典同值。 */
+      'qa.tabMwTopology': 'MW Topology',
+      /* 2026-11-20 加：与 zh 字典同步。用户点名的写法 'Fiber Topology'，中英同值。 */
+      'qa.tabFiberTopology': 'Fiber Topology',
       /* 2026-11-08 改：与 zh 字典同步换成业务名（说明见中文那份），
          英文界面不得回落中文；内部标识 cch 保持不变。 */
       'cch.title': 'Customer Complaint Query',
@@ -1596,10 +1607,12 @@ window.OLBR_DATA = (function () {
       编辑态改名还要后端 TAB_PAGES 白名单带上 olibTopo，否则改名被静默丢弃。ipranTopo 仍留在白名单，避免旧改名记录在下次保存时被丢掉。
       ⚠️ 2026-11-17（用户要求「GIS Map 的 IP 页签移动到 Knowledge Q&A，页签名字 Topology」）：
         本页签从 MAP_TABS 里删掉 —— IP 页签（?page=olibTopo&view=physical）整体搬进
-        Knowledge Q&A 栏当第四页签，显示名改为 "Topology"（见 olbr.js 的 topologyItem() /
-        qaItems() / qaSrc()，以及本文件 qa.tabTopology 词条）。'map.ip' 词条与 PH 的
-        share-network 图标**保留**（QA 栏的合成条目还在用）；MAP_TAB_CSS 里的
-        'olibTopo': '' 也保留：将来若要恢复页签不用重写。 */
+        Knowledge Q&A 栏当第四页签（见 olbr.js 的 mwTopologyItem() / qaItems() / qaSrc()）。
+        ⚠️ 2026-11-20（用户要求「topology 改为 MW Topology，并增加页签 Fiber Topology」）：
+           该页签显示名改为 "MW Topology"（词条改为本文件的 qa.tabMwTopology，内容不变），
+           并在其后新增第五页签 "Fiber Topology"（view=logical，词条 qa.tabFiberTopology）。
+           'map.ip' 词条与 PH 的 share-network 图标仍**保留**（QA 栏的两个合成条目共用）；
+           MAP_TAB_CSS 里的 'olibTopo': '' 也保留：将来若要恢复地图栏页签不用重写。 */
   /* 2026-11-11：再加 ?page=packet_loss（Packet Loss Map），页签名 "PL"。
      page 必须与 my_app 的 PageKey 一致；后端 TAB_PAGES 白名单里 packet_loss
      **早已存在**（2026-09-25 下线该页签时特意保留），故这次不用改后端。

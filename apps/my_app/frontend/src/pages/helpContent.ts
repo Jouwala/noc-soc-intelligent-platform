@@ -9,6 +9,7 @@ export type Locale = 'zh' | 'en'
 export const PAGE_LIST: { key: string; iframe?: boolean }[] = [
   { key: 'sync' },
   { key: 'email_reports' },
+  { key: 'site_sync_ops' },
   { key: 'alarm' },
   { key: 'ttwo' },
   { key: 'v1_ttwo' },
@@ -31,6 +32,7 @@ export const PAGE_LIST: { key: string; iframe?: boolean }[] = [
   { key: 'ipranTopo' },
   { key: 'olibTopo' },
   { key: 'olibTopo_v2' },
+  { key: 'nocTopology' },
   { key: 'mwRealTime', iframe: true },
   { key: 'gis' },
   { key: 'realtime_alarm' },
@@ -87,6 +89,7 @@ export const NAV_KEY_MAP: Record<string, string> = {
   feedback: 'nav.feedback',
   sync: 'nav.sync',
   email_reports: 'nav.emailReports',
+  site_sync_ops: 'nav.siteSyncOps',
   alarm: 'nav.alarm',
   ttwo: 'nav.ttwo',
   v1_ttwo: 'nav.v1Ttwo',
@@ -109,6 +112,7 @@ export const NAV_KEY_MAP: Record<string, string> = {
   ipranTopo: 'nav.ipranTopo',
   olibTopo: 'nav.olibTopo',
   olibTopo_v2: 'nav.olibTopoV2',
+  nocTopology: 'nav.nocTopology',
   mwRealTime: 'nav.mwRealTime',
   gis: 'nav.gis',
   realtime_alarm: 'nav.realtimeAlarm',
@@ -162,7 +166,7 @@ export const CATEGORIES: { id: string; pages: string[] }[] = [
   { id: 'tasks', pages: ['sync', 'email_reports', 'upload', 'tables', 'overview'] },
   {
     id: 'boards',
-    pages: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'alarmManagement', 'fme_ranking', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'bm_speedtest', 'bm_meta', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'bp_report', 'ran_cells_kpi', 'ran_inventory', 'packet_loss', 'battery', 'ume_in_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'imonitor', 'gis', 'realtime_alarm', 'person', 'incident_overview', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary'],
+    pages: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'alarmManagement', 'fme_ranking', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'bm_speedtest', 'bm_meta', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'bp_report', 'ran_cells_kpi', 'ran_inventory', 'packet_loss', 'battery', 'ume_in_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'imonitor', 'gis', 'realtime_alarm', 'person', 'incident_overview', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary'],
   },
   { id: 'analysis', pages: ['eflow_qa', 'eflow_flow', 'dashboard', 'archive', 'ip_trace', 'vmax_user_query', 'vmax_user_cca', 'ipt_power'] },
   { id: 'workflow', pages: ['ap_center', 'feedback'] },
@@ -210,6 +214,15 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         'eFlow 页签三个「立即…」按钮分别手动触发对应任务：立即检查（TT 规则 + 匹配矫正）、收集告警规则、收集推单规则；触发后 3 秒自动刷新一次，任务慢时需手动再刷',
         'eFlow 页签底部表格：蓝色标签为规则表（TT 规则随每日 04:20 检查刷新；告警/推单规则原本每 3 天 23:59 刷新，可用上面的「收集…」按钮随时刷新），灰色为本次检查产物',
         '「TTs and MTTR」页签的「立即生成」投一次 `tt_mttr_report_generate`（定时为每天 07:20，要更高频在任务管理页改排程），页面按文件生成时间轮询，出现更新的文件才提示「报告已生成」；口径：有 WO + 告警发生→告警清除历时 < 48 小时 + Site Category 非空 + 告警月份 ≥ 2026-01',
+      ],
+    },
+    site_sync_ops: {
+      desc: '分组式数据同步操作台（当前开放 eFlow 站点主数据）：把 my_app/db 下最新的 CMDB「ZTE OLR MS Master Site Database」与 eflow / PG master_site_db 基线比对，生成差异文件后，预览写库影响并二次确认写入生产 PostgreSQL。',
+      usage: [
+        '第一步「生成待审查文件」复用站点同步比对任务（只生成文件、绝不写库），产出带 A/M/D 着色的差异表与导入副本，可逐一下载审查',
+        '第二步「预览写库影响」是 dry-run：按最新源表算出将 UPDATE / INSERT 的行数，不写库也不备份；令牌与源文件指纹绑定，源表被换掉必须重新预览',
+        '「确认写库」需二次确认弹窗；脚本先自动备份 app.master_site_db 到 backup/，再 update+insert，**默认不删除任何站点**（不带 --prune）',
+        '写库是一次性人工操作，刻意不注册定时任务、不进任务队列，避免被调度器误跑；旧入口 Email Reports →「站点同步」页签仍然保留',
       ],
     },
     alarm: {
@@ -383,6 +396,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '三种布局回答不同问题：**力导向（默认）**看环网与簇团，并把接入点往主归属的水平方向收拢；**地理**看断站影响哪个城市；**分层**看层级关系，适合导出。布局是确定性的，同一份数据每次位置一致。旧算法在真实图上扫到过 42 次边交叉，那组参数仍留在 layoutForceClassic',
         '三种着色：按层级（默认）/ 按在线状态 / 按最高告警级。**告警不着色是刻意的**：实测 74/93（80%）网元都有紧急告警，按告警级填色整张图会全红；告警只做节点右上角小红点',
         '第四种着色「按流量负载」把链路染成 Weathermap 的 8 档色阶（0-1% 灰白 … 85-100% 红），并从中间拆成两段：前半段是源→宿、后半段是宿→源，各标一个百分比。切到这一档才去取端口流量（多读 6 张 15 分钟表），切走不会重新取数。利用率 = 端口收发速率 ÷ 端口带宽；**没有采集到的链路是灰虚线 + N/A，不是 0%** —— 端口流量只覆盖 KPI 采集配置里的 13 个网元（实测 IP RAN 层 50/141 条边有数），页底会写明只覆盖多少条',
+        '工具条右侧「Weathermap 视图」把整页切成一张流量气象图，也可直链 `?page=ipranTopo&view=weathermap&layer=ipran`：设备画成 NMS 风格图标，链路从中点拆成收发两段上 8 档色、百分比压在线上，图例与采样时刻叠在画布角上。位置复用同一份布局（两个视图位置一致），点图标或链路仍开详情抽屉；默认画全量（含接入层）保持密度，关掉「含接入层」只看骨干 22 个点；节点名默认只标核心与汇聚，接入点切「全部标签」再显示，滚轮缩放、拖动平移。工具条「编辑布局」可拖动节点、松手按层保存（仅本机或持令牌可写），「重置布局」恢复自动布局；后端未重启时先存本机并在工具条提示',
         '带宽只体现在**线宽**（100G / 25G / 10G / 其它四档），断链是红色虚线，有告警的链路转橙色；「折叠平行链路」开关可把 ×N 展开成扇面',
         '右侧栏（约 25%）上面是一行统计卡，下面是「紧急告警最多的网元」，两块同宽。数字下面的构成说明默认不显示，点数字才弹出；点卡片标题仍可下钻。左侧拓扑画布占约 75%，并吃掉工具条之下剩余的高度。点节点或点榜上的名字聚焦：其余节点变暗、只保留一跳邻居，详情从右侧滑出（概览 / 接口 / 告警 / 影响分析）。再点一次、点空白、点遮罩或按 Esc 关闭。滚轮缩放，拖空白处平移',
         '影响分析给出的是**根因候选**，不是已确认根因：只有失联设备、且上游没有更靠前的失联设备才会列入；接口没有告警发生时间。流量利用率没有数据时显示 N/A，不会用端口速率去估',
@@ -418,10 +432,26 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '**静态数据页**：GPS 映射表是 public/olib/olib-site-geo.json（由 scripts/gen-olib-site-geo.mjs 生成），页面不直连 GIS 接口；自动刷新建议 1800 秒，内容不会变化',
       ],
     },
+    nocTopology: {
+      desc: 'NOC 统一网络拓扑中心（1.0）：把 IPRAN、MW 微波、OLIB FO 三个来源收进**同一套数据模型与视觉语言**，提供全网总览 / 逻辑拓扑 / 流量视图 / 地理视图四个视图。它不是三个专页的替代品 —— IPRAN、MW、OLIB 原页面继续负责各自的深度分析，本页负责统一态势、跨域浏览与统一入口。',
+      usage: [
+        '顶部两个维度独立切换：**视图**（全网总览 / 逻辑拓扑 / 流量视图 / 地理视图）与**来源**（全部 / IPRAN / MW / OLIB FO）。可只看 MW 的地理分布，也可看全部来源的流量视图；URL 支持深链接 `?page=nocTopology&view=traffic&source=mw&layer=ipran&gran=rt`',
+        '**设备身份 = 来源 + 原生 ID**（如 `ipran:<UME uuid>`、`mw:<IP>`、`olib:<站点下标>`）。三个来源之间**不做自动合并**：站名相似、坐标接近都不算关联依据；IPRAN 的站点名来自 UME 且含近似匹配，不能当主数据 siteId 用',
+        '流量口径：**TX = 源设备→宿设备，RX = 宿设备→源设备**，两个方向分别取原生值、不平均。8 档 Weathermap 色阶与 IPRAN 专页同一套；MW 自己的 healthy / minor / major / critical 四级（60 / 70 / 80 阈值）原样保留，8 档色只表达负载，不重新定义故障严重度',
+        '**没有流量采样显示 N/A，不显示 0%**：IPRAN 实测只有 50/141 条链路有端口流量（KPI 只覆盖配置里的 13 个网元），MW 有 20 条物理链路当期无 KPI，OLIB 全部没有实时流量。这些链路画中性灰虚线，图例与详情都写明原因',
+        'OLIB 的线与部分骨干连接是**示意连接**（PDF 第 1 页数字化 592 条 / 覆盖 411 站，第 2 页骨干 17 条），不是实际光缆路由，也没有实时利用率；适配层给所有 OLIB 边打 `schematic=true`，永远不参与流量着色',
+        '链路详情里 MW 有历史趋势（日粒度全部日期 / 实时最近 96 个 15 分钟槽）；IPRAN 的 `topo_traffic.py` 只读最新 KPI 快照，**没有历史接口，不画曲线**（不拼伪历史）',
+        '来源健康面板逐源显示 Connected / Partial / Stale / Unavailable / Static。取数是三个独立请求（`Promise.allSettled` 语义），一个来源失败只标红那一行，另外两个照常显示；总览卡与风险榜跟随来源筛选，不跟随搜索词',
+        '画布交互：滚轮缩放、拖动平移、双击回全景；点设备聚焦一跳邻居并开详情，点链路看两端、带宽、端口明细与历史；搜索框回车定位（只在主动搜索时移动视口）',
+        '自动刷新按来源节流：IPRAN 300 秒、MW 900 秒（15 分钟采集）、OLIB 1800 秒（静态资产）。顶栏「开启刷新」建议 300 秒，本页已登记为**原地刷新**（收到 `myapp-refresh` 只静默重取，不重建地图与画布）',
+        '1.0 明确不做：跨系统设备/链路的自动关联、自动故障传播推理、给 OLIB 编造实时利用率、给 IPRAN 编造历史曲线',
+      ],
+    },
     mwRealTime: {
       desc: '与微波拓扑同构的 15 分钟粒度实时版（拓扑骨架、风险榜、抽屉、趋势完全一致）。',
       usage: ['默认只展示最新一个 15 分钟槽位，滑杆可回看最近 2 小时窗口', '自动刷新默认关闭，可在顶栏按页开启（本页建议 900 秒）；开启后走「软刷新」（不重载 iframe、不闪屏）'],
     },
+
     gis: {
       desc: '站点地图：告警/工单在地图上的分布、拓扑线、区域面与多维筛选（历史/工单口径）。',
       usage: [
@@ -502,7 +532,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       ],
     },
     cn_kpi: {
-      desc: 'CN KPI 看板：原 FineBI「CN KPI」看板的原生重建，18 个组件（VLR / Voice / Data 用户数、USSD 成功率、位置更新成功率、USPP / MSC / xGW 利用率、FDD / TDD 流量、RG-6/11/12/30 等）。数据经远端只读 SQL API 读 db_ps_cs_cn，不依赖 my-finebi 进程。⚠ 本页数据来自两条彼此独立的流水线：人工导出的 _EMS 表（会停摆，且**粒度随导出区间变化**）与自动同步的 _UME 表；因此取数会逐级降级，并在卡片与页头**显式标注粒度**。',
+      desc: 'CN KPI 看板：原 FineBI「CN KPI」看板的原生重建，23 个组件（VLR / Voice / Data 用户数、呼入 / 呼出应答率、国际 MOU、MGW32 资源利用率与资源占用、USSD 成功率、位置更新成功率、USPP / MSC / xGW 利用率、FDD / TDD 流量、RG-6/11/12/30 等）。数据经远端只读 SQL API 读 db_ps_cs_cn，不依赖 my-finebi 进程。⚠ 本页数据来自两条彼此独立的流水线：人工导出的 _EMS 表（会停摆，且**粒度随导出区间变化**）与自动同步的 _UME 表；因此取数会逐级降级，并在卡片与页头**显式标注粒度**。呼入 / 呼出应答率、国际 MOU、MGW32 两张卡（2026-11-20 新增）只有人工导出的 _EMS 表，**既没有 _UME 孪生表也没有 1month_* 月表**，停止导出时会直接空掉（不换源、不填 0）；MGW32 是小时粒度、图上按天取算术平均（不是峰值），且不含今天（今天只有已完成的若干小时）。',
       usage: [
         '默认为「近 31 天」；改时间区间后点查询，月粒度组件会自动改用近 13 个月窗口',
         '卡片右上角橙色「月粒度」标签表示该点代表一个月，**不是某一天**；金色「已切源」表示原表停更、已改用自动同步的同名数据源',
@@ -559,7 +589,6 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '「数据口径说明」默认收起（点标题展开）；「导出 Excel」总览 + 每个组件一张宽表，便于对账',
       ],
     },
-
     imonitor: {
       desc: 'UME iMonitor 大屏（guard-imonitor-iui，screen_id=1）：把 UME 门户（172.17.208.1:28808）的原版监控大屏原样嵌进 myapp，保留其全部图表与交互。页面经 nginx 8088 反代到上游（门户独立端口方案），首次进入会由注入脚本自动完成 em-portal 登录（账号取自 Settings → 凭据的「UME 客户业务 KPI 门户」，即 ume_in），无需手工输入；登录页的 frame-bust 已在反代里中和、iframe 另加 sandbox，保证登录过程不会把 myapp 外壳冲掉。',
       usage: [
@@ -974,6 +1003,15 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         'On the "TTs and MTTR" tab, "Generate now" submits one `tt_mttr_report_generate` run (scheduled daily at 07:20; raise the frequency from the Schedule column in Task Manager). The page polls the file timestamps and only reports success once a newer file appears. Scope: has a WO, alarm occur-to-clear under 48 hours, non-empty Site Category, occur month from 2026-01.',
       ],
     },
+    site_sync_ops: {
+      desc: 'Grouped data sync operations console (eFlow site master data enabled first): diffs the newest CMDB "ZTE OLR MS Master Site Database" under my_app/db against the eflow / PG master_site_db baseline, generates diff files, previews the write impact, then writes to production PostgreSQL after a second confirmation.',
+      usage: [
+        '"Generate review files" reuses the Site Sync diff task (files only, never writes to DB); download and review the colour-coded A/M/D workbooks and import copies',
+        '"Preview write impact" is a dry-run: computes rows to UPDATE / INSERT from the latest source, without writing or backing up; the token is bound to the source fingerprint, so a replaced source requires a new preview',
+        '"Confirm write" requires a second-confirmation modal; the script first backs up app.master_site_db to backup/, then updates/inserts, and **never deletes sites by default** (no --prune)',
+        'Writing is a one-off manual action, intentionally not registered as a scheduled task or put on the task queue, so the scheduler cannot run it by mistake; the old Email Reports -> "Site Sync" tab remains available',
+      ],
+    },
     alarm: {
       desc: 'Combined view of all current active network alarms: totals, severity, site-level multi-dimension statistics and trends.',
       usage: ['Click any number to open a searchable drill-down table', '"Realtime" data comes from eFlow active alarms (eflow_active_alarm synced every minute) — not second-level push', '**Region profiles and per-type counts explain themselves on hover** (2026-11-04): "N alarms ↗" opens into "row-counted alarms + how many of them have transmission_type=MW + sites counted by distinct site_id", plus the note that rows whose region code is outside the 15-county list are not counted in any region; the "Top Alarm Types" ⓘ states the name comes from alarm_title falling back to codename, that the backend sends the top 10 while the chart draws 8, so **those 8 do not sum to the alarm total**'],
@@ -1145,6 +1183,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         'The three layouts answer different questions: **force (default)** shows rings and clusters and pulls access nodes toward their primary parent; **geographic** shows which city an outage hits; **tiered** shows the hierarchy and is the better export view. Layouts are deterministic. The older force scan of 42 crossings on the real graph is kept as layoutForceClassic',
         'Four color modes: tier (default) / online state / highest alarm severity / traffic load. **Alarms are deliberately not a fill color**: 74/93 NEs (80%) carry critical alarms, so filling by severity would paint the whole map red; alarms are a small corner dot instead',
         'The fourth mode, "Traffic load", paints links on Weathermap\'s 8-step scale (0-1% light grey … 85-100% red) and splits each link at the midpoint: the first half is source→destination, the second half destination→source, each with its own percentage. Port traffic is fetched only when you switch to this mode (6 more 15-minute tables) and switching away does not refetch. Utilization = port send/receive rate ÷ port bandwidth; **a link with no sample is grey dashed with N/A, never 0%** — port counters only cover the 13 NEs in the KPI config (measured: 50 of 141 edges on the IP RAN layer carry data), and the page footer states how many links are covered',
+        'The "Weathermap view" button on the right of the toolbar turns the page into a full-screen traffic map; it can be deep-linked with `?page=ipranTopo&view=weathermap&layer=ipran`. Devices are drawn as NMS-style icons, each link is split at its midpoint into per-direction halves on the 8-step scale with the percentage printed over the line, and the legend plus sample time sit in the canvas corners. Positions are reused from the same layout (both views place devices identically); clicking an icon or a link still opens the details drawer. The full network (access included) is drawn by default to keep the map dense — switch "Include access" off to see only the 22 backbone devices. Only core and aggregation devices are labelled by default — switch on "All labels" for access devices; scroll to zoom and drag to pan. "Edit layout" lets you drag nodes and saves the arrangement per layer on drop (write requires the local host or a token); "Reset layout" returns to the automatic arrangement. If the backend has not been restarted yet, edits stay in this browser and the toolbar says so',
         'Bandwidth is shown by **line width** only (100G / 25G / 10G / others); down links are red dashed and links with alarms turn orange. The "Fold parallel links" switch expands ×N into a fan',
         'The right rail (about 25%) puts the stat cards in one row above "NEs with most critical alarms"; both are the same width. The breakdown under each number stays hidden until the number is clicked; the card title still drills. The topology canvas takes the left 75% and all height left under the toolbar. Click a node or a name in that list to focus: other nodes dim and only one-hop neighbors stay lit, and the detail drawer slides in from the right (Overview / Interfaces / Alarms / Impact). Click again, click empty space, click the mask, or press Esc to close. Use the wheel to zoom and drag empty space to pan',
         'Impact analysis lists **root-cause candidates**, not a confirmed root cause: only a down device with no failed device further upstream is listed, and the API has no alarm timestamp. Utilization stays N/A when traffic is absent; port speed is never used as a substitute',
@@ -1178,6 +1217,21 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         'The PDF layer is coloured as in the PDF legend: 40G fibre, 10G fibre, IPRAN/DWDM, P26A-D project links, planned/under construction and base links (the untyped black lines); dashed means planned. Endpoints are projected from PDF coordinates with a thin-plate spline and snapped to the nearest site, so **position error is about 1-10 km** and dense areas may snap to a neighbouring site. It shows which links are drawn on the PDF only - not the cable route, capacity or latency',
         'Click a site for PDF region, GPS, master-data site and id, county/region, match method and verification; Locate / Zoom fly the map to it',
         '**Static data page**: the GPS mapping is public/olib/olib-site-geo.json, generated by scripts/gen-olib-site-geo.mjs; the page does not call the GIS API. Auto-refresh defaults to 1800s and the content does not change',
+      ],
+    },
+    nocTopology: {
+      desc: 'NOC unified network topology center (1.0): brings IPRAN, MW microwave and OLIB FO into **one data model and one visual language**, with four views - network overview, logical topology, traffic and geographic. It does not replace the three specialist pages: IPRAN, MW and OLIB keep owning their deep analysis; this page owns the unified picture, cross-domain browsing and a single entry point.',
+      usage: [
+        'Two independent dimensions: **view** (overview / logical / traffic / geographic) and **source** (all / IPRAN / MW / OLIB FO). You can look at MW alone on the map, or all sources in the traffic view. Deep links are supported: `?page=nocTopology&view=traffic&source=mw&layer=ipran&gran=rt`',
+        '**Device identity = source + native ID** (for example `ipran:<UME uuid>`, `mw:<IP>`, `olib:<site index>`). Nothing is merged automatically across sources: similar names or nearby coordinates are not evidence. IPRAN site names come from UME and include fuzzy matches, so they cannot serve as a master-data siteId',
+        'Traffic semantics: **TX = source device to target device, RX = target device to source device**. Both directions use their native values and are never averaged. The eight-step Weathermap scale is the same one the IPRAN page uses; the MW healthy / minor / major / critical four levels (60 / 70 / 80 thresholds) are preserved verbatim - the eight colours express load only and never redefine severity',
+        '**No traffic sample means N/A, never 0%**: in the measured run only 50 of 141 IPRAN links had port traffic (KPI covers the 13 configured NEs), 20 MW physical links had no KPI for the period, and all OLIB links have no live traffic. Those links are drawn as neutral dashed lines and both the legend and the details say why',
+        'OLIB lines and some backbone links are **schematic connections** (592 page-1 digitised links covering 411 sites, plus 17 page-2 backbone links). They are not the cable route and have no live utilization; every OLIB edge carries `schematic=true` and never takes traffic colours',
+        'The link drawer shows real MW history (all daily periods, or the last 96 15-minute slots in realtime mode). The IPRAN `topo_traffic.py` reads only the latest KPI snapshot, so **there is no history endpoint and no curve is drawn** - no synthetic history is stitched together',
+        'The source health panel reports Connected / Partial / Stale / Unavailable / Static per source. The three fetches are independent (`Promise.allSettled` semantics), so one failing source only turns its own row red. The summary cards and risk list follow the source filter but not the search box',
+        'Canvas: scroll to zoom, drag to pan, double-click to fit. Click a device to focus its one-hop neighbours and open details; click a link for both endpoints, capacity, port details and history. Search and press Enter to locate (the viewport only moves on an explicit search)',
+        'Automatic refresh is throttled per source: IPRAN 300 s, MW 900 s (15-minute collection), OLIB 1800 s (static assets). The header suggestion is 300 s and this page is registered for **in-place refresh**: on `myapp-refresh` it silently refetches without rebuilding the map or canvas',
+        'Explicitly out of scope for 1.0: automatic cross-system device/link correlation, automatic fault propagation, inventing live utilization for OLIB, and inventing history for IPRAN',
       ],
     },
     mwRealTime: {
@@ -1264,7 +1318,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       ],
     },
     cn_kpi: {
-      desc: 'CN KPI dashboard: a native rebuild of the original FineBI "CN KPI" board, with 18 widgets (VLR / Voice / Data subscribers, USSD success rate, location-update success rate, USPP / MSC / xGW utilisation, FDD / TDD traffic, RG-6/11/12/30 and more). Data is read from db_ps_cs_cn through the remote read-only SQL API and does not depend on the my-finebi process. Note: this page draws on two independent pipelines — manually exported _EMS tables (which stall, and whose granularity follows the export range) and auto-synced _UME tables — so fetching degrades gracefully and the granularity is labelled on both the card and the page header.',
+      desc: 'CN KPI dashboard: a native rebuild of the original FineBI "CN KPI" board, with 23 widgets (VLR / Voice / Data subscribers, incoming / outgoing call answer ratio, international MOU, MGW32 resource utilisation and usage, USSD success rate, location-update success rate, USPP / MSC / xGW utilisation, FDD / TDD traffic, RG-6/11/12/30 and more). Data is read from db_ps_cs_cn through the remote read-only SQL API and does not depend on the my-finebi process. Note: this page draws on two independent pipelines — manually exported _EMS tables (which stall, and whose granularity follows the export range) and auto-synced _UME tables — so fetching degrades gracefully and the granularity is labelled on both the card and the page header. The incoming / outgoing call answer ratio, international MOU and the two MGW32 charts (added 2026-11-20) read manually exported _EMS tables only: there is **no _UME twin and no 1month_* monthly table**, so they go empty when the export stops (no source switch, no zero filling); MGW32 is hourly and is averaged per day on the chart (not a peak), and today is excluded (only part of it is complete).',
       usage: [
         'The default range is the last 31 days; after changing the range and querying, month-granularity widgets automatically widen to the last 13 months',
         'An orange "Monthly" tag on a card means each point is one month, not one day; a gold "Switched" tag means the original table stalled and an auto-synced source of the same name is being used',
@@ -1321,7 +1375,6 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '"Data caliber notes" is collapsed by default (click to expand); "Export Excel" writes an overview plus one wide sheet per widget for reconciliation',
       ],
     },
-
     imonitor: {
       desc: 'UME iMonitor screen (guard-imonitor-iui, screen_id=1): embeds the original UME monitoring screen from the UME portal (172.17.208.1:28808) inside myapp, keeping all of its charts and interactions. The page is reverse-proxied to the upstream through nginx port 8088 (the portal dedicated-port scheme); on first visit an injected script signs in to em-portal automatically using the credentials from Settings → Credentials ("UME Customer Service KPI Portal", key ume_in). The login page frame-bust is neutralised in the proxy and the iframe additionally carries a sandbox, so the sign-in flow can never replace the myapp shell.',
       usage: [

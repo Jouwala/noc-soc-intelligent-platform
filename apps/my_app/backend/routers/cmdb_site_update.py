@@ -6,24 +6,53 @@
 - GET /api/cmdb-site-update/summary   上次运行摘要 + modify 目录产出文件清单
 - GET /api/cmdb-site-update/download  下载产出文件（只允许 modify 目录内）
 
-触发执行不在这里，走统一的任务接口 `POST /api/tasks/eflow_site_update/run` ——
-复用队列、禁用态校验、执行历史与失败记录，不要另开一条触发路径。
+「生成差异文件」的触发不在这里，走统一的任务接口 `POST /api/tasks/eflow_site_update/run`
+——复用队列、禁用态校验、执行历史与失败记录，不要另开一条触发路径。
 
-**只读 + 只下载，本模块不写库、不改任何业务数据。**
+站点同步操作页的**写库**走本模块 /writeback/*：预览令牌 + confirm 双开关，
+一次性人工动作，刻意不注册成定时任务、不进队列（避免被调度器误跑）；
+写库目标仅 app.master_site_db，脚本先自动备份，且默认不删站。
+除 /writeback/apply 外本模块全部只读。
 """
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
+from backend.security import require_protected
 from backend.services.eflow import eflow_site_update_task as task
+from backend.services.eflow import master_site_writeback_service as writeback
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/cmdb-site-update", tags=["cmdb-site-update"])
+
+
+class WritebackApply(BaseModel):
+    token: str
+    confirm: bool = False
+
+
+@router.get("/writeback/preview")
+def writeback_preview(_=Depends(require_protected)):
+    """写库预览（不写库）：预期 update/insert + 令牌。令牌绑定源文件指纹，改了源表要重新预览。"""
+    return writeback.preview()
+
+
+@router.post("/writeback/apply")
+def writeback_apply(body: WritebackApply, _=Depends(require_protected)):
+    """确认写库：必须带预览令牌 + confirm=true。默认不删站，脚本先自动备份 PG 表。"""
+    return writeback.apply(body.token, body.confirm)
+
+
+@router.get("/writeback/last")
+def writeback_last():
+    """上次写库结果摘要（只读）。"""
+    return {"last_run": writeback.last_writeback()}
 
 
 @router.get("/summary")

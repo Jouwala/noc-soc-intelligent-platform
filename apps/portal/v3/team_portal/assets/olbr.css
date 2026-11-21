@@ -2568,7 +2568,10 @@ html:not(.dark) .qc-spark .sp-bar.sp-warn { stroke-width: 1; }
 
    ⚠️ 窄屏退让：nowrap 之后三段永不换行，极窄视口下靠 .p-hd 的 min-width:0
       让标题先被压到 0（省略号），再把余量给按钮 —— 按钮**始终可见**，
-      这是刻意的取舍（按钮是操作入口，标题被压缩可接受）。 */
+      这是刻意的取舍（按钮是操作入口，标题被压缩可接受）。
+   ⚠️ 2026-11-20：QA 栏页签增至 5 个后单行放不下，本栏改为**两行**（页签独占
+      第二行）—— 见下方 .map-tools 之后的 #qaSlot 规则与那里的实测数字。
+      故这条 nowrap 现在只作用于地图栏。 */
 /* ⚠️ 只改有页签的这两栏（#l0Map / #qaSlot），不动全局 .p-head：
    全局那条被报告文件栏等**没有页签**的面板共用，那些面板"标题吃余量 +
    按钮自然贴右"就够了，不需要三段式，给它们加 nowrap 只会让窄屏更挤。
@@ -2576,16 +2579,14 @@ html:not(.dark) .qc-spark .sp-bar.sp-warn { stroke-width: 1; }
    ⚠️ .p-hd 也只在**这两栏**覆写：全局 .p-hd 仍是 flex:1 1 auto，
    千万别动它 —— 其它面板靠这颗弹簧与 .map-tools 配对把页签留在中间；
    一旦全局改成 0 1 auto，那些面板的页签会跟着跑到左边。 */
-#l0Map .p-head, #qaSlot .p-head { flex-wrap: nowrap; }
+#l0Map .p-head { flex-wrap: nowrap; }
 /* 2026-11-08：从 flex:1 1 0（左侧弹簧，把页签顶到正中）改成 flex:0 1 auto
    （只占标题内容宽）→ 页签紧跟标题、靠左。shrink 仍为 1 且全局 .p-hd 带
    min-width:0，长标题照样先被压成省略号，不会把工具按钮挤出标题条。
    同日追加需求「Knowledge Q&A 页签也靠左，参考 GIS Map」，故把 #qaSlot 并列进来：
    QA 栏的 .p-head 由 qaSectionHtml() 直接写进 #qaSlot，结构与地图栏同为
    .p-hd / .map-tabs / .map-tools 三颗直接子元素，两栏可以共用同一条规则。
-   ⚠️ 别把这条并进全局 .p-hd：其它面板靠 1 1 auto 吃余量。
-   ⚠️ nowrap 那条同样要并列 #qaSlot —— 三段式的前提是三段不换行，
-      只给地图栏加会让 QA 栏在边界宽度上掉成三行、弹簧彻底失效。 */
+   ⚠️ 别把这条并进全局 .p-hd：其它面板靠 1 1 auto 吃余量。 */
 #l0Map .p-head > .p-hd, #qaSlot .p-head > .p-hd { flex: 0 1 auto; }
 /* 2026-11-06：地图栏从三页签变四页签（新增 IPT Power）。原来 `flex:none` 固定
    成内容宽，多一个页签就多约 95px；虽然 nowrap 后右侧弹簧先被压，极窄视口下
@@ -2603,6 +2604,26 @@ html:not(.dark) .qc-spark .sp-bar.sp-warn { stroke-width: 1; }
    左侧已无弹簧（其它面板仍有），若本段不带 auto，按钮会紧贴在页签右侧
    而不是卡片右缘（居中时期同理）。 */
 .map-tools { display: flex; align-items: center; justify-content: flex-end; gap: var(--s2); flex: 1 1 0; min-width: 0; margin-left: auto; }
+/* ⚠️ 2026-11-20（用户要求 Knowledge Q&A 加第五页签 Fiber Topology）：
+   **QA 栏的标题条改成两行，页签独占第二行。** 原因是实测出来的，不是审美选择 ——
+   本栏 1600px 视口下可用宽 732px（panel 766 − 内边距）：
+     · 标题 135 + 页签 571（5 个页签的内容宽）+ 工具 0 基准 = 706，正好放得下，
+       于是 flex 判定"无需收缩"；
+     · 而 .map-tools 的基准是 0（吃剩余空间的弹簧），剩下的 12px 就是它分到的全部，
+       两颗按钮（约 120px 宽）于是溢出自己的盒子、按 DOM 顺序**画在页签上面**。
+       实测命中测试：第 5 个页签中心点命中的是 #qaOpen 的图标 —— 页签点不动，
+       而且看起来"按钮盖在页签上"。这不是换行判定，是弹簧基准为 0 造成的。
+   为什么不是"让页签条横向滚动"：.map-tabs 隐藏了滚动条（scrollbar-width:none），
+   鼠标用户没有 shift+滚轮的习惯，第五个页签会变成"看不见也够不着"。
+   两行是唯一能让 5 个页签始终可见、且工具按钮不被压扁的排法：
+     · 第一行：标题 | 工具（.map-tools 用 order 提到第二行之前，DOM 顺序不变）；
+     · 第二行：页签条 flex-basis:100%，靠左（与 2026-11-08「页签靠左」一致）。
+   地图栏（#l0Map）仍是 4 个页签、仍单行 nowrap —— 那条规则没动。
+   ⚠️ 别为了"回到单行"把 .map-tools 的基准改回 0：那正是本 bug 的成因。
+   ⚠️ 本栏以后再加页签，第二行会自动换行/滚动，不必再改这里。 */
+#qaSlot .p-head { flex-wrap: wrap; row-gap: 6px; align-items: center; }
+#qaSlot .p-head > .map-tabs { order: 3; flex: 1 1 100%; }
+#qaSlot .p-head > .map-tools { order: 2; flex: 0 0 auto; }
 /* 缩放锁的两态（2026-10-22 加）。
    · 锁定（默认）= 普通 .gb：中性色，和刷新 / Open Link 同一档，不抢眼 ——
      它是常态，不该看起来像"有什么需要注意的"；

@@ -1,6 +1,6 @@
 /* 拓扑工具条：层 / 布局 / 着色 / 搜索 / 过滤 / 缩放。文案全部走 i18n。 */
 import { Button, Input, Segmented, Select, Space, Switch } from 'antd'
-import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
+import { DownloadOutlined, HeatMapOutlined, ReloadOutlined } from '@ant-design/icons'
 
 import { WH } from '../../theme'
 import { useI18n } from '../../i18n'
@@ -37,6 +37,8 @@ interface Props {
   onZoomIn: () => void
   onZoomOut: () => void
   onFit: () => void
+  /** 切到整屏 Weathermap 视图（只读流量图） */
+  onWeathermap?: () => void
 }
 
 export default function TopologyControls(p: Props) {
@@ -88,6 +90,11 @@ export default function TopologyControls(p: Props) {
           <Button size="small" onClick={p.onFit}>{t('ipranTopo.btn.fit')}</Button>
           <Button icon={<ReloadOutlined />} loading={p.loading} onClick={p.onRefresh}>{t('ipranTopo.btn.refresh')}</Button>
           <Button icon={<DownloadOutlined />} disabled={!p.canExport} onClick={p.onExport}>{t('ipranTopo.btn.export')}</Button>
+          {p.onWeathermap && (
+            <Button size="small" type="primary" ghost icon={<HeatMapOutlined />} onClick={p.onWeathermap}>
+              {t('ipranTopo.view.weathermap')}
+            </Button>
+          )}
           {p.metaLine && <span style={{ color: WH.textDim, fontSize: 12 }}>{p.metaLine}</span>}
         </Space>
       </CardBase>
