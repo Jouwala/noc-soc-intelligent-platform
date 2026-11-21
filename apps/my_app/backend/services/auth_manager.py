@@ -37,6 +37,20 @@ try:
 except ImportError:
     from rsa_util import rsa_encrypt_pem
 
+# 运行角色守卫（2026-11-21）：隔离副本（.smoke / 便携副本）不得向生产上游登录。
+# 事故背景见 env_role.py 顶部：副本里的过期口令每登录一次就消耗上游的失败计数，
+# 把生产账号撞锁。这里在**所有登录的公共入口** _do_login 上拦，避免逐任务加开关漏掉。
+# 导入失败时降级为无守卫（独立运行/老部署不因此整体不可用）。
+try:
+    from backend.services.env_role import assert_upstream_login_allowed
+except ImportError:
+    try:
+        from env_role import assert_upstream_login_allowed
+    except ImportError:
+        def assert_upstream_login_allowed(host, port=0, caller=""):  # type: ignore
+            """守卫模块不可用时不做限制（与改动前行为一致）。"""
+            return None
+
 # 跨平台文件锁
 if sys.platform == 'win32':
     import msvcrt
@@ -202,9 +216,35 @@ AUTH_CONNECT_TIMEOUT = float(os.environ.get("AUTH_CONNECT_TIMEOUT", "30"))
 #   检测到 locked → 写一份带截止时间的状态文件 → 冷却期内直接拒绝登录，
 #   各任务快速失败并如实上报，不再打扰上游。
 #
-# 冷却时长：默认 1800s（30 分钟）。上游自动解锁周期未知，取 30 分钟是在
-# 「不干扰自动解锁」与「解锁后尽快恢复」之间的折中；可用环境变量调整。
+# 冷却时长（2026-11-21 按失败原因拆分）：
+#   · 普通终态（密码到期 / 密码错误 / 验证码）：默认 1800s（30 分钟）。
+#     这类错误**重试几次就够**，改密或改凭据通常几分钟内完成。
+#   · 上游明确「账号已被锁」(`User has been locked`)：上游锁定周期是
+#     **1440 分钟**（2026-10-13 管理员确认的「连续 3 次密码错误 → 锁 1440
+#     分钟」）。原来两种原因共用 1800s，结果是锁定期间每 30 分钟仍去撞一次，
+#     而每次撞锁都在给上游的失败计数充值 —— 2026-11-20/21 iPRAN `noc1` 的
+#     「解锁之后又被锁」就是这个模式：本地熔断 30 分钟一跳，上游锁 24 小时。
+#     这里改成 4 小时起，并在**重复检测到锁定**时翻倍（上限 24 小时），
+#     让探测频率随「连续撞锁次数」退避，而不是固定空转。
+#   · 解锁后要立刻恢复：调 `clear_lock_state()`（设置页「清除熔断」按钮 /
+#     POST /api/credentials/{key}/clear-lock），不必等冷却走完。
+# 三者都可用环境变量覆盖，且都在**模块导入时求值**（改 .env 要重启后端与 worker）。
 AUTH_LOCK_COOLDOWN_SEC = int(os.environ.get("AUTH_LOCK_COOLDOWN_SEC", "1800") or 1800)
+AUTH_LOCKED_COOLDOWN_SEC = int(os.environ.get("AUTH_LOCKED_COOLDOWN_SEC", "14400") or 14400)
+AUTH_LOCKED_COOLDOWN_MAX_SEC = int(
+    os.environ.get("AUTH_LOCKED_COOLDOWN_MAX_SEC", "86400") or 86400)
+
+# 判定「这次失败是上游账号已锁定」而不是普通密码错误的特征串。
+# ⚠ 不能只匹配 `locked`：密码错误的原文是
+#   `Incorrect user name or password, the account may be locked if you enter
+#    wrong for multiple times (code=4)`
+# 它含 locked 却是「还没锁、再试就要锁」，必须走短冷却并立即停止重试。
+# 只认上游明确宣告已锁定的措辞。
+_UPSTREAM_LOCKED_KEYS = (
+    "user has been locked",
+    "account has been locked",
+    "账号已被上游锁定",
+)
 
 
 def _safe_account(username: str) -> str:
@@ -228,36 +268,91 @@ def _lock_state_path(host: str, port: int, username: str = "") -> Path:
     return AUTH_CACHE_DIR / f".locked_{host}_{port}{suffix}.json"
 
 
+def _is_upstream_locked_reason(reason: str) -> bool:
+    """该失败原因是否表示「上游已把账号锁住」（决定用哪档冷却）。"""
+    lowered = (reason or "").lower()
+    return any(k in lowered for k in _UPSTREAM_LOCKED_KEYS)
+
+
+def _read_lock_raw(path: Path) -> dict | None:
+    """只读锁定状态文件，**不做过期判断**（供写入时累计撞锁次数用）。"""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _read_lock_state(host: str, port: int, username: str = "") -> dict | None:
-    """读取锁定状态；不存在或已过冷却期返回 None（并顺手清理过期文件）。"""
+    """读取锁定状态；不存在或已过冷却期返回 None。
+
+    2026-11-21：冷却期满**不再删除**状态文件。原因是要保留 `hits`（连续撞锁
+    次数）用于冷却退避（4h → 8h → 16h → 24h 封顶）；删了文件，下一次检测就
+    从头计数，退避永远不生效。文件只有几十字节、每主机每账号一份，
+    登录成功或人工清除时由 `clear_lock_state()` 删除。
+    """
     p = _lock_state_path(host, port, username)
     if not p.exists():
         return None
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        until = float(data.get("until") or 0)
-        if until > time.time():
-            return data
-        # 冷却期已过：删除标记，允许下一次尝试（上游可能已自动解锁）
-        p.unlink(missing_ok=True)
+    data = _read_lock_raw(p)
+    if not data:
+        logger.debug("[AUTH] 锁定状态文件损坏，忽略 (%s:%s)", host, port)
         return None
-    except Exception:  # noqa: BLE001
-        logger.debug("[AUTH] 锁定状态文件损坏，忽略 (%s:%s)", host, port, exc_info=True)
-        return None
+    until = float(data.get("until") or 0)
+    if until > time.time():
+        return data
+    # 冷却期已过：允许尝试（上游可能已自动解锁），但保留文件以延续撞锁计数。
+    return None
+
+
+def _cooldown_for(reason: str, hits: int) -> int:
+    """按失败原因与连续撞锁次数决定本轮冷却秒数。"""
+    if _is_upstream_locked_reason(reason):
+        base = max(60, AUTH_LOCKED_COOLDOWN_SEC)
+        # hits=1 → base；2 → base*2；3 → base*4 …，封顶 AUTH_LOCKED_COOLDOWN_MAX_SEC
+        factor = 2 ** max(0, min(hits, 8) - 1)
+        return int(min(AUTH_LOCKED_COOLDOWN_MAX_SEC, base * factor))
+    return AUTH_LOCK_COOLDOWN_SEC
 
 
 def _write_lock_state(host: str, port: int, reason: str, username: str = "") -> None:
-    """记录账号已被上游锁定，冷却期内不再尝试登录。"""
+    """记录账号处于熔断冷却期，冷却期内不再尝试登录。
+
+    2026-11-21：新增 `hits` 与按原因分档的冷却（见模块内 AUTH_LOCKED_COOLDOWN_SEC
+    的说明）。连续撞锁会翻倍退避，避免「本地 30 分钟一跳、上游 24 小时才解」。
+    """
     p = _lock_state_path(host, port, username)
+    prev = _read_lock_raw(p)
+    locked_now = _is_upstream_locked_reason(reason)
+
+    hits = 1
+    if locked_now and prev and _is_upstream_locked_reason(str(prev.get("reason", ""))):
+        try:
+            prev_hits = int(prev.get("hits") or 1)
+        except (TypeError, ValueError):
+            prev_hits = 1
+        # 上一次锁定距今超过封顶冷却时长，视为新的一轮（避免很久以后还从大退避起步）。
+        try:
+            prev_locked_at = datetime.fromisoformat(str(prev.get("locked_at", "")))
+            if prev_locked_at.tzinfo is None:
+                prev_locked_at = prev_locked_at.replace(tzinfo=timezone.utc)
+            stale = (datetime.now(timezone.utc) - prev_locked_at).total_seconds() > AUTH_LOCKED_COOLDOWN_MAX_SEC
+        except Exception:  # noqa: BLE001
+            stale = False
+        hits = 1 if stale else prev_hits + 1
+
+    cooldown = _cooldown_for(reason, hits)
     payload = {
         "host": host,
         "port": port,
         "username": username or "",
         "reason": reason[:300],
         "locked_at": datetime.now(timezone.utc).isoformat(),
-        "until": time.time() + AUTH_LOCK_COOLDOWN_SEC,
-        "cooldown_sec": AUTH_LOCK_COOLDOWN_SEC,
+        "until": time.time() + cooldown,
+        "cooldown_sec": cooldown,
+        "hits": hits,
+        "upstream_locked": locked_now,
     }
     try:
         tmp = p.with_suffix(".tmp")
@@ -962,6 +1057,8 @@ def _do_login(host: str, port: int, username: str, password: str) -> dict:
     （同样以 `$10` 结尾）但 len=225，实测登出**无效**（返回 204 但会话不死）。
     ⚠ 也**不是** Z-AUTH-CODE cookie（cookie 值 len=43 且无 `$` 后缀）。
     """
+    # 隔离副本守卫（2026-11-21）：必须在任何网络请求之前拦。
+    assert_upstream_login_allowed(host, port, caller="auth_manager._do_login")
     logger.info(f"[AUTH] 开始登录 {host}:{port} (用户: {username})")
 
     # ===== 空密码护栏（2026-10-14）=====
@@ -1381,8 +1478,11 @@ def get_auth(host: str, port: int, username: str, password: str,
     _locked = _read_lock_state(host, port, username)
     if _locked:
         remain = max(0, int(float(_locked.get("until", 0)) - time.time()))
-        msg = (f"[AUTH] 账号锁定冷却中（剩余 {remain}s，共 {_locked.get('cooldown_sec')}s），"
-               f"本轮跳过登录 ({host}:{port})。锁定原因：{_locked.get('reason', '未知')}")
+        _hint = ("；若已在 UME 侧解锁，可在「设置 → 凭据」点「清除熔断」立即恢复"
+                 if _locked.get("upstream_locked", True) else "")
+        msg = (f"[AUTH] 账号锁定冷却中（剩余 {remain}s，共 {_locked.get('cooldown_sec')}s，"
+               f"连续撞锁第 {_locked.get('hits', 1)} 次），"
+               f"本轮跳过登录 ({host}:{port})。锁定原因：{_locked.get('reason', '未知')}{_hint}")
         logger.warning(msg)
         raise Exception(msg)
 

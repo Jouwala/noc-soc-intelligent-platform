@@ -1149,6 +1149,10 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 
 重试的判定不是"失败就重跑"，而是**先看数据缺口是否已被后续成功执行补上**；超过 24h 硬上限直接放弃（`task_registry.py:320`）。
 
+**永久性失败不重投（2026-11-21 扩充）**：`services/auto_retry.py:166` 的 `NON_RETRYABLE_KEYS` 命中即放弃 —— 这类失败重试不仅无效，还会**给上游的失败计数充值**。除原先的「账号已被上游锁定 / 密码到期」外，2026-11-21 把**密码错误**也纳入：上游原文是
+`Incorrect user name or password, the account may be locked if you enter wrong for multiple times (code=4)`，
+它带 `locked` 字样却表示「**尚未**锁定、再试就要锁」。2026-11-20 iPRAN `noc1` 事故里，17:19 那次失败被 auto_retry 在 17:20 / 17:40 各重投一次（`log/worker_m_20261120.log:10110`、`:10270`），恰好凑满上游「连续 3 次密码错误 → 锁 1440 分钟」。熔断冷却与「清除熔断」见 `05-security-and-credentials.md`。
+
 ### 邮箱通道降级：延后执行，恢复后按时效补发（2026-11-18）
 
 用户要求：**邮箱通道没恢复时，邮箱相关任务不必再跑一遍；等通道恢复、且时效未过再执行。**

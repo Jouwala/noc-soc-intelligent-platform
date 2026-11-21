@@ -29,7 +29,8 @@ param(
     [int]$IssueNumber = 0,
     [string]$Remote = 'platform',
     [switch]$DryRun,
-    [switch]$SkipFrontendBuild
+    [switch]$SkipFrontendBuild,
+    [switch]$SkipCredentialSync
 )
 
 $ErrorActionPreference = 'Continue'
@@ -490,6 +491,39 @@ try {
             throw "找不到已验证的 $SmokePs1。真跑把 §8.1–§8.4 与 pytest 委托给该脚本，请确认 D:\02 上存在 ops\smoke\smoke.ps1。"
         }
         New-SmokeLock -WaitSec 1800
+        # ---------- 同步生产的三张本地权威表到副本（2026-11-21） ----------
+        # 为什么必须每次同步：副本 app.db 只在 provision-smoke-runner.ps1 -Apply 时播种，
+        # 副本放久就会与生产分叉。2026-11-20 生产改了 ipran_ume 密码、副本仍是 9 月的旧密码，
+        # 副本里的任务/看板一登录就拿错口令去撞真实 UME —— 上游「连续 3 次密码错误锁 1440 分钟」，
+        # 直接把生产账号撞锁（11-20 18:00、11-21 13:09 两次实测）。
+        # 代码侧另有守卫（backend/services/env_role.py：隔离副本禁止登录生产上游），
+        # 这里同步凭据是第二道保险，保证副本里看到的配置与生产一致。
+        if (-not $SkipCredentialSync) {
+            try {
+                $runnerMeta = Get-Content -LiteralPath (Join-Path $Root '.smoke-runner') -Raw -Encoding UTF8 | ConvertFrom-Json
+                $projRoot = [string]$runnerMeta.project_root
+                $authTool = Join-Path $Root 'ops\deploy\local_authority_tools.py'
+                $srcDb = Join-Path $projRoot 'apps\my_app\db\app.db'
+                $dstDb = Join-Path $Root 'apps\my_app\db\app.db'
+                if ($projRoot -and (Test-Path -LiteralPath $srcDb) -and (Test-Path -LiteralPath $authTool) -and (Test-Path -LiteralPath $dstDb)) {
+                    $py = Join-Path $projRoot 'runtime\python312\python.exe'
+                    if (-not (Test-Path -LiteralPath $py)) { $py = 'python' }
+                    Write-Log "同步本地权威表（credentials / task_schedule_config / email_recipients）：$srcDb -> $dstDb"
+                    & $py $authTool migrate --source $srcDb --target $dstDb --backup-dir (Join-Path $Root 'TMP') 2>&1 |
+                        ForEach-Object { Write-Log "  [credsync] $_" }
+                    if ($LASTEXITCODE -ne 0) {
+                        $Notes += "警告：本地权威表同步失败（exit=$LASTEXITCODE），副本凭据可能与生产不一致；代码侧隔离守卫仍会拦上游登录。"
+                        Write-Log $Notes[-1]
+                    }
+                } else {
+                    $Notes += "跳过本地权威表同步：源/目标/脚本缺失（$srcDb -> $dstDb）。"
+                    Write-Log $Notes[-1]
+                }
+            } catch {
+                $Notes += "本地权威表同步异常（不影响冒烟）：$($_.Exception.Message)"
+                Write-Log $Notes[-1]
+            }
+        }
         $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
         # 冒烟前例行维护：把生产的三张本地权威表同步进 runner。

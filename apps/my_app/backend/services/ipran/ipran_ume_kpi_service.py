@@ -632,6 +632,14 @@ class UmeSessionClient:
         if shared:
             self._adopt_shared_auth(shared["cookie"], shared["forgery_token"])
             return
+        # 隔离副本守卫（2026-11-21）：自有登录分支绕过 auth_manager，必须在这里
+        # 单独拦一次。事故背景：`.smoke` 副本用 9 月的旧密码登录真实 UME，把生产
+        # 账号撞锁（详见 backend/services/env_role.py 顶部）。
+        try:
+            from backend.services.env_role import assert_upstream_login_allowed
+        except ImportError:
+            from env_role import assert_upstream_login_allowed  # 独立运行
+        assert_upstream_login_allowed(HOST, PORT, caller="ipran_ume_kpi_service.login")
         logger.info("[LOGIN] Starting authentication via requests.Session...")
         # 清空旧 cookie：首次登录时本就为空（行为不变）；401 恢复重登时带着已死
         # 会话进来，不清的话服务端新 Set-Cookie 与旧值可能在 jar 里并存，干扰后续请求。

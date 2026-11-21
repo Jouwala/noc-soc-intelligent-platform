@@ -119,6 +119,20 @@ powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-wa
 - `smoke-reload-watcher.ps1`：改 `smoke-watcher.ps1` 后停旧进程并
   `install-smoke-watcher.ps1 -Start`（避免计划任务 IgnoreNew 仍跑旧代码）。
 
+#### 副本不得使用过期凭据去撞生产上游（2026-11-21 事故后加固）
+
+2026-11-20/21 的 iPRAN `noc1` 反复锁号，根因就在冒烟副本：副本的 `credentials.ipran_ume`
+停在 2026-09-24 的旧口令，而副本 `ipran_kpi_sync` 仍是每小时启用 —— 冒烟栈一起来
+（11-20 18:00、11-21 13:09 实测）就用旧口令登录**真实** UME，上游「连续 3 次密码错误
+锁 1440 分钟」直接把生产账号撞锁。现在有三道防线，**改动后不要拆掉任何一道**：
+
+| 防线 | 位置 | 作用 |
+| --- | --- | --- |
+| 副本不跑调度器 | `provision-smoke-runner.ps1` 强制写 `MY_APP_DISABLE_SCHEDULER=1` 到副本 `apps\my_app\backend\.env` | 副本启动后不再按生产 cron 跑任何定时任务（顺带消除「副本发真邮件」） |
+| 每次冒烟前同步权威表 | `smoke-local.ps1` 调 `local_authority_tools.py migrate`（`-SkipCredentialSync` 可跳过） | `credentials` / `task_schedule_config` / `email_recipients` 与生产一致，副本不会拿旧口令 |
+| 代码级守卫 | `apps\my_app\backend\services\env_role.py` | 隔离副本（`ISOLATED_COPY.flag` / `.smoke-runner`）登录**非回环地址**前直接抛 `PermissionError`，临时放行用 `ISOLATED_ALLOW_UPSTREAM_LOGIN=1` 或 `ISOLATED_LOGIN_ALLOW_HOSTS` |
+
+
 ### 冒烟值班：零 LLM token（推荐）
 
 整条链路设计就是 **本机脚本消耗 GitHub API，不经过对话里的 Agent**：

@@ -2,11 +2,17 @@
 credentials.py - 凭据管理 API 路由
 ==================================
 提供"设置"页面所需的凭据查询/更新/连接测试接口：
-- GET  /api/credentials          列出全部凭据组（密码掩码 + 来源标记）
-- PUT  /api/credentials          按 key 更新用户名/密码（写 db/app.db credentials 表）
-- POST /api/credentials/test     连接测试（ZTE UME 系 / eFlow 走真实登录，其余返回不支持）
+- GET  /api/credentials                  列出全部凭据组（密码掩码 + 来源标记）
+- PUT  /api/credentials                  按 key 更新用户名/密码（写 db/app.db credentials 表）
+- POST /api/credentials/test             连接测试（ZTE UME 系 / eFlow 走真实登录，其余返回不支持）
+- POST /api/credentials/{key}/clear-lock 清除该组的账号锁定熔断（2026-11-21 新增）
 
 存储实现见 backend/services/credential/credential_store.py。
+
+【2026-11-21 为什么要 clear-lock】
+上游 UME 锁号周期是 1440 分钟，而本地熔断冷却现在按原因分档（上游锁定 4 小时起、
+连续撞锁翻倍，见 auth_manager.AUTH_LOCKED_COOLDOWN_SEC）。管理员在 UME 侧解锁后，
+不能让任务再干等 4 小时 —— 由本接口立即清掉熔断文件，下一次调度就能正常登录。
 """
 
 import time
@@ -17,6 +23,7 @@ from pydantic import BaseModel
 
 from backend.services.credential.credential_store import (
     CREDENTIAL_GROUPS,
+    CredentialReadError,
     _GROUP_INDEX,
     get_credential,
     get_effective,
@@ -116,7 +123,10 @@ def update_credential(body: CredentialUpdate, request: Request):
         raise HTTPException(status_code=400, detail=(f"Unknown credential group: {body.key}" if en else f"未知凭据组: {body.key}"))
     if not body.username and not body.secret:
         raise HTTPException(status_code=400, detail=("Username and password cannot both be empty" if en else "用户名和密码不能同时为空"))
-    cur_user, cur_secret = get_effective(body.key)
+    try:
+        cur_user, cur_secret = get_effective(body.key)
+    except CredentialReadError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     new_user = body.username or cur_user
     new_secret = body.secret or cur_secret
     set_credential(body.key, new_user, new_secret)
@@ -133,7 +143,10 @@ def reveal_credential(key: str, request: Request):
     group = _GROUP_INDEX.get(key)
     if not group:
         raise HTTPException(status_code=400, detail=(f"Unknown credential group: {key}" if en else f"未知凭据组: {key}"))
-    user, secret = get_credential(key, group["default_user"], group["default_secret"])
+    try:
+        user, secret = get_credential(key, group["default_user"], group["default_secret"])
+    except CredentialReadError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     return {"key": key, "username": user, "secret": secret}
 
 
@@ -169,9 +182,11 @@ def test_credential(body: CredentialTestRequest, request: Request):
             user, pwd = get_credential(
                 group["key"], group["default_user"], group["default_secret"],
             )
-        except Exception as e:
-            logger.warning(f"[CRED] 读取凭据失败: {body.key}: {e}")
-            user, pwd = group["default_user"], group["default_secret"]
+        except CredentialReadError as e:
+            # 2026-11-21：读库失败不再回退到凭据组默认值（口令默认是空串）。
+            # 空密码/空 ssh 口令发出去会被上游按「密码错误」计数，直接中止更安全。
+            logger.error(f"[CRED] 读取凭据失败: {body.key}: {e}")
+            raise HTTPException(status_code=409, detail=str(e)) from e
         try:
             from backend.services.credential.credential_tester import run_test
         except Exception as e:
@@ -189,7 +204,11 @@ def test_credential(body: CredentialTestRequest, request: Request):
         user, pwd = get_credential(
             group["key"], group["default_user"], group["default_secret"],
         )
+    except CredentialReadError as e:
+        logger.error(f"[CRED] 读取凭据失败: {body.key}: {e}")
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
+    try:
         # ★ 熔断冷却提示（2026-10-13）：若该主机正处于熔断冷却期，直接告知运维，
         #   而不是真的再去撞一次上游（那会刷新失败计数、拖延自动解锁）。
         #
@@ -218,13 +237,23 @@ def test_credential(body: CredentialTestRequest, request: Request):
             if _st:
                 remain = max(0, int(float(_st.get("until", 0)) - time.time()))
                 reason = str(_st.get("reason", ""))[:300]
-                upstream_locked = ("User has been locked" in reason
-                                   or "code=4" in reason or "code\":\"4" in reason)
+                # 2026-11-21：与 auth_manager 用同一把尺子判断「是否真被上游锁定」。
+                # 原来还看 `code=4`，而密码错误的原文同样带 (code=4)，会把
+                # 「尚未锁、再试就要锁」误报成「上游确实锁定了」。
+                try:
+                    from backend.services.auth_manager import _is_upstream_locked_reason
+                except ImportError:
+                    from auth_manager import _is_upstream_locked_reason
+                upstream_locked = _is_upstream_locked_reason(reason)
                 lock_note = (
-                    " 上游确实报过「账号被锁」（code=4）。" if upstream_locked
+                    " 上游确实报过「账号被锁」（code=4）。若 UME 侧已解锁，"
+                    "点本卡下方的「清除熔断」即可立即恢复，不必等冷却走完。"
+                    if upstream_locked
                     else " 注意：熔断原因不一定是账号被锁（也可能是 HTTP 4xx/5xx 等瞬时错误）。"
                 ) if not en else (
-                    " Upstream did report an account lock (code=4)." if upstream_locked
+                    " Upstream did report an account lock (code=4). If it has been unlocked in UME, "
+                    "click \"Clear breaker\" below to resume immediately."
+                    if upstream_locked
                     else " Note: the trip reason may not be an account lock (could be a transient HTTP 4xx/5xx)."
                 )
                 return {
@@ -279,3 +308,64 @@ def test_credential(body: CredentialTestRequest, request: Request):
             "message": f"Login failed: {type(e).__name__}: {e}" if en else f"登录失败: {type(e).__name__}: {e}",
             "elapsed": round(time.time() - t0, 2),
         }
+
+
+@router.post("/{key}/clear-lock")
+def clear_lock(key: str, request: Request):
+    """清除该凭据组对应 (host, port, 账号) 的本地熔断标记。
+
+    使用场景（2026-11-21）：上游 UME 账号被管理员解锁后，本地熔断仍处于冷却期
+    （上游锁定按 4 小时起、连续撞锁翻倍）。与其干等，不如在这里点一下立即恢复。
+    本接口**只删本地状态文件，不联系上游**，所以不会产生任何登录尝试。
+    """
+    en = _is_en(request)
+    group = _GROUP_INDEX.get(key)
+    if not group:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Unknown credential group: {key}" if en else f"未知凭据组: {key}"),
+        )
+
+    ep = resolve_endpoint(key)
+    host, port = ep.get("host"), ep.get("port")
+    if not (host and port):
+        return {
+            "status": "unsupported",
+            "key": key,
+            "message": ("This credential group has no login endpoint, so it has no lock state."
+                        if en else "该凭据组没有登录端点，不存在熔断状态。"),
+        }
+
+    try:
+        user, _secret = get_credential(key, group["default_user"], group["default_secret"])
+    except CredentialReadError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    try:
+        from backend.services.auth_manager import clear_lock_state, get_lock_state
+    except ImportError:
+        from auth_manager import clear_lock_state, get_lock_state
+
+    before = get_lock_state(host, int(port), user or "")
+    # 同时清「按账号」与「旧命名（host:port）」两种文件，见 clear_lock_state 的说明。
+    clear_lock_state(host, int(port), user or "")
+    after = get_lock_state(host, int(port), user or "")
+    had = before is not None
+    logger.info("[CRED] 清除熔断 %s @ %s:%s（账号 %s）：清除前存在=%s，清除后存在=%s",
+                key, host, port, user, had, after is not None)
+    return {
+        "status": "ok",
+        "key": key,
+        "endpoint": ep,
+        "had_lock": had,
+        "previous": before,
+        "message": (
+            (f"Breaker cleared ({key} @ {host}:{port}). The next scheduled run will log in normally."
+             if had else
+             f"No breaker was recorded for {key} @ {host}:{port}; nothing to clear.")
+            if en else
+            (f"已清除熔断（{key} @ {host}:{port}），下一次调度会正常登录。"
+             if had else
+             f"{key} @ {host}:{port} 当前没有熔断记录，无需清除。")
+        ),
+    }

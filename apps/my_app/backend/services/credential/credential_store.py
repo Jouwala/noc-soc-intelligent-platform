@@ -713,22 +713,58 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
+class CredentialReadError(RuntimeError):
+    """读取凭据库失败（区别于「该凭据组没有配置」）。
+
+    2026-11-21 引入：原实现在 app.db 被占用/读取超时时把异常吞掉、返回 None，
+    调用方于是回退到凭据组默认值（口令默认值一律为空串）—— **一次数据库抖动
+    就变成「以空密码登录上游」**。实测 2026-11-21 13:03:26 就触发过一次
+    （`/api/credentials/test` 之前的生产任务日志：拒绝以空密码登录 … noc1）。
+    空密码在上游按「密码错误」计数，连续 3 次锁号 1440 分钟，是账号被撞锁的
+    直接路径之一。现在把「读失败」与「没配置」区分开：读失败重试后抛出本异常，
+    由调用方中止本次操作，绝不拿空口令去试。
+    """
+
+
 def _read_db(key: str):
-    """从数据库读取凭据，返回 (username, secret) 或 None。"""
+    """从数据库读取凭据，返回 (username, secret)，没有配置返回 None。
+
+    ⚠ 读失败**不再返回 None**（见 CredentialReadError 的说明），由调用方决定
+    重试还是中止。
+    """
+    conn = _get_conn()
     try:
-        conn = _get_conn()
-        try:
-            row = conn.execute(
-                "SELECT username, secret FROM credentials WHERE key = ?", (key,)
-            ).fetchone()
-            if row and (row["secret"] or row["username"]):
-                return row["username"], row["secret"]
-            return None
-        finally:
-            conn.close()
-    except Exception:
-        logger.warning(f"[CRED] 读取凭据失败: {key}", exc_info=True)
+        row = conn.execute(
+            "SELECT username, secret FROM credentials WHERE key = ?", (key,)
+        ).fetchone()
+        if row and (row["secret"] or row["username"]):
+            return row["username"], row["secret"]
         return None
+    finally:
+        conn.close()
+
+
+def _read_db_with_retry(key: str, attempts: int = 3, base_sleep: float = 0.2):
+    """读凭据库并带短重试；最终失败抛 CredentialReadError。
+
+    为什么重试：app.db 是本机唯一的凭据库（SG 3.3GB，与任务队列/日志同库），
+    备份、杀软扫描、并发写都可能造成瞬时 `database is locked`。3 次 ~0.2/0.4s
+    退避能覆盖绝大多数的瞬时锁，同时不会把「库真坏了」拖成长时间卡死。
+    """
+    last: Exception | None = None
+    for i in range(max(1, attempts)):
+        try:
+            return _read_db(key)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            if i < attempts - 1:
+                time.sleep(base_sleep * (i + 1))
+    logger.error("[CRED] 读取凭据失败（已重试 %d 次）: %s", attempts, key, exc_info=last)
+    raise CredentialReadError(
+        f"读取凭据组 {key} 失败（{type(last).__name__}: {last}）。"
+        f"为避免以空密码/默认值登录上游（会被上游按密码错误计数并锁定账号），"
+        f"本次操作已中止；请确认 apps/my_app/db/app.db 未被占用后重试。"
+    ) from last
 
 
 # ============================================================
@@ -764,7 +800,7 @@ def get_credential(key: str, default_user: str = "", default_secret: str = "",
     if cached and (now - cached[0]) < CACHE_TTL:
         db_val = cached[1]
     else:
-        db_val = _read_db(key)
+        db_val = _read_db_with_retry(key)
         with _cache_lock:
             _cache[key] = (now, db_val)
 
@@ -816,7 +852,7 @@ def get_effective(key: str):
     供 PUT 部分更新时合并未修改字段使用。
     """
     g = _GROUP_INDEX.get(key)
-    db_val = _read_db(key)
+    db_val = _read_db_with_retry(key)
     if db_val:
         du = g["default_user"] if g else ""
         ds = g["default_secret"] if g else ""

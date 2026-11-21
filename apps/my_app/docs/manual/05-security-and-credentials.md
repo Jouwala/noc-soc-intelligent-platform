@@ -411,6 +411,54 @@ MW / CNN 的重复 OAuth2 实现与 `_rsa_encrypt_pem` 一并删除（与
 调长 TTL 对被探活保护的主机只是多一次探测开销，对**未**传 probe 的消费方
 则是直接把死会话用出去 —— 后者才是需要靠短 TTL 兜底的场景。
 
+### 账号锁定熔断与「清除熔断」（2026-11-21）
+
+**上游规则**：UME 对「连续 3 次密码错误」锁号 **1440 分钟**（2026-10-13 管理员确认，
+记录在 `backend/services/auth_manager.py:302-306`）。因此「重试」本身就会把账号撞锁 ——
+凡是用同一份错口令再试一次，都是给上游的失败计数充值。
+
+**（1）冷却按原因分档**（`auth_manager.py:205-224`）
+
+| 失败原因 | 冷却 | 环境变量 |
+| --- | --- | --- |
+| 普通终态（密码到期 / 密码错误 / 上游要求验证码） | 30 分钟 | `AUTH_LOCK_COOLDOWN_SEC`（默认 1800） |
+| **上游已锁定**（`User has been locked`） | 4 小时起，**连续撞锁翻倍**，封顶 24 小时 | `AUTH_LOCKED_COOLDOWN_SEC`（默认 14400）、`AUTH_LOCKED_COOLDOWN_MAX_SEC`（默认 86400） |
+
+> 为什么分档：锁定周期是 24 小时，而原实现两种原因共用 30 分钟 —— 结果每 30 分钟
+> 就去撞一次锁着的账号，`hits` 记录连续撞锁次数并翻倍退避。判定「是否真被锁定」
+> 只认 `User has been locked` 一类措辞，**不能**匹配 `code=4`：密码错误的原文
+> `Incorrect user name or password, the account may be locked … (code=4)` 也带 code=4，
+> 那是「还没锁、再试就要锁」（`auth_manager._is_upstream_locked_reason`）。
+
+**（2）解锁后立即恢复**：设置 → 凭据 → 该组卡片上的**「清除熔断」**，对应
+`POST /api/credentials/{key}/clear-lock`（`backend/routers/credentials.py`）。
+它**只删本地状态文件** `.locked_<host>_<port>_<账号>.json`，不联系上游、不产生登录尝试；
+返回体带 `had_lock` 与 `previous`（清除前的熔断内容），便于留痕。
+
+**（3）隔离副本禁止登录生产上游**（`backend/services/env_role.py`）
+目录含 `ISOLATED_COPY.flag` 或 `.smoke-runner` → 判为隔离副本，登录**非回环地址**前
+直接抛 `PermissionError`（拦在 `auth_manager._do_login` 与 iPRAN 自有登录分支的公共入口，
+见 `ipran/ipran_ume_kpi_service.py` 的 `login()`）。临时放行：
+`ISOLATED_ALLOW_UPSTREAM_LOGIN=1` 或 `ISOLATED_LOGIN_ALLOW_HOSTS=host1,host2`。
+配套：`provision-smoke-runner.ps1` 强制副本 `MY_APP_DISABLE_SCHEDULER=1`，
+`smoke-local.ps1` 每次冒烟前把三张本地权威表（含 `credentials`）从生产同步到副本。
+
+**（4）凭据读失败不再降级为空密码**：`credential_store._read_db_with_retry` 会重试 3 次，
+仍失败则抛 `CredentialReadError`（接口返回 **409**，任务直接失败并写明原因）。
+原实现在 app.db 被占用时返回 `None` → 回退到凭据组默认值（口令默认是空串）→
+「一次数据库抖动 = 一次空密码登录」，2026-11-21 13:03:26 实测触发过一次（被空密码护栏拦下）。
+
+**2026-11-20/21 事故经过（本次改造的由来）**
+
+1. 11-20 15:00 起 UME 返回 `code=2 密码即将到期`，生产每小时失败；17:19:37 有人
+   在设置页把 `ipran_ume` 改成新口令，17:40 登录成功（UME 侧改密完成）。
+2. 但 `.smoke` 副本的 `credentials.ipran_ume` 仍是 2026-09-24 的旧口令（副本只在
+   provision 时播种），且副本的 `ipran_kpi_sync` 仍是每小时启用。11-20 18:00 与
+   11-21 13:09 两次冒烟栈起来后，副本都用旧口令登录**真实** UME，上游累计 3 次
+   密码错误 → 生产账号被锁 → 生产任务每小时去问一次，表现为「解锁之后又被锁」。
+3. 同期 auto_retry 还会把「密码错误」当可重试错误重投 2 次（已改为永久性失败，
+   见 `04-task-system.md`），一次失败就能凑满 3 次。
+
 ### 登出能力（2026-10-04 新增，默认关闭）
 
 **修正前的缺口：全仓库没有任何 eFlow 登出调用。** `auth_manager.invalidate_cache()`
