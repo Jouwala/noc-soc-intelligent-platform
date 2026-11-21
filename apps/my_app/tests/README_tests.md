@@ -372,10 +372,11 @@ python -m pytest tests -m "not live"     # 离线集（CI 同款，见下）
 
 ### 已知失败（CI 显式 deselect，修好后去掉）
 
-| 用例 | 原因 |
-|---|---|
-| `test_client_is_local_trust.py::test_genuine_local_callers_still_allowed` | `backend/security.py::_is_loopback` 对 `::ffff:127.0.0.1` 返回 False，但它自己的 docstring 写明要覆盖 IPv4-mapped IPv6 —— 实现与文档不符。修它要改鉴权信任边界，另开任务，不在本轮做。 |
-| `test_client_is_local_trust.py::test_is_loopback_covers_ipv4_mapped_and_port_forms` | 同上。 |
+当前无。
 
-CI（`.github/workflows/quality.yml` 的 `pytest` job）跑的就是离线集加这两条
-`--deselect`，要求 0 failed。
+`test_client_is_local_trust.py` 的两条（`test_genuine_local_callers_still_allowed`、
+`test_is_loopback_covers_ipv4_mapped_and_port_forms`）已于 2026-11-21 修复（#200）：
+`backend/security.py::_is_loopback` 现对 IPv4-mapped IPv6（`::ffff:127.0.0.1`）
+看内嵌 IPv4 的回环性，CI 的两条 `--deselect` 已随之去掉。
+
+CI（`.github/workflows/quality.yml` 的 `pytest` job）跑的就是离线集，要求 0 failed。

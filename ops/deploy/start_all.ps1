@@ -392,6 +392,16 @@ function Start-Detached {
     if ($Port -gt 0) {
         if (Wait-Port $Port $WaitSeconds) { Write-Ok "$Name 已监听 $Port (pid=$($proc.Id))"; return $true }
         Write-Err2 "$Name 未在 ${WaitSeconds}s 内监听 $Port，日志：$out / $err"
+        # 失败时把日志尾部直接回显：最常被问的就是「到底停在哪一步」。
+        # 注意 stdout 可能仍是块缓冲（调用方若没加 -u），尾部只代表最后一次刷盘，
+        # 不代表真实最后一步 —— 回显是为了少开一次文件，不是断言卡点。
+        foreach ($logFile in @($out, $err)) {
+            if (-not (Test-Path -LiteralPath $logFile)) { continue }
+            $tail = @(Get-Content -LiteralPath $logFile -Tail 8 -ErrorAction SilentlyContinue)
+            if ($tail.Count -eq 0) { continue }
+            Write-Host ("    ---- {0} 尾部 ----" -f (Split-Path -Leaf $logFile)) -ForegroundColor DarkGray
+            foreach ($line in $tail) { Write-Host ("    {0}" -f $line) -ForegroundColor DarkYellow }
+        }
         return $false
     }
     Write-Ok "$Name 已启动 (pid=$($proc.Id))"
@@ -551,9 +561,14 @@ if ($startNginx -and -not $SkipNginxConf) {
 
 # ------------------------------------------------------------- 3) my_app 后端
 Write-Step '--- 3/6 my_app 后端 ---'
+# -u（等价 PYTHONUNBUFFERED=1）：Start-Detached 把 stdout 重定向到文件，Python 默认
+# 块缓冲，失败时 TMP\portable-backend.out 只到最后一个 8KB 刷盘点，看着像卡在
+# 某一步（2026-11-21 PR #199/#201 两次冒烟都是这样，最后一行都停在 TT 预热）。
+# 等待上限 90s：backend.main 导入热态实测 2.2s，冷缓存下会明显变慢；2026-11-21 两次
+# 都在 45s 上限处失败，90s 留出冷启动余量，真实挂死仍会在 90s 报错。
 $ok = Start-Detached -Name 'backend' -Exe $PyExe `
-    -ArgList @('-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', [string]$BePort) `
-    -WorkDir $MyAppDir -Port $BePort -WaitSeconds 45
+    -ArgList @('-u', '-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', [string]$BePort) `
+    -WorkDir $MyAppDir -Port $BePort -WaitSeconds 90
 if (-not $ok) { throw 'my_app 后端启动失败（见 TMP\portable-backend.err / .out）' }
 
 # ------------------------------------------------------------- 4) my_app 前端

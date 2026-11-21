@@ -66,9 +66,15 @@ def _is_loopback(value: str) -> bool:
     elif host.count(":") == 1:
         host = host.rsplit(":", 1)[0]
     try:
-        return ipaddress.ip_address(host).is_loopback
+        addr = ipaddress.ip_address(host)
     except ValueError:
         return False
+    if addr.is_loopback:
+        return True
+    # IPv4-mapped IPv6（::ffff:127.0.0.1）：ipaddress 的 is_loopback 只认
+    # ::1，不认映射地址 —— 需看其内嵌的 IPv4 是否回环（2026-11-21 修，#200）。
+    mapped = getattr(addr, "ipv4_mapped", None)
+    return mapped is not None and mapped.is_loopback
 
 
 def _forwarded_client(value: str) -> str:

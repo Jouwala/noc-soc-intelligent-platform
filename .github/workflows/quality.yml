@@ -104,10 +104,7 @@ jobs:
       - name: 安装依赖
         run: python -m pip install -r requirements.txt
       - name: pytest 离线集
-        # 2 条已知失败先显式 deselect（见 tests/README_tests.md「离线测试基线」）：
-        # client_is_local 对 ::ffff:127.0.0.1 的判定与 backend/security.py
-        # 自身 docstring 不符，修它要改鉴权信任边界，不在本轮做；修好后去掉。
-        run: python -m pytest tests -m "not live" --deselect tests/test_client_is_local_trust.py::test_genuine_local_callers_still_allowed --deselect tests/test_client_is_local_trust.py::test_is_loopback_covers_ipv4_mapped_and_port_forms
+        run: python -m pytest tests -m "not live"
 
   # 以下是 TASK-01 新增作业（2026-11-14），不改既有作业。
   # 目的：agent-worker 与 control-plane（调度器 + 分派模块）的离线测试此前
