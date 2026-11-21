@@ -3,11 +3,14 @@
 
 配套任务：`eflow_site_update`（backend/services/eflow/eflow_site_update_task.py）。
 
-- GET /api/cmdb-site-update/summary   上次运行摘要 + modify 目录产出文件清单
-- GET /api/cmdb-site-update/download  下载产出文件（只允许 modify 目录内）
+- GET  /api/cmdb-site-update/summary   上次运行摘要 + modify 目录产出文件清单
+- GET  /api/cmdb-site-update/download  下载产出文件（只允许 modify 目录内）
+- GET  /api/cmdb-site-update/sources   可选 CMDB 主数据 xlsx 清单
+- POST /api/cmdb-site-update/generate  按选定源文件生成差异文件（操作台专用，同步返回）
 
-「生成差异文件」的触发不在这里，走统一的任务接口 `POST /api/tasks/eflow_site_update/run`
-——复用队列、禁用态校验、执行历史与失败记录，不要另开一条触发路径。
+老的「生成差异文件」入口仍走统一任务接口 `POST /api/tasks/eflow_site_update/run`
+——复用队列、禁用态校验、执行历史与失败记录，永远取最新源表、不接受参数。
+操作台需要指定源文件并同步拿到 A/M/D，才另开 `/generate`（同一任务函数，传 src_file）。
 
 站点同步操作页的**写库**走本模块 /writeback/*：预览令牌 + confirm 双开关，
 一次性人工动作，刻意不注册成定时任务、不进队列（避免被调度器误跑）；
@@ -32,21 +35,50 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/cmdb-site-update", tags=["cmdb-site-update"])
 
 
+class SourceChoice(BaseModel):
+    source: str | None = None
+
+
 class WritebackApply(BaseModel):
     token: str
     confirm: bool = False
+    source: str | None = None
+
+
+class GenerateBody(BaseModel):
+    source: str | None = None
+
+
+@router.get("/sources")
+def cmdb_site_update_sources(_=Depends(require_protected)):
+    """可选 CMDB 主数据 xlsx 清单（最新在前）。写死文件名不可取，页面据此下拉选择。"""
+    return {"sources": task.list_sources()}
+
+
+@router.post("/generate")
+def cmdb_site_update_generate(body: GenerateBody, _=Depends(require_protected)):
+    """按选定源文件生成差异文件（只产文件不写库）。
+
+    与统一任务接口 `POST /api/tasks/eflow_site_update/run` 的区别：那个不接受
+    参数、只能取最新源表；本接口是操作台专用同步调用，可指定 --src-file，
+    前端要拿本次结果（A/M/D）而不是排队异步，故不复用队列。
+    """
+    try:
+        return task.run_eflow_site_update(src_file=body.source)
+    except Exception as exc:  # noqa: BLE001 - 转成前端可读错误
+        return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
 @router.get("/writeback/preview")
-def writeback_preview(_=Depends(require_protected)):
-    """写库预览（不写库）：预期 update/insert + 令牌。令牌绑定源文件指纹，改了源表要重新预览。"""
-    return writeback.preview()
+def writeback_preview(source: str | None = None, _=Depends(require_protected)):
+    """写库预览（不写库）：预期 update/insert + 令牌。令牌绑定选中源文件指纹。"""
+    return writeback.preview(source)
 
 
 @router.post("/writeback/apply")
 def writeback_apply(body: WritebackApply, _=Depends(require_protected)):
     """确认写库：必须带预览令牌 + confirm=true。默认不删站，脚本先自动备份 PG 表。"""
-    return writeback.apply(body.token, body.confirm)
+    return writeback.apply(body.token, body.confirm, body.source)
 
 
 @router.get("/writeback/last")

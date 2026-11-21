@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Alert, Button, Card, Col, Descriptions, Modal, Row, Space, Spin, Statistic,
+  Alert, Button, Card, Col, Descriptions, Modal, Row, Select, Space, Spin,
   Table, Tag, Typography, message,
 } from 'antd'
 import {
@@ -39,6 +39,7 @@ type GenSummary = {
   files?: OutFile[];
 }
 type GenStatus = { work_dir: string; out_dir: string; last_run: GenSummary | null; files: OutFile[] }
+type SourceFile = { name: string; size: number; mtime: string; is_latest: boolean }
 
 const countTag = (label: string, value: number | undefined, color: string) => (
   <Tag color={color} style={{ margin: 0 }}>{label}: {value ?? '—'}</Tag>
@@ -55,16 +56,26 @@ export default function SiteSyncOps() {
   const [writeLoading, setWriteLoading] = useState(false)
   const [writeResult, setWriteResult] = useState<WriteResult | null>(null)
   const [lastWrite, setLastWrite] = useState<WriteResult | null>(null)
+  const [sources, setSources] = useState<SourceFile[]>([])
+  const [selectedSource, setSelectedSource] = useState<string | undefined>(undefined)
 
   const load = useCallback(async () => {
     setGenLoading(true)
     try {
-      const [gen, wb] = await Promise.all([
+      const [gen, wb, src] = await Promise.all([
         api.get('/cmdb-site-update/summary'),
         api.get('/cmdb-site-update/writeback/last'),
+        api.get('/cmdb-site-update/sources'),
       ])
       setStatus(gen.data || null)
       setLastWrite(wb.data?.last_run || null)
+      const list: SourceFile[] = src.data?.sources || []
+      setSources(list)
+      // 首次加载默认选最新；之后保留用户已选（若仍在列表里）
+      setSelectedSource(prev => {
+        if (prev && list.some(s => s.name === prev)) return prev
+        return list.find(s => s.is_latest)?.name || list[0]?.name
+      })
     } catch {
       message.error(t('siteOps.loadFail'))
     } finally {
@@ -75,27 +86,44 @@ export default function SiteSyncOps() {
   useEffect(() => { void load() }, [load])
 
   const generate = useCallback(async () => {
+    if (!selectedSource) {
+      message.warning(t('siteOps.sourceRequired'))
+      return
+    }
     setGenRunning(true)
     try {
-      const res = await api.post('/tasks/eflow_site_update/run')
-      if (!res.data?.accepted) {
+      // 专用同步接口：可指定源文件，跑完直接拿本次 A/M/D 摘要
+      const res = await api.post('/cmdb-site-update/generate', { source: selectedSource })
+      if (!res.data?.success) {
         message.error(`${t('siteOps.genFail')}: ${res.data?.error || ''}`)
-        setGenRunning(false)
-        return
+      } else {
+        message.success(t('siteOps.genDone'))
+        setPreview(null)  // 源表在生成时可能被刷新，旧令牌作废
       }
-      message.success(t('siteOps.genSubmitted'))
-      window.setTimeout(() => { void load(); setGenRunning(false) }, 12000)
+      void load()
     } catch {
       message.error(t('siteOps.genFail'))
+    } finally {
       setGenRunning(false)
     }
-  }, [load, t])
+  }, [load, selectedSource, t])
+
+  const changeSource = useCallback((name: string) => {
+    setSelectedSource(name)
+    setPreview(null)  // 换源表必须重新预览，令牌绑定的是旧源表
+  }, [])
 
   const doPreview = useCallback(async () => {
+    if (!selectedSource) {
+      message.warning(t('siteOps.sourceRequired'))
+      return
+    }
     setPreviewLoading(true)
     setPreview(null)
     try {
-      const res = await api.get('/cmdb-site-update/writeback/preview')
+      const res = await api.get('/cmdb-site-update/writeback/preview', {
+        params: { source: selectedSource },
+      })
       setPreview(res.data || null)
       if (!res.data?.ok) message.error(res.data?.error || t('siteOps.previewFail'))
     } catch (e: any) {
@@ -105,14 +133,14 @@ export default function SiteSyncOps() {
     } finally {
       setPreviewLoading(false)
     }
-  }, [t])
+  }, [selectedSource, t])
 
   const doWrite = useCallback(async () => {
     if (!preview?.token) return
     setWriteLoading(true)
     try {
       const res = await api.post('/cmdb-site-update/writeback/apply', {
-        token: preview.token, confirm: true,
+        token: preview.token, confirm: true, source: selectedSource,
       })
       setWriteResult(res.data || null)
       if (res.data?.ok) {
@@ -130,7 +158,7 @@ export default function SiteSyncOps() {
     } finally {
       setWriteLoading(false)
     }
-  }, [preview, load, t])
+  }, [preview, selectedSource, load, t])
 
   const summary = status?.last_run
   const files = status?.files || []
@@ -143,6 +171,25 @@ export default function SiteSyncOps() {
       {/* 网元分组：eflow 是第一组，其他网元后续按同样骨架往这里加 */}
       <Card title={<Space><FileExcelOutlined />{t('siteOps.groupEflow')}</Space>} style={cardStyle}>
         <Spin spinning={genLoading}>
+          {/* 源表选择：不再写死某个文件名，db 目录下的候选自动列出 */}
+          <Alert type="info" showIcon style={{ marginBottom: 16 }}
+                 message={<Space wrap>
+                   <Text strong>{t('siteOps.sourceSelect')}：</Text>
+                   {sources.length ? (
+                     <Select
+                       size="small"
+                       style={{ minWidth: 360, maxWidth: '100%' }}
+                       value={selectedSource}
+                       onChange={(v) => changeSource(v)}
+                       options={sources.map(s => ({
+                         value: s.name,
+                         label: `${s.name}　(${s.mtime}${s.is_latest ? ` · ${t('siteOps.sourceLatest')}` : ''})`,
+                       }))}
+                     />
+                   ) : <Text type="secondary">{t('siteOps.sourceEmpty')}</Text>}
+                 </Space>}
+                 description={t('siteOps.sourceSelectHint')} />
+
           <Row gutter={[16, 16]}>
             <Col xs={24} lg={12}>
               <Card size="small" title={t('siteOps.step1')} extra={
