@@ -4,6 +4,10 @@
 
 **手工维护工具**，不在任何定时任务里跑：上游每年更新一两次拓扑 PDF，人工执行一次。
 
+⚠ 本脚本只管**物理图**（第 1 页）与站点名单。逻辑图（`logical.svg`）与逻辑点位
+   `LOGICAL_PINS` 自 2026-11-21 起改用单独一页的 PDF，由 `gen_olib_logical.py` 生成；
+   两份脚本互不覆盖。
+
 它做的事
 --------
 1. 读 PDF 第 1 页（物理拓扑）的全部文字对象，把「站点名」与「说明文字」分开：
@@ -252,7 +256,7 @@ def main() -> int:
             r"(physical: \{ w: )[\d.]+(, h: )[\d.]+( \})",
             lambda m: f"{m.group(1)}{W:.1f}{m.group(2)}{H:.1f}{m.group(3)}",
             new_src, count=1)
-        TOPO_DATA.write_text(new_src, encoding="utf-8")
+        TOPO_DATA.write_text(new_src, encoding="utf-8", newline="\n")
         print(f"已写入 {TOPO_DATA}")
     return 0
 

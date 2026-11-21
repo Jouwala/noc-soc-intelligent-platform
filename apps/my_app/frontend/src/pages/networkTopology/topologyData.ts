@@ -1,20 +1,25 @@
 /* ============================================================================
  * OLIB FO 网络拓扑 —— 静态参考数据（非接口取数）
  * ============================================================================
- * 数据来源：Orange Liberia《Orange network topology_20260623.pdf》（2026-11-17 换版）
+ * 数据来源：
+ *   · 物理图 + 站点名单：Orange Liberia《Orange network topology_20260623.pdf》第 1 页（2026-11-17 换版）
+ *   · 逻辑图 + 逻辑点位：Orange Liberia《OLIB FO_Network_20260901.pdf》（2026-11-21 换版，单页逻辑图）
  *   · 第 1 页「物理拓扑」→ public/topology/physical.svg（由 PDF 矢量导出）
- *   · 第 2 页「逻辑拓扑」→ public/topology/logical.svg（同上；该页标题仍是 202503，内容未换版）
+ *   · 逻辑图 → public/topology/logical.svg（同上；2026-09-01 版，画布 4065.4×1154.5，比旧逻辑图更扁）
  *   · 矢量图放大到任意倍数都清晰；不要改回 JPEG/PNG 截图 —— 那会在放大后糊掉。
- *   · 站点名单 667 条**全部按第 1 页（物理图）的文字对象重新提取**，坐标是**在原图上的
+ *   · 站点名单 667 条**全部按物理图（20260623 第 1 页）的文字对象重新提取**，坐标是**在原图上的
  *     近似相对位置**（x/y 均以原图宽高 0~1000 归一化，不是 GPS）。旧版 553 条坐标来自
  *     202503 逻辑图，与新图（画布 6491×4818.5，比旧图更宽）不同源，已整表替换。
- *   · 逻辑图点位 LOGICAL_PINS：第 2 页文字对象里能匹配到站点表的标签（约 65 个），
- *     供逻辑页签搜索定位；不是全量 667。
- *   · 5G 标记取原图上**红色的 5G 文字对象**（就近归属站点，>20pt 不认）；ISP 取站名里的 ISP。
- *   · 骨干核心节点名单见 CORE_NAMES；骨干示意由第 2 页逻辑图人工梳理（CORE_LINKS）。
+ *   · 逻辑图点位 LOGICAL_PINS：20260901 逻辑图文字对象里能匹配到站点表的标签（108 个，
+ *     旧版 65 个），供逻辑页签搜索定位；不是全量 667。
+ *   · 5G 标记取物理图上**红色的 5G 文字对象**（就近归属站点，>20pt 不认）；ISP 取站名里的 ISP。
+ *   · 骨干核心节点名单见 CORE_NAMES；骨干示意（CORE_LINKS）按 202503 版逻辑图人工梳理，
+ *     20260901 换图时未重梳理。
  *
- * 重新生成：`python backend/scripts/gen_olib_topo.py "<新的 PDF>" --write`
- * （PDF 换了版就重跑这一条，脚本会整表重抽并同步 TOPO_PAGE_SIZE，别再手改单条坐标。）
+ * 重新生成：
+ *   python backend/scripts/gen_olib_topo.py "<物理图 PDF>" --write      # 站点名单 / 物理图画布
+ *   python backend/scripts/gen_olib_logical.py "<逻辑图 PDF>" --write   # logical.svg / 逻辑点位
+ * （PDF 换了版就重跑对应那一条，别再手改单条坐标。）
  *
  * ⚠ 本文件是**源级静态数据**，不由任何定时任务写入，也不要改成接口取数：
  *   原图与点位来自 PDF 提取，上游没有对应 API。
@@ -764,7 +769,7 @@ export const CORE_NODES: CoreNode[] = [
 
 export type CoreLinkType = 'exist' | 'dwdm' | 'rail' | 'p25a'
 
-/** [起点 id, 终点 id, 链路类型] —— 按第 2 页逻辑图梳理 */
+/** [起点 id, 终点 id, 链路类型] —— 按 202503 版逻辑图人工梳理 */
 export const CORE_LINKS: [string, string, CoreLinkType][] = [
   ['hq', 'kakata', 'exist'], ['hq', 'ria', 'exist'], ['hq', 'odc', 'exist'], ['kakata', 'ria', 'exist'],
   ['ria', 'buch', 'exist'], ['buch', 'botota', 'exist'], ['gbarnga', 'sanniq', 'exist'], ['sanniq', 'danane', 'exist'],
@@ -803,73 +808,116 @@ export function findCoreNodeBySite(site: TopoSite): CoreNode | undefined {
   return CORE_NODES.find(node => node.site && normalizeName(node.site) === n)
 }
 
-/** 第 2 页逻辑图上能匹配到站点表的标签坐标（千分比；由 PDF 文字对象提取） */
+/** 20260901 逻辑图上能匹配到站点表的标签坐标（108 个；千分比；由 PDF 文字对象提取并匹配站名） */
 export const LOGICAL_PINS: { name: string; x: number; y: number }[] = [
-  { name: "Banjor", x: 158.4, y: 157.3 },
-  { name: "Benson Street", x: 138.3, y: 263.6 },
-  { name: "Botota", x: 727.3, y: 256.3 },
-  { name: "Boulevard Junction", x: 271.0, y: 211.9 },
-  { name: "BTC", x: 169.4, y: 229.1 },
-  { name: "Buchanan 3", x: 653.7, y: 240.1 },
-  { name: "Buchanan 4", x: 624.5, y: 277.3 },
-  { name: "Buchanan1（b）", x: 625.7, y: 257.3 },
-  { name: "Buchanan2", x: 636.3, y: 322.4 },
-  { name: "Careysburg", x: 421.3, y: 153.6 },
-  { name: "Chocolate City", x: 246.7, y: 197.0 },
-  { name: "Compound 3", x: 684.2, y: 297.3 },
-  { name: "Congo town", x: 179.0, y: 246.0 },
-  { name: "Danane", x: 891.1, y: 244.7 },
-  { name: "Defense", x: 280.7, y: 279.2 },
-  { name: "ELWA", x: 317.4, y: 228.9 },
-  { name: "EPCM", x: 796.7, y: 100.2 },
-  { name: "Felela", x: 519.6, y: 153.4 },
-  { name: "Fendell(ISP)", x: 390.8, y: 155.1 },
-  { name: "Ganta", x: 706.6, y: 154.6 },
-  { name: "Ganta City", x: 690.6, y: 143.1 },
-  { name: "Gbarnga 2", x: 636.3, y: 178.6 },
-  { name: "Gbartala", x: 581.1, y: 155.3 },
-  { name: "Glaygbo Town", x: 719.9, y: 272.0 },
-  { name: "Goodridge(ISP)", x: 282.8, y: 262.6 },
-  { name: "GSA", x: 325.5, y: 292.1 },
-  { name: "Island Clinic", x: 142.0, y: 139.9 },
-  { name: "JFK", x: 271.1, y: 305.3 },
-  { name: "Kakata City", x: 453.7, y: 176.1 },
-  { name: "Kebbah road", x: 251.2, y: 137.8 },
-  { name: "Kenema town", x: 350.0, y: 222.7 },
-  { name: "Kenny Town", x: 396.7, y: 223.9 },
-  { name: "Kpein 2", x: 663.7, y: 153.4 },
-  { name: "LBS", x: 276.7, y: 235.8 },
-  { name: "Liscr", x: 216.7, y: 275.1 },
-  { name: "LPMC Comm 2", x: 732.0, y: 139.9 },
-  { name: "LPRC", x: 266.1, y: 137.8 },
-  { name: "Luwein(Bokaytown)", x: 480.9, y: 252.1 },
-  { name: "Methodist Cpd", x: 228.2, y: 247.8 },
-  { name: "Morris Farm", x: 360.3, y: 151.3 },
-  { name: "Nigeria House", x: 258.3, y: 253.7 },
-  { name: "Orange", x: 220.4, y: 227.6 },
-  { name: "Peter Luogon Town", x: 710.2, y: 284.6 },
-  { name: "Quiwor", x: 691.9, y: 289.0 },
-  { name: "R.I.A", x: 454.7, y: 317.1 },
-  { name: "Randall Street", x: 163.6, y: 274.3 },
-  { name: "Salvation army", x: 202.7, y: 285.8 },
-  { name: "Saniquellie 2", x: 792.2, y: 209.2 },
-  { name: "Sethi Compound", x: 127.7, y: 142.2 },
-  { name: "Shefflin", x: 439.0, y: 230.5 },
-  { name: "Sigma", x: 103.6, y: 142.0 },
-  { name: "Sinkor", x: 235.3, y: 326.7 },
-  { name: "Sophe town", x: 414.9, y: 252.0 },
-  { name: "Steven Tolbert", x: 269.3, y: 173.8 },
-  { name: "Suakoko", x: 606.1, y: 153.6 },
-  { name: "Tower Hill(ISP)", x: 586.3, y: 245.7 },
-  { name: "Town hall", x: 156.8, y: 242.7 },
-  { name: "WAT", x: 296.3, y: 296.3 },
-  { name: "Weala", x: 487.0, y: 151.3 },
-  { name: "Yekepa", x: 837.9, y: 151.3 },
-  { name: "Yekepa 3", x: 869.0, y: 182.6 },
-  { name: "Yekepa 4", x: 852.6, y: 204.4 },
-  { name: "YWCA(ISP)", x: 257.2, y: 286.7 },
-  { name: "Zardun", x: 666.7, y: 308.8 },
-  { name: "Zuluyee", x: 787.9, y: 159.7 },
+  { name: "10th street", x: 207.1, y: 764.1 },
+  { name: "16th street", x: 212.7, y: 827.9 },
+  { name: "18th street", x: 223.9, y: 766.2 },
+  { name: "Banjor", x: 155.3, y: 326.3 },
+  { name: "Baptist Seminary", x: 432.3, y: 534.3 },
+  { name: "Barnersville estate", x: 251.7, y: 255.3 },
+  { name: "Benson Street", x: 115.4, y: 698.0 },
+  { name: "BHP Congo town", x: 164.7, y: 601.2 },
+  { name: "Botota", x: 789.7, y: 616.2 },
+  { name: "BTC", x: 169.2, y: 524.3 },
+  { name: "Buchanan 3", x: 707.5, y: 568.8 },
+  { name: "Buchanan 4", x: 654.6, y: 563.3 },
+  { name: "Buchanan1（b）", x: 676.4, y: 619.0 },
+  { name: "Buchanan2", x: 688.2, y: 809.5 },
+  { name: "Camp Johnson Road", x: 176.9, y: 751.3 },
+  { name: "Careysburg", x: 448.5, y: 315.4 },
+  { name: "Chocolate City", x: 253.8, y: 448.8 },
+  { name: "Cocacola(ISP)", x: 347.8, y: 318.3 },
+  { name: "Compound 3", x: 741.6, y: 736.2 },
+  { name: "Congo town", x: 310.1, y: 685.3 },
+  { name: "Cooper Hill(ISP)", x: 387.9, y: 539.3 },
+  { name: "Danane", x: 972.2, y: 582.0 },
+  { name: "Defense", x: 295.5, y: 677.7 },
+  { name: "Duala market", x: 180.7, y: 441.6 },
+  { name: "Duport Road", x: 319.9, y: 588.4 },
+  { name: "ELWA", x: 332.6, y: 539.6 },
+  { name: "EPCM", x: 867.0, y: 159.1 },
+  { name: "Felela", x: 558.0, y: 314.9 },
+  { name: "Fendell(ISP)", x: 414.5, y: 319.7 },
+  { name: "Ganta", x: 766.5, y: 318.3 },
+  { name: "Ganta City", x: 746.1, y: 324.0 },
+  { name: "Gbankonima", x: 593.2, y: 318.5 },
+  { name: "Gbarnga 2", x: 688.2, y: 388.5 },
+  { name: "Gbarnga city", x: 684.2, y: 278.7 },
+  { name: "Gbartala", x: 626.6, y: 320.5 },
+  { name: "Glaygbo Town", x: 781.3, y: 662.1 },
+  { name: "Gold Medal", x: 299.8, y: 342.8 },
+  { name: "Goodridge(ISP)", x: 294.0, y: 634.6 },
+  { name: "GSA", x: 353.0, y: 591.8 },
+  { name: "GSA Road", x: 366.1, y: 681.0 },
+  { name: "harbel Purchasing", x: 477.6, y: 568.9 },
+  { name: "ICON 16", x: 232.8, y: 715.7 },
+  { name: "Island Clinic", x: 137.1, y: 281.5 },
+  { name: "JFK", x: 271.9, y: 803.7 },
+  { name: "JJY", x: 226.0, y: 330.8 },
+  { name: "Kakata city", x: 484.5, y: 388.5 },
+  { name: "Kebbah road", x: 269.3, y: 259.2 },
+  { name: "Kenema town", x: 363.5, y: 539.3 },
+  { name: "Kenny Town", x: 412.3, y: 539.3 },
+  { name: "Keselly Boulevard", x: 233.4, y: 390.4 },
+  { name: "Kokoya Road", x: 724.7, y: 400.2 },
+  { name: "Konola", x: 504.7, y: 402.2 },
+  { name: "Kpein 2", x: 718.7, y: 318.6 },
+  { name: "LBS", x: 287.3, y: 555.9 },
+  { name: "LEC", x: 198.0, y: 453.6 },
+  { name: "Liscr", x: 220.4, y: 671.2 },
+  { name: "Logan town", x: 228.3, y: 488.6 },
+  { name: "LPMC Comm 2", x: 794.9, y: 275.4 },
+  { name: "LPRC", x: 287.4, y: 262.1 },
+  { name: "Luwein(Bokaytown)", x: 509.5, y: 597.3 },
+  { name: "Mamba point", x: 150.4, y: 453.3 },
+  { name: "Mamba point2", x: 167.1, y: 574.7 },
+  { name: "Methodist Cpd", x: 237.2, y: 600.9 },
+  { name: "Morris Farm", x: 380.5, y: 314.9 },
+  { name: "New Georgia", x: 243.5, y: 313.7 },
+  { name: "New Kru Town", x: 200.5, y: 325.8 },
+  { name: "Nigeria House", x: 266.7, y: 608.0 },
+  { name: "ODC 2nd", x: 252.8, y: 612.3 },
+  { name: "Old Road", x: 310.3, y: 808.2 },
+  { name: "Orange", x: 224.5, y: 532.2 },
+  { name: "orange tower", x: 632.8, y: 578.9 },
+  { name: "Peter Luogon Town", x: 770.5, y: 698.9 },
+  { name: "Police Academy Rd", x: 338.5, y: 446.7 },
+  { name: "Quiwor", x: 750.2, y: 711.7 },
+  { name: "R.I.A", x: 485.7, y: 794.1 },
+  { name: "R2(Grayja)", x: 446.8, y: 541.9 },
+  { name: "Randall Street", x: 150.8, y: 753.7 },
+  { name: "Redlight(ISP)", x: 316.0, y: 318.3 },
+  { name: "Salvation army", x: 204.7, y: 708.7 },
+  { name: "Saniquellie 2", x: 862.0, y: 478.3 },
+  { name: "Sanniquellie 3", x: 880.3, y: 350.8 },
+  { name: "Sethi Compound", x: 121.2, y: 282.0 },
+  { name: "Shefflin", x: 461.7, y: 570.2 },
+  { name: "Sigma", x: 97.6, y: 287.8 },
+  { name: "Sinkor", x: 241.1, y: 822.2 },
+  { name: "SKD Boulevard", x: 280.9, y: 479.7 },
+  { name: "Sophe town", x: 441.4, y: 609.8 },
+  { name: "St.Michael", x: 248.5, y: 343.4 },
+  { name: "Steven Tolbert", x: 305.7, y: 277.4 },
+  { name: "Suakoko", x: 654.5, y: 315.4 },
+  { name: "Sue town", x: 488.9, y: 261.8 },
+  { name: "Tower Hill(ISP)", x: 449.8, y: 705.5 },
+  { name: "Town hall", x: 237.3, y: 269.1 },
+  { name: "Town Hall Comm.", x: 130.2, y: 625.7 },
+  { name: "Two Tires", x: 567.0, y: 592.8 },
+  { name: "Via town", x: 90.6, y: 376.8 },
+  { name: "Water Side", x: 118.8, y: 470.8 },
+  { name: "Weala", x: 521.7, y: 308.8 },
+  { name: "Wood camp 2", x: 372.7, y: 269.5 },
+  { name: "World wide", x: 334.5, y: 682.2 },
+  { name: "Yekepa 3", x: 947.5, y: 400.2 },
+  { name: "Yekepa 4", x: 914.4, y: 454.4 },
+  { name: "Yekepa 5 Area P", x: 924.9, y: 419.2 },
+  { name: "Yekepa Town", x: 912.9, y: 315.0 },
+  { name: "YWCA(ISP)", x: 266.8, y: 740.5 },
+  { name: "Zardun", x: 722.0, y: 769.8 },
+  { name: "Zowinta", x: 818.7, y: 496.6 },
+  { name: "Zuluyee", x: 813.2, y: 362.7 },
 ]
 
 export function findLogicalPin(site: TopoSite): { name: string; x: number; y: number } | undefined {
@@ -889,5 +937,5 @@ export const TOPO_DOCS: Record<'physical' | 'logical', string> = {
 /** SVG 的固有尺寸（viewBox 单位 = PDF pt）。图片还没 onLoad 时先用它排布，避免闪一下大图 */
 export const TOPO_PAGE_SIZE: Record<'physical' | 'logical', { w: number; h: number }> = {
   physical: { w: 6491.0, h: 4818.5 },
-  logical: { w: 4532.5, h: 3380 },
+  logical: { w: 4065.4, h: 1154.5 },
 }

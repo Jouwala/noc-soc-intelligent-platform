@@ -5836,16 +5836,19 @@ Network 取 <code>ms_sla_kpi</code> 快照原值不重算；PS_* = 阈值达标�
 </ul>
 <p><a id="ch-11-s14"></a></p>
 <h3>8c. OLIB 光纤拓扑（<code>?page=olibTopo</code>，2026-11-16 新增）</h3>
-<p>Orange Liberia 全国光纤网络拓扑的<strong>静态参考页</strong>：把《Orange network topology_20260623.pdf》（2026-11-17 换版，旧版是 20251226）第 1 页物理图、第 2 页逻辑图原样嵌入，并在物理图上叠加 667 个提取站点。<strong>不连后端、不写库</strong>，所有数据都是源级静态文件。</p>
+<p>Orange Liberia 全国光纤网络拓扑的<strong>静态参考页</strong>：把《Orange network topology_20260623.pdf》（2026-11-17 换版，旧版是 20251226）第 1 页物理图、以及《OLIB FO_Network_20260901.pdf》（2026-11-21 换版，单页逻辑图）的逻辑图原样嵌入，并在物理图上叠加 667 个提取站点。<strong>不连后端、不写库</strong>，所有数据都是源级静态文件。</p>
 <ul>
 <li>
-<p><strong>换版与重抽</strong>：PDF 换版时跑 <code>python backend/scripts/gen_olib_topo.py &quot;&lt;新 PDF 路径&gt;&quot; --write</code> —— 整表重抽站名/坐标/5G 标记，并同步 <code>TOPO_PAGE_SIZE</code>；<strong>不要手改单条坐标</strong>。脚本口径：站点名取第 1 页物理图的文字对象（同一基线的碎片合并、断行续写合并），红色独立 <code>5G</code> 文字对象就近归属站点（&gt;20pt 不认），<code>ISP</code> 取站名中的 ISP；图例（Backbone fiber / ON going IPRAN link / DWDM / 5G SITE / P26A-D）、里程与国名等说明文字按白名单剔除。本次换版实测：667 条（旧版 553 条）、5G 27 条、ISP 10 条；<strong>画布从 4818.5×4159.5 变成 6491×4818.5，旧坐标与新图不同源，所以整表替换而不是平移</strong>。</p>
+<p><strong>换版与重抽（物理图 / 站点名单）</strong>：PDF 换版时跑 <code>python backend/scripts/gen_olib_topo.py &quot;&lt;新 PDF 路径&gt;&quot; --write</code> —— 整表重抽站名/坐标/5G 标记，并同步 <code>TOPO_PAGE_SIZE.physical</code>；<strong>不要手改单条坐标</strong>。脚本口径：站点名取第 1 页物理图的文字对象（同一基线的碎片合并、断行续写合并），红色独立 <code>5G</code> 文字对象就近归属站点（&gt;20pt 不认），<code>ISP</code> 取站名中的 ISP；图例（Backbone fiber / ON going IPRAN link / DWDM / 5G SITE / P26A-D）、里程与国名等说明文字按白名单剔除。本次换版实测：667 条（旧版 553 条）、5G 27 条、ISP 10 条；<strong>画布从 4818.5×4159.5 变成 6491×4818.5，旧坐标与新图不同源，所以整表替换而不是平移</strong>。</p>
+</li>
+<li>
+<p><strong>换版与重抽（逻辑图，2026-11-21 新增）</strong>：逻辑图是<strong>单独一页</strong>的 PDF，换版时跑 <code>python backend/scripts/gen_olib_logical.py &quot;&lt;逻辑图 PDF&gt;&quot; --write</code> —— 矢量导出 <code>logical.svg</code>（文字转轮廓，不依赖字体）、同步 <code>TOPO_PAGE_SIZE.logical</code>，并按页内文字对象重建 <code>LOGICAL_PINS</code>。点位口径：把 Visio 拆成单个词的文字对象先按同一基线拼行、再按行距/字号/颜色/水平中心合成标签簇；标签规范化后与站点表精确匹配，括号后缀（<code>Fendell(ISP)</code>）、缩写与拼写差异走脚本内 <code>ALIASES</code> 白名单（人工确认过的同一站），对不上的标签（KSB / UL / AML Loop 3 等不在 667 条名单里的）跳过不猜；同站出现两次时取非红色（现有）那条。本次 20260901 版实测：108 个逻辑点位（旧版 65）、画布 4065.4×1154.5。两个脚本互不覆盖。</p>
 </li>
 <li>
 <p><strong>数据与资源</strong>：站点名单 / 坐标 / 骨干节点与链路在 <code>frontend/src/pages/networkTopology/topologyData.ts</code>；两张图是<strong>由 PDF 矢量导出的 SVG</strong>（<code>frontend/public/topology/physical.svg</code>、<code>logical.svg</code>，构建后落到 <code>_fe_dist/topology/</code>，经 vite base <code>/myapp/</code> 加载），不是位图截图 —— 放大到任意倍率线条与文字都保持清晰。坐标口径、已知限制写在 <code>topologyData.ts</code> 文件头与本页可展开的口径说明里。</p>
 </li>
 <li>
-<p><strong>三个视图</strong>（<code>TopologyViewer.tsx</code>）：「原图 · 物理拓扑」叠加全部站点点位；「原图 · 逻辑拓扑」只看第 2 页原图；「骨干示意」按第 2 页逻辑图重绘 13 个节点、18 条链路（<code>CoreSchematic.tsx</code>）。<strong>「站点分布」散点视图已于 2026-11-16 按用户要求移除</strong>（<code>ScatterView.tsx</code>、<code>SECTOR_COLORS</code> 与 <code>view/hint/detail.scatter</code> 三个 i18n 键一并删除，不留死代码）。</p>
+<p><strong>三个视图</strong>（<code>TopologyViewer.tsx</code>）：「原图 · 物理拓扑」叠加全部站点点位；「原图 · 逻辑拓扑」看 20260901 版逻辑图，并叠加能匹配到站名的 108 个标签点位；「骨干示意」按 202503 版逻辑图重绘 13 个节点、18 条链路（<code>CoreSchematic.tsx</code>）。<strong>「站点分布」散点视图已于 2026-11-16 按用户要求移除</strong>（<code>ScatterView.tsx</code>、<code>SECTOR_COLORS</code> 与 <code>view/hint/detail.scatter</code> 三个 i18n 键一并删除，不留死代码）。</p>
 </li>
 <li>
 <p><strong>交互</strong>：滚轮以光标为中心缩放、拖动平移、工具条缩放/重置/全屏/显示隐藏点位；右下角缩略图（仅物理图）显示当前视野并可点击跳转。画布按「原图尺寸 × 倍率」重新渲染 SVG（不是 CSS transform 拉伸），所以放大后文字、链路仍清晰；点位半径按 <code>1/scale</code> 反向补偿，放大后仍是细小圆点；选中站点画十字虚线 + 橙色脉冲光圈 + 名称标签。</p>
@@ -20300,9 +20303,9 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 </ul>
 <p><a id="ch-15-s121"></a></p>
 <h5>olibTopo（<code>olibTopo</code>）</h5>
-<p>OLIB FO 全国光纤网络拓扑（静态参考页）：把 Orange Liberia 网络拓扑 PDF 的第 1 页物理图、第 2 页逻辑图原样嵌入，并在物理图上叠加 667 个提取站点。支持缩放 / 平移 / 站点搜索 / 骨干核心与 5G·ISP 筛选，点站点可看区域、原图相对位置和类型，并可全图定位或放大看周边链路。</p>
+<p>OLIB FO 全国光纤网络拓扑（静态参考页）：把 Orange Liberia 网络拓扑 PDF 第 1 页物理图、20260901 版单页逻辑图原样嵌入，并在物理图上叠加 667 个提取站点、在逻辑图上叠加 108 个能匹配到站名的标签点位。支持缩放 / 平移 / 站点搜索 / 骨干核心与 5G·ISP 筛选，点站点可看区域、原图相对位置和类型，并可全图定位或放大看周边链路。</p>
 <ul>
-<li>三个视图：「原图 · 物理拓扑」（叠加站点点位）/「原图 · 逻辑拓扑」/「骨干示意」（按第 2 页逻辑图梳理的 9 个核心节点与链路）</li>
+<li>三个视图：「原图 · 物理拓扑」（叠加站点点位）/「原图 · 逻辑拓扑」（20260901 版逻辑图，叠加能匹配到站名的 108 个标签点位）/「骨干示意」（按 202503 版逻辑图梳理的 9 个核心节点与链路）</li>
 <li>物理图点位：灰=普通、红=5G、蓝=ISP、紫=骨干核心；半径随缩放反向补偿，放大后仍是细小圆点。滚轮缩放、拖动平移，右下角缩略图可点击跳转，工具条可重置 / 全屏 / 隐藏点位</li>
 <li>右侧站点查询是模糊搜索：忽略大小写和标点，可以按站名或区域里的词匹配，打错一个字母或少写一两个字母也能找到；另有区域下拉与「全部 / 5G / ISP / 骨干核心」快捷筛选。结果超过 300 条时只渲染前 300 条并明确提示，不会静默截断。点一条结果会放大到该站</li>
 <li>点站点后详情卡显示区域、原图相对位置（近似值，不是 GPS）与类型；「全图定位」「放大看周边链路」两个按钮与参考页一致</li>

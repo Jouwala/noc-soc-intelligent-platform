@@ -2072,9 +2072,9 @@ UME topology in four layers (IP RAN Fiber / IP Core / Metro Ring / DWDM): all fo
 
 #### olibTopo（`olibTopo`）
 
-OLIB FO nationwide fiber topology (static reference page): pages 1-2 of the Orange Liberia network topology PDF are embedded as-is, with 667 extracted sites overlaid on the physical map. It supports zoom / pan / site search / backbone-core and 5G·ISP filters; click a site to see its region, approximate page position and type, then locate it or zoom into the nearby links.
+OLIB FO nationwide fiber topology (static reference page): page 1 of the Orange Liberia network topology PDF and the 20260901 single-page logical drawing are embedded as-is, with 667 extracted sites overlaid on the physical map and 108 label pins matched to site names on the logical map. It supports zoom / pan / site search / backbone-core and 5G·ISP filters; click a site to see its region, approximate page position and type, then locate it or zoom into the nearby links.
 
-- Three views: "Original · Physical" (site dots overlaid) / "Original · Logical" / "Backbone schematic" (9 core nodes and links traced from the page-2 drawing)
+- Three views: "Original · Physical" (all site dots overlaid) / "Original · Logical" (the 20260901 drawing with 108 label pins matched to site names) / "Backbone schematic" (9 core nodes and links traced from the 202503 drawing)
 - Physical-map dots: grey = regular, red = 5G, blue = ISP, purple = backbone core. The radius is compensated against zoom so dots stay small when zoomed in. Wheel to zoom, drag to pan; the bottom-right mini map jumps on click, and the toolbar resets / goes fullscreen / hides dots
 - The site search on the right is fuzzy: it ignores case and punctuation, matches words in the site name or region, and still hits when one letter is wrong or a couple are missing. A region dropdown and the All / 5G / ISP / Backbone core chips sit beside it. When more than 300 rows match only the first 300 are rendered, with an explicit notice (never silently truncated). Picking a row zooms to that site
 - After selecting a site the detail card shows its region, approximate page position (not GPS) and type; "Locate on map" and "Zoom to nearby links" match the reference page
