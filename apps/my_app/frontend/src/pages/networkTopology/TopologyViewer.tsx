@@ -93,7 +93,7 @@ const SiteDots = memo(function SiteDots({
   )
 })
 
-/** 逻辑图点位：只有第 2 页能匹配到的标签（约 65 个），不是全量 667 */
+/** 逻辑图点位：20260901 逻辑图上能匹配到站名的标签（108 个），不是全量 667 */
 const LogicalDots = memo(function LogicalDots({
   w, h, scale, selectedName, onSelect,
 }: {
@@ -358,7 +358,7 @@ const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function Topology
    * 重新栅格化 SVG，任意倍率都清晰。平移仍用 transform，缩放时才改宽高。 */
   const display = content ? { w: content.w * transform.s, h: content.h * transform.s } : null
 
-  /* 高亮位置（视图坐标系）：物理用全量坐标；逻辑用第 2 页标签坐标 */
+  /* 高亮位置（视图坐标系）：物理用全量坐标；逻辑用 LOGICAL_PINS 标签坐标 */
   const highlight = useMemo(() => {
     if (!selected || !content) return null
     let x = selected.x
