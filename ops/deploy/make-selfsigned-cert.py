@@ -14,7 +14,7 @@
   runtime\\python312\\python.exe ops\\deploy\\make-selfsigned-cert.py
   runtime\\python312\\python.exe ops\\deploy\\make-selfsigned-cert.py --dir nginx-1.28.0\\certs --force
 
-退出码：0 = 已有证书或生成成功；1 = 环境不满足（缺 cryptography / 写不进去）。
+退出码：0 = 已有证书或生成成功；1 = 环境不满足（缺 cryptography / 写不进去 / 未给 --dir 且找不到 nginx）。
 """
 from __future__ import annotations
 
