@@ -164,6 +164,10 @@ const BmMeta = lazy(() => import('./pages/BmMeta'))
 // BP Report 劣化小区报告（umlaut 口径：日均三条件 / 周 4/7 天 / 月 3/4 个完整周）
 const BpReport = lazy(() => import('./pages/BpReport'))
 const CnKpi = lazy(() => import('./pages/CnKpi'))
+// CS / PS CN KPI 分组看板（2026-11-20）：同一批 KPI 按 EMS / UME 两段展示，
+// 页面主体共用 pages/cnKpiSplit/CnKpiBoard.tsx。
+const CsCnKpi = lazy(() => import('./pages/CsCnKpi'))
+const PsCnKpi = lazy(() => import('./pages/PsCnKpi'))
 // CN KPI 5 分钟看板：读 cnn_kpi_sync_5mins 写入的 5mins_* 表，Day0/Day1/Day7 叠画
 const CnKpi5mins = lazy(() => import('./pages/CnKpi5mins'))
 // CN 小时 KPI 看板（KPI Template.xlsx 模板，gr=3600）
@@ -209,9 +213,9 @@ const FINEBI_PAGE_TO_SLUG: Record<string, string> = Object.fromEntries(
   FINEBI_BOARDS.map((b) => [`finebi_${b.slug}`, b.slug]),
 )
 
-type PageKey = 'overview' | 'tables' | 'upload' | 'dashboard' | 'alarm' | 'ttwo' | 'v1_ttwo' | 'tt' | 'wo' | 'gis' | 'realtime_alarm' | 'packet_loss' | 'archive' | 'sync' | 'warehouse' | 'sp_material' | 'sp_details' | 'sp_report' | 'com_report' | 'warehouse_summary' | 'ms_wo_sla' | 'ms_contract_kpi' | 'battery' | 'person' | 'settings' | 'ip_trace' | 'incident_overview' | 'nur' | 'ms_sla' | 'ms_nur_only' | 'ms_sla_only' | 'alarmManagement' | 'cxoDashboard' | 'vmaxCxoDashboard' | 'vmaxCxoDashboard_Daily' | 'vmaxCxoDashboard_90Days' | 'socTrendDashboard' | 'imonitor' | 'email_reports' | 'mwUmeTopology' | 'ipranTopo' | 'olibTopo' | 'olibTopo_v2' | 'mwRealTime' | 'portalLogin' | 'eflow_qa' | 'eflow_flow' | 'site_avail' | 'avail_ms' | 'avail_flm' | 'avail_county' | 'fme_ranking' | 'noc_analyst' | 'repeat_site_down' | 'cr_analysis' | 'pm_analysis' | 'ran_cells_kpi' | 'ran_inventory' | 'bm_speedtest' | 'bm_meta' | 'bp_report' | 'cn_kpi' | 'cn_kpi_5mins' | 'cn_hourly_kpi' | 'ume_in_kpi' | 'vmax_user_query' | 'vmax_user_cca' | 'ipt_power' | 'feedback' | 'ap_center' | 'help' | `finebi_${string}`
+type PageKey = 'overview' | 'tables' | 'upload' | 'dashboard' | 'alarm' | 'ttwo' | 'v1_ttwo' | 'tt' | 'wo' | 'gis' | 'realtime_alarm' | 'packet_loss' | 'archive' | 'sync' | 'warehouse' | 'sp_material' | 'sp_details' | 'sp_report' | 'com_report' | 'warehouse_summary' | 'ms_wo_sla' | 'ms_contract_kpi' | 'battery' | 'person' | 'settings' | 'ip_trace' | 'incident_overview' | 'nur' | 'ms_sla' | 'ms_nur_only' | 'ms_sla_only' | 'alarmManagement' | 'cxoDashboard' | 'vmaxCxoDashboard' | 'vmaxCxoDashboard_Daily' | 'vmaxCxoDashboard_90Days' | 'socTrendDashboard' | 'imonitor' | 'email_reports' | 'mwUmeTopology' | 'ipranTopo' | 'olibTopo' | 'olibTopo_v2' | 'mwRealTime' | 'portalLogin' | 'eflow_qa' | 'eflow_flow' | 'site_avail' | 'avail_ms' | 'avail_flm' | 'avail_county' | 'fme_ranking' | 'noc_analyst' | 'repeat_site_down' | 'cr_analysis' | 'pm_analysis' | 'ran_cells_kpi' | 'ran_inventory' | 'bm_speedtest' | 'bm_meta' | 'bp_report' | 'cn_kpi' | 'cn_kpi_5mins' | 'cn_hourly_kpi' | 'cs_cn_kpi' | 'ps_cn_kpi' | 'ume_in_kpi' | 'vmax_user_query' | 'vmax_user_cca' | 'ipt_power' | 'feedback' | 'ap_center' | 'help' | `finebi_${string}`
 
-const VALID_PAGES: PageKey[] = ['overview', 'tables', 'upload', 'dashboard', 'alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'gis', 'realtime_alarm', 'packet_loss', 'archive', 'sync', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary', 'ms_wo_sla', 'ms_contract_kpi', 'battery', 'person', 'settings', 'ip_trace', 'incident_overview', 'nur', 'ms_sla','ms_nur_only', 'ms_sla_only', 'alarmManagement', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'email_reports', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'portalLogin', 'eflow_qa', 'eflow_flow', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'ran_inventory', 'bm_speedtest', 'bm_meta', 'bp_report', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'ume_in_kpi', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'feedback', 'ap_center', 'help', ...FINEBI_BOARDS.map((b) => `finebi_${b.slug}` as PageKey)]
+const VALID_PAGES: PageKey[] = ['overview', 'tables', 'upload', 'dashboard', 'alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'gis', 'realtime_alarm', 'packet_loss', 'archive', 'sync', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary', 'ms_wo_sla', 'ms_contract_kpi', 'battery', 'person', 'settings', 'ip_trace', 'incident_overview', 'nur', 'ms_sla','ms_nur_only', 'ms_sla_only', 'alarmManagement', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'email_reports', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'portalLogin', 'eflow_qa', 'eflow_flow', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'ran_inventory', 'bm_speedtest', 'bm_meta', 'bp_report', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'ume_in_kpi', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'feedback', 'ap_center', 'help', ...FINEBI_BOARDS.map((b) => `finebi_${b.slug}` as PageKey)]
 
 /* ==================== 自动刷新（大屏 / NOC 值班场景） ====================
  * 背景：各页面此前只在挂载时拉取一次数据（legacy iframe 页面同样只在 onload
@@ -288,7 +292,7 @@ const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {
   nur: 300, ms_sla: 300, ms_nur_only: 300, ms_sla_only: 300, ms_wo_sla: 300, ms_contract_kpi: 300,
   site_avail: 300, avail_ms: 300, avail_flm: 300, avail_county: 300, fme_ranking: 300,
   noc_analyst: 300, repeat_site_down: 300,
-  cn_kpi: 300, cn_kpi_5mins: 300, cn_hourly_kpi: 300, ume_in_kpi: 300,
+  cn_kpi: 300, cn_kpi_5mins: 300, cn_hourly_kpi: 300, cs_cn_kpi: 300, ps_cn_kpi: 300, ume_in_kpi: 300,
   cxoDashboard: 300, vmaxCxoDashboard: 300, vmaxCxoDashboard_Daily: 300,
   imonitor: 300, incident_overview: 300,
   gis: 300, person: 300, battery: 300,
@@ -331,7 +335,7 @@ const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {
  *  cn_kpi_5mins（2026-11-10）：重挂载会把 data 清掉，`loading && !data` 期间
  *  11 张图全部变成转圈空白；远端取数往往比刷新间隔还慢，下一轮重挂载还会
  *  丢掉还没落地的响应。该页监听 myapp-refresh 静默重取，失败保留上一帧。 */
-const AR_INPLACE_REFRESH_PAGES: PageKey[] = ['person', 'cn_kpi_5mins', 'cn_hourly_kpi']
+const AR_INPLACE_REFRESH_PAGES: PageKey[] = ['person', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi']
 // 支持软刷新协议（postMessage myapp-refresh 原地重拉数据）的 legacy 页面 / React 内嵌页。
 // imonitor：跨端口 iframe 无法由外壳重挂载来刷新（会整页闪白），改由页面自己
 // 监听 myapp-refresh 后在 iframe 内原地重载（见 ImonitorScreen.tsx）。
@@ -544,6 +548,9 @@ const PAGE_META: Record<PageKey, { icon: ReactNode; labelKey: string }> = {
   // BP Cells Report：用告警类图标，与「劣化」语义一致
   bp_report: { icon: <AlertOutlined />, labelKey: 'nav.bpReport' },
   cn_kpi: { icon: <FundProjectionScreenOutlined />, labelKey: 'nav.cnKpi' },
+  // CS / PS 分组看板：同一批 CN KPI 按 EMS / UME 两段展示，图标沿用 CN KPI 家族
+  cs_cn_kpi: { icon: <FundProjectionScreenOutlined />, labelKey: 'nav.csCnKpi' },
+  ps_cn_kpi: { icon: <FundProjectionScreenOutlined />, labelKey: 'nav.psCnKpi' },
   cn_kpi_5mins: { icon: <FieldTimeOutlined />, labelKey: 'nav.cnKpi5mins' },
   cn_hourly_kpi: { icon: <FieldTimeOutlined />, labelKey: 'nav.cnHourlyKpi' },
   ume_in_kpi: { icon: <DotChartOutlined />, labelKey: 'nav.umeInKpi' },
@@ -603,7 +610,7 @@ const DEFAULT_GROUPS: { key: string; labelKey: string; items: PageKey[] }[] = [
   {
     key: 'grp_monitor',
     labelKey: 'nav.grp.monitor',
-    items: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'ume_in_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'alarmManagement', 'incident_overview'],
+    items: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'ume_in_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'alarmManagement', 'incident_overview'],
   },
   {
     key: 'grp_network',
@@ -1683,6 +1690,10 @@ function AppContent() {
         return <CnKpi5mins />
       case 'cn_hourly_kpi':
         return <CnHourlyKpi />
+      case 'cs_cn_kpi':
+        return <CsCnKpi />
+      case 'ps_cn_kpi':
+        return <PsCnKpi />
       case 'ume_in_kpi':
         return <UmeInKpi />
       case 'alarmManagement':

@@ -515,8 +515,8 @@ TASK_SPECS = [
     #      错开高峰；小时行 append-only，2 天窗口足够补齐跨天档。
     dict(task_id="cn_hourly_kpi_sync", name="CN 小时KPI同步", name_en="CN Hourly KPI Sync",
          loader=("backend.services.cn_kpl.cn_hourly_kpi_service", "run_cn_hourly_kpi_sync"),
-         description="CN UME 小时粒度 KPI 同步（KPI Template.xlsx 模板：xGW 会话/吞吐容量 + MGW/MRFP 资源利用率，gr=3600，默认 2 天增量窗口），API 写入 DB CNN 的 <模板名>_UME 表，供小时 KPI 看板按日期区间出图",
-         description_en="CN UME hourly KPI sync (templates from KPI Template.xlsx: xGW session/throughput capacity + MGW/MRFP resource utilization, gr=3600, 2-day incremental window by default), API write to DB CNN <template>_UME tables for the hourly KPI board",
+         description="CN UME 小时粒度 KPI 同步（KPI Template.xlsx 模板 + 补采的 DNS 成功率：xGW 会话/吞吐容量 + MGW/MRFP 资源利用率与容量 + DNS 成功率，gr=3600，默认 2 天增量窗口），API 写入 DB CNN 的 <模板名>_UME 表，供小时 KPI、CS 与 PS CN KPI 看板按日期区间出图",
+         description_en="CN UME hourly KPI sync (KPI Template.xlsx templates plus a manually added DNS success ratio: xGW session/throughput capacity + MGW/MRFP resource utilization and capacity + DNS success ratio, gr=3600, 2-day incremental window by default), API write to DB CNN <template>_UME tables for the hourly, CS and PS CN KPI boards",
          default_cron="20 6 * * *", category="cnn_kpi"),
 
     # 12. SP 备件数据同步（2026-09-20 起改为每小时 :10，原为每天 07:00）

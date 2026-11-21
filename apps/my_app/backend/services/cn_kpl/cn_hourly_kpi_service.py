@@ -13,11 +13,17 @@
 
 =========================== 口径决定（用户 2026-11-18 定） ===========================
 
-  1. **Resource_Utilization 与 Resource_Capacity 两族重复，只保留 Utilization 一族。**
+  1. **Resource_Utilization 与 Resource_Capacity 两族各自重复，各取一张做载体。**
      xlsx 里 CS_MGW91/92/MRFP96 的三个 Utilization 模板 items/motid/grouplayer
-     **完全一致**（同 motid 50804、同 3 个复合 KPI），任取其一即可；本服务取
-     `CS_MRFP96_Resource_Utilization_OSS` 做载体，表名沿用 `<模板名>_UME` 惯例。
-     （Capacity 族是 6 个原始 counter，utilization 已覆盖其口径，弃用。）
+     **完全一致**（同 motid 50804、同 3 个复合 KPI）；三个 Capacity 模板同样一致
+     （同 motid 40841、同 6 个原始 counter）。任取其一即可，本服务分别取：
+         · `CS_MRFP96_Resource_Utilization_OSS` —— TONE/TC/RTP 利用率(%)
+         · `CS_MRFP96_Resource_Capacity_OSS`   —— TONE/TC/RTP 可用量 + 占用量
+     落库表名沿用 `<模板名>_UME` 惯例；两张表都含 MGW_91 / MGW_92 / MRFP_96
+     三个 NE（Object Scope=ALL），页面按 NE 过滤即可得到 MGW91/92/MRFP96
+     各自的视图 —— 不必为每个模板单独跑一次查询。
+     （2026-11-20 新增 Capacity：CS CN KPI 页要展示三台 MGW/MRFP 的资源容量；
+      实测该模板导出列名与 `CS_MGW32_Resource_Capacity_OSS_EMS` 同构。）
   2. **Object Scope = ALL**：既有 payload 的 `filterlayer="all"` 即对应此选择，
      实测导出自动包含全部 NE（MGW_91 / MGW_92 / MRFP_96 / xGWU22 / xGWU122），
      无需额外参数。
@@ -25,10 +31,13 @@
   4. **落库走 DbWriterClient → db_ps_cs_cn.sqlite3**（与既有 CNN 表同一库同一通道），
      表名 `<模板名>_UME`，读取走 `cn_kpi_service.query_remote`（远端只读 API）。
 
-参与模板（3 个）：
+参与模板（5 个）：
   PS_xGW_Session_Capacity_OSS      xGW PFCP 会话 授权/已用（原始 counter）
   PS_xGW_Throughput_Capacity_OSS   xGW 吞吐 容量/已用（原始 counter）
   CS_MRFP96_Resource_Utilization_OSS  MGW_91/92 + MRFP_96 的 TONE/TC/RTP 资源利用率（%）
+  CS_MRFP96_Resource_Capacity_OSS     MGW_91/92 + MRFP_96 的 TONE/TC/RTP 可用量/占用量
+  DNS_SUCCESS_RATIO_OSS_updated       xGW DNS 查询成功率（%，2026-11-20 补采；
+                                      不在 KPI Template.xlsx 里，配置见 XLSX_OPTIONAL）
 
 =========================== 解析坑（实测踩过） ===========================
 
@@ -61,7 +70,14 @@ TEMPLATE_KEYS = [
     "PS_xGW_Session_Capacity_OSS",
     "PS_xGW_Throughput_Capacity_OSS",
     "CS_MRFP96_Resource_Utilization_OSS",
+    "CS_MRFP96_Resource_Capacity_OSS",
+    "DNS_SUCCESS_RATIO_OSS_updated",
 ]
+
+# 不在 KPI Template.xlsx 里的模板：配置来自 2026-11-20 从 UME 抓到的请求体
+# （templateid 1649220598196 / motid 4927 / items cn.xgw.49270004）。
+# 这些模板在 xlsx 里本来就没有，解析成功时不该报「xlsx 缺模板」的告警。
+XLSX_OPTIONAL = {"DNS_SUCCESS_RATIO_OSS_updated"}
 
 # 首次回补窗口（天）：用户定「一个月」
 BACKFILL_DAYS = int(os.environ.get("CN_HOURLY_KPI_BACKFILL_DAYS", "31"))
@@ -103,6 +119,38 @@ FALLBACK_CONFIGS: dict[str, dict] = {
         "itemsposition": [0, 0, 0], "itemsposition1": [0, 0, 0],
         "groupchoice": None, "invaliditems": [],
         "table_name": "CS_MRFP96_Resource_Utilization_OSS_UME",
+    },
+    # Capacity 族：6 个原始 counter（可用量 + 占用量），与 Utilization 同 motid 族
+    # 不同（40841 vs 50804），必须单独查。导出列名实测与 CS_MGW32_Resource_Capacity
+    # _OSS_EMS 同构，且含 MGW_91 / MGW_92 / MRFP_96 三个 NE。
+    # 2026-11-20 新增：DNS 成功率（gr=3600，按 NE 每小时一行）。
+    # 配置逐字段取自用户在 UME「KPI 模板管理」抓到的请求体：
+    # templateid=1649220598196 / motid=4927 / nfctid=cn.ngc.xgw-u /
+    # items=["cn.xgw.49270004"] / groupchoice=cn_service_group_choice=normal。
+    # 导出列名实测为 "Ratio of successful DNS query analysis(%)"。
+    "DNS_SUCCESS_RATIO_OSS_updated": {
+        "favoriteconditionname": "DNS_SUCCESS_RATIO_OSS_updated",
+        "templatename": "DNS_SUCCESS_RATIO_OSS_updated",
+        "templateid": "1649220598196", "gr": "3600", "groupbygroup": False,
+        "filterlayer": "all", "grouplayer": "me,fservice",
+        "motid": "4927", "nfctid": "cn.ngc.xgw-u",
+        "items": ["cn.xgw.49270004"],
+        "itemsposition": [0], "itemsposition1": [0],
+        "groupchoice": "cn_service_group_choice=normal", "invaliditems": [],
+        "table_name": "DNS_SUCCESS_RATIO_OSS_UME",
+    },
+    "CS_MRFP96_Resource_Capacity_OSS": {
+        "favoriteconditionname": "CS_MRFP96_Resource_Capacity_OSS",
+        "templatename": "CS_MRFP96_Resource_Capacity_OSS",
+        "templateid": "1649220598376", "gr": "3600", "groupbygroup": False,
+        "filterlayer": "all", "grouplayer": "orignaldata_layermoc",
+        "motid": "40841", "nfctid": "cn.wcn.mgw",
+        "items": ["C408410019", "C408410024", "C408410033",
+                  "C408410038", "C408410054", "C408410059"],
+        "itemsposition": [0, 0, 0, 0, 0, 0],
+        "itemsposition1": [0, 0, 0, 0, 0, 0],
+        "groupchoice": None, "invaliditems": [],
+        "table_name": "CS_MRFP96_Resource_Capacity_OSS_UME",
     },
 }
 
@@ -190,7 +238,9 @@ def load_hourly_configs() -> dict[str, dict]:
         cfg = parsed.get(key)
         if cfg is None:
             cfg = copy.deepcopy(FALLBACK_CONFIGS[key])
-            if parsed:  # xlsx 解析成功但缺这个模板 → 上游可能删了模板，值得一条显式告警
+            # xlsx 解析成功但缺这个模板 → 上游可能删了模板，值得一条显式告警；
+            # DNS 是「xlsx 之外补采」的模板，缺它是预期行为，不告警。
+            if parsed and key not in XLSX_OPTIONAL:
                 logger.warning("[CN-HOURLY] xlsx 里没有模板 %s，使用内置兜底配置", key)
         elif cfg.get("templateid") != FALLBACK_CONFIGS[key]["templateid"]:
             logger.info("[CN-HOURLY] 模板 %s 的 templateid 与兜底值不同（xlsx=%s），以 xlsx 为准",
@@ -279,11 +329,14 @@ def _upsert_table(table_name: str, xlsx_bytes: bytes) -> int:
     return len(rows)
 
 
-def run_cn_hourly_kpi_sync(days_back: int = None) -> dict:
+def run_cn_hourly_kpi_sync(days_back: int = None,
+                           templates: list[str] | None = None) -> dict:
     """CN 小时 KPI 同步主流程：登录 → 逐模板查询/导出 → upsert 落库。
 
     days_back: 查询窗口天数；None 时取 RECENT_DAYS（日常增量）。
     首次回补传 BACKFILL_DAYS（31）。
+    templates: 只跑指定模板（模板名）；None = 全部。用于新增模板后的单模板回补，
+        避免为一张新表把 4 个模板全部重查一遍（每次查询约 1.5 分钟）。
     """
     t_start = time.time()
     if days_back is None:
@@ -291,6 +344,11 @@ def run_cn_hourly_kpi_sync(days_back: int = None) -> dict:
     result: dict = {"success": False, "tables": {}, "errors": [], "elapsed_seconds": 0}
 
     configs = load_hourly_configs()
+    if templates:
+        unknown = [t for t in templates if t not in configs]
+        if unknown:
+            raise ValueError(f"未知模板：{unknown}；可选：{list(configs)}")
+        configs = {k: v for k, v in configs.items() if k in templates}
     start_iso, end_iso = _window_iso(days_back)
     logger.info("[CN-HOURLY] 同步开始：模板=%s 窗口=%s → %s",
                 list(configs), start_iso, end_iso)
@@ -501,10 +559,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CN 小时 KPI 同步（KPI Template.xlsx 模板）")
     parser.add_argument("--days", type=int, default=None,
                         help=f"回补天数（默认 {RECENT_DAYS}；首次回补用 --days {BACKFILL_DAYS}）")
+    parser.add_argument("--templates", default="",
+                        help="只跑指定模板（逗号分隔），留空=全部。例："
+                             "CS_MRFP96_Resource_Capacity_OSS")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s [%(name)s] %(levelname)s: %(message)s')
-    res = run_cn_hourly_kpi_sync(days_back=args.days)
+    tpl = [t.strip() for t in (args.templates or "").split(",") if t.strip()] or None
+    res = run_cn_hourly_kpi_sync(days_back=args.days, templates=tpl)
     print(f"\nCN Hourly KPI 结果: {'成功' if res['success'] else '失败'}")
     for t, info in res["tables"].items():
         print(f"  {t}: {info['rows']} 行")

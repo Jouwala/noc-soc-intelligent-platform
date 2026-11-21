@@ -465,6 +465,21 @@ export function getCnKpiHealth() {
   return api.get('/cn-kpi/health')
 }
 
+// CS / PS 分组看板（?page=cs_cn_kpi / ?page=ps_cn_kpi）
+// 数据源：db_ps_cs_cn.sqlite3，经远端只读 SQL API；按 EMS / UME 两段返回组件。
+// board: 'cs' | 'ps'；params: start/end=YYYY-MM-DD（留空=近31天）/ force=true 跳过 60s 缓存
+export type CnKpiSplitBoard = 'cs' | 'ps'
+export function getCnKpiSplitOverview(
+  board: CnKpiSplitBoard,
+  params?: { start?: string; end?: string; force?: boolean },
+) {
+  const q: Record<string, string | number> = {}
+  if (params?.start) q.start = params.start
+  if (params?.end) q.end = params.end
+  if (params?.force) q.force = 1
+  return api.get(`/cn-kpi-split/${board}/overview`, { params: Object.keys(q).length ? q : undefined })
+}
+
 // CN KPI 5 分钟看板（?page=cn_kpi_5mins）
 // 数据源：任务 cnn_kpi_sync_5mins 每 15 分钟写入的 5mins_* 表（db_ps_cs_cn.sqlite3）。
 // 窗口固定为「今天 + 昨天 + 7 天前」（Day0/Day1/Day7 叠画），故不接收日期参数。

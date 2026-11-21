@@ -15,7 +15,9 @@
     数据集定义，与原版 1:1 对齐（见 my-finebi 的 backend/seed_cnkpi.json）。
     - 折线类：GROUP BY substr("End Time",1,10)，默认近 31 天
     - pivot 类：SQL 返回 [时间, NE, 值] 三列，前端按 NE 透视成多序列
-    - 单位换算与原版一致（Byte→GB 除以 1000/1000，与 FineBI 相同）
+    - 单位换算：Byte→GB 除以 1000/1000/1000（1 GB = 1e9 字节）。
+      2026-11-20 实测上游列确实是字节（单日 4G FDD 约 4.2e14 B = 42 万 GB），
+      原写法 /1e6 会放大 1000 倍；与 cn_kpi_5mins_service（/1e9）统一。
 
 =========================== EMS / UME 配对回退 ===========================
     同一个 KPI 在 db_ps_cs_cn 里有两张同名不同源的表：
@@ -297,7 +299,7 @@ WIDGETS: List[Dict[str, Any]] = [
         "chart": "line",
         "sql": (
             'SELECT substr("End Time",1,10) AS t, '
-            'ROUND(SUM(b)/1000.0/1000.0, 2) AS "FDD Traffic(GB)" FROM (\n'
+            'ROUND(SUM(b)/1000.0/1000.0/1000.0, 2) AS "FDD Traffic(GB)" FROM (\n'
             'SELECT "End Time", "Byte of downlink data packets received via SGI '
             'interface per APN(Byte)" AS b FROM "4G_FDD_DATA_TRAFFIC_TEMPLATE_OSS_UME"\n'
             ")  GROUP BY substr(\"End Time\",1,10) "
@@ -315,7 +317,7 @@ WIDGETS: List[Dict[str, Any]] = [
         "monthly_table": "1month_TDD_DATA_TRAFFIC_TEMPLATE_OSS_EMS",
         "sql": (
             'SELECT substr("End Time",1,10) AS t, '
-            'ROUND(SUM(b)/1000.0/1000.0, 2) AS "TDD Traffic(GB)" FROM (\n'
+            'ROUND(SUM(b)/1000.0/1000.0/1000.0, 2) AS "TDD Traffic(GB)" FROM (\n'
             'SELECT "End Time", "Byte of downlink data packets received via SGI '
             'interface per APN(Byte)" AS b FROM "TDD_DATA_TRAFFIC_TEMPLATE_OSS_EMS"\n'
             ")  GROUP BY substr(\"End Time\",1,10) "
@@ -328,7 +330,7 @@ WIDGETS: List[Dict[str, Any]] = [
         "chart": "line",
         "sql": (
             'SELECT substr("Begin Time",1,10) AS t, '
-            'ROUND(SUM(b)/1000.0/1000.0, 2) AS "RG-30(GB)" FROM (\n'
+            'ROUND(SUM(b)/1000.0/1000.0/1000.0, 2) AS "RG-30(GB)" FROM (\n'
             'SELECT "Begin Time", "Bytes of flows of downlink packets based RG(Byte)" '
             'AS b, "Measurement Object" AS mo '
             'FROM "FREE_RATING_GROUP_TEMPLATE_OSS_update_UME"\n'
@@ -342,7 +344,7 @@ WIDGETS: List[Dict[str, Any]] = [
         "chart": "line",
         "sql": (
             'SELECT substr("Begin Time",1,10) AS t, '
-            'ROUND(SUM(b)/1000.0/1000.0, 2) AS "RG-12(GB)" FROM (\n'
+            'ROUND(SUM(b)/1000.0/1000.0/1000.0, 2) AS "RG-12(GB)" FROM (\n'
             'SELECT "Begin Time", "Bytes of flows of downlink packets based RG(Byte)" '
             'AS b, "Measurement Object" AS mo '
             'FROM "FREE_RATING_GROUP_TEMPLATE_OSS_update_UME"\n'
@@ -356,7 +358,7 @@ WIDGETS: List[Dict[str, Any]] = [
         "chart": "line",
         "sql": (
             'SELECT substr("Begin Time",1,10) AS t, '
-            'ROUND(SUM(b)/1000.0/1000.0, 2) AS "RG-11(GB)" FROM (\n'
+            'ROUND(SUM(b)/1000.0/1000.0/1000.0, 2) AS "RG-11(GB)" FROM (\n'
             'SELECT "Begin Time", "Bytes of flows of downlink packets based RG(Byte)" '
             'AS b, "Measurement Object" AS mo '
             'FROM "FREE_RATING_GROUP_TEMPLATE_OSS_update_UME"\n'
@@ -370,7 +372,7 @@ WIDGETS: List[Dict[str, Any]] = [
         "chart": "line",
         "sql": (
             'SELECT substr("Begin Time",1,10) AS t, '
-            'ROUND(SUM(b)/1000.0/1000.0, 2) AS "RG-6(GB)" FROM (\n'
+            'ROUND(SUM(b)/1000.0/1000.0/1000.0, 2) AS "RG-6(GB)" FROM (\n'
             'SELECT "Begin Time", "Bytes of flows of downlink packets based RG(Byte)" '
             'AS b, "Measurement Object" AS mo '
             'FROM "FREE_RATING_GROUP_TEMPLATE_OSS_update_UME"\n'

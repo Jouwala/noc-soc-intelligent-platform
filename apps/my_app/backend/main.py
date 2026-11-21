@@ -136,6 +136,9 @@ from backend.routers import (
     portal_catalog,
     cn_kpi,
     cn_kpi_5mins,
+    # CS / PS 分组看板（?page=cs_cn_kpi / ?page=ps_cn_kpi）：按 EMS/UME 分段，
+    # 数据源/口径见 services/cn/cn_kpi_split_widgets.py 顶部说明。
+    cn_kpi_split,
     # CN 小时粒度 KPI 看板（?page=cn_hourly_kpi）：数据源/口径见
     # services/cn_kpl/cn_hourly_kpi_service.py 顶部说明。
     cn_hourly_kpi,
@@ -370,6 +373,9 @@ app.include_router(cn_kpi.router)
 # CN KPI 5 分钟看板：读 cnn_kpi_sync_5mins 任务写入的 5mins_* 表，Day0/Day1/Day7 叠画。
 # 数据源/口径见 services/cn/cn_kpi_5mins_service.py 顶部说明。
 app.include_router(cn_kpi_5mins.router)
+# CS / PS 分组看板：按 EMS（人工导出）/ UME（自动同步）两段展示同一批 CN KPI，
+# 不换源、缺表就空态。组件清单见 services/cn/cn_kpi_split_widgets.py。
+app.include_router(cn_kpi_split.router)
 # CN 小时 KPI 看板：读 cn_hourly_kpi_sync 任务写入的 <模板名>_UME 表（gr=3600，
 # 数据源 KPI Template.xlsx）。数据源/口径见 services/cn_kpl/cn_hourly_kpi_service.py 顶部说明。
 app.include_router(cn_hourly_kpi.router)

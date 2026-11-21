@@ -508,8 +508,8 @@ export const TASK_DOCS: TaskDoc[] = [
     script: 'services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync',
     zh: {
       name: 'CN 小时KPI同步',
-      desc: '从 UME「KPI 模板管理」导出件 KPI Template.xlsx 解析 3 个新模板（PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS），以小时粒度（gr=3600）查询并 API 写入 DB CNN 的 <模板名>_UME 三张表，供「CN 小时KPI」看板按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization/Capacity 两族重复只留 Utilization（用户 2026-11-18 定）',
-      flow: ['解析 KPI Template.xlsx（缺文件时用内置兜底配置并告警）', '登录 CNN UME（与 cnn_kpi_sync 共用会话缓存）', '按模板逐个查询小时粒度数据（默认 2 天增量窗口；首次回补 python -m ... --days 31）', '写入 db_ps_cs_cn 的 <模板名>_UME 表（upsert，主键 Begin Time+NE(+SERVICE)）'],
+      desc: '从 UME「KPI 模板管理」导出件 KPI Template.xlsx 解析 4 个模板（PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS），另按用户抓到的请求体补采 1 个不在 xlsx 里的模板（DNS_SUCCESS_RATIO_OSS_updated，templateid 1649220598196 / motid 4927），共 5 个；以小时粒度（gr=3600）查询并 API 写入 DB CNN 的 <模板名>_UME 五张表，供「CN 小时KPI」「CS CN KPI」与「PS CN KPI」看板按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization 与 Capacity 两族各自重复、各留一张做载体（用户 2026-11-18 定，Capacity 与 DNS 2026-11-20 补入）',
+      flow: ['解析 KPI Template.xlsx（缺文件时用内置兜底配置并告警）', '登录 CNN UME（与 cnn_kpi_sync 共用会话缓存）', '按模板逐个查询小时粒度数据（默认 2 天增量窗口；首次回补 python -m ... --days 31，新增模板可加 --templates <模板名> 单跑）', '写入 db_ps_cs_cn 的 <模板名>_UME 表（upsert，主键 Begin Time+NE(+SERVICE)）'],
       maintain: [
         '⚠ 导出 0 行视为空态跳过、不计失败（与 5 分钟任务同约定）',
         '与 cnn_kpi_sync / cnn_kpi_sync_5mins 同在 n 组串行，避免共用 CNN UME 会话互踢',
@@ -519,8 +519,8 @@ export const TASK_DOCS: TaskDoc[] = [
     },
     en: {
       name: 'CN Hourly KPI Sync',
-      desc: 'Parses 3 templates from the UME "KPI Template" export file KPI Template.xlsx (PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS), queries them at hourly granularity (gr=3600) and writes the <template>_UME tables in DB CNN for the date-rangeable CN Hourly KPI board; Object Scope=ALL covers every NE, and only the Utilization family is kept because Utilization/Capacity duplicate each other (user decision 2026-11-18)',
-      flow: ['Parse KPI Template.xlsx (falls back to embedded configs with a warning if the file is missing)', 'Log into CNN UME (shares the session cache with cnn_kpi_sync)', 'Query each template at hourly granularity (2-day incremental window by default; first backfill via python -m ... --days 31)', 'Upsert into db_ps_cs_cn tables named <template>_UME (PK Begin Time+NE(+SERVICE))'],
+      desc: 'Parses 4 templates from the UME "KPI Template" export file KPI Template.xlsx (PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS) and adds 1 more that is not in the xlsx from the request body captured by the user (DNS_SUCCESS_RATIO_OSS_updated, templateid 1649220598196 / motid 4927), five in total; it queries them at hourly granularity (gr=3600) and writes the <template>_UME tables in DB CNN for the date-rangeable CN Hourly KPI, CS CN KPI and PS CN KPI boards; Object Scope=ALL covers every NE, and one carrier table is kept per family because Utilization and Capacity each duplicate internally (user decision 2026-11-18; Capacity and DNS added 2026-11-20)',
+      flow: ['Parse KPI Template.xlsx (falls back to embedded configs with a warning if the file is missing)', 'Log into CNN UME (shares the session cache with cnn_kpi_sync)', 'Query each template at hourly granularity (2-day incremental window by default; first backfill via python -m ... --days 31, or --templates <name> for a single new template)', 'Upsert into db_ps_cs_cn tables named <template>_UME (PK Begin Time+NE(+SERVICE))'],
       maintain: [
         'WARNING: a 0-row export is treated as an empty state and skipped, not a failure (same as the 5-minute task)',
         'Runs in group n alongside cnn_kpi_sync / cnn_kpi_sync_5mins so the shared CNN UME session never gets kicked',
