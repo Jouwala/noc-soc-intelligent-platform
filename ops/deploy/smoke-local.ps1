@@ -482,7 +482,7 @@ try {
         $Results['8.2'] = '干跑：跳过 start_all / psql / local_authority_tools check。真跑将要求 data_directory 经斜杠归一化后落在 D:\02 下，且三表 source/target 为 20/74/10。'
         $Results['8.3'] = '干跑：跳过 6 项服务检查。真跑将要求 /api/health 的 db_mode=pg，overview 响应非空，以及 9277/8080/8443、index sha256、nginx -t。'
         $Results['8.4'] = '干跑：跳过停服务与端口确认。真跑由 smoke.ps1 调用 stop_all（隐藏控制台、隔离等待），并确认 80/443 仍归 D:\01、02 端口已释放。'
-        $Results['pytest'] = '干跑：跳过 pytest。真跑使用 D:\02_olbr_portal\runtime\python312\python.exe，-m "not live"，-n 8（若已安装 xdist）；与 CI quality.yml 一样 deselect 两条 test_client_is_local_trust（::ffff:127.0.0.1 实现与文档不符，另开任务）；仅忽略 2 个已知 NUR 缺数据失败。'
+        $Results['pytest'] = '干跑：跳过 pytest。真跑使用 D:\02_olbr_portal\runtime\python312\python.exe，-m "not live"，-n 8（若已安装 xdist）；仅忽略 2 个已知 NUR 缺数据失败。'
         $Results['结论'] = '通过'
         $script:ExitCode = 0
     } else {
