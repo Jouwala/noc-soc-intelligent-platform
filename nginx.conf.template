@@ -75,7 +75,6 @@ http {
         # 同一 location 清单同时服务 443，避免维护两份（与主仓库 nginx.conf 同思路）。
         listen       {{HTTPS_PORT}} ssl;
         listen       [::]:{{HTTPS_PORT}} ssl;
-        http2        on;
         ssl_certificate     {{NGINX_CERTS}}/portal.crt;
         ssl_certificate_key {{NGINX_CERTS}}/portal.key;
         ssl_protocols       TLSv1.2 TLSv1.3;
