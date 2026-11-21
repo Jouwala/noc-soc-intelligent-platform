@@ -270,6 +270,35 @@ if (-not (Test-Path -LiteralPath (Join-Path $Runner 'apps\my_app\backend\.env'))
     if ($Apply) { Copy-FileIfMissing -From $beEnvSrc -To (Join-Path $Runner 'apps\my_app\backend\.env') | Out-Null }
 }
 
+# ---------- 4b. 副本强制关闭调度器（2026-11-21） ----------
+# 为什么必须强制写 1：`MY_APP_DISABLE_SCHEDULER` 是 main.py:177 专为「冒烟/CI 模式」
+# 留的开关，但副本的 backend\.env 是从生产整份复制的，生产值恒为 0。于是副本一启动
+# 就按生产 cron 跑全部定时任务 —— 副本里的凭据是旧快照（只在 provision 时播种），
+# 任务一登录就拿过期口令撞真实上游。2026-11-20/21 iPRAN `noc1` 被反复锁号就是这条：
+# 副本 18:00/13:09 各起一次栈，用 9 月的旧密码登录真实 UME，上游「连续 3 次密码错误
+# 锁 1440 分钟」→ 生产账号被副本撞锁。
+# 冒烟只需要 /api/health 与看板接口，不需要任何定时任务；关掉调度器同时消除
+# 「副本发真邮件 / 真投递 WhatsApp」这类更严重的副作用。
+# 代码侧还有第二道保险：backend/services/env_role.py 拒绝隔离副本登录生产上游。
+$beEnvDst = Join-Path $Runner 'apps\my_app\backend\.env'
+if (Test-Path -LiteralPath $beEnvDst) {
+    Write-Step '副本强制 MY_APP_DISABLE_SCHEDULER=1（冒烟副本不跑调度器）'
+    if ($Apply) {
+        $envLines = @(Get-Content -LiteralPath $beEnvDst -Encoding UTF8)
+        $foundFlag = $false
+        $newLines = foreach ($ln in $envLines) {
+            if ($ln -match '^\s*MY_APP_DISABLE_SCHEDULER\s*=') {
+                $foundFlag = $true
+                'MY_APP_DISABLE_SCHEDULER=1'
+            } else {
+                $ln
+            }
+        }
+        if (-not $foundFlag) { $newLines = @($newLines) + 'MY_APP_DISABLE_SCHEDULER=1' }
+        Set-Content -LiteralPath $beEnvDst -Value $newLines -Encoding UTF8
+    }
+}
+
 # ---------- 5. 构建产物 / 门户运行态 / nginx ----------
 $copyDirs = @(
     @{ From = (Join-Path $ProjectRoot 'nginx-1.28.0'); To = (Join-Path $Runner 'nginx-1.28.0'); Skip = $true },

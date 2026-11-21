@@ -176,6 +176,16 @@ NON_RETRYABLE_KEYS = (
     "User has been locked",
     "has been locked",
     "账号已被上游锁定",
+    # 密码错误（2026-11-21 新增）：上游同一句话里带 "may be locked" 警告，
+    # 原文 `Incorrect user name or password, the account may be locked if you
+    # enter wrong for multiple times (code=4)` —— 它**不是**"已锁定"，却同样属于
+    # 「重试有害」：每重投一轮就是一次新的密码错误，上游按「连续 3 次密码错误 →
+    # 锁 1440 分钟」计数。2026-11-20 iPRAN 事故中，17:19 那次失败被 auto_retry
+    # 在 17:20 / 17:40 各重投一次（worker_m_20261120.log:10110、:10270），
+    # 恰好把失败次数凑满 → 账号被锁。改凭据/改密码只能人工做，重试不会变好。
+    "Incorrect user name or password",
+    "may be locked if you enter wrong",
+    "用户名或密码错误",
     # 密码到期族（2026-10-13 新增）：ume_in 2026-10-13 05:45 起返回
     # {"detail":{"code":"2","message":"The user password is about to expire"}}，
     # 改密只能人工在 UME 侧完成，重试不会成功；且每次失败登录都在给上游

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Card, Input, Button, Tag, message, Spin, Row, Col, Space, Modal, Tooltip } from 'antd'
-import { SaveOutlined, ApiOutlined, ReloadOutlined, EyeOutlined, InfoCircleOutlined, SearchOutlined } from '@ant-design/icons'
+import { SaveOutlined, ApiOutlined, ReloadOutlined, EyeOutlined, InfoCircleOutlined, SearchOutlined, ClearOutlined } from '@ant-design/icons'
 import api from '../api'
 import { useI18n } from '../i18n'
 import { WH, cardStyle } from '../theme'
@@ -38,6 +38,7 @@ export default function CredentialSettings() {
   const [drafts, setDrafts] = useState<Record<string, { username: string; secret: string }>>({})
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [testingKey, setTestingKey] = useState<string | null>(null)
+  const [clearingKey, setClearingKey] = useState<string | null>(null)
   const [revealData, setRevealData] = useState<{ name: string; username: string; secret: string } | null>(null)
   const [query, setQuery] = useState('')
 
@@ -131,6 +132,21 @@ export default function CredentialSettings() {
       message.error(t('settings.saveFailed') + ': ' + (e?.response?.data?.detail || e?.message || e))
     } finally {
       setSavingKey(null)
+    }
+  }
+
+  // 清除熔断（2026-11-21）：上游 UME 解锁后，让本组立即恢复登录，不必等冷却走完。
+  // 只删本地熔断文件，不联系上游（不会产生登录尝试）。
+  const clearLock = async (g: CredentialGroup) => {
+    setClearingKey(g.key)
+    try {
+      const res = await api.post(`/credentials/${g.key}/clear-lock`)
+      const d = res.data || {}
+      message.success(d.message || t('settings.clearLockOk'), 6)
+    } catch (e: any) {
+      message.error(t('settings.clearLockFailed') + ': ' + (e?.response?.data?.detail || e?.message || e))
+    } finally {
+      setClearingKey(null)
     }
   }
 
@@ -308,6 +324,18 @@ export default function CredentialSettings() {
                           </Tooltip>
                           {targetBadge(g)}
                         </Space>
+                      )}
+                      {/* 清除熔断：仅对走 auth_manager 的 ZTE 网管组显示（只有它们有账号级熔断） */}
+                      {g.test_kind === 'zte_oauth2' && (
+                        <Tooltip title={t('settings.clearLockHint')}>
+                          <Button
+                            icon={<ClearOutlined />}
+                            loading={clearingKey === g.key}
+                            onClick={() => clearLock(g)}
+                          >
+                            {t('settings.clearLock')}
+                          </Button>
+                        </Tooltip>
                       )}
                       <Button icon={<EyeOutlined />} onClick={() => reveal(g)}>
                         {t('settings.reveal')}
