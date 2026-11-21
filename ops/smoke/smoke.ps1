@@ -384,10 +384,6 @@ $AuthTables  = @('credentials', 'task_schedule_config', 'email_recipients')
 $TestPorts   = @(8080, 8443, 7039, 7091, 9277, 55432)
 # 后端派生的实时代理（start_all 不写它们的 pid，故 stop_all 停不掉）-- 只记录，不杀
 $ExtraPorts  = @(8887, 8890)
-$PytestDeselect = @(
-    'tests/test_client_is_local_trust.py::test_genuine_local_callers_still_allowed',
-    'tests/test_client_is_local_trust.py::test_is_loopback_covers_ipv4_mapped_and_port_forms'
-)
 
 # ---------------------------------------------------------------- 记录结构
 $results = New-Object System.Collections.ArrayList
@@ -1127,7 +1123,6 @@ if ($Pytest) {
         if (-not $xdist) { Add-Note '未安装 pytest-xdist，pytest 改为串行' }
     }
     $pa = @('-m', 'pytest', 'tests', '-m', '"not live"', '-p', 'no:cacheprovider', '--tb=short')
-    foreach ($d in $PytestDeselect) { $pa += @('--deselect', $d) }
     if ($xdist) { $pa += @('-n', $PytestWorkers, '--dist', $PytestDist) }
     $errFile = "$PytestOut.err"
     $codeFile = "$PytestOut.code"
