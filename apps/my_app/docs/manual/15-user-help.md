@@ -1950,6 +1950,20 @@ TT 看板的「WO 数据源」版：版式与 page=tt 逐块一致，只是数�
 - 筛选条（区域 / 高级过滤）、下钻明细与页面级 Excel 导出与 TT&WO 看板同源，只是数据端点用 /wo-dashboard/overview；导出文件名前缀为 TTWO_wo_
 - 直链 http://<host>/myapp/?page=wo；完整版见 page=ttwo，只看 TT 见 page=tt
 
+#### tt_state（`tt_state`）
+
+TT 州维度统计：只看「派出了 WO 的 TT」（eflow_tt 里 wo_no 非空），按州 × 日/周/月给出「告警未清除 / WO 未关闭 / TT 未关闭 / 总数」四个数。默认时间窗近 30 天、日粒度；五张 KPI 卡与矩阵每格都能点开明细。
+
+- 数据源与 page=tt 相同（eflow_tt），但只取 wo_no 非空的行；WO 是否关闭取 eflow_wo.status（按 wo_no 左关联），TT 是否关闭取 eflow_tt.status；关联不到 WO 的记录按未关闭计，页面顶部会常驻提示有几张
+- 四格数字顺序固定为「告警未清除 / WO 未关闭 / TT 未关闭 / 总数」，与图例一致：告警未清除 = alarm_clear_time 为空；WO 未关闭 = eflow_wo.status 不以 Closed 开头；TT 未关闭 = eflow_tt.status 不以 Closed 开头；总数 = 该州该时间桶的行数
+- 「WO 未关闭」与「TT 未关闭」是两个不同口径，页面同时展示便于对账：TT 要等 WO 确认后才 Closed，上游大量「WO 已关、TT 仍 Waiting」的行只进 TT 未关闭。两者是独立集合、可重叠，A+B 不一定等于总数
+- 行 = 州（region_level1，空值归入「未标注州」），列 = 日/周/月时间桶；时间字段 alarm_occur_time，与 page=tt 同一字段，窗口左闭右开
+- 时间窗档位与 page=tt 一致（全部时间 / 近 7·30·90·180 天 / 自定义）；粒度切日/周/月，总数不变。默认日粒度、近 30 天
+- 点任意格子、行合计、列合计、五张 KPI 卡（总数 / WO 未关闭 / TT 未关闭 / 告警未清除 / 告警已清除）都能下钻；概览与下钻共用后端同一份取数，表格数字与弹窗「共 N 条」严格相等（超过 5000 行时弹窗常驻截断告警）
+- 导出 Excel 两个 sheet：州×时间明细（长表，含告警未清除 / WO 未关闭 / TT 未关闭 / 总数）与按州汇总；下钻弹窗也可单独导出当前明细
+- 每个数字都能悬浮看构成；整页口径收在默认收起的「数据口径说明」里
+- 直链 http://<host>/myapp/?page=tt_state；同源的 TT 汇总见 page=tt
+
 #### NUR 看板（`nur`）
 
 网络不可用率（NUR）的日/周/月趋势、多维分析与站点达标情况。

@@ -1949,6 +1949,20 @@ The eflow_wo-sourced twin of the TT Dashboard: the layout matches page=tt block 
 - Filters (region / advanced filters), drill-down and the page-level Excel export are shared with the TT&WO Dashboard, but the data endpoint is /wo-dashboard/overview; the export filename is prefixed TTWO_wo_
 - Direct link http://<host>/myapp/?page=wo; the full version is page=ttwo, TT only is page=tt
 
+#### tt_state（`tt_state`）
+
+TT by state: only TT rows that spawned a WO (eflow_tt rows with a non-empty wo_no), counted by state x day/week/month as alarm not cleared / WO not closed / TT not closed / total. The default window is the last 30 days at day granularity; the five KPI cards and every matrix cell open a drill-down.
+
+- Same source table as page=tt (eflow_tt) but only rows with a non-empty wo_no. WO closure comes from eflow_wo.status (LEFT JOIN on wo_no) and TT closure from eflow_tt.status; a TT whose WO row is missing counts as not closed, and a persistent banner reports how many such rows exist
+- The four numbers in every cell always read alarm not cleared / WO not closed / TT not closed / total, matching the legend: alarm not cleared = empty alarm_clear_time; WO not closed = eflow_wo.status not starting with Closed; TT not closed = eflow_tt.status not starting with Closed; total = rows in that state and bucket
+- WO not closed and TT not closed are two different calibers and are shown side by side for reconciliation: a TT only becomes Closed after WO confirmation, so the many upstream rows where the WO is closed but the TT is still Waiting land only in TT not closed. They are independent sets that may overlap, so A+B does not necessarily equal the total
+- Rows are states (region_level1; blank falls into Unassigned state), columns are day/week/month buckets on alarm_occur_time, the same field as page=tt, with a start-inclusive/end-exclusive window
+- The window presets match page=tt (all time / last 7, 30, 90, 180 days / custom); switching day/week/month does not change the total. Default is day granularity over the last 30 days
+- Every cell, row total, column total and the five KPI cards (total / WO not closed / TT not closed / alarm not cleared / alarm cleared) drill down. Overview and drill-down share the same backend row set, so a cell number and the drill-down count are exactly equal (above 5000 rows the dialog shows a persistent truncation warning)
+- Excel export has two sheets: state x time in long form (alarm not cleared / WO not closed / TT not closed / total) and a by-state summary; the drill-down dialog also exports its rows
+- Every number is hover-explainable; the page-wide caliber sits in a collapsed "How these numbers are computed" note
+- Direct link http://<host>/myapp/?page=tt_state; the TT summary lives at page=tt
+
 #### NUR Dashboard（`nur`）
 
 Network Unavailability Rate (NUR) daily/weekly/monthly trends, multi-dimension analysis and site compliance.

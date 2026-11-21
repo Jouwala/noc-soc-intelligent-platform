@@ -23,6 +23,7 @@
 | 7 | TT&WO 看板（v1·仅上半部分） | `v1_ttwo` | React（同组件切片） |
 | 8 | TT 看板 | `tt` | React（同组件切片，数据源 `eflow_tt`） |
 | 9 | WO 看板 | `wo` | React（同组件换数据源 `eflow_wo`） |
+| 9b | TT 州统计 | `tt_state` | React（按州 × 日/周/月矩阵） |
 | 10 | NUR 看板 | `nur` | React |
 | 11 | NUR 看板（仅 NUR） | `ms_nur_only` | React（同组件切片） |
 | 12 | MS Operation KPI 看板 | `ms_sla` | React |
@@ -426,6 +427,27 @@
   > **切片边界与导出范围必须成对维护**：`exportOverview` 里凡页面不渲染的区块，导出也必须不出（`isSlicePage` 统一判定）。**不用子判断表达式**（`xxxOnly` 拼 `&&`）—— 2026-09-27 实现时就是这样各自为政，导致站点信息那处漏了数据源判断，`page=wo` 多出两个区块（探针脚本查出后改为单一开关 `isSlicePage`）。
 - **门户入口（2026-09-28 改）**：统一门户 `/v1/olbrportal/` 的 **FO View** 分组里本页占一张卡（目录 `no=75`，标题 `WO Dashboard`），与 `page=tt` 的 `no=74`（`TT Dashboard`）并列，**替换掉原 `no=13`「TT&WO Dashboard」（`?page=v1_ttwo`）**。做法与维护要点见 4c 节末尾一条（同一处改动）。
 
+
+### 4e. TT 州统计（`?page=tt_state`）—— 按州看「告警未清除 / WO 未关闭 / TT 未关闭 / 总数」
+
+2026-11-21 新增。回答的是「哪些州派了 WO 但还没关、告警还挂着的有多少」，与 4c 的 `page=tt` 是**同一张表、不同切法**，不是另一个看板。
+
+- **数据范围**：`eflow_tt` 里 `wo_no` 非空的行 —— 一行 = 一张派出了 WO 的 TT。当前库 `wo_no` 唯一（16,164 行 / 16,164 个 WO），所以行数 = WO 数；**不去重站点、不按 WO 二次去重**。
+- **每格四个数字，顺序固定为「告警未清除 / WO 未关闭 / TT 未关闭 / 总数」**（与页面图例一致）：
+  - **告警未清除** = `alarm_clear_time` 为空 / NULL（告警尚未恢复，通常是实时小量）；
+  - **WO 未关闭** = `LEFT JOIN eflow_wo ON wo_no` 后 `eflow_wo.status` 不以 `Closed` 开头；**关联不到 WO 记录时按未关闭计**（没有关闭证据），`meta.wo_missing` 计数并在页顶**常驻告警**；
+  - **TT 未关闭** = `eflow_tt.status` 不以 `Closed` 开头（TT 自身状态，与上一条是两个字段）；
+  - **总数** = 该州该时间桶的行数（不按告警/状态过滤）。
+  - ⚠ 前三个是**三个独立集合**，可以互相重叠，所以 A + B 不一定等于 D；四个数是独立计数，不是把总数拆开。
+- **两个 status 同时展示（2026-11-21 按需求加）**：`WO 未关闭` 与 `TT 未关闭` 并列进 KPI 卡与每个格子，下钻也各有 `flag`。原因：TT 要等 WO 确认后才 `Closed`，上游大量「WO 已关、TT 仍 Waiting」的行（实测 1,791 行 `Waiting for FO Process` 对应的 WO 已 `Closed`）只在 TT 未关闭里出现 —— 两个数通常差一个量级，同时展示才能看出「WO 关得快、TT 关得慢」这段流程落差。页面不拿一个冒充另一个。
+- **州与时间**：州取 `region_level1`（空值归 `__unknown__`，前端显示「未标注州」）；时间字段 `alarm_occur_time`（与 `page=tt` 同一字段），窗口左闭右开。日 = `YYYY-MM-DD`，周 = ISO 8601 `YYYY-Www`（周一起算），月 = `YYYY-MM` —— 三种粒度用**同一个分桶函数**，切粒度总数不变。
+- **为什么在 Python 里分桶**：日/周/月在 SQLite 与 PG 的 `strftime` / `date_trunc` 写法不同，而本库双模（`MY_APP_DB_MODE`）。服务层一次取回窗口内的行（全量 1.6 万行、30 天窗口实测约 1,400 行），用同一份 `_period_label` 在 Python 分桶 —— 与 `routers/tt_wo_dashboard.py` 的 MTTR 趋势同一做法，**概览与下钻因此共用同一份取数**，表格数字与弹窗「共 N 条」严格相等（超过 5000 行时弹窗常驻截断告警）。
+- **下钻**：`state` 传具体州 / `__unknown__` / `*`（不限州），`period` 空 = 全部桶，`flag` ∈ `alarm_uncleared` / `wo_unclosed` / `tt_unclosed` / `alarm_cleared`。KPI 卡点开后用 `state=*` + `flag`，所以卡片数字与弹窗行数也相等。`alarm_cleared` 是派生值（总数 − 告警未清除），对应下钻就是 `alarm_clear_time` 非空的行。
+- **接口**：`GET /api/tt-state-matrix/overview`（`start` / `end` / `gran` / `all=1`）与 `GET /api/tt-state-matrix/drilldown`（再加 `state` / `period` / `flag` / `limit`）。实现：`backend/routers/tt_state_matrix.py` + `backend/services/tt_state_matrix.py`；页面：`frontend/src/pages/TtStateMatrix.tsx` + `pages/ttState/`（矩阵表、下钻弹窗、类型）。
+- **UI 约定**：五张 KPI 卡（总数 / WO 未关闭 / TT 未关闭 / 告警未清除 / 告警已清除）都可点下钻、数字可悬浮看构成；矩阵每格可点、非零格可悬浮看「这一格怎么构成」；整页口径收在默认收起的 `CalcChainNote`（根 `AGENTS.md` 四.10）。算不全的两种情况（WO 记录缺失、告警时间无法解析）**常驻可见**。
+- **默认时间窗**：近 30 天、日粒度（与 `page=tt` 的档位一致：全部时间 / 近 7·30·90·180 天 / 自定义）。建议刷新间隔 300 秒，已在 `App.tsx` 的 `AR_PAGE_DEFAULTS` 登记。
+- **导出 Excel**：`exportReport` 两个 sheet —— 「州×时间」长表（州 / 时间 / 告警未清除 / WO 未关闭 / TT 未关闭 / 总数）与「按州汇总」（同一组列 + 告警已清除）；下钻弹窗也可单独导出，明细里同时带 TT 状态与 WO 状态。
+- **测试与验证**：`python tests/test_doc_consistency.py` 的页面数 / 路由数 / 帮助条目 / 按页刷新四道守卫都会覆盖本页；后端可用 `python -c "from backend.services import tt_state_matrix as s; print(s.overview('2026-10-22','2026-11-21','day')['summary'])"` 直接冒烟（不重启服务）。
 
 ## 5. NUR 看板（`?page=nur`）
 

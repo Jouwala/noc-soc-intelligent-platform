@@ -334,6 +334,18 @@ export function getRepeatSiteDownFilters() {
   return api.get('/repeat-site-down/filters')
 }
 
+// ========== TT 州维度统计（?page=tt_state）==========
+// 数据源：eflow_tt 里 wo_no 非空的行；WO 关闭状态 LEFT JOIN eflow_wo。
+// 口径（时间字段 / 告警未清除 / WO 未关闭 / 未标注州）见
+// backend/services/tt_state_matrix.py 的模块 docstring，页面「口径说明」与它逐条对应。
+export function getTtStateOverview(params?: Record<string, string | number>) {
+  return api.get('/tt-state-matrix/overview', { params })
+}
+
+export function getTtStateDrilldown(params: Record<string, string | number>) {
+  return api.get('/tt-state-matrix/drilldown', { params })
+}
+
 export function getRepeatSiteDownOverview(params?: Record<string, string | number>) {
   return api.get('/repeat-site-down/overview', { params })
 }

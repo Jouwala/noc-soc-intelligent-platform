@@ -107,6 +107,8 @@ const TTWODashboard = lazy(() => import('./pages/TTWODashboard'))
 const V1TTWODashboard = lazy(() => import('./pages/V1TTWODashboard'))
 // 只保留 TT / WO 单侧内容的直链页（同为 TTWODashboard 的切片）
 const TTDashboard = lazy(() => import('./pages/TTDashboard'))
+// TT 州维度统计：按州 × 日/周/月看「告警未清除 / WO 未关闭 / 总数」
+const TtStateMatrix = lazy(() => import('./pages/TtStateMatrix'))
 const WODashboard = lazy(() => import('./pages/WODashboard'))
 const AlarmDashboard = lazy(() => import('./pages/AlarmDashboard'))
 const PacketLossDashboard = lazy(() => import('./pages/PacketLossDashboard'))
@@ -220,9 +222,9 @@ const FINEBI_PAGE_TO_SLUG: Record<string, string> = Object.fromEntries(
   FINEBI_BOARDS.map((b) => [`finebi_${b.slug}`, b.slug]),
 )
 
-type PageKey = 'overview' | 'tables' | 'upload' | 'dashboard' | 'alarm' | 'ttwo' | 'v1_ttwo' | 'tt' | 'wo' | 'gis' | 'realtime_alarm' | 'packet_loss' | 'archive' | 'sync' | 'warehouse' | 'sp_material' | 'sp_details' | 'sp_report' | 'com_report' | 'warehouse_summary' | 'ms_wo_sla' | 'ms_contract_kpi' | 'battery' | 'person' | 'settings' | 'ip_trace' | 'incident_overview' | 'nur' | 'ms_sla' | 'ms_nur_only' | 'ms_sla_only' | 'alarmManagement' | 'cxoDashboard' | 'vmaxCxoDashboard' | 'vmaxCxoDashboard_Daily' | 'vmaxCxoDashboard_90Days' | 'socTrendDashboard' | 'imonitor' | 'email_reports' | 'mwUmeTopology' | 'ipranTopo' | 'olibTopo' | 'olibTopo_v2' | 'nocTopology' | 'mwRealTime' | 'portalLogin' | 'eflow_qa' | 'eflow_flow' | 'site_avail' | 'avail_ms' | 'avail_flm' | 'avail_county' | 'fme_ranking' | 'noc_analyst' | 'repeat_site_down' | 'cr_analysis' | 'pm_analysis' | 'ran_cells_kpi' | 'ran_inventory' | 'bm_speedtest' | 'bm_meta' | 'bp_report' | 'cn_kpi' | 'cn_kpi_5mins' | 'cn_hourly_kpi' | 'cs_cn_kpi' | 'ps_cn_kpi' | 'ume_in_kpi' | 'vmax_user_query' | 'vmax_user_cca' | 'ipt_power' | 'feedback' | 'ap_center' | 'site_sync_ops' | 'help' | `finebi_${string}`
+type PageKey = 'overview' | 'tables' | 'upload' | 'dashboard' | 'alarm' | 'ttwo' | 'v1_ttwo' | 'tt' | 'wo' | 'tt_state' | 'gis' | 'realtime_alarm' | 'packet_loss' | 'archive' | 'sync' | 'warehouse' | 'sp_material' | 'sp_details' | 'sp_report' | 'com_report' | 'warehouse_summary' | 'ms_wo_sla' | 'ms_contract_kpi' | 'battery' | 'person' | 'settings' | 'ip_trace' | 'incident_overview' | 'nur' | 'ms_sla' | 'ms_nur_only' | 'ms_sla_only' | 'alarmManagement' | 'cxoDashboard' | 'vmaxCxoDashboard' | 'vmaxCxoDashboard_Daily' | 'vmaxCxoDashboard_90Days' | 'socTrendDashboard' | 'imonitor' | 'email_reports' | 'mwUmeTopology' | 'ipranTopo' | 'olibTopo' | 'olibTopo_v2' | 'nocTopology' | 'mwRealTime' | 'portalLogin' | 'eflow_qa' | 'eflow_flow' | 'site_avail' | 'avail_ms' | 'avail_flm' | 'avail_county' | 'fme_ranking' | 'noc_analyst' | 'repeat_site_down' | 'cr_analysis' | 'pm_analysis' | 'ran_cells_kpi' | 'ran_inventory' | 'bm_speedtest' | 'bm_meta' | 'bp_report' | 'cn_kpi' | 'cn_kpi_5mins' | 'cn_hourly_kpi' | 'cs_cn_kpi' | 'ps_cn_kpi' | 'ume_in_kpi' | 'vmax_user_query' | 'vmax_user_cca' | 'ipt_power' | 'feedback' | 'ap_center' | 'site_sync_ops' | 'help' | `finebi_${string}`
 
-const VALID_PAGES: PageKey[] = ['overview', 'tables', 'upload', 'dashboard', 'alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'gis', 'realtime_alarm', 'packet_loss', 'archive', 'sync', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary', 'ms_wo_sla', 'ms_contract_kpi', 'battery', 'person', 'settings', 'ip_trace', 'incident_overview', 'nur', 'ms_sla','ms_nur_only', 'ms_sla_only', 'alarmManagement', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'email_reports', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'portalLogin', 'eflow_qa', 'eflow_flow', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'ran_inventory', 'bm_speedtest', 'bm_meta', 'bp_report', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'ume_in_kpi', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'feedback', 'ap_center', 'site_sync_ops', 'help', ...FINEBI_BOARDS.map((b) => `finebi_${b.slug}` as PageKey)]
+const VALID_PAGES: PageKey[] = ['overview', 'tables', 'upload', 'dashboard', 'alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'tt_state', 'gis', 'realtime_alarm', 'packet_loss', 'archive', 'sync', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary', 'ms_wo_sla', 'ms_contract_kpi', 'battery', 'person', 'settings', 'ip_trace', 'incident_overview', 'nur', 'ms_sla','ms_nur_only', 'ms_sla_only', 'alarmManagement', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'email_reports', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'portalLogin', 'eflow_qa', 'eflow_flow', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'ran_inventory', 'bm_speedtest', 'bm_meta', 'bp_report', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'ume_in_kpi', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'feedback', 'ap_center', 'site_sync_ops', 'help', ...FINEBI_BOARDS.map((b) => `finebi_${b.slug}` as PageKey)]
 
 /* ==================== 自动刷新（大屏 / NOC 值班场景） ====================
  * 背景：各页面此前只在挂载时拉取一次数据（legacy iframe 页面同样只在 onload
@@ -295,7 +297,7 @@ const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {
   realtime_alarm: 60, alarm: 60, alarmManagement: 60,
 
   // —— 300 秒：看板主力（上游多为 15 分钟级同步）——
-  ttwo: 300, v1_ttwo: 300, tt: 300, wo: 300,
+  ttwo: 300, v1_ttwo: 300, tt: 300, wo: 300, tt_state: 300,
   nur: 300, ms_sla: 300, ms_nur_only: 300, ms_sla_only: 300, ms_wo_sla: 300, ms_contract_kpi: 300,
   site_avail: 300, avail_ms: 300, avail_flm: 300, avail_county: 300, fme_ranking: 300,
   noc_analyst: 300, repeat_site_down: 300,
@@ -534,6 +536,8 @@ const PAGE_META: Record<PageKey, { icon: ReactNode; labelKey: string }> = {
   v1_ttwo: { icon: <BarChartOutlined />, labelKey: 'nav.v1Ttwo' },
   // 只保留单侧内容的直链页：图标沿用其数据源看板，便于在侧栏一眼认出父子关系
   tt: { icon: <ThunderboltOutlined />, labelKey: 'nav.tt' },
+  // 州维度统计：与 tt 同一数据源（eflow_tt 且有 WO），按州 × 时间桶看未关闭构成
+  tt_state: { icon: <AreaChartOutlined />, labelKey: 'nav.ttState' },
   wo: { icon: <FileTextOutlined />, labelKey: 'nav.wo' },
   nur: { icon: <LineChartOutlined />, labelKey: 'nav.nur' },
   ms_sla: { icon: <FundOutlined />, labelKey: 'nav.msSla' },
@@ -625,7 +629,7 @@ const DEFAULT_GROUPS: { key: string; labelKey: string; items: PageKey[] }[] = [
   {
     key: 'grp_monitor',
     labelKey: 'nav.grp.monitor',
-    items: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'ume_in_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'alarmManagement', 'incident_overview'],
+    items: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'tt_state', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'ume_in_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'alarmManagement', 'incident_overview'],
   },
   {
     key: 'grp_network',
@@ -1653,6 +1657,8 @@ function AppContent() {
         return <TTDashboard />
       case 'wo':
         return <WODashboard />
+      case 'tt_state':
+        return <TtStateMatrix />
       case 'eflow_qa':
         return <EflowQa />
       case 'eflow_flow':

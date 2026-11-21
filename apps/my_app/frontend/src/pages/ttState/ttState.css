@@ -1,0 +1,171 @@
+/* ==================== TT 州维度统计：矩阵网格 ====================
+ * 用 CSS Grid 而不是 antd Table：15 个州 × 最多几百个时间桶，
+ * Table 的固定首列会把每个单元格渲染两遍，几千格时明显卡；
+ * Grid 只有一份 DOM，首行/首列用 position:sticky 即可。
+ * ================================================================ */
+
+.tts-scroll {
+  overflow: auto;
+  max-height: 68vh;
+  border: 1px solid var(--wh-card-border);
+  border-radius: 10px;
+  background: var(--wh-card-bg);
+}
+
+.tts-grid {
+  display: grid;
+  /* 列少时铺满卡片，列多时按 max-content 横向滚动（1fr 才不会塌成最小宽度） */
+  width: max-content;
+  min-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.tts-th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 4px;
+  /* 浅色主题的卡片底是半透明玻璃渐变：粘性表头/首列必须垫一层不透明底色，
+     否则横向滚动时下面的数字会透上来（看起来像重影）。背景色取页面底色，
+     再叠卡片渐变，既保持卡片观感又不透。 */
+  background-color: var(--wh-page-bg);
+  background-image: var(--wh-card-bg);
+  border-bottom: 1px solid var(--wh-card-border);
+  box-shadow: 0 1px 0 var(--wh-card-border);
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  color: var(--wh-text-muted);
+  white-space: nowrap;
+}
+
+.tts-th-main { color: var(--wh-text); font-weight: 600; }
+.tts-th-sub { color: var(--wh-text-dim); font-size: 0.625rem; }
+
+.tts-sticky {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: var(--wh-page-bg);
+  background-image: var(--wh-card-bg);
+  border-right: 1px solid var(--wh-card-border);
+}
+
+.tts-th.tts-sticky { z-index: 4; align-items: flex-start; padding-left: 10px; }
+
+.tts-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  font-size: 0.75rem;
+  color: var(--wh-text);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--wh-card-border);
+}
+
+.tts-state-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--wh-teal);
+  flex: 0 0 auto;
+}
+
+.tts-cellwrap {
+  border-bottom: 1px solid var(--wh-card-border);
+  border-left: 1px solid var(--wh-card-border);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.tts-cell {
+  display: grid;
+  grid-template-columns:
+    minmax(1.2rem, 1fr) auto
+    minmax(1.2rem, 1fr) auto
+    minmax(1.2rem, 1fr) auto
+    minmax(1.2rem, 1fr);
+  align-items: baseline;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.tts-cell:hover { background: var(--wh-teal-20); }
+.tts-cell:focus-visible { outline: 2px solid var(--wh-teal); outline-offset: -2px; }
+
+.tts-n { text-align: center; font-variant-numeric: tabular-nums; }
+.tts-n-a { color: var(--wh-danger); }
+.tts-n-b { color: var(--wh-warn); font-weight: 600; }
+.tts-n-t { color: var(--wh-indigo); font-weight: 600; }
+.tts-n-c { color: var(--wh-text); font-weight: 700; }
+.tts-sep { color: var(--wh-text-dim); font-size: 0.6875rem; }
+
+.tts-cell-empty .tts-n { opacity: 0.42; }
+.tts-cell-empty .tts-n-b { font-weight: 400; }
+
+.tts-rowtotal {
+  border-bottom: 1px solid var(--wh-card-border);
+  border-left: 1px solid var(--wh-card-border);
+  background: var(--wh-teal-20);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.tts-grand,
+.tts-grand.tts-sticky,
+.tts-grand.tts-cellwrap,
+.tts-grand.tts-rowtotal {
+  background: var(--wh-teal-20);
+  font-weight: 700;
+}
+
+.tts-grand.tts-sticky {
+  z-index: 5;
+  background-color: var(--wh-page-bg);
+  background-image: linear-gradient(var(--wh-teal-20), var(--wh-teal-20)), var(--wh-card-bg);
+}
+
+.tts-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.75rem;
+  color: var(--wh-text-muted);
+}
+
+.tts-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tts-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.tts-legend-a { background: var(--wh-danger); }
+.tts-legend-b { background: var(--wh-warn); }
+.tts-legend-t { background: var(--wh-indigo); }
+.tts-legend-c { background: var(--wh-text); }
+
+.tts-empty {
+  padding: 40px 0;
+}

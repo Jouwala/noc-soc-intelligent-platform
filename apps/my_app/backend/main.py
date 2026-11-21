@@ -144,6 +144,8 @@ from backend.routers import (
     cn_hourly_kpi,
     native_boards,
     repeat_site_down,
+    # TT 州维度统计（?page=tt_state）：按州 × 日/周/月看「告警未清除 / WO 未关闭 / 总数」
+    tt_state_matrix,
     fme_ranking,
     cr_analysis,
     pm_analysis,
@@ -386,6 +388,9 @@ app.include_router(cn_hourly_kpi.router)
 app.include_router(native_boards.router)
 # Daily repeat site-down count dashboard (eflow_tt + eflow_site).
 app.include_router(repeat_site_down.router)
+# TT 州维度统计：eflow_tt 里 wo_no 非空的单，按州 × 日/周/月统计
+# 「告警未清除 / WO 未关闭 / 总数」；口径见 services/tt_state_matrix.py。
+app.include_router(tt_state_matrix.router)
 # FME 工程师 WO / 站点可用率排名（master_site_db + eflow_wo + 站点可用率服务）
 app.include_router(fme_ranking.router)
 # CR 变更分析：按 change_category 看变更计划的排期与执行情况（数据源 eflow_cr）。
