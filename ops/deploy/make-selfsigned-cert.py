@@ -36,15 +36,25 @@ for _stream in (sys.stdout, sys.stderr):
 
 
 def _default_cert_dir(root: Path) -> Path:
-    """与 ops/deploy/noc-paths.ps1 的 Resolve-NginxDir 同序：先版本根，再 runtime/。
+    """与 ops/deploy/noc-paths.sh 的 _np_resolve_nginx_dir 同序：先版本根，再 runtime/。
 
-    否则会出现「证书写到 <根>\\nginx-1.28.0\\certs，nginx 却从 runtime\\nginx-1.28.0
-    读 certs」这种自洽但起不来的错位（2026-11-19 安装包实测风险点）。
+    每个候选目录按 sbin/nginx、nginx、nginx.exe 依次探测：Linux 随包 nginx
+    的二进制在 sbin/ 下（runtime-build.yml 编译后断言 sbin/nginx 存在），
+    Windows 的在版本目录根（nginx.exe）。只认直接子文件会漏掉 sbin，
+    导致证书写到 <根>\\nginx-1.28.0\\certs、nginx 却从 runtime\\nginx-1.28.0
+    读 certs 的错位（2026-11-19 安装包实测风险点；v0.0.3 P1-8 复现，#202）。
+
+    两处都找不到时抛错，不再静默回退到根目录——写错地方比报错更糟。
     """
     for base in (root / "nginx-1.28.0", root / "runtime" / "nginx-1.28.0"):
-        if (base / "nginx.exe").exists() or (base / "nginx").exists():
-            return base / "certs"
-    return root / "nginx-1.28.0" / "certs"
+        for name in ("sbin/nginx", "nginx", "nginx.exe"):
+            if (base / name).exists():
+                return base / "certs"
+    raise FileNotFoundError(
+        "找不到 nginx：已查 "
+        f"{root / 'nginx-1.28.0'} 与 {root / 'runtime' / 'nginx-1.28.0'} "
+        "（各查 sbin/nginx、nginx、nginx.exe）；请用 --dir 指定证书目录"
+    )
 
 
 def main() -> int:
@@ -52,14 +62,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="生成 nginx 自签证书（portal.crt / portal.key）")
     parser.add_argument(
         "--dir",
-        default=str(_default_cert_dir(root)),
-        help="证书输出目录（默认按 noc-paths.ps1 的顺序找 nginx 目录下的 certs/）",
+        default=None,
+        help="证书输出目录（默认按 noc-paths.sh 的顺序找 nginx 目录下的 certs/）",
     )
     parser.add_argument("--days", type=int, default=3650, help="有效期天数（默认 3650）")
     parser.add_argument("--force", action="store_true", help="已存在也覆盖")
     args = parser.parse_args()
 
-    out = Path(args.dir).resolve()
+    if args.dir is None:
+        try:
+            out = _default_cert_dir(root)
+        except FileNotFoundError as exc:
+            print(f"[cert] {exc}", file=sys.stderr)
+            return 1
+    else:
+        out = Path(args.dir).resolve()
     crt, key = out / "portal.crt", out / "portal.key"
     if crt.exists() and key.exists() and not args.force:
         print(f"[cert] 已存在，跳过：{crt}")
