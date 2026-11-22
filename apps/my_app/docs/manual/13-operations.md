@@ -62,6 +62,8 @@ python -m backend.services.db.pg_mirror --status
 # ② 手工补一轮（缺表/水位落后；--full 才整表重拉）
 python -m backend.services.db.pg_mirror --db db_ps_cs_cn.sqlite3
 python -m backend.services.db.pg_mirror --db ran_kpi_daily.sqlite3
+python -m backend.services.db.pg_mirror --db db.sqlite3
+python -m backend.services.db.pg_mirror --db fw_db.sqlite
 
 # ③ 后端启动日志里应有一行：
 #    [startup] 本机 PG 镜像守护已启动（每 5 分钟）

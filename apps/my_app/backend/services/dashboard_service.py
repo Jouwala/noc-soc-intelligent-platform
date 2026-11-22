@@ -174,6 +174,19 @@ IPRAN_HISTORY_FALLBACK = os.environ.get(
     "NATIVE_BOARD_IPRAN_FALLBACK", "1").strip().lower() not in ("0", "false", "no", "off")
 LOCAL_IPRAN_PG = "__local_ipran_pg__"
 
+# 原生看板 93 个组件（db.sqlite3 / db_ps_cs_cn.sqlite3 / fw_db.sqlite）→ 本机 PG。
+# 与 IP RAN 同一思路：目录里的 db 名不动，在别名层换成 PG schema；PG 缺表/空结果
+# 时回退本机 SQLite 镜像，再回退远端。NATIVE_BOARD_PG=0 一键恢复旧行为。
+NATIVE_BOARD_PG = os.environ.get(
+    "NATIVE_BOARD_PG", "1").strip().lower() not in ("0", "false", "no", "off")
+PG_ALIAS_PREFIX = "__local_pg__:"
+NATIVE_PG_SCHEMAS: Dict[str, str] = {
+    "db.sqlite3": "native_db",
+    "db_ps_cs_cn.sqlite3": "cn_kpi",
+    "fw_db.sqlite": "fw_native",
+}
+PG_ALIAS_SOURCE: Dict[str, str] = {}
+
 # 本机库标识（native_catalog 用它标记「走本机 app.db，不发远端」）
 LOCAL_APP_DB = "__local_app_db__"
 
@@ -477,7 +490,40 @@ def _pg_range_has_data(table: str, start: str, end: str) -> bool:
     return ok
 
 
+def _query_pg_schema(sql: str, schema: str, limit: int) -> Dict[str, Any]:
+    """按 schema 查本机 PG（复用通用读通道的方言改写与类型转换）。"""
+    from backend.services.db.pg_query import query_pg
+
+    return query_pg(sql, schema, limit)
+
+
 def query(sql: str, db: str, limit: int = DEFAULT_LIMIT) -> Dict[str, Any]:
+    if db.startswith(PG_ALIAS_PREFIX):
+        schema = db[len(PG_ALIAS_PREFIX):]
+        src_db = PG_ALIAS_SOURCE.get(db, "")
+        pg_res: Optional[Dict[str, Any]] = None
+        try:
+            pg_res = _query_pg_schema(sql, schema, limit)
+            if pg_res.get("rows"):
+                return pg_res
+        except Exception as e:  # noqa: BLE001 — 缺表/方言不支持都回退
+            logger.warning("原生看板 PG(%s) 查询失败，回退本机镜像/远端: %s",
+                           schema, str(e)[:160])
+        # 回退 1：本机 SQLite 镜像（native_board_mirror_sync 维护）
+        if MIRROR_ENABLED and src_db:
+            path = _mirror_sync.mirror_path(src_db)
+            if path.is_file():
+                try:
+                    res = _query_local(sql, limit, path)
+                    if res.get("rows"):
+                        return res
+                except Exception:  # noqa: BLE001
+                    pass
+        # 回退 2：远端
+        if src_db:
+            return _query_remote(sql, src_db, limit)
+        return pg_res or {"success": True, "columns": [], "rows": [],
+                          "count": 0, "truncated": False, "elapsed_ms": 0.0}
     if db == LOCAL_IPRAN_PG:
         return _query_pg(sql, limit)
     if db == LOCAL_APP_DB:
@@ -711,6 +757,13 @@ if IPRAN_SOURCE == "pg":
 if MIRROR_ENABLED:
     for _remote_db in _mirror_sync.REMOTE_DBS:
         DB_ALIASES[_remote_db] = _mirror_sync.mirror_alias(_remote_db)
+
+# PG 别名必须放在镜像别名之后：同 db 两边都有时以 PG 为准，SQLite 镜像留作回退。
+if NATIVE_BOARD_PG:
+    for _pg_db, _pg_schema in NATIVE_PG_SCHEMAS.items():
+        _alias = PG_ALIAS_PREFIX + _pg_schema
+        DB_ALIASES[_pg_db] = _alias
+        PG_ALIAS_SOURCE[_alias] = _pg_db
 
 
 def resolve_db(db: str) -> str:
@@ -1057,6 +1110,15 @@ def _coverage_from_widgets(results: List[Dict[str, Any]], start: str,
     }
 
 
+def _board_source_label(board: Dict[str, Any]) -> str:
+    """看板数据源标签：有 PG 组件显示 local PG，全本地 SQLite 显示 local。"""
+    for w in board.get("widgets", []):
+        db = resolve_db(w.get("db", ""))
+        if db.startswith(PG_ALIAS_PREFIX) or db == LOCAL_IPRAN_PG:
+            return "local PG"
+    return "local"
+
+
 def _build_board(board: Dict[str, Any], slug: str, start: str,
                  end: str) -> Dict[str, Any]:
     """真正取数：并发拉取整页组件（唯一会走远端的路径）。"""
@@ -1072,7 +1134,8 @@ def _build_board(board: Dict[str, Any], slug: str, start: str,
             "slug": slug,
             "name": board["name"],
             "category": board["category"],
-            "host": get_api_base_url(),
+            "host": (_board_source_label(board) if NATIVE_BOARD_PG
+                     else get_api_base_url()),
             "ipran_source": IPRAN_SOURCE,
             "count": len(results),
             "failed": failed,
@@ -1247,7 +1310,9 @@ def health(slug: str) -> Dict[str, Any]:
         db = resolve_db(w.get("db", ""))
         try:
             res = query(w["sql"], db, 1)
-            return {"ok": True, "slug": slug, "host": get_api_base_url(),
+            return {"ok": True, "slug": slug,
+                    "host": (_board_source_label(board) if NATIVE_BOARD_PG
+                             else get_api_base_url()),
                     "db": db, "elapsed_ms": res.get("elapsed_ms")}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "slug": slug, "host": get_api_base_url(),

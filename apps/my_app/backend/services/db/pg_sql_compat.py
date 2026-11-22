@@ -36,6 +36,37 @@ LANGUAGE sql STABLE AS $$
     'YYYY-MM-DD')
 $$;
 
+CREATE OR REPLACE FUNCTION {s}.datetime(p text) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT to_char(
+    CASE WHEN lower(trim(p)) = 'now'
+         THEN (now() AT TIME ZONE 'UTC')
+         ELSE p::timestamp END,
+    'YYYY-MM-DD HH24:MI:SS')
+$$;
+
+CREATE OR REPLACE FUNCTION {s}.datetime(p text, m text) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT to_char(
+    (CASE WHEN lower(trim(p)) = 'now'
+          THEN (now() AT TIME ZONE 'UTC')
+          ELSE p::timestamp END)
+    + (regexp_replace(m, '[^0-9+-]', '', 'g'))::int * interval '1 day',
+    'YYYY-MM-DD HH24:MI:SS')
+$$;
+
+CREATE OR REPLACE FUNCTION {s}.julianday(p text) RETURNS double precision
+LANGUAGE sql STABLE AS $$
+  SELECT CASE
+    WHEN lower(trim(p)) = 'now' OR p ~ '^\s*[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    THEN extract(epoch from
+      CASE WHEN lower(trim(p)) = 'now'
+           THEN (now() AT TIME ZONE 'UTC')
+           ELSE p::timestamp END) / 86400.0 + 2440587.5
+    ELSE NULL
+  END
+$$;
+
 CREATE OR REPLACE FUNCTION {s}.strftime(fmt text, t text) RETURNS text
 LANGUAGE sql STABLE AS $$
   SELECT to_char(
@@ -70,11 +101,16 @@ CREATE OR REPLACE FUNCTION {s}."round"(x double precision, n integer) RETURNS nu
 LANGUAGE sql IMMUTABLE AS $$
   SELECT round(x::numeric, n)
 $$;
+
+CREATE OR REPLACE FUNCTION {s}."round"(x text, n integer) RETURNS numeric
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT round({s}.safe_num(x), n)
+$$;
 """
 
 
 def ensure_compat(cur, schema: str) -> None:
-    cur.execute(_COMPAT_DDL.format(s=_q(schema)))
+    cur.execute(_COMPAT_DDL.replace("{s}", _q(schema)))
 
 
 

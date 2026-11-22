@@ -28,7 +28,6 @@ my_app 的一批看板仍在**跨机**读 .19 的 SQLite（db_ps_cs_cn / ran_kpi
 """
 from __future__ import annotations
 
-import argparse
 import hashlib
 import logging
 import os
@@ -44,7 +43,39 @@ logger = logging.getLogger("pg_mirror")
 MIRROR_DBS: Dict[str, str] = {
     "db_ps_cs_cn.sqlite3": "cn_kpi",
     "ran_kpi_daily.sqlite3": "ran_kpi",
+    # 原生看板（FineBI 重建）用的两个历史库；只镜像被看板 SQL 引用的表
+    "db.sqlite3": "native_db",
+    "fw_db.sqlite": "fw_native",
 }
+
+# 只镜像看板真正引用的表：db.sqlite3 里还有 2M 行级的 cell/hourly 表，整库镜像
+# 既慢又没有消费者。清单来自 native_catalog 的 FROM 交集（2026-11-22 核定）。
+MIRROR_TABLES: Dict[str, tuple] = {
+    "db.sqlite3": (
+        "2G_Main_Kpi_group_Daily",
+        "3G_Main_Kpi_group_Daily",
+        "4G_Main_Kpi_group_Daily",
+        "2G_Main_Kpi_Site_Daily",
+        "3G_Main_Kpi_Site_Daily",
+        "4G_Main_Kpi_Site_Daily",
+        "Eflow_WO_FB",
+        "Eflow_TT_FB",
+    ),
+    "fw_db.sqlite": ("device_whole_throughput",),
+}
+
+# 无主键 + 有时间列的表：滚动窗口（天），只保留看板默认窗口（31 天）再多留余量，
+# 避免每轮把 20 万行的 site_daily 整表拉一遍。
+WINDOW_DAYS: Dict[str, int] = {
+    "2G_Main_Kpi_Site_Daily": 120,
+    "3G_Main_Kpi_Site_Daily": 120,
+    "4G_Main_Kpi_Site_Daily": 120,
+    "2G_Main_Kpi_group_Daily": 400,
+    "3G_Main_Kpi_group_Daily": 400,
+    "4G_Main_Kpi_group_Daily": 400,
+    "Eflow_WO_FB": 180,
+}
+DEFAULT_WINDOW_DAYS = 120
 
 # sqlite 内部表 / 元数据表不镜像
 _SKIP_TABLES = {"sqlite_sequence", "sqlite_stat1", "_update_log"}
@@ -56,7 +87,8 @@ _FULL_REPLACE_SUFFIXES = ("_EMS",)
 
 # 时间列候选：按优先级取第一个真实存在的列
 _TIME_COLS = ("Begin Time", "begin_time", "End Time", "end_time",
-              "Start Time", "start_time", "Time", "time")
+              "Start Time", "start_time", "time_full", "Created Time",
+              "Time", "time")
 
 # 每页行数（远端 /api/query 单请求上限按 5000 走）
 PAGE = int(os.environ.get("PG_MIRROR_PAGE", "5000"))
@@ -276,14 +308,70 @@ def _needs_full_refresh(cur, db: str, table: str) -> Tuple[bool, str]:
 # ----------------------------------------------------------------------
 # 单表镜像
 # ----------------------------------------------------------------------
+def _sync_window(cur, db: str, table: str, schema: str,
+                 cols: Sequence[str], time_col: str) -> Dict[str, Any]:
+    """无主键 + 有时间列：删掉窗口内的旧行再整段写回（窗口替换）。
+
+    这些表（site_daily / group_daily / Eflow_WO_FB）没有唯一约束，增量 INSERT
+    会重复；每轮整表重拉又要拉 20 万行。窗口替换只碰最近 N 天（默认 120），
+    既幂等又能吸收上游对窗口内数值的修正。
+    """
+    t0 = time.time()
+    watermark = _pg_watermark(cur, schema, table, time_col)
+    lo = None
+    if watermark:
+        try:
+            lo = datetime.strptime(watermark[:19], "%Y-%m-%d %H:%M:%S") - OVERLAP
+        except ValueError:
+            lo = None
+    if lo is None:
+        # 首次建镜像：整段历史都拉（原生看板默认窗口是「全历史」，只留 120 天
+        # 会让页面突然少掉 2025 年的曲线）。之后只滚动最近 N 天。
+        lo = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    lo_s = f"{lo:%Y-%m-%d %H:%M:%S}"
+    where = f"{_q(time_col)} >= '{lo_s}'"
+
+    rows: List[List[Any]] = []
+    offset = 0
+    page = _fetch_page(db, table, where, offset)
+    rows.extend(page)
+    offset += len(page)
+    while len(page) == PAGE:
+        page = _fetch_page(db, table, where, offset)
+        rows.extend(page)
+        offset += len(page)
+
+    written = 0
+    if rows:
+        cur.execute(
+            f'DELETE FROM {_q(schema)}.{_q(table)} '
+            f'WHERE {_q(_ident(time_col))} >= %s', (lo_s,))
+        written = _upsert(cur, schema, table, cols, [], rows)
+    new_wm = _pg_watermark(cur, schema, table, time_col)
+    _set_meta(cur, db, table, _pg_count(cur, schema, table), new_wm)
+    return {"db": db, "table": table, "mode": "window", "rows": written,
+            "watermark": new_wm, "where": where,
+            "elapsed_ms": round((time.time() - t0) * 1000, 1)}
+
+
 def sync_table(cur, db: str, table: str, schema: str, force_full: bool = False) -> Dict[str, Any]:
     t0 = time.time()
     cols, pk = _remote_schema(db, table)
     _ensure_table(cur, schema, table, cols, pk)
 
     time_col = next((c for c in _TIME_COLS if c in cols), "")
+    if time_col and not pk:
+        # 窗口替换要按时间列 DELETE：没有索引时 20 万行表一次删要 37s
+        # （2026-11-22 实测 3G site daily），加普通索引后毫秒级。
+        _h = hashlib.sha1(f"{schema}.{table}.{time_col}".encode("utf-8")).hexdigest()[:12]
+        cur.execute(
+            f'CREATE INDEX IF NOT EXISTS "ix_{_h}" ON {_q(schema)}.{_q(table)} '
+            f'({_q(_ident(time_col))})')
     by_name = (table.startswith(_FULL_REPLACE_PREFIXES)
                or table.endswith(_FULL_REPLACE_SUFFIXES))
+    # 原生看板的历史库：无主键 + 有时间列 -> 滚动窗口替换
+    if db in ("db.sqlite3",) and not pk and time_col and not force_full:
+        return _sync_window(cur, db, table, schema, cols, time_col)
     full = force_full or by_name or not pk or not time_col
 
     if full:
@@ -377,7 +465,8 @@ def run_mirror(db: Optional[str] = None, full: bool = False,
                 _ensure_schema(cur, schema)
                 # DDL 必须单独提交：后面任一表失败会 rollback，把刚建的 schema 一起撤掉
                 conn.commit()
-                names = list(tables) if tables is not None else _remote_tables(one)
+                names = (list(tables) if tables is not None
+                     else list(MIRROR_TABLES.get(one) or _remote_tables(one)))
                 for table in names:
                     try:
                         st = sync_table(cur, one, table, schema, force_full=full)
@@ -408,42 +497,7 @@ def run_pg_mirror_sync(full_backfill: bool = False) -> Dict[str, Any]:
     return out
 
 
-def status() -> Dict[str, Any]:
-    """诊断：每个库在 PG 里的表数 / 行数 / 水位。"""
-    out: Dict[str, Any] = {}
-    with _connect() as conn:
-        cur = conn.cursor()
-        for db, schema in MIRROR_DBS.items():
-            cur.execute(
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema=%s ORDER BY 1", (schema,))
-            tables = [r[0] for r in cur.fetchall()]
-            cur.execute(
-                f"SELECT db, table_name, rows, watermark, last_full_at "
-                f"FROM {_q(META_SCHEMA)}.meta WHERE db=%s ORDER BY table_name", (db,))
-            out[db] = {"schema": schema, "tables": tables, "meta": [
-                dict(zip(("db", "table", "rows", "watermark", "last_full_at"), r))
-                for r in cur.fetchall()]}
-    return out
-
-
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="远端 SQLite -> 本机 PG 镜像")
-    parser.add_argument("--db", default="", help=f"远端库名，缺省=全部 {list(MIRROR_DBS)}")
-    parser.add_argument("--table", default="", help="只处理一张表")
-    parser.add_argument("--full", action="store_true", help="强制整表重拉")
-    parser.add_argument("--status", action="store_true", help="只看 PG 侧现状")
-    args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(message)s")
-    if args.status:
-        print(status())
-        return 0
-    tables = [args.table] if args.table else None
-    out = run_mirror(db=args.db or None, full=args.full, tables=tables)
-    print({k: v for k, v in out.items() if k != "results"})
-    return 0 if out["ok"] else 1
-
-
 if __name__ == "__main__":
-    sys.exit(main())
+    from backend.services.db.pg_mirror_cli import main as _cli_main
+
+    sys.exit(_cli_main())

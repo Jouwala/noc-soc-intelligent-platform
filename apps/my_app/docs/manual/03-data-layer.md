@@ -188,8 +188,13 @@ SQLite**。`task_schedule_config` 尤其特殊：判定**只读本地这一份**
 
 | 远端库 | 本机 PG schema | 说明 |
 | --- | --- | --- |
-| `db_ps_cs_cn.sqlite3` | `cn_kpi` | CN KPI 全系列（cn_kpi / cn_kpi_split / cn_kpi_5mins / CS·PS 15min）与 MOU/CCN 邮件 |
+| `db_ps_cs_cn.sqlite3` | `cn_kpi` | CN KPI 全系列（cn_kpi / cn_kpi_split / cn_kpi_5mins / CS·PS 15min / 小时）与 MOU/CCN 邮件；原生看板 33 个组件 |
 | `ran_kpi_daily.sqlite3` | `ran_kpi` | RAN 15 分钟长表 `ran_kpi_15mins`（另含 4 张 OLIB 日表） |
+| `db.sqlite3` | `native_db` | 原生看板（FineBI 重建）6 张日表 + `Eflow_TT_FB` / `Eflow_WO_FB`，共 58 个组件 |
+| `fw_db.sqlite` | `fw_native` | 原生看板 `device_whole_throughput`（2 个组件） |
+
+> `db.sqlite3` 只镜像**被看板 SQL 引用**的 8 张表（`MIRROR_TABLES`）；库里的
+> `2G/3G/4G_Main_Kpi_Cell_Daily`、`umts_PL_Hourly_7` 等百万行表没有消费者，不拉。
 
 ### 写入：`backend/services/db/pg_mirror.py`（常驻守护）
 
@@ -201,6 +206,8 @@ SQLite**。`task_schedule_config` 尤其特殊：判定**只读本地这一份**
   的表；所有表按远端主键 upsert，幂等。
 - 增量：**有主键**的表按时间列（`Begin Time` / `begin_time` / `End Time` …）取
   `本机 MAX(时间列) − 24h` 之后的行，按主键 upsert。
+- **窗口替换**：`db.sqlite3` 的日表没有主键但有 `Begin Time`/`End Time`；首轮拉全历史，
+  之后每轮删掉「水位 − 24h」之后的行再写回（窗口内吸收上游修正，窗口外保留历史）。
 - 整表重拉：**无主键**的表**每轮都重拉**（没有唯一约束就无法幂等，走增量会把
   20 行镜像成 40 行 —— 2026-11-22 实测 3G UME 表踩过）；表名 `1month_*` 或
   `*_EMS`（上游 full_replace）最多每 6 小时一次。单表超过 30 万行直接报错
@@ -210,6 +217,9 @@ SQLite**。`task_schedule_config` 尤其特殊：判定**只读本地这一份**
   的那一轮直接跳过，下一轮再来。
 - 隔离副本（`ISOLATED_COPY.flag` / `.smoke-runner`）**不启动**守护，避免冒烟栈
   打生产远端。
+- 原生看板的取数层（`dashboard_service.query`）把 3 个历史库的别名换成
+  `__local_pg__:<schema>`，**PG 优先 → 本机 SQLite 镜像 → 远端**三级回退；
+  `NATIVE_BOARD_PG=0` 一键恢复旧行为（仍走本机镜像）。
 
 ### 读取：`backend/services/db/pg_query.py`（PG 优先、远端回退）
 
@@ -250,6 +260,7 @@ python -m backend.services.db.pg_mirror --db ran_kpi_daily.sqlite3 --table ran_k
 | `PG_MIRROR_ENABLED` | `1` | 关闭镜像（守护与手工任务都跳过） |
 | `PG_MIRROR_DAEMON` | `1` | 关闭后端内常驻守护（仍可手工跑 CLI） |
 | `PG_READ_ENABLED` | `1` | 关闭 PG 读通道，全部回远端（零改码回退） |
+| `NATIVE_BOARD_PG` | `1` | 原生看板 93 个组件读 PG；`0` 恢复读本机 SQLite 镜像 |
 | `PG_MIRROR_OVERLAP_HOURS` | `24` | 增量重叠窗口 |
 | `PG_MIRROR_FULL_HOURS` | `6` | EMS/1month 整表刷新间隔 |
 | `PG_READ_TIMEOUT_MS` | `60000` | 单条 PG 查询 statement_timeout |
