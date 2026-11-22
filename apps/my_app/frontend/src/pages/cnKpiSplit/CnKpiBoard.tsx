@@ -278,6 +278,11 @@ export default function CnKpiBoard({ board }: { board: 'cs' | 'ps' }) {
               {data?.meta && data.meta.truncated > 0 && (
                 <Tag color="warning">{t('cnkpiSplit.truncatedTag')} × {data.meta.truncated}</Tag>
               )}
+              {data?.meta?.stale && (
+                <Tag color="warning">
+                  {t('cnkpiSplit.staleTag', { age: Math.round(data.meta.age_s ?? 0) })}
+                </Tag>
+              )}
             </Space>
           </Col>
           <Col>
