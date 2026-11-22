@@ -2044,7 +2044,7 @@ Matched: alarmCode=9991 in 9971/9981 (7 total)
 | 文档 | 来源 | 内容 |
 |---|---|---|
 | `TT单-告警压缩规则.md` | `eflow_alarm_rules.xlsx` | 告警压缩（父子关联）规则 + **告警码→父告警码速查** |
-| `TT单-告警码字典.md` | `eflow_tt_alarm_code_distinct.xlsx` | 实际产生过 TT 单的告警码及含义 |
+| `TT单-告警码字典.md` | `eflow_tt_alarm_code_distinct.xlsx`（由 my_app `tools/export_eflow_tt_alarm_codes.py` 从 `app.eflow_tt` 派生；`data/` 不入库，缺失时 `sync-kb.mjs` 自动重建） | 实际产生过 TT 单的告警码及含义 |
 
 **② eFlow 业务文档**（与 ① 同一批 Excel，但覆盖更全）
 

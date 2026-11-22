@@ -50,6 +50,10 @@ function isIsolatedCopy() {
 
 /**
  * 规则源文件（相对 my_app 根）。
+ * 前三份由 eFlow 采集任务写出；第四份（告警码字典）是从 `app.eflow_tt` 现算的
+ * **派生文件**，没有任何任务自动重建，落在被 `.gitignore` 挡住的 `data/` 下 ——
+ * `scripts/sync-kb.mjs` 发现它缺失时会先调用 my_app 的生成器补回（见该脚本的
+ * `regenerateDerivedSource`），补不回来才判失败。
  * 与 `scripts/export-tt-knowledge.py` 读取的是同一批 —— 加新导出源要两处一起改。
  */
 export const RULE_SOURCE_FILES = [

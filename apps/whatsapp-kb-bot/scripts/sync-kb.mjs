@@ -58,6 +58,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scanKnowledge, diffIndex, hashKnowledge } from '../src/indexFreshness.js';
 import { myAppDir, RULE_SOURCE_FILES } from '../src/myAppPaths.js';
+import { resolvePython } from '../src/pythonPath.js';
 import { CONFIG } from '../src/config.js';
 import { healthCheck } from '../src/ollama.js';
 
@@ -86,6 +87,54 @@ function computeSourceFingerprint(myAppDir) {
     parts.push(`${segs[segs.length - 1]}:${st.size}:${Math.round(st.mtimeMs)}`);
   }
   return { ok: true, fingerprint: parts.join('|'), parts };
+}
+
+/**
+ * 派生规则源 —— 不是从 eFlow 采集来的，而是 my_app 从 `app.eflow_tt` 现算出来的。
+ *
+ * 前三份规则表由采集任务每天/每 3 天重写；这一份**没有任何任务自动重建**，
+ * 只落在被 `.gitignore` 挡住的 `data/` 下。新克隆的仓库天然没有它，误删、
+ * data/ 清理、换机都会让它消失 —— 而 `RULE_SOURCE_FILES` 把它当必需源，
+ * 少一个就三个 `whatsapp_kb_sync_*` 任务一起失败（2026-11-21~22 实测：
+ * 文件被删后知识库同步整夜 100% 失败，bot 一直按旧规则回答且没人察觉）。
+ *
+ * 所以缺了就地重新生成，而不是直接判失败 —— 生成器本来就是幂等的。
+ */
+const DERIVED_SOURCE = ['data', 'eflow_tt_alarm_code_distinct.xlsx'];
+const DERIVED_GENERATOR = ['tools', 'export_eflow_tt_alarm_codes.py'];
+
+/**
+ * 补回缺失的派生规则源；返回 {ok, error}。**只在文件缺失时调用**。
+ *
+ * 生成失败不在这里抛出：让调用方统一走 computeSourceFingerprint 的
+ * 「缺哪个文件 + 怎么补」报错路径，避免两处各说一套。
+ */
+function regenerateDerivedSource(myAppDir) {
+  const target = join(myAppDir, ...DERIVED_SOURCE);
+  if (existsSync(target)) return { ok: true, regenerated: false };
+  const generator = join(myAppDir, ...DERIVED_GENERATOR);
+  if (!existsSync(generator)) {
+    return { ok: false, error: `生成脚本不存在：${generator}` };
+  }
+  console.log(`\n! 派生规则源缺失，尝试现生成：${DERIVED_SOURCE.join('/')}`);
+  const r = spawnSync(resolvePython(), [generator], {
+    cwd: myAppDir,
+    stdio: 'inherit',
+    timeout: 180_000,
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+  });
+  if (r.error) {
+    return { ok: false, error: `生成脚本启动失败：${r.error.message}` };
+  }
+  if ((r.status ?? 1) !== 0) {
+    return { ok: false, error: `生成脚本失败（exit=${r.status ?? 1}）` };
+  }
+  if (!existsSync(target)) {
+    // 退出 0 却没产出 = 生成器与路径约定分叉了，不能当成功
+    return { ok: false, error: '生成脚本退出 0 但没有产出文件' };
+  }
+  console.log(`✓ 已生成 ${DERIVED_SOURCE.join('/')}`);
+  return { ok: true, regenerated: true };
 }
 
 function readState() {
@@ -170,13 +219,39 @@ async function main() {
   }
   console.log(`my_app 目录：${appDir}`);
 
-  const fp = computeSourceFingerprint(appDir);
+  let fp = computeSourceFingerprint(appDir);
+  if (!fp.ok) {
+    // 派生源（告警码字典）不是采集产物，缺了可以就地补 —— 先试一次，再判失败。
+    // 另外三份来自 eFlow 采集任务，补不出来，直接报「先跑采集」。
+    // dry-run 承诺「不落盘」，所以只说明「实际运行会补」，不在这里写文件。
+    if (fp.missing === DERIVED_SOURCE.join('/')) {
+      if (DRY_RUN) {
+        console.log(
+          `! [dry-run] 派生规则源缺失：实际运行会先自动生成（${DERIVED_SOURCE.join('/')}），本次不落盘`
+        );
+      } else {
+        const heal = regenerateDerivedSource(appDir);
+        if (!heal.ok) {
+          console.error(`✗ 派生规则源缺失且无法重建：${heal.error}`);
+        } else {
+          fp = computeSourceFingerprint(appDir);
+        }
+      }
+    }
+  }
   if (!fp.ok) {
     // 缺源文件 = 采集任务可能还没跑过或盘断了。**不改动知识库**：
     // 导出脚本对缺文件会「跳过」，若此时重建索引，
     // 会把已有的那份 md 内容原样留下、却把索引整体重算一遍，得不偿失。
     console.error(`✗ 规则源文件缺失：${fp.missing}`);
-    console.error('  知识库未改动。请先执行 eFlow 规则采集任务。');
+    // 分开说：采集源等任务，派生源等生成器 —— 否则运维会去翻不存在的采集任务。
+    if (fp.missing === DERIVED_SOURCE.join('/')) {
+      console.error(`  这是派生文件（由 app.eflow_tt 现算），可手动补：`);
+      console.error(`    cd ${appDir}`);
+      console.error(`    python ${DERIVED_GENERATOR.join('/')}`);
+    } else {
+      console.error('  知识库未改动。请先执行 eFlow 规则采集任务。');
+    }
     return 1;
   }
 
