@@ -49,6 +49,20 @@ def test_apply_supplementary_always_keeps_columns_when_old_table_missing():
     for col in SUPPLEMENTARY_COLUMNS:
         assert col in out.columns
     assert out["starlink_recently_migrated"].iloc[0] == "No"
+    # 2026-11-22：site_type / power_sources 是 CMDB 源表没有的项目列，
+    # 首次导入也必须带上列（值留空），否则 GIS 的硬编码 SELECT 会整条 500。
+    assert out["site_type"].iloc[0] == ""
+    assert out["power_sources"].iloc[0] == ""
+
+
+def test_apply_supplementary_rescues_site_type_by_site_id():
+    """site_type（Indoor/Outdoor）必须从旧表按 site_id 搬回，不能整列变成空。"""
+    df = pd.DataFrame({"site_id": [1, 2, 3]})
+    kept = {"site_type": pd.Series({"1": "Indoor", "2": "Outdoor"})}
+
+    out = apply_supplementary(df, kept)
+
+    assert list(out["site_type"]) == ["Indoor", "Outdoor", ""]
 
 
 def test_apply_supplementary_does_not_mutate_other_columns():
