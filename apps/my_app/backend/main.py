@@ -136,9 +136,16 @@ from backend.routers import (
     portal_catalog,
     cn_kpi,
     cn_kpi_5mins,
+    # RAN KPI 15 分钟看板（?page=ran_kpi_15mins）：从 RAN UME 取 2G/3G/4G/5G 四个
+    # NOC Platform 模板的 15 分钟档、Object Group=all 数据，D0/D1/D7 叠画。
+    # 数据源/口径见 services/ran_kpi_assurance/ran_kpi_15mins_service.py 顶部说明。
+    ran_kpi_15mins,
     # CS / PS 分组看板（?page=cs_cn_kpi / ?page=ps_cn_kpi）：按 EMS/UME 分段，
     # 数据源/口径见 services/cn/cn_kpi_split_widgets.py 顶部说明。
     cn_kpi_split,
+    # 上面两块看板的 15 分钟细粒度对照版（?page=cs_cn_kpi_15mins / ps_cn_kpi_15mins）：
+    # 只取 UME，D0/D1/D7 叠画；口径见 services/cn/cn_kpi_15mins_widgets.py。
+    cn_kpi_15mins,
     # CN 小时粒度 KPI 看板（?page=cn_hourly_kpi）：数据源/口径见
     # services/cn_kpl/cn_hourly_kpi_service.py 顶部说明。
     cn_hourly_kpi,
@@ -375,9 +382,16 @@ app.include_router(cn_kpi.router)
 # CN KPI 5 分钟看板：读 cnn_kpi_sync_5mins 任务写入的 5mins_* 表，Day0/Day1/Day7 叠画。
 # 数据源/口径见 services/cn/cn_kpi_5mins_service.py 顶部说明。
 app.include_router(cn_kpi_5mins.router)
+# RAN KPI 15 分钟看板：2G/3G/4G/5G 四个 NOC Platform 模板，Object Group=all，
+# 由 ran_kpi_15mins_sync 任务每 15 分钟写入远端 ran_kpi_daily.sqlite3.ran_kpi_15mins。
+# 数据源/口径见 services/ran_kpi_assurance/ran_kpi_15mins_service.py 顶部说明。
+app.include_router(ran_kpi_15mins.router)
 # CS / PS 分组看板：按 EMS（人工导出）/ UME（自动同步）两段展示同一批 CN KPI，
 # 不换源、缺表就空态。组件清单见 services/cn/cn_kpi_split_widgets.py。
 app.include_router(cn_kpi_split.router)
+# CS / PS CN KPI 15 分钟看板：只取 UME，D0/D1/D7 叠画，横轴为 15 分钟桶。
+# 组件清单与口径见 services/cn/cn_kpi_15mins_widgets.py。
+app.include_router(cn_kpi_15mins.router)
 # CN 小时 KPI 看板：读 cn_hourly_kpi_sync 任务写入的 <模板名>_UME 表（gr=3600，
 # 数据源 KPI Template.xlsx）。数据源/口径见 services/cn_kpl/cn_hourly_kpi_service.py 顶部说明。
 app.include_router(cn_hourly_kpi.router)
@@ -711,6 +725,16 @@ async def startup_event():
         print("[startup] 丢包看板总览预热已启动（后台）")
     except Exception as _e:
         print(f"[startup] 丢包看板预热异常（不影响启动）: {_e}")
+
+    # 本机 PG 镜像守护（2026-11-22）：把 .19 的 db_ps_cs_cn / ran_kpi_daily 增量镜像到
+    # 本机 PG，看板优先读本地（缺表/空结果自动回退远端）。每 5 分钟一轮。
+    try:
+        from backend.services.db import pg_mirror_daemon as _pgr
+        # 单实例锁没拿到说明另有一个后端在跑（仅 HTTP 实例），镜像交给持锁实例
+        if _got_lock and _pgr.start_mirror_daemon():
+            print("[startup] 本机 PG 镜像守护已启动（每 5 分钟）")
+    except Exception as _e:
+        print(f"[startup] PG 镜像守护启动异常（不影响启动）: {_e}")
 
     if DISABLE_SCHEDULER:
         print("[startup] MY_APP_DISABLE_SCHEDULER=1: skip APScheduler start (smoke test mode)")

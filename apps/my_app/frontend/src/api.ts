@@ -488,6 +488,17 @@ export function getCnKpi5minsOverview(params?: { force?: boolean }) {
   return api.get('/cn-kpi-5mins/overview', { params: Object.keys(q).length ? q : undefined })
 }
 
+// RAN KPI 15 分钟看板（?page=ran_kpi_15mins）
+// 数据源：任务 ran_kpi_15mins_sync 每 15 分钟从 RAN UME 取 2G/3G/4G/5G 四个
+// NOC Platform 模板（Object Group=all，gr=900），写远端 ran_kpi_daily.sqlite3
+// 的 ran_kpi_15mins 长表。窗口固定「今天 + 昨天 + 7 天前」，四个页签按需取数。
+// params: tech=2G|3G|4G|5G；force=true 跳过后端 300s 缓存
+export function getRanKpi15minsOverview(params: { tech: string; force?: boolean }) {
+  const q: Record<string, string | number> = { tech: params.tech }
+  if (params.force) q.force = 1
+  return api.get('/ran-kpi-15mins/overview', { params: q })
+}
+
 // CN 小时 KPI 看板（?page=cn_hourly_kpi）
 // 数据源：任务 cn_hourly_kpi_sync 写入的 <模板名>_UME 表（gr=3600，db_ps_cs_cn.sqlite3），
 // 模板来自 UME「KPI 模板管理」导出件 KPI Template.xlsx（见 services/cn_kpl/cn_hourly_kpi_service.py）。
@@ -513,6 +524,16 @@ export function getCnKpiSplitOverview(
   if (params?.end) q.end = params.end
   if (params?.force) q.force = 1
   return api.get(`/cn-kpi-split/${board}/overview`, { params: Object.keys(q).length ? q : undefined })
+}
+
+// CS / PS CN KPI 15 分钟看板（?page=cs_cn_kpi_15mins / ?page=ps_cn_kpi_15mins）
+// 数据源：db_ps_cs_cn.sqlite3 的 UME 表（不含 EMS）；D0/D1/D7 叠画、横轴 15 分钟桶。
+// 窗口固定为「今天 / 昨天 / 7 天前」，因此不接收日期区间；force=true 跳过 300s 缓存。
+export type CnKpi15minsBoard = 'cs' | 'ps'
+export function getCnKpi15minsOverview(board: CnKpi15minsBoard, force = false) {
+  return api.get(`/cn-kpi-15mins/${board}/overview`, {
+    params: force ? { force: 1 } : undefined,
+  })
 }
 
 // ===== 原生看板（my-finebi 其余看板泛化迁移） =====

@@ -1,6 +1,6 @@
 # 04 任务与调度系统
 
-my_app 的"心脏"。86 个定时任务负责全部数据采集与报表投递，页面上看到的数据新鲜度、失败告警、补跑行为都在这里定义。
+my_app 的"心脏"。87 个定时任务负责全部数据采集与报表投递，页面上看到的数据新鲜度、失败告警、补跑行为都在这里定义。
 
 > 另有两个**模块级说明文件**更贴近代码：`backend/WORKER.md`（worker 进程架构、容错、启停、环境变量）与 `backend/task_registry.md`（注册表字段与对外接口）。本章是归口叙述，改动这两处代码时请同步更新三份文档。
 
@@ -30,7 +30,7 @@ APScheduler 到点 (backend 进程内)
 
 | 组 | 任务数 | 约束原因 | 成员 task_id |
 | --- | --- | --- | --- |
-| `u` | 13 | RAN UME 单账号会话，必须串行（并发会被踢会话）。`bp_report_sync` 也读 RAN UME，且必须排在 `main_kpi_sync` 之后（否则读到昨天的 KPI）；2026-11-07 新增 `ran_element_management_sync`（23:00 拉 RNM 网元管理表格落 PG），同走 `zte_ume` 凭据与 `auth_cache` 会话，故必须归本组串行，与 02:00 的 `ran_ume_daily` 错峰 | `ran_ume_daily`, `main_kpi_sync`, `cell_availability_sync`, `network_kpi_sync`, `packet_loss_sync`, `packet_loss_email`, `battery_kpi_sync`, `ipran_kpi_sync`, `cm_data_sync`, `cells_kpi_sync`, `avail_recon_sync`, `bp_report_sync`, `ran_element_management_sync` |
+| `u` | 14 | RAN UME 单账号会话，必须串行（并发会被踢会话）。`bp_report_sync` 也读 RAN UME，且必须排在 `main_kpi_sync` 之后（否则读到昨天的 KPI）；2026-11-07 新增 `ran_element_management_sync`（23:00 拉 RNM 网元管理表格落 PG），同走 `zte_ume` 凭据与 `auth_cache` 会话，故必须归本组串行，与 02:00 的 `ran_ume_daily` 错峰；2026-11-22 新增 `ran_kpi_15mins_sync`（每 15 分钟取 2G/3G/4G/5G 15 分钟档 KPI），同样走 `zte_ume` 共享会话 | `ran_ume_daily`, `main_kpi_sync`, `cell_availability_sync`, `network_kpi_sync`, `packet_loss_sync`, `packet_loss_email`, `battery_kpi_sync`, `ipran_kpi_sync`, `cm_data_sync`, `cells_kpi_sync`, `avail_recon_sync`, `bp_report_sync`, `ran_element_management_sync`, `ran_kpi_15mins_sync` |
 | `n` | 19 | eFlow API / config-center 同源会话（2026-09-27 由 17 项收窄，VMAX→`v`、SFTP→`s`、MW UME→`w`；2026-10-15 实时告警→`x`；2026-10-17 新增 `cnn_kpi_sync_5mins`，与 `cnn_kpi_sync` 共用 CNN UME 会话；2026-10-23 新增 3 个 `whatsapp_kb_sync_*`，跟在对应规则采集之后触发知识库同步；2026-10-29 新增 `eflow_push_rules_check`，与规则采集同会话故同组；2026-11-18 新增 `cn_hourly_kpi_sync`，同登 CNN UME 共享会话故同组） | `eflow_sync`, `eflow_sync_full`, `eflow_history_alarm`, `eflow_tt_rules_check`, `ms_sla_full`, `cnn_kpi_sync`, `cnn_kpi_sync_5mins`, `cn_hourly_kpi_sync`, `fw_kpi_sync`, `sp_online_sync`, `sp_material_sync`, `eflow_alarm_rules_collect`, `eflow_push_rules_collect`, `eflow_push_rules_check`, `whatsapp_kb_sync_alarm_rules`, `whatsapp_kb_sync_push_rules`, `whatsapp_kb_sync_tt_rules`, `ume_in_kpi_sync`, `ume_in_osg_report` |
 | `s` | 1 | SP 备件 SFTP（独立 SFTP 服务器 + UNC 镜像库）。2026-09-27 从 `n` 拆出：它是 `n` 组最大单体负载（实测 347min/天）且是已知挂死源（SFTP channel 读挂死 5.5h 曾拖停整组） | `sp_data_sync` |
 | `w` | 2 | MW UME 微波网管（凭证分组 `mw_ume`），独立会话。2026-09-27 从 `n` 拆出：`mw_ume_kpi_sync_rt` 为 `*/15` 高频任务，此前每次排在 `sp_data_sync` 后，实测队列等待 964s（全场最久） | `mw_ume_kpi_sync`, `mw_ume_kpi_sync_rt` |
@@ -98,6 +98,13 @@ APScheduler 到点 (backend 进程内)
 > ① `tests/test_worker_group_coverage.py`（不依赖 pytest，`python tests\test_worker_group_coverage.py` 即可跑，2026-09-18 实跑 PASS=5）—— 5 个用例：任务覆盖（缺项 + 幽灵 id）、同组不重复、三处组集合一致、共用 8790 会话的任务必须同组、前端任务帮助（`frontend/src/pages/helpTaskDocs.ts` 的 `TASK_DOCS`）与分组表一一对应且组名相同；任一项失配在跑测试时就失败。**跑它必须用 PATH 上的 `python`（系统 3.12）**，工作区的 `Scripts\python.exe` 与 `.venv\Scripts\python.exe` 都没装 apscheduler，用错解释器会报 `ModuleNotFoundError: apscheduler` 而“假失败”（看着像分组配错了）；
 > ② `worker.py::_expire_orphan_pending`（每 300s）—— pending 超过 `STALE_PENDING_SECONDS`（默认 6h）仍无人认领就置 failed 并补执行日志，释放被它占住的单飞名额，让下一次调度能正常入队（以前一条陈旧 pending 会把该任务**之后每一次**调度静默挡在门外）；
 > ③ `worker_watchdog.py::main()` 启动自检 —— 分组表与 `MY_APP_WORKER_GROUPS` 两侧任一漏改，看门狗启动时打 warning（只告警不退出）。
+
+> **不在 `TASK_SPECS` 里的常驻守护（2026-11-22）**：`pg_mirror_daemon.start_mirror_daemon` 每 5 分钟
+> 把 `.19` 的 `db_ps_cs_cn` / `ran_kpi_daily` 增量镜像进本机 PG。它**故意不做成任务**：
+> 任务必须归属某个 worker 组，而镜像不能被 `p` 组 `pg_to_sqlite_sync`（9~20 分钟）或
+> `n` 组 `eflow_sync` 堵住；单独开组要同步改五处。代价是它不在任务管理页可见，
+> 巡检用 `python -m backend.services.db.pg_mirror --status` 与启动日志的
+> `[startup] 本机 PG 镜像守护已启动`（见 `13-operations.md`）。
 
 ## 文档一致性守卫（文档与代码对不上时，跑测试就失败）
 
@@ -246,7 +253,8 @@ APScheduler 到点 (backend 进程内)
 | `network_kpi_sync` | RAN Network KPI 同步 | `0 5 * * *` | u |
 | `cnn_kpi_sync` | CNN UME KPI 同步 | `0 6 * * *` | n |
 | `cnn_kpi_sync_5mins` | CNN UME KPI 5分钟同步（**增量窗口**默认最近 120 分钟，上一轮失败自动回退全窗口「昨天 00:00→现在」补缺口，`CNN5M_WINDOW_MODE=full` 回滚旧行为；写 `5mins_*` 新表；**混合粒度**：5 个模板 5 分钟 + 3 个模板走上游 15 分钟档模板；0 行跳过不计失败） | `*/15 * * * *` | n |
-| `cn_hourly_kpi_sync` | CN 小时 KPI 同步（模板来自 UME「KPI 模板管理」导出件 `KPI Template.xlsx`，由 `cn_kpl/cn_hourly_kpi_service.py` 解析后走既有 CNN 查询管线；gr=3600，默认 2 天增量窗口，首次回补 `python -m backend.services.cn_kpl.cn_hourly_kpi_service --days 31`；写 `<模板名>_UME` 三张表，供 ?page=cn_hourly_kpi 按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization/Capacity 两族重复只留 Utilization） | `20 6 * * *` | n |
+| `ran_kpi_15mins_sync` | RAN UME 15 分钟 KPI 同步（2G/3G/4G/5G 四个 NOC Platform 模板，Object Group=all，`gr=900`；写远端 `ran_kpi_daily.sqlite3` 的 `ran_kpi_15mins` 长表；首轮回补 8 天，之后每轮补最近 3 小时，upsert 累积；供 `?page=ran_kpi_15mins` 做 D0/D1/D7 叠画） | `6,21,36,51 * * * *` | u |
+| `cn_hourly_kpi_sync` | CN 小时 KPI 同步（模板来自 UME「KPI 模板管理」导出件 `KPI Template.xlsx`，由 `cn_kpl/cn_hourly_kpi_service.py` 解析后走既有 CNN 查询管线；gr=3600，默认 2 天增量窗口，**5 个模板并行**（单模板 95~180 秒，串行 9 分钟 → 并行约 3 分钟），首次回补 `python -m backend.services.cn_kpl.cn_hourly_kpi_service --days 31`；写 `<模板名>_UME` 五张表，供 ?page=cn_hourly_kpi / CS 与 PS CN KPI 看板出图；Object Scope=ALL 覆盖全部网元，Utilization/Capacity 两族重复各留一张） | `5 * * * *` | n |
 | `sp_data_sync` | SP 备件数据同步 | `10 * * * *` | s |
 | `ipran_kpi_sync` | iPRAN UME KPI 同步（**每小时全量拉取 3 天窗口是本意**，2026-11-06 与用户确认；写入侧按**每个 ME 各自的**远端水位增量裁剪 —— 同表 BU 的 Begin Time 比另外 3 个 ME 快 8 小时，用全表水位会把它们整批裁掉，2026-11-16 已修） | `0 * * * *` | u |
 | `liberia_email_1h` | Liberia 宕站 1小时报告邮件 | `15 * * * *` | m |
@@ -785,7 +793,7 @@ python -c "import sys; sys.path.insert(0,'.'); from backend.services.task.task_r
 | `_EMS` | `Task\PS_CS_CORE_Scripts\ps_cs_core.py`（**不是本项目的任务，不进 `TASK_SPECS`**） | **人工**导出 CSV 后手动运行 | 8+ 个模板，含 USSD / LOCATION_UPDATE |
 | `_UME` | 任务 `cnn_kpi_sync`（本项目，每天 06:00，`ccn_ume_kpi_service.py`） | 自动 | **仅 8 个模板**（`CNN_KPI_QUERY_CONFIGS`） |
 
-> ⚠ 2026-11-18 起同名后缀多了一条小时链路：`cn_hourly_kpi_sync`（每天 06:20，
+> ⚠ 2026-11-18 起同名后缀多了一条小时链路：`cn_hourly_kpi_sync`（每小时 :05，
 > `cn_kpl/cn_hourly_kpi_service.py`）也写 `<模板名>_UME` 表（`PS_xGW_Session_Capacity_OSS_UME`
 > 等 **3 张新表**，gr=3600，供 ?page=cn_hourly_kpi），与上表 8 个日/月粒度表
 > **互不重叠** —— 表名按模板名区分，不会撞 `cn_kpi` 页面的表。

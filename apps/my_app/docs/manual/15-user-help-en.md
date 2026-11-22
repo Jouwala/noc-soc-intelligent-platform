@@ -10,7 +10,7 @@
 
 - [1. Platform Overview](#1-platform-overview)
 - [2. General Usage](#2-general-usage)
-- [3. Task Manager Deep Dive (86 tasks)](#3-task-manager-deep-dive)
+- [3. Task Manager Deep Dive (87 tasks)](#3-task-manager-deep-dive)
 - [4. Pages Guide](#4-pages-guide)
 - [5. Ops & Troubleshooting](#5-ops-troubleshooting)
 - [6. FAQ](#6-faq)
@@ -83,7 +83,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 
 > ⚠️ **New tasks MUST also be registered in `GROUP_TASK_MAP` in worker_watchdog.py** — declaring them only in TASK_SPECS leaves them pending forever. This accident happened four times (finebi_report_sync / whatsapp_send_ext / sp_email_details / the olib_soc and vmax_multi_data_sync tasks found on 2026-09-18).
 
-### 3.3 Full task catalog (86 tasks)
+### 3.3 Full task catalog (87 tasks)
 
 | Task | task_id | Default cron | Group | Workflow script |
 | --- | --- | --- | --- | --- |
@@ -110,7 +110,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | BP Cells Report Sync | `bp_report_sync` | `20 6 * * *` | u | `services/bp/bp_report_sync.py → run_bp_report_sync` |
 | CNN UME KPI Sync | `cnn_kpi_sync` | `0 6 * * *` | n | `services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync` |
 | CNN UME KPI 5-Min Sync | `cnn_kpi_sync_5mins` | `*/15 * * * *` | n | `services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins` |
-| CN Hourly KPI Sync | `cn_hourly_kpi_sync` | `20 6 * * *` | n | `services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync` |
+| CN Hourly KPI Sync | `cn_hourly_kpi_sync` | `5 * * * *` | n | `services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync` |
 | SP Spare Data Sync | `sp_data_sync` | `10 * * * *` | s | `services/sp/get_sp_table.py → run_sp_data_sync` |
 | iPRAN UME KPI Sync | `ipran_kpi_sync` | `0 * * * *` | u | `services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync` |
 | Liberia Site-Down 1H Report Email | `liberia_email_1h` | `15 * * * *` | m | `services/email/liberia_email_report.py → run_1h_report` |
@@ -173,6 +173,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | RAN User Identity Lists (VoLTE/N78) | `gp_ran_user_sync` | `20 13 * * *` | g | `services/gp_ran/gp_ran_sync.py → run_gp_ran_user_sync` |
 | IPT Site Power Collect | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN Element Management Sync | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
+| RAN KPI 15-Min Sync | `ran_kpi_15mins_sync` | `6,21,36,51 * * * *` | u | `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync` |
 
 Workflow & maintenance notes per task:
 
@@ -640,16 +641,16 @@ Workflow & maintenance notes per task:
 
 #### CN Hourly KPI Sync（`cn_hourly_kpi_sync`）
 
-- Default cron: `20 6 * * *`　|　worker group: **n**
+- Default cron: `5 * * * *`　|　worker group: **n**
 - Workflow script: `services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync`
 
-**What it does**: Parses 4 templates from the UME "KPI Template" export file KPI Template.xlsx (PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS) and adds 1 more that is not in the xlsx from the request body captured by the user (DNS_SUCCESS_RATIO_OSS_updated, templateid 1649220598196 / motid 4927), five in total; it queries them at hourly granularity (gr=3600) and writes the <template>_UME tables in DB CNN for the date-rangeable CN Hourly KPI, CS CN KPI and PS CN KPI boards; Object Scope=ALL covers every NE, and one carrier table is kept per family because Utilization and Capacity each duplicate internally (user decision 2026-11-18; Capacity and DNS added 2026-11-20)
+**What it does**: Parses 4 templates from the UME "KPI Template" export file KPI Template.xlsx (PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS) and adds 1 more that is not in the xlsx from the request body captured by the user (DNS_SUCCESS_RATIO_OSS_updated, templateid 1649220598196 / motid 4927), five in total; it queries them at hourly granularity (gr=3600) and writes the <template>_UME tables in DB CNN for the date-rangeable CN Hourly KPI, CS CN KPI and PS CN KPI boards; Object Scope=ALL covers every NE, and one carrier table is kept per family because Utilization and Capacity each duplicate internally (user decision 2026-11-18; Capacity and DNS added 2026-11-20); since 2026-11-22 it runs every hour at :05 instead of daily 06:20, querying/exporting the five templates in parallel (95-180 s each; 9 min serial -> about 3 min parallel), which cuts the hourly-source lag on the 15-minute boards from 8-24 h to about 1-2 h
 
 **Workflow & data flow**:
 
 1. Parse KPI Template.xlsx (falls back to embedded configs with a warning if the file is missing)
 1. Log into CNN UME (shares the session cache with cnn_kpi_sync)
-1. Query each template at hourly granularity (2-day incremental window by default; first backfill via python -m ... --days 31, or --templates <name> for a single new template)
+1. Query the five templates in parallel at hourly granularity (95-180 s each; 2-day incremental window by default; first backfill via python -m ... --days 31, or --templates <name> for a single new template)
 1. Upsert into db_ps_cs_cn tables named <template>_UME (PK Begin Time+NE(+SERVICE))
 
 **Maintenance**:
@@ -1815,6 +1816,28 @@ Workflow & maintenance notes per task:
 - The schema is created idempotently by DDL inside the service (CREATE TABLE IF NOT EXISTS) - no Alembic migration needed. When changing the FIELDS mapping, update the DDL and indexes too
 - Troubleshooting order: check status / error in app.ran_element_management_sync_log first, then the task execution log; a sudden drop in rows usually means the minimum-row guard rejected a partial response; for session issues test the zte_ume credential in Settings -> Credentials
 
+#### RAN KPI 15-Min Sync（`ran_kpi_15mins_sync`）
+
+- Default cron: `6,21,36,51 * * * *`　|　worker group: **u**
+- Workflow script: `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync`
+
+**What it does**: Every 15 minutes, fetch 15-minute KPIs for the four NOC Platform templates (*_NW_KPI_Monitor_NOC_Platform) from RAN UME for 2G/3G/4G/5G with Object Group = all (whole network: payload filterlayer="all" + grouplayer="all") and gr=900; parse the exported xlsx into a long table and upsert it into ran_kpi_15mins in the remote ran_kpi_daily.sqlite3 for the four-tab Day0/Day1/Day7 overlay on the RAN KPI 15-Minute board
+
+**Workflow & data flow**:
+
+1. Log into RAN UME (shared session via auth_manager + credential_store key zte_ume)
+1. For each tech, GET /api/pm-model/v1/templates/detail?id=<template id> to read the metric list (column names are not hardcoded, so template changes are picked up next round)
+1. Create history queries per tech in parallel (gr=900, filterlayer=all, grouplayer=all), poll until done, then export xlsx
+1. Parse into a long table keyed by (tech, metric_key, begin_time) and write it with DbWriterClient.write_data(mode="upsert") into ran_kpi_daily.sqlite3.ran_kpi_15mins
+
+**Maintenance**:
+
+- WARNING: the first run (or a table with no watermark) backfills 8 days because Day7 needs them; later runs start from latest data minus 3 hours (tunable via RAN_KPI_15M_OVERLAP_HOURS), capped at 8 days back, and history accumulates via upsert. Force a full backfill with run_ran_kpi_15mins_sync(full_backfill=True) or RAN_KPI_15M_FULL=1
+- WARNING: Object Group = all is not a specific rangroup. filterlayer="group" with empty uilocations is rejected by UME (0001610001 object information cannot be empty); use filterlayer="all"
+- WARNING: belongs to group u because it shares the same zte_ume account and session with the other RAN UME tasks; concurrent logins kick each other. It runs every 15 minutes and a measured run takes about 4.5 minutes (four techs, including 24 metrics for 5G)
+- WARNING: an export with 0 rows is treated as an empty state and skipped, not failed (same convention as cnn_kpi_sync_5mins)
+- The only consumer is ?page=ran_kpi_15mins (routers/ran_kpi_15mins.py + the read side of services/ran_kpi_assurance/ran_kpi_15mins_service.py)
+
 ### 3.4 Reliability mechanisms (timeout / retry / self-healing)
 
 | Mechanism | Description |
@@ -2454,12 +2477,12 @@ CN KPI 5-minute dashboard: overlays today (Day0), yesterday (Day1) and 7 days ag
 
 #### cn_hourly_kpi（`cn_hourly_kpi`）
 
-CN Hourly KPI board: an HOURLY-granularity view of xGW session/throughput capacity and MGW/MRFP resource utilization, with a selectable date range (last 7 days by default, up to 31 days). The data comes from 4 templates parsed out of the UME "KPI Template" export file KPI Template.xlsx (templates created 2026-11-17), plus 1 template added from outside the xlsx (DNS_SUCCESS_RATIO_OSS_updated), five in total; task cn_hourly_kpi_sync pulls them at gr=3600 every day at 06:20 into the five <template>_UME tables in db_ps_cs_cn. Caliber (set 2026-11-18, Capacity added 2026-11-20): the Resource_Utilization and Resource_Capacity template families each duplicate internally, so one carrier table is kept per family (CS_MRFP96) and both cover all network elements; Object Scope=ALL, covering every network element.
+CN Hourly KPI board: an HOURLY-granularity view of xGW session/throughput capacity and MGW/MRFP resource utilization, with a selectable date range (last 7 days by default, up to 31 days). The data comes from 4 templates parsed out of the UME "KPI Template" export file KPI Template.xlsx (templates created 2026-11-17), plus 1 template added from outside the xlsx (DNS_SUCCESS_RATIO_OSS_updated), five in total; task cn_hourly_kpi_sync pulls all five in parallel at gr=3600 every hour at :05 (about 3 minutes) into the five <template>_UME tables in db_ps_cs_cn. Caliber (set 2026-11-18, Capacity added 2026-11-20): the Resource_Utilization and Resource_Capacity template families each duplicate internally, so one carrier table is kept per family (CS_MRFP96) and both cover all network elements; Object Scope=ALL, covering every network element.
 
 - Seven widget cards: xGW PFCP sessions used, xGW session occupancy(%), xGW throughput used(Mbps), xGW throughput occupancy(%), and MGW/MRFP TONE/TC/RTP utilization(%). The first four plot xGWU22/xGWU122 (occupancy is a single merged ALL line), the last three plot MGW_91/MGW_92/MRFP_96
 - Change the date range with the range picker (inclusive endpoints); the board refetches immediately and is capped at 31 days (same tier as the backfill window)
 - **Every widget title explains its value on hover**: the ⓘ spells out the aggregate per card — session/throughput usage is a SUM over NE-hours, occupancy is SUM(Used)×100÷SUM(Authorized) weighted across NEs, and resource utilization is the upstream composite-KPI value as-is (e.g. 100*C408230024/(Gr*C408230021), Gr=3600s) with no recomputation on the page
-- The first month of history comes from the backfill command: python -m backend.services.cn_kpl.cn_hourly_kpi_service --days 31; afterwards the daily 06:20 run appends new hours automatically (2-day window by default)
+- The first month of history comes from the backfill command: python -m backend.services.cn_kpl.cn_hourly_kpi_service --days 31; afterwards the hourly :05 run (five templates in parallel) appends new hours automatically (2-day window by default)
 - The header tags "N/N widgets with data", "date range" and "N failed" are hover-explainable too: empty and failed widgets are both excluded from "with data"
 - "Data caliber notes" is collapsed by default (click the title to expand): template origin, the Utilization/Capacity choice, Object Scope=ALL and the utilization formulas are all in there
 - "Export Excel" writes one sheet per widget, expanded per NE column by hour, for reconciliation
@@ -2484,6 +2507,37 @@ PS CN KPI group board (packet switched): splits the PS-side CN KPIs by **data so
 - The xGW throughput/session capacity cards plot used and authorized, whose difference is the headroom; RG-6/11/12/30 are split by Measurement Object into four lines (same source and caliber as the four RG cards on the CN KPI page, merged into one here)
 - The card ⓘ states the source table, actual granularity, row count and the SQL that was actually executed; nothing is recomputed on the page
 - "Data caliber notes" is collapsed by default (click to expand); "Export Excel" writes an overview plus one wide sheet per widget for reconciliation
+
+#### cs_cn_kpi_15mins（`cs_cn_kpi_15mins`）
+
+CS CN KPI 15-minute board: **UME only**, overlaying today (D0), yesterday (D1) and seven days ago (D7, same weekday) on one chart with 15-minute buckets (00:00 / 00:15 / ...). Its metrics match the UME section of ?page=cs_cn_kpi one-for-one: MRFP96 / MGW92 / MGW91 utilization and capacity, VLR subscribers and Voice traffic. Data is read from the *_UME tables in db_ps_cs_cn through the remote read-only SQL API; EMS is never shown and the window is fixed.
+
+- Every card plots exactly one metric (TONE, TC, RTP and used each get their own card) with three lines: D0 today, D1 yesterday and D7 seven days ago; colour and line style both identify the day (D0 green solid / D1 blue dashed / D7 cyan dotted). The x axis is clock time, so the same x value is the same time of day
+- The card badge states the source granularity: MGW/MRFP resource cards are **hourly source** (points only on the hour, no forward filling); VLR / Voice are 5-minute data aggregated into 15-minute buckets; the native 15-minute resource cards live on the PS page
+- D0 ends at the latest collection time, so a shorter tail than D1/D7 is collection lag, not missing data. D7 appears only once the table has accumulated eight days; a missing day means one less line, never a filled zero
+- The three date tags in the header are the D0/D1/D7 dates of the current window; "Export Excel" expands one sheet per widget by clock time
+- "Data caliber notes" is collapsed by default (click to expand): UME-only source, Begin Time (left edge) bucketing, mean for ratios versus SUM for traffic, and the three source granularities
+
+#### ps_cn_kpi_15mins（`ps_cn_kpi_15mins`）
+
+PS CN KPI 15-minute board: **UME only**, overlaying D0/D1/D7 on a 15-minute axis. Its metrics match the UME section of ?page=ps_cn_kpi one-for-one: xGW throughput capacity, xGW session capacity, xGW CPU (Current/Mean/Peak), xGW license occupancy (PFCP sessions + throughput), data subscribers (2G/3G/4G/5G), DNS success ratio, RG-6/11/12/30 traffic, 4G and 3G FDD. The three daily/monthly duplicate views on the reference page (License daily, CPU daily, RG monthly) are not copied here — they would be flat lines at 15-minute scale and remain on ps_cn_kpi.
+
+- Every card plots exactly one metric (Used/Authorized, 2G/3G/4G/5G and each RG group get their own card) with three lines: D0 today, D1 yesterday and D7 seven days ago; colour and line style both identify the day (D0 green solid / D1 blue dashed / D7 cyan dotted)
+- The card badge states the source granularity: xGW CPU, xGW License and 3G FDD are **native 15-minute**; Data Subscribers, 4G FDD and RG are 5-minute data aggregated into 15-minute buckets; xGW throughput/session capacity and DNS are **hourly source** (points only on the hour)
+- Ratios and percentages use the arithmetic mean within the bucket (not weighted, not peak); traffic bytes are summed per bucket and /1e9 to GB; gauges such as subscriber counts sum network elements per timestamp first and then average the samples in the bucket
+- D0 ends at the latest collection time, so a shorter tail than D1/D7 is collection lag, not missing data; D7 appears only after eight days of accumulated history
+- "Data caliber notes" is collapsed by default (click to expand); "Export Excel" expands one sheet per widget by clock time
+
+#### ran_kpi_15mins（`ran_kpi_15mins`）
+
+RAN KPI 15-minute board: four tabs (2G / 3G / 4G / 5G). Each tab lays out one card per template metric, and every card overlays **today (D0) / yesterday (D1) / seven days ago (D7, same weekday)** on a 15-minute clock axis (00:00 / 00:15 / ..., 96 points a day). A task, ran_kpi_15mins_sync, fetches four NOC Platform templates (*_NW_KPI_Monitor_NOC_Platform) from RAN UME every 15 minutes with **Object Group = all (whole network)** and gr=900, writes the long table ran_kpi_15mins in the remote ran_kpi_daily.sqlite3, and the page reads it through the read-only SQL API per tab.
+
+- Tabs switch by technology (2G / 3G / 4G / 5G); a tab is fetched only when opened, revisiting it does not refetch, and refresh / auto refresh only refetches the active tab
+- Every card has exactly three lines: Day0 today, Day1 yesterday and Day7 seven days ago; colour is the day (green / blue / cyan) and the x axis is clock time, so the same x value is the same time of day
+- Day0 ends at the latest collection time, so a shorter tail than D1/D7 is collection lag, not missing data. Day7 appears only after enough history has accumulated (the first sync backfills eight days); when it is absent the header says so instead of filling zeros
+- Ratio metrics (success/drop/utilization/availability rates, template datatypeshow=7) arrive as 0~1 fractions and are multiplied by 100 for display; every other metric keeps the template unit
+- The card ⓘ states the original metric name, granularity, Object Group and source table; the "vs yesterday" tag is computed in the frontend from raw API rows (yesterday truncated to today's last slot, same-length comparison)
+- "Data caliber notes" is collapsed by default (click to expand); "Export Excel" writes an overview plus one wide sheet per metric (time x D0/D1/D7) with percentages already multiplied by 100
 
 #### UME iMonitor Screen（`imonitor`, iframe page）
 
