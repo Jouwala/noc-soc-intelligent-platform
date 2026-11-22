@@ -49,6 +49,37 @@ Get-ChildItem D:\01_RPA\Task\my_app\log\heartbeat_*.json |
 
 5. 数据库新鲜度巡检由 `db_freshness_check` 每小时 :15 自动做，滞后会在其执行日志里给出调用链与检查方向（`task_registry.py:311-315`）。
 
+### 本机 PG 镜像巡检（2026-11-22 新增）
+
+CN / RAN 看板改为「本机 PG 优先、远端回退」后，页面慢或数字停在旧值，先看镜像。
+
+```powershell
+cd D:\02_olbr_portal\apps\my_app
+
+# ① 每个远端库在 PG 里的表、行数、水位、上次整表刷新时间
+python -m backend.services.db.pg_mirror --status
+
+# ② 手工补一轮（缺表/水位落后；--full 才整表重拉）
+python -m backend.services.db.pg_mirror --db db_ps_cs_cn.sqlite3
+python -m backend.services.db.pg_mirror --db ran_kpi_daily.sqlite3
+
+# ③ 后端启动日志里应有一行：
+#    [startup] 本机 PG 镜像守护已启动（每 5 分钟）
+```
+
+判断顺序：
+
+| 现象 | 先查 | 结论 |
+| --- | --- | --- |
+| 页面慢，但数字对 | `PG_READ_ENABLED` 是否被设成 0；`query_pg` 日志是否有缺表/方言回退 | 回退到了 .19（慢但正确） |
+| 数字停在几小时前 | `--status` 的 `watermark` / `last_full_at` | 镜像守护没跑 / 该表没有时间列只能整表重拉 |
+| 页面整块空白 | PG 表是否存在；`pg_query` 是否报方言错误 | 两者都会回退远端，不该空白；若远端也空，查上游同步任务 |
+| `date` 比较报 `text = date` | 是否新增了未走 `to_pg_sql` 的直接 SQL | 手写 SQL 也要走 `query_data`，不要直连远端再自己拼 PG 版 |
+
+> 回退开关：`PG_READ_ENABLED=0`（读）/ `PG_MIRROR_ENABLED=0`（镜像）/
+> `PG_MIRROR_DAEMON=0`（只停守护，保留 CLI）。改环境变量后需重启后端。
+> 细节与 SQL 改写规则见 `03-data-layer.md`「远端 SQLite → 本机 PG 镜像」。
+
 ## 日志
 
 | 文件（`log/`） | 内容 | 备注（2026-08-27 实测体积） |

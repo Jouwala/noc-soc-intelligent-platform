@@ -107,11 +107,13 @@ def _widget_sql() -> str:
 
 def _fetch_mou_data() -> Optional[pd.DataFrame]:
     """读取与 ?page=cn_kpi 的 International MOU 图表相同的数据。"""
-    from backend.services.cn import cn_kpi_service
+    from backend.services.cn.cn_kpi_service import REMOTE_DB
+    from backend.services.db.pg_query import query_data
 
     try:
         sql = _widget_sql()
-        res = cn_kpi_service.query_remote(sql)
+        # 本机 PG 优先、远端回退（2026-11-22）
+        res = query_data(sql, db=REMOTE_DB)
         if not res.get("success", True):
             raise RuntimeError(res.get("error") or "远端返回 success=false")
         rows = res.get("rows") or []

@@ -60,6 +60,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
 from backend.services.cn.cn_kpi_service import REMOTE_DB, query_remote
+from backend.services.db.pg_query import query_data
 
 logger = logging.getLogger("cn_kpi_5mins")
 
@@ -341,7 +342,8 @@ def _fetch_widget(w: Dict[str, Any]) -> Dict[str, Any]:
         return out
 
     try:
-        res = query_remote(w["sql"], db=REMOTE_DB, limit=5000)
+        # 本机 PG 优先、远端回退（2026-11-22）
+        res = query_data(w["sql"], db=REMOTE_DB, limit=5000)
     except Exception as e:  # noqa: BLE001 — 表不存在也算空态
         msg = str(e)
         if "no such table" in msg.lower():

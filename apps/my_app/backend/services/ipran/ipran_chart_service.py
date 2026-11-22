@@ -312,18 +312,22 @@ def _read_from_excel_fallback(me: str, measure_obj: str) -> Optional[pd.DataFram
 
 
 def query_data(me: str, measure_obj: str, table_name: str, days_back: int = 3) -> Optional[pd.DataFrame]:
-    """查询数据，优先级：远程 API → SQLite → Excel"""
-    
-    # 1. 尝试远程 API
-    df = _query_remote_api(me, measure_obj, table_name)
-    if df is not None and not df.empty:
-        return df
-    
-    # 2. 尝试本地 SQLite（传入正确的表名）
+    """查询数据，优先级：本机（PG/SQLite）→ 远端 API → Excel。
+
+    2026-11-22 起本机优先：`_read_from_sqlite` 在 `MY_APP_DB_MODE=pg` 下经
+    `get_raw_connection(logical_name="ipran_ume")` 读本机 PG，与原生看板一致；
+    远端只在本机缺该 ME/区间时回退。
+    """
+    # 1. 本机（PG 模式下即 ipran_ume schema）
     df = _read_from_sqlite(me, measure_obj, table_name, days_back)
     if df is not None and not df.empty:
         return df
-    
+
+    # 2. 回退远端 API
+    df = _query_remote_api(me, measure_obj, table_name)
+    if df is not None and not df.empty:
+        return df
+
     # 3. 降级到 Excel
     return _read_from_excel_fallback(me, measure_obj)
 

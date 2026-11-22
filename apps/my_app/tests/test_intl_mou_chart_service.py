@@ -12,7 +12,7 @@
 3. **发信内容**：正文包含统计窗口、最近 7 天表和内嵌图片占位符，图片数量
    与行数进入返回值。
 
-全程不联网、不发信、不写图：`query_remote` / `plot_series` / `_send_email`
+全程不联网、不发信、不写图：`query_data` / `plot_series` / `_send_email`
 都被替身接管。
 """
 from pathlib import Path
@@ -22,6 +22,7 @@ import pytest
 
 from backend.services import intl_mou_chart_service as svc
 from backend.services.cn import cn_kpi_service as kpi
+from backend.services.db import pg_query
 
 
 def _frame(n: int = 3) -> pd.DataFrame:
@@ -68,7 +69,7 @@ def test_fetch_shifts_end_time_back_to_stat_day(monkeypatch):
             ["2020-01-03", 300, "400.25"],
         ],
     }
-    monkeypatch.setattr(kpi, "query_remote", lambda *a, **k: payload)
+    monkeypatch.setattr(pg_query, "query_data", lambda *a, **k: payload)
 
     df = svc._fetch_mou_data()
     assert df is not None
@@ -90,14 +91,14 @@ def test_fetch_drops_today_and_handles_empty(monkeypatch):
             [(today + pd.Timedelta(days=1)).strftime("%Y-%m-%d"), 99, 98],
         ],
     }
-    monkeypatch.setattr(kpi, "query_remote", lambda *a, **k: payload)
+    monkeypatch.setattr(pg_query, "query_data", lambda *a, **k: payload)
     df = svc._fetch_mou_data()
     assert df is not None
     assert list(df["Start Time"].dt.strftime("%Y-%m-%d")) == [
         (today - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
     ]
 
-    monkeypatch.setattr(kpi, "query_remote",
+    monkeypatch.setattr(pg_query, "query_data",
                         lambda *a, **k: {"success": True, "columns": [], "rows": []})
     assert svc._fetch_mou_data() is None
 

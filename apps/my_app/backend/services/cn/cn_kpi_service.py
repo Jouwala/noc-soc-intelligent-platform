@@ -743,10 +743,25 @@ def _apply_range(sql: str, start: Optional[str], end: Optional[str],
     return sql.replace(_LO_TOKEN, lo_sql).replace(_HI_TOKEN, hi_sql)
 
 
-def query_remote(sql: str, db: str = REMOTE_DB, limit: int = 5000) -> Dict[str, Any]:
+def data_source_label() -> str:
+    """页面 meta 的「数据源」标签：PG 优先时显示 local PG，而不是 .19 地址。"""
+    try:
+        from backend.services.db.pg_query import primary_source_label
+
+        return primary_source_label()
+    except Exception:  # noqa: BLE001 — 标签失败不影响取数
+        return get_api_base_url()
+
+
+def query_remote(sql: str, db: str = REMOTE_DB, limit: int = 5000,
+                 timeout: Optional[float] = None) -> Dict[str, Any]:
     """调用远端只读 SQL API 执行一条 SELECT。
 
     返回远端原始结构：{success, columns, rows, count, truncated, elapsed_ms}
+
+    `timeout`（2026-11-22 加）：单条查询的 socket 超时，缺省用模块级
+    `QUERY_TIMEOUT`（60s）。整页取数带预算的调用方（如 cn_kpi_split_service）
+    应把「剩余预算」传进来，避免被放弃的组件线程在后台继续占 60s。
     """
     sql = _guard(sql)
     url = f"{get_api_base_url()}/api/query"
@@ -758,7 +773,7 @@ def query_remote(sql: str, db: str = REMOTE_DB, limit: int = 5000) -> Dict[str, 
         method="POST",
     )
     try:
-        with _OPENER.open(req, timeout=QUERY_TIMEOUT) as resp:
+        with _OPENER.open(req, timeout=timeout or QUERY_TIMEOUT) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = ""
@@ -931,7 +946,10 @@ def _fetch_widget(w: Dict[str, Any], start: Optional[str] = None,
         return out
 
     def _run(sql_text: str) -> tuple[List[str], List[List[Any]]]:
-        res = query_remote(sql_text)
+        # 本机 PG 优先、远端回退（2026-11-22）；PG 缺表/空结果时行为与改造前一致
+        from backend.services.db.pg_query import query_data
+
+        res = query_data(sql_text, db=REMOTE_DB)
         if not res.get("success", True):
             raise RuntimeError(res.get("error") or "远端返回 success=false")
         cols = list(res.get("columns") or [])
@@ -1085,7 +1103,7 @@ def _compute(key: str, start_v: Optional[str], end_v: Optional[str]) -> Dict[str
     data = {
         "meta": {
             "db": REMOTE_DB,
-            "host": get_api_base_url(),
+            "host": data_source_label(),
             "count": len(widgets),
             "failed": failed,
             "elapsed_ms": round((time.time() - t0) * 1000, 1),
@@ -1179,7 +1197,7 @@ def get_overview(
     return {
         "meta": {
             "db": REMOTE_DB,
-            "host": get_api_base_url(),
+            "host": data_source_label(),
             "count": 0,
             "failed": 0,
             "elapsed_ms": 0.0,

@@ -178,6 +178,93 @@ SQLite**。`task_schedule_config` 尤其特殊：判定**只读本地这一份**
 `_save_schedule_config` 双写出来的**只写不读镜像**（细节见 `04-task-system.md` 的
 「双库一致性：权威只有一份，PG 只是镜像」）。
 
+## 远端 SQLite → 本机 PG 镜像（2026-11-22，看板不再跨机取数）
+
+### 背景与范围
+
+一批看板原先经 `db_writer_api`（`.19:8765`）读远端 SQLite。2026-11-04 对 IP RAN 已
+落过「数据在本机产生，远端只是给其它 BI 的副本，看板不要跨机取数」；2026-11-22
+如意要求**所有从 .19 取数的页面都改读本机 PG**，先落地 CN/RAN 这一批。
+
+| 远端库 | 本机 PG schema | 说明 |
+| --- | --- | --- |
+| `db_ps_cs_cn.sqlite3` | `cn_kpi` | CN KPI 全系列（cn_kpi / cn_kpi_split / cn_kpi_5mins / CS·PS 15min）与 MOU/CCN 邮件 |
+| `ran_kpi_daily.sqlite3` | `ran_kpi` | RAN 15 分钟长表 `ran_kpi_15mins`（另含 4 张 OLIB 日表） |
+
+### 写入：`backend/services/db/pg_mirror.py`（常驻守护）
+
+- 后端 `startup_event` 起一个 daemon（`start_mirror_daemon`），**每 5 分钟**跑一轮，
+  不登记成 `TASK_SPECS` 任务 —— 它不能被 worker 分组里的长任务（`pg_to_sqlite_sync`
+  9~20 分钟、`eflow_sync` 数分钟）堵住；为它单开 worker 组要同步改五处，代价不对等。
+  先例：`native_board_mirror_sync.start_mirror_daemon`。
+- 表结构从远端 `sqlite_master` 读（列名 + `PRIMARY KEY`），本机 PG 建**同名、全 TEXT**
+  的表；所有表按远端主键 upsert，幂等。
+- 增量：**有主键**的表按时间列（`Begin Time` / `begin_time` / `End Time` …）取
+  `本机 MAX(时间列) − 24h` 之后的行，按主键 upsert。
+- 整表重拉：**无主键**的表**每轮都重拉**（没有唯一约束就无法幂等，走增量会把
+  20 行镜像成 40 行 —— 2026-11-22 实测 3G UME 表踩过）；表名 `1month_*` 或
+  `*_EMS`（上游 full_replace）最多每 6 小时一次。单表超过 30 万行直接报错
+  （要求另设计增量，避免每轮全拉）。
+- **进程间互斥**：`run_mirror` 用 PG advisory lock（`0x5A4D4952`）保证 daemon
+  与手工 CLI / 两个后端实例不会同时 upsert 同一张表（实测并发会死锁）；拿不到锁
+  的那一轮直接跳过，下一轮再来。
+- 隔离副本（`ISOLATED_COPY.flag` / `.smoke-runner`）**不启动**守护，避免冒烟栈
+  打生产远端。
+
+### 读取：`backend/services/db/pg_query.py`（PG 优先、远端回退）
+
+页面取数统一走 `query_data(sql, db=...)`：
+
+1. `PG_READ_ENABLED=1` 且 `MY_APP_DB_MODE=pg` → 先在本机 PG 执行；
+2. PG 缺表 / 方言不支持 / 返回 0 行 → 回退 `.19`（`query_remote`），行为与改造前一致；
+3. 远端也空 → 返回 PG 的空结果（形状一致）。
+
+SQL 仍是**唯一真相源**（`cn_kpi_service.WIDGETS` / `cn_kpi_split_widgets` 等），
+PG 侧只做最小改写（`to_pg_sql`）：
+
+| SQLite | PG | 原因 |
+| --- | --- | --- |
+| `CAST(x AS REAL)` | `CAST(x AS DOUBLE PRECISION)` | `REAL` 是 4 字节，会丢精度 |
+| `x GLOB '*[0-9]*'` | `x ~ '[0-9]'` | PG 无 GLOB |
+| `HAVING t >= …` | 外层 `WHERE` | PG 的 HAVING 不认 SELECT 别名 |
+| `WHERE t >= …` | 外层 `WHERE` | 同上（WHERE 也不认） |
+| `FROM (子查询)` | 补 `AS _pg_sN` | PG 要求子查询必须带别名 |
+| `date(...)` | `schema.date(...)` | `pg_catalog` 永远排在 search_path 前，不限定会命中内建 `date(timestamp)` |
+| `SUM/AVG(裸列/别名/加法表达式)` | 包 `safe_num()` | 镜像列全是 TEXT；`safe_num` 对数值类型有重载，非数值返回 NULL |
+
+兼容函数（`date` / `strftime` / `printf` / `safe_num` / `round(double,int)`）由
+`ensure_schema_ready(schema)` 幂等创建在目标 schema 里；首次 `query_pg` 自动补齐。
+
+### 开关与手工命令
+
+```powershell
+# 全量/增量回填（手工）
+cd D:\02_olbr_portal\apps\my_app
+python -m backend.services.db.pg_mirror --status
+python -m backend.services.db.pg_mirror --db db_ps_cs_cn.sqlite3 --full
+python -m backend.services.db.pg_mirror --db ran_kpi_daily.sqlite3 --table ran_kpi_15mins
+```
+
+| 环境变量 | 默认 | 作用 |
+| --- | --- | --- |
+| `PG_MIRROR_ENABLED` | `1` | 关闭镜像（守护与手工任务都跳过） |
+| `PG_MIRROR_DAEMON` | `1` | 关闭后端内常驻守护（仍可手工跑 CLI） |
+| `PG_READ_ENABLED` | `1` | 关闭 PG 读通道，全部回远端（零改码回退） |
+| `PG_MIRROR_OVERLAP_HOURS` | `24` | 增量重叠窗口 |
+| `PG_MIRROR_FULL_HOURS` | `6` | EMS/1month 整表刷新间隔 |
+| `PG_READ_TIMEOUT_MS` | `60000` | 单条 PG 查询 statement_timeout |
+
+### 已知边界（写进页面口径说明，不要当 bug）
+
+- **镜像滞后 ≤ 5 分钟**（守护间隔）；上游同步任务本身 15 分钟一轮，所以 D0 最新桶
+  可能比远端少 1~2 个点。EMS / `1month_*` 最多滞后 6 小时（人工导出，一天一次）。
+- **0.01 级舍入差异**：PG 用 numeric 精确平均，SQLite 用 double 累加，恰在 `.005`
+  边界时可能差 0.01（实测 3 个 15 分钟点）。不是取数错误。
+- 超 63 字节的列名在 PG 被截断（如 `Byte ... per APN(Byte)`）；建表、`ADD COLUMN`、
+  查询都按同一截断口径处理，**不要**在别处再用全名手工建列。
+- 远端仍是采集侧的**权威库**（其它 BI / FineBI 在消费）；镜像只读，不在 .19 建索引、
+  改表、改 PRAGMA。
+
 ## 迁移与建表：三套东西各司其职
 
 | 位置 | 是什么 | 怎么用 |
@@ -312,6 +399,41 @@ WHERE n.nspname = '<schema>' AND cl.relname = '<表>' AND c.contype IN ('p','u')
 - **告警两表是例外**：`realtime_alarm` / `history_alarm` 由 `eflow_alarm_service` 双写主库与 eflow 副本，页面只读主库；双 schema 下的换表风险与落地写法见上文「新增 upsert 目标前的自检」中的告警段。
 - **物理文件仍有合法读者**（sqlite 模式）：`packet_loss_service` 读其中站点信息（`backend/services/packet_loss_service.py:64`；PG 模式经 `get_raw_connection` 映射到 `eflow` schema），`apps/eflow_Q&A/tools/gen_datadict.py` 用它生成数据字典。删文件或停掉中间库写入前，先处理这两处。
 - 结论出处：`PROJECT_DOCS.md` §2 Phase 0.5 / 0.7（2026-08 查代码闭环，历史档案）；本节是现状固化，后续以本节为准。
+
+### `master_site_db` 整表重建：项目自有列必须登记 + 缺列不得拖垮页面（2026-11-22）
+
+`master_site_db` 是用 CMDB 主数据 xlsx **整表 `replace`** 重建的
+（`backend/scripts/refresh_master_site.py`，`if_exists="replace"`）。源表里没有的
+**项目自有列**必须写进该脚本的 `SUPPLEMENTARY_COLUMNS`，否则下一次重建会静默洗掉：
+
+| 列 | 语义 | 是否源表自带 |
+| --- | --- | --- |
+| `starlink_recently_migrated` | 是否近期迁星链（NUR 站点维度） | 否 |
+| `site_type` | 站点物理形态 `Indoor` / `Outdoor`（GIS 筛选项与站点弹窗） | 否 |
+| `power_sources` | 供电方式（GIS 高级筛选） | 否 |
+
+**2026-11-21 事故后果**：那一轮重建洗掉 `site_type` / `power_sources`，并把源表头
+`New SuperVisor` 落成 `new_supervisor`（旧列名 `supervisor` 消失）。因为
+`backend/routers/gis.py` 的 `/sites`、`/realtime/sites` 把 `site_type` 写死在 SELECT，
+PG 直接 `UndefinedColumn` → 两个端点 500 → **GIS 地图与实时告警地图全空**；
+`personnel` 的 stats、`site_availability_service` 的筛选器与站点表也因写死
+`supervisor` / `site_type` 而读表失败（错误只进日志，页面看起来像「没数据」）。
+
+处置与防线（都在版本库里）：
+
+- **恢复存量值**：`backend/scripts/restore_master_site_columns.py --source <旧快照 app.db>`
+  —— 缺列则 `ADD COLUMN`，按 `site_id` → 规范化站点名从旧快照回填，**只填 NULL/空串**，
+  不覆盖已有值、不删任何数据；`--dry-run` 先看覆盖数。
+- **防再丢**：`SUPPLEMENTARY_COLUMNS` 已含上述三列，重建时按 `site_id` 抢救并并入
+  同一次写入（读旧表失败会中止，不再「读失败 → 空值 → 照常 replace」）。
+  新增项目自有列时**先登记再重建**。
+- **防 500**：站点查询的列名一律按 `table_columns()` 探测后拼接，缺列退化为
+  `NULL`/`''`，单个可选列缺失不能让整条查询 500。`supervisor` 的消费方按
+  `supervisor` → `new_supervisor` 顺序取（`gis.py::_resolve_filter_cols`、
+  `site_availability_service.load_master_sites`、`personnel._fme_site_index`、
+  `eflow_data_mapper._pick_col`）。
+- **回归守卫**：`tests/test_master_site_supplementary.py`（补充列抢救与默认值）、
+  `tests/test_gis_schema_tolerance.py`（缺列时 SELECT 退化、`supervisor` 改名兜底）。
 
 ## 运行时目录
 
