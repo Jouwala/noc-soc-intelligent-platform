@@ -4928,13 +4928,13 @@ python TMP\_backfill_vlr_voice_ume.py 80
 2. **日期键仍是 `substr("End Time",1,10)`**，与全页其余 18 个组件同口径。
    这几张 EMS 表的 `End Time` 都是区间**右端点**（`Start Time` = 统计日 00:00、
    `End Time` = 次日 00:00），所以横轴标签比实际统计日早一天 ——
-   **为对齐横轴这里不单独改**；真要改必须 20 个组件一起改，并同步改本节与该页口径条。
+   **为对齐横轴这里不单独改**；真要改必须 23 个组件一起改，并同步改本节与该页口径条。
 3. **值必须过数值守卫。** 上游列是 TEXT，空串 / `-` 这类非数值用
    `CASE WHEN TRIM(col) GLOB '*[0-9]*' THEN CAST(TRIM(col) AS REAL) END` 转成 NULL（断线），
    **不能直接 `CAST(... AS REAL)`** —— 那会把「没有数」写成 `0%`。
    `_has_any_value()` 因此在全空窗口判「暂无数据」而不是「有数」。
 
-回归：`GET /api/cn-kpi/overview?force=1` 的 `meta.count` 应为 **20**；c14/c15 各 31 行、
+回归：`GET /api/cn-kpi/overview?force=1` 的 `meta.count` 应为 **23**；c14/c15 各 31 行、
 `granularity="day"`、`degraded=""`、`error=""`。
 `python tests\test_cn_kpi_widgets.py` 用静态断言锁住这两条定义（表名 / SQL 只读 / 不登记降级源）。
 
