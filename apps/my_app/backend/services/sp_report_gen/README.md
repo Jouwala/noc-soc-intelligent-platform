@@ -9,7 +9,8 @@
 Step 0 refresh_material_master()：先调 sp_material_sync.run_sp_material_sync() 从 eFlow 拉**全量**
    │  物料主数据写 app.sp_material —— 报表里 Material Name 的唯一来源，失败只告警并沿用库中现有表
    ▼
-SFTP 10.100.20.11 /home/ubuntu/sp（备件原始数据，上游每小时产一份）
+SFTP 10.100.20.11：普通表 `/home/pict/sp`（凭据 `sftp_sp` / pict）；
+OCAuto `/home/ubuntu/OCAuto/OCAutoOutput`（pict→su root，凭据 `sftp_sp_root`）
    │  sftp_download()（paramiko）—— 按「目录名 + 固定文件名」取**最新**一份：
    │    sp/inbound/<yyyymmdd>/<yyyymmddHHMMSSfff>/inbound.xlsx
    │                                        → data\inband_details.xlsx

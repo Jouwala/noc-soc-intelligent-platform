@@ -1,11 +1,18 @@
 # UME 拓扑路由（routers/ipran_topo.py）
 
-前缀：`/api/ipran-topo`。只读，无写接口。四层共用同一套路由与服务实现。
+前缀：`/api/ipran-topo`。图数据只读；**Weathermap 手工布局是唯一写接口**（仅本机 / 持 `X-API-Token`，与侧栏菜单布局同一套 `require_protected`）。四层共用同一套路由与服务实现。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/layers` | 页签清单（key / 中英名 / 是否有 UME 人工布局 / 层级标签）。**不返回 lid** |
 | GET | `/graph?layer=ipran&refresh=0` | 完整图数据（网元 + 折叠后的边 + meta）。`layer` 缺省为 `ipran` |
+| GET | `/layout?layer=ipran` | 该层已保存的手工布局 `{nodes: {id: [x, y]}, updated_at, editable}`；没保存过 `nodes` 为空对象 |
+| PUT | `/layout?layer=ipran` | 整层覆盖保存 `{nodes: {...}}`（写接口，需 `require_protected`），坐标范围 -2000~4000、最多 500 个节点 |
+| DELETE | `/layout?layer=ipran` | 删除该层手工布局，回到自动布局（写接口） |
+
+布局落 `backend/data/ipran_topo_layout.json`（JSON + 原子替换，按层一份），**不建表、不迁移**：
+它是一张图一份、几十 KB、整份替换的配置，跟 `ui_menu_layout.json` 同一模式。
+读写实现见 `backend/services/ipran_topo/topo_layout_store.py`。
 
 `layer` 走 `layers.LAYERS` 白名单，非法值直接 **400**，**不接受前端传任意 lid**。
 不带 `layer` 时默认 `ipran`，与改造前一致（旧调用兼容）；前端四层页签会显式传 `layer`。

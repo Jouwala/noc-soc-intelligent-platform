@@ -11,6 +11,13 @@
  * 2026-11-16：按用户要求去掉「站点分布」视图（散点图），只保留原图两页 + 骨干示意；
  *   ScatterView.tsx 与配套的 SECTOR_COLORS / i18n 键一并删除，不留死代码。
  *
+ * 2026-11-20（用户要求「?page=olibTopo 去掉 backbone 这个页签」）：本组件是 v1
+ *   （?page=olibTopo）与 v2（?page=olibTopo_v2）共用的画布，两页对视图的需求不同：
+ *   · v1 只剩「物理 / 逻辑」两个页签 —— 由调用方通过 `views` 传进来；
+ *   · v2 仍保留「骨干核心」模式（它用自己的 Segmented 切换，并隐藏本组件的页签条）。
+ *   故这里**不删 core 视图**，而是把「显示哪几个页签」参数化，谁用谁声明。
+ *   `views` 缺省仍是三档，v2 不用改。
+ *
  * 清晰度：原图是 PDF 矢量导出的 SVG，缩放时改的是**布局宽高**（内容尺寸 × scale），
  * 让浏览器按新尺寸重绘矢量，而不是用 CSS transform 把小图放大 —— 后者在放大后一定糊。
  * 平移只改 transform，不触发重绘。
@@ -47,6 +54,8 @@ export interface TopologyViewerHandle {
 interface Props {
   view: TopoView
   onViewChange: (v: TopoView) => void
+  /** 工具条上提供哪几档视图（顺序即按钮顺序）。缺省三档全给（v2 靠 CSS 隐藏本页签条） */
+  views?: TopoView[]
   sitesVisible: boolean
   onSitesVisibleChange: (v: boolean) => void
   selected: TopoSite | null
@@ -134,6 +143,8 @@ const VIEW_OPTIONS: { value: TopoView; key: string }[] = [
   { value: 'core', key: 'olibTopo.view.core' },
 ]
 
+const ALL_VIEWS: TopoView[] = VIEW_OPTIONS.map(o => o.value)
+
 const CSS = `
 .topo-toolbar{display:flex;flex-wrap:wrap;gap:var(--wh-space-sm);align-items:center;
   padding:var(--wh-space-sm) var(--wh-space-md);border-bottom:1px solid var(--wh-card-border)}
@@ -183,7 +194,7 @@ const CSS = `
 `
 
 const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function TopologyViewer({
-  view, onViewChange, sitesVisible, onSitesVisibleChange, selected, onSelect,
+  view, onViewChange, views = ALL_VIEWS, sitesVisible, onSitesVisibleChange, selected, onSelect,
 }, ref) {
   const { t } = useI18n()
   const { isDark } = useTheme()
@@ -410,7 +421,7 @@ const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function Topology
       <style>{CSS}</style>
       <div className="topo-toolbar">
         <div className="topo-views" role="tablist" aria-label={t('olibTopo.view.tabs')}>
-          {VIEW_OPTIONS.map(o => (
+          {VIEW_OPTIONS.filter(o => views.includes(o.value)).map(o => (
             <Button
               key={o.value}
               size="small"

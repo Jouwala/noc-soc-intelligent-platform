@@ -105,7 +105,7 @@ def _runtime_credentials():
     return get_credential("sftp_sp")
 
 
-# /home/ubuntu/sp 下每个数据集一个目录，结构为
+# /home/pict/sp 下每个数据集一个目录，结构为
 #   sp/<目录名>/<yyyymmdd>/<yyyymmddHHMMSSfff>/<文件名>.xlsx
 # 取「最新的、且文件名匹配」的那一份（2026-09-16 用户指定）。
 # 本地一律落到 *_details.xlsx —— 下游 sp_email_details / sp_online / sp_material_summary
@@ -135,10 +135,12 @@ SFTP_FOLDERS = {
 
 SFTP_SPECIAL = {
     "ocrule": {
-        "remote_folder": "OCAuto/OCAutoOutput",
+        # 2026-11-20：仍在 /home/ubuntu；pict 无权直读，走 pict→su root
+        "remote_folder": "/home/ubuntu/OCAuto/OCAutoOutput",
         "local_path": "data/ocrule_details.xlsx",
         "search_func": "find_latest_ocrule_csv_recursive",
         "convert_to_excel": True,
+        "via_su_root": True,
     },
     # transfer（WH Transfer）2026-09-16 起改由 SFTP_FOLDERS 处理
     # （sp/wh_transfer/<日期>/<时间戳>/wh_transfer.xlsx），不再走旧的 sp-wh_transfer 递归搜索。
@@ -499,8 +501,16 @@ def sftp_download():
     except Exception as _e:
         print(f"  [WARN] SFTP channel 超时设置失败（退回无超时模式）: {_e}")
 
-    # Special files
+    # Special files（ocrule 走 su root；其余若有再走普通 SFTP）
     for name, cfg in SFTP_SPECIAL.items():
+        if cfg.get("via_su_root"):
+            try:
+                from backend.services.sp.sp_sftp_su import fetch_latest_ocrule_csv
+                remote = fetch_latest_ocrule_csv(cfg["local_path"], cfg["remote_folder"])
+                print(f"  [OK] {name}: {remote} → {cfg['local_path']} (via su root)")
+            except Exception as e:  # noqa: BLE001
+                print(f"  [WARN] {name}: su-root 拉取失败: {e}")
+            continue
         search_fn = _SFTP_SEARCH_FUNCS[cfg["search_func"]]
         remote = search_fn(sftp, cfg["remote_folder"])
         if remote:
@@ -509,14 +519,15 @@ def sftp_download():
         else:
             print(f"  [WARN] {name}: file not found")
 
-    # Regular folders: sp/<目录名>/<yyyymmdd>/<时间戳>/<文件名>.xlsx —— 取最新且文件名匹配的一份
+    # Regular folders: /home/pict/sp/<目录名>/<yyyymmdd>/<时间戳>/<文件名>.xlsx
     for folder, cfg in SFTP_FOLDERS.items():
-        remote = _find_latest_named_excel(sftp, f"sp/{folder}", cfg["filename"])
+        remote = _find_latest_named_excel(
+            sftp, f"/home/pict/sp/{folder}", cfg["filename"])
         if remote:
             _sftp_download_file(sftp, remote, cfg["local_path"])
             print(f"  [OK] {folder}: {remote} → {cfg['local_path']}")
         else:
-            print(f"  [WARN] {folder}: {cfg['filename']} not found under sp/{folder}")
+            print(f"  [WARN] {folder}: {cfg['filename']} not found under /home/pict/sp/{folder}")
 
     sftp.close()
     client.close()

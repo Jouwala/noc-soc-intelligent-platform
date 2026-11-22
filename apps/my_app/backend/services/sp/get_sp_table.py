@@ -7,12 +7,14 @@ SP（备件）数据同步服务。
 同时镜像写入 FineBI 服务器（DESKTOP-D4GF62）上的
 WareHouseDashBoard/inventory.db（UNC 网络路径），供 FineBI 仓库看板读取。
 
-表名与 WareHouseDashBoard 保持一致（2026-09-16 起上游目录/文件名已变更）：
-  - inband_details   （Inbound  Ticket，sp/inbound            → inbound.xlsx）
-  - outband_details  （Outbound Ticket，sp/outbound           → outbound.xlsx）
-  - inventory_details（Inventory，      sp/inventory_management → inventory_management.xlsx）
-  - ocrule_details   （OC Rule，         OCAuto/OCAutoOutput，递归找 csv→excel）
-  - transfer_details  （WH Transfer，    sp/wh_transfer        → wh_transfer.xlsx）
+表名与 WareHouseDashBoard 保持一致（2026-09-16 起上游目录/文件名已变更；
+2026-11-20 起普通表改绝对路径 /home/pict/sp/...，ocrule 仍在 /home/ubuntu
+且需 pict→su root，见 sp_sftp_su.py）：
+  - inband_details   （Inbound  Ticket，/home/pict/sp/inbound            → inbound.xlsx）
+  - outband_details  （Outbound Ticket，/home/pict/sp/outbound           → outbound.xlsx）
+  - inventory_details（Inventory，      /home/pict/sp/inventory_management → inventory_management.xlsx）
+  - ocrule_details   （OC Rule，         /home/ubuntu/OCAuto/OCAutoOutput，su root 找 csv→excel）
+  - transfer_details  （WH Transfer，    /home/pict/sp/wh_transfer        → wh_transfer.xlsx）
 
 可直接作为任务集成进任务管理（run_sp_data_sync）。
 """
@@ -110,13 +112,15 @@ def _runtime_credentials():
     return get_credential("sftp_sp")
 
 # 5 份报表的下载定义
-# ⚠️ 2026-09-16：上游把数据源迁到 /home/ubuntu/sp 下的新目录 + 固定文件名
-#    sp/<目录名>/<yyyymmdd>/<yyyymmddHHMMSSfff>/<文件名>.xlsx
+# ⚠️ 2026-09-16：上游把数据源迁到 /home/<user>/sp 下的新目录 + 固定文件名
+#    2026-11-20：SFTP 账号 pict；普通表用绝对路径 /home/pict/sp/...；
+#    ocrule 仍在 /home/ubuntu/OCAuto/OCAutoOutput，pict 无权直读 → via_su_root。
+#    <目录>/<yyyymmdd>/<yyyymmddHHMMSSfff>/<文件名>.xlsx
 #    旧的 sp/spinbound|spoutbound|spinventory|sp-wh_transfer 已于 2026-09-15 08:00 停更，
 #    继续用会静默取到过期快照。带 "filename" 的走 find_latest_named_excel（校验文件名）。
 SP_TABLES = {
     "inband_details": {
-        "remote_folder": "sp/inbound",
+        "remote_folder": "/home/pict/sp/inbound",
         "filename": "inbound.xlsx",
         "local_name": "inband_details.xlsx",
         "nested": True,        # 进入 日期/时间戳 子目录找最新 excel
@@ -125,7 +129,7 @@ SP_TABLES = {
         "search": None,
     },
     "outband_details": {
-        "remote_folder": "sp/outbound",
+        "remote_folder": "/home/pict/sp/outbound",
         "filename": "outbound.xlsx",
         "local_name": "outband_details.xlsx",
         "nested": True,
@@ -134,7 +138,7 @@ SP_TABLES = {
         "search": None,
     },
     "inventory_details": {
-        "remote_folder": "sp/inventory_management",
+        "remote_folder": "/home/pict/sp/inventory_management",
         "filename": "inventory_management.xlsx",
         "local_name": "inventory_details.xlsx",
         "nested": True,
@@ -143,15 +147,17 @@ SP_TABLES = {
         "search": None,
     },
     "ocrule_details": {
-        "remote_folder": "OCAuto/OCAutoOutput",
+        "remote_folder": "/home/ubuntu/OCAuto/OCAutoOutput",
         "local_name": "ocrule_details.xlsx",
         "nested": False,
         "csv": True,          # 找到 csv 后转 excel
         "recursive": True,
         "search": "ocrule",
+        # pict 对 /home/ubuntu 无读权限；走 SSH pict → su - root（sp_sftp_su）
+        "via_su_root": True,
     },
     "transfer_details": {
-        "remote_folder": "sp/wh_transfer",
+        "remote_folder": "/home/pict/sp/wh_transfer",
         "filename": "wh_transfer.xlsx",
         "local_name": "transfer_details.xlsx",
         "nested": True,
@@ -1011,23 +1017,50 @@ def run_sp_data_sync() -> dict:
                 # 单表重试：失败则重建连接后重试该表
                 for sub in range(1, SFTP_TABLE_RETRY + 2):
                     try:
-                        if cfg.get("filename"):
+                        # OCAuto：pict SFTP 无权读 /home/ubuntu，改走 pict→su root
+                        if cfg.get("via_su_root"):
+                            from backend.services.sp.sp_sftp_su import fetch_latest_ocrule_csv
+                            remote_file = fetch_latest_ocrule_csv(
+                                local_path, cfg["remote_folder"])
+                        elif cfg.get("filename"):
                             remote_file = find_latest_named_excel(
                                 sftp, cfg["remote_folder"], cfg["filename"])
+                            if not remote_file:
+                                msg = f"[警告] {table_name} 未找到远端文件，跳过"
+                                print(msg)
+                                result["tables"][table_name] = {
+                                    "rows": 0, "status": "skipped", "detail": msg}
+                                break
+                            download_file(sftp, remote_file, str(local_path), cfg["csv"])
                         elif cfg["nested"]:
                             remote_file = find_latest_excel_in_nested(sftp, cfg["remote_folder"])
+                            if not remote_file:
+                                msg = f"[警告] {table_name} 未找到远端文件，跳过"
+                                print(msg)
+                                result["tables"][table_name] = {
+                                    "rows": 0, "status": "skipped", "detail": msg}
+                                break
+                            download_file(sftp, remote_file, str(local_path), cfg["csv"])
                         elif cfg["recursive"]:
                             if cfg["csv"]:
-                                remote_file = find_latest_ocrule_csv_recursive(sftp, cfg["remote_folder"])
+                                remote_file = find_latest_ocrule_csv_recursive(
+                                    sftp, cfg["remote_folder"])
                             else:
-                                remote_file = find_latest_transfer_xlsx_recursive(sftp, cfg["remote_folder"])
-                        if not remote_file:
-                            msg = f"[警告] {table_name} 未找到远端文件，跳过"
+                                remote_file = find_latest_transfer_xlsx_recursive(
+                                    sftp, cfg["remote_folder"])
+                            if not remote_file:
+                                msg = f"[警告] {table_name} 未找到远端文件，跳过"
+                                print(msg)
+                                result["tables"][table_name] = {
+                                    "rows": 0, "status": "skipped", "detail": msg}
+                                break
+                            download_file(sftp, remote_file, str(local_path), cfg["csv"])
+                        else:
+                            msg = f"[警告] {table_name} 无下载策略，跳过"
                             print(msg)
-                            result["tables"][table_name] = {"rows": 0, "status": "skipped", "detail": msg}
+                            result["tables"][table_name] = {
+                                "rows": 0, "status": "skipped", "detail": msg}
                             break
-
-                        download_file(sftp, remote_file, str(local_path), cfg["csv"])
                         df = pd.read_excel(local_path)
                         _write_table(conn, table_name, df, sink=mirror_data)
                         conn.execute(

@@ -74,6 +74,39 @@ WORK_DIR = _resolve_work_dir()
 SCRIPT_PATH = WORK_DIR / _SCRIPT_NAME
 OUT_DIR = WORK_DIR / "modify"
 SUMMARY_JSON = OUT_DIR / "last_run_summary.json"
+# CMDB 主数据 xlsx 所在目录（与 build 脚本 DEFAULT_SRC_DIR 同口径）
+DB_DIR = (Path(__file__).resolve().parents[3] / "db").resolve()
+SOURCE_GLOB = "ZTE OLR MS Master Site Database*.xlsx"
+
+
+def list_sources() -> list[dict]:
+    """列出 db 目录下可选 CMDB 主数据 xlsx（最新在前）。供操作台下拉框用。"""
+    cands = [p for p in DB_DIR.glob(SOURCE_GLOB)
+             if not p.name.startswith("~$") and p.is_file()]
+    cands.sort(key=lambda p: (p.stat().st_mtime, p.name), reverse=True)
+    return [{
+        "name": p.name,
+        "size": p.stat().st_size,
+        "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        "is_latest": i == 0,
+    } for i, p in enumerate(cands)]
+
+
+def resolve_source(name: str | None) -> Path | None:
+    """把页面传来的文件名安全解析成绝对路径；None=让脚本自己取最新。
+
+    只接受纯文件名且必须在候选清单里，避免路径穿越 / 指向任意文件。
+    找不到时抛 ValueError，由调用方转成友好错误。
+    """
+    if not name:
+        return None
+    if Path(name).name != name:
+        raise ValueError("源文件只能是文件名，不接受路径")
+    hit = next((p for p in DB_DIR.glob(SOURCE_GLOB)
+                if p.name == name and p.is_file()), None)
+    if hit is None:
+        raise ValueError(f"源文件不在候选中：{name}")
+    return hit
 
 # stdout 里的结构化行（脚本自己打印的，格式见 build_cmdb_site_update_v2.py:1143+）
 _RE_EFLOW = re.compile(r"eflow\s*:\s*新增A\s*(\d+)\s+修改M\s*(\d+)\s+删除D\s*(\d+)\s+无变化\s*(\d+)")
@@ -236,10 +269,12 @@ def _read_manifest() -> dict | None:
         return None
 
 
-def run_eflow_site_update(timeout: int = _DEFAULT_TIMEOUT) -> dict:
+def run_eflow_site_update(timeout: int = _DEFAULT_TIMEOUT, src_file: str | None = None) -> dict:
     """执行比对脚本并返回摘要（task_runner 入口，签名不接受必填参数）。
 
     只读 CMDB 源表 + eflow 基线 + PG 快照基线，只写 modify 目录下的 xlsx。
+    `src_file` 为 None 时脚本自己取 db 目录最新 xlsx；操作台页面可显式传
+    某个候选文件名（只能是文件名，不接受路径，防目录穿越）。
     """
     script = SCRIPT_PATH
     if not script.is_file():
@@ -252,6 +287,13 @@ def run_eflow_site_update(timeout: int = _DEFAULT_TIMEOUT) -> dict:
         logger.warning(msg)
         return {"success": False, "error": msg}
 
+    # 解析页面显式选定的源文件；定时任务无参调用时 src_file=None，脚本自己取最新
+    try:
+        src = resolve_source(src_file)
+    except ValueError as exc:
+        _RUN_LOCK.release()
+        return {"success": False, "error": str(exc)}
+
     started = time.perf_counter()
     started_at = _now()
     cmd = [
@@ -262,6 +304,8 @@ def run_eflow_site_update(timeout: int = _DEFAULT_TIMEOUT) -> dict:
         # 显式钉死「占用即降级另存」：绝不因预览面板开着而让整批产出失败
         "--allow-fallback",
     ]
+    if src is not None:
+        cmd += ["--src-file", str(src)]
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"

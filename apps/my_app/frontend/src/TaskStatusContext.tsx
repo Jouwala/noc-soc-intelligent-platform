@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react'
 import api from './api'
 
 interface TaskStatusContextType {
@@ -28,6 +28,15 @@ const POLL_IDLE_MS = 15000
 /** ±15% 抖动：多标签页/多块大屏的轮询相位错开，避免同一秒齐射打满单进程后端。 */
 const withJitter = (base: number) => Math.round(base * (0.85 + Math.random() * 0.3))
 
+/** 两次轮询的运行状态是否**逐键相同**（键集合与布尔值都一致）。
+ *  只比较真值键：后端返回的 map 里通常只有「正在运行」的任务，其余不出现。 */
+function sameRunning(a: Record<string, boolean>, b: Record<string, boolean>): boolean {
+  const keys = Object.keys(b).filter(k => b[k])
+  if (keys.length !== Object.keys(a).filter(k => a[k]).length) return false
+  for (const k of keys) if (!a[k]) return false
+  return true
+}
+
 export function TaskStatusProvider({ children }: { children: ReactNode }) {
   const [runningMap, setRunningMap] = useState<Record<string, boolean>>({})
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -41,7 +50,13 @@ export function TaskStatusProvider({ children }: { children: ReactNode }) {
         // 而这里只需要一个布尔值，且是每 15s（忙时 5s，±15% 抖动）轮询一次。
         const res = await api.get('/tasks/running')
         map = res.data.running || {}
-        if (!cancelled) setRunningMap(map)
+        // 内容没变就**不要** setState：每次轮询都换一个新对象身份，会在 context 上
+        // 触发全站所有消费组件重渲染。任务管理页实测每次重渲染要重建 85 张卡、
+        // 1.1 万个节点：办公机档（CPU 降 4 倍）单次 4–14 秒，页面等于一直在冻住
+        // —— 这才是「点了没反应、网页没有响应」的真正来源（2026-11-20 实测）。
+        if (!cancelled) {
+          setRunningMap(prev => (sameRunning(prev, map) ? prev : map))
+        }
       } catch {
         // 轮询失败忽略，下次继续
       } finally {
@@ -59,10 +74,13 @@ export function TaskStatusProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const isRunning = (taskId: string) => !!runningMap[taskId]
+  // 回调与 context value 都要稳定：否则 Provider 自己每次渲染都会换 identity，
+  // 让消费者白白重渲染（与上面 sameRunning 是同一类浪费）。
+  const isRunning = useCallback((taskId: string) => !!runningMap[taskId], [runningMap])
+  const value = useMemo(() => ({ runningMap, isRunning }), [runningMap, isRunning])
 
   return (
-    <TaskStatusContext.Provider value={{ runningMap, isRunning }}>
+    <TaskStatusContext.Provider value={value}>
       {children}
     </TaskStatusContext.Provider>
   )

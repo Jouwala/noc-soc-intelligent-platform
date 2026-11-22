@@ -655,7 +655,7 @@ Workflow & maintenance notes per task:
 
 - WARNING: a 0-row export is treated as an empty state and skipped, not a failure (same as the 5-minute task)
 - Runs in group n alongside cnn_kpi_sync / cnn_kpi_sync_5mins so the shared CNN UME session never gets kicked
-- Consumer: ?page=cn_hourly_kpi (routers/cn_hourly_kpi.py + the read side of cn_kpl/cn_hourly_kpi_service.py)
+- Consumer: ?page=cn_hourly_kpi (routers/cn_hourly_kpi.py + the read side of cn_kpl/cn_hourly_kpi_service.py); the Capacity/DNS tables feed ?page=cs_cn_kpi / ?page=ps_cn_kpi
 - When the upstream changes templates, re-export the xlsx over cn_kpl/KPI Template.xlsx — no code change needed
 
 #### SP Spare Data Sync（`sp_data_sync`）
@@ -667,7 +667,8 @@ Workflow & maintenance notes per task:
 
 **Workflow & data flow**:
 
-1. Log into the spare-parts SFTP (credential group sftp_sp)
+1. Log into the spare-parts SFTP (credential group sftp_sp / pict, paths under /home/pict/sp/...)
+1. OC Rule separately uses SSH pict→su root (credential sftp_sp_root) to read /home/ubuntu/OCAuto/OCAutoOutput
 1. Fetch the 5 reports
 1. Clean and write into the main DB for the warehouse board and SP reports; before writing, Material Name is resolved by Material No. from the sp_material master (latest name), so a renamed material no longer shows up in two spellings on the board
 1. After all tables are stored, mirror into the FineBI inventory.db (UNC path; full replace for normal tables, append-only for Inventory)
@@ -681,6 +682,7 @@ Workflow & maintenance notes per task:
 - The warehouse board's "Inventory Quantity Trend" reads every date in this table (no date filter = full history), so lowering the retention window directly shortens the trend chart
 - Since 2026-09-20 this runs hourly at :10 instead of daily 07:00: the upstream SFTP already exports every hour at :00:03, and the MsPortal QC panel's SPMS card reads the inband_details/outband_details this task writes — a daily sync left that number up to 24h stale. :10 avoids eflow_sync (:00) and sp_online_sync (:35) in the same worker group
 - A run is lengthened by the trailing FineBI mirror (UNC inventory.db occasionally reports "database is locked"; observed 1-9 min). The queue has single-flight protection, so an unfinished run makes the next trigger skip — no pile-up, but that hour keeps the old data. If other QC metrics (TT/WO/CR/PMT) slow down too, check whether this task is occupying the group-n worker
+- 2026-11-20: regular tables under /home/pict/sp; OCAuto still under /home/ubuntu and needs sftp_sp_root
 
 #### iPRAN UME KPI Sync（`ipran_kpi_sync`）
 
@@ -1947,6 +1949,20 @@ The eflow_wo-sourced twin of the TT Dashboard: the layout matches page=tt block 
 - Filters (region / advanced filters), drill-down and the page-level Excel export are shared with the TT&WO Dashboard, but the data endpoint is /wo-dashboard/overview; the export filename is prefixed TTWO_wo_
 - Direct link http://<host>/myapp/?page=wo; the full version is page=ttwo, TT only is page=tt
 
+#### tt_state（`tt_state`）
+
+TT by state: only TT rows that spawned a WO (eflow_tt rows with a non-empty wo_no), counted by state x day/week/month as alarm not cleared / WO not closed / TT not closed / total. The default window is the last 30 days at day granularity; the five KPI cards and every matrix cell open a drill-down.
+
+- Same source table as page=tt (eflow_tt) but only rows with a non-empty wo_no. WO closure comes from eflow_wo.status (LEFT JOIN on wo_no) and TT closure from eflow_tt.status; a TT whose WO row is missing counts as not closed, and a persistent banner reports how many such rows exist
+- The four numbers in every cell always read alarm not cleared / WO not closed / TT not closed / total, matching the legend: alarm not cleared = empty alarm_clear_time; WO not closed = eflow_wo.status not starting with Closed; TT not closed = eflow_tt.status not starting with Closed; total = rows in that state and bucket
+- WO not closed and TT not closed are two different calibers and are shown side by side for reconciliation: a TT only becomes Closed after WO confirmation, so the many upstream rows where the WO is closed but the TT is still Waiting land only in TT not closed. They are independent sets that may overlap, so A+B does not necessarily equal the total
+- Rows are states (region_level1; blank falls into Unassigned state), columns are day/week/month buckets on alarm_occur_time, the same field as page=tt, with a start-inclusive/end-exclusive window
+- The window presets match page=tt (all time / last 7, 30, 90, 180 days / custom); switching day/week/month does not change the total. Default is day granularity over the last 30 days
+- Every cell, row total, column total and the five KPI cards (total / WO not closed / TT not closed / alarm not cleared / alarm cleared) drill down. Overview and drill-down share the same backend row set, so a cell number and the drill-down count are exactly equal (above 5000 rows the dialog shows a persistent truncation warning)
+- Excel export has two sheets: state x time in long form (alarm not cleared / WO not closed / TT not closed / total) and a by-state summary; the drill-down dialog also exports its rows
+- Every number is hover-explainable; the page-wide caliber sits in a collapsed "How these numbers are computed" note
+- Direct link http://<host>/myapp/?page=tt_state; the TT summary lives at page=tt
+
 #### NUR Dashboard（`nur`）
 
 Network Unavailability Rate (NUR) daily/weekly/monthly trends, multi-dimension analysis and site compliance.
@@ -2060,6 +2076,7 @@ UME topology in four layers (IP RAN Fiber / IP Core / Metro Ring / DWDM): all fo
 - The three layouts answer different questions: **force (default)** shows rings and clusters and pulls access nodes toward their primary parent; **geographic** shows which city an outage hits; **tiered** shows the hierarchy and is the better export view. Layouts are deterministic. The older force scan of 42 crossings on the real graph is kept as layoutForceClassic
 - Four color modes: tier (default) / online state / highest alarm severity / traffic load. **Alarms are deliberately not a fill color**: 74/93 NEs (80%) carry critical alarms, so filling by severity would paint the whole map red; alarms are a small corner dot instead
 - The fourth mode, "Traffic load", paints links on Weathermap's 8-step scale (0-1% light grey … 85-100% red) and splits each link at the midpoint: the first half is source→destination, the second half destination→source, each with its own percentage. Port traffic is fetched only when you switch to this mode (6 more 15-minute tables) and switching away does not refetch. Utilization = port send/receive rate ÷ port bandwidth; **a link with no sample is grey dashed with N/A, never 0%** — port counters only cover the 13 NEs in the KPI config (measured: 50 of 141 edges on the IP RAN layer carry data), and the page footer states how many links are covered
+- The "Weathermap view" button on the right of the toolbar turns the page into a full-screen traffic map; it can be deep-linked with `?page=ipranTopo&view=weathermap&layer=ipran`. Devices are drawn as NMS-style icons, each link is split at its midpoint into per-direction halves on the 8-step scale with the percentage printed over the line, and the legend plus sample time sit in the canvas corners. Positions are reused from the same layout (both views place devices identically); clicking an icon or a link still opens the details drawer. The full network (access included) is drawn by default to keep the map dense — switch "Include access" off to see only the 22 backbone devices. Only core and aggregation devices are labelled by default — switch on "All labels" for access devices; scroll to zoom and drag to pan. "Edit layout" lets you drag nodes and saves the arrangement per layer on drop (write requires the local host or a token); "Reset layout" returns to the automatic arrangement. If the backend has not been restarted yet, edits stay in this browser and the toolbar says so
 - Bandwidth is shown by **line width** only (100G / 25G / 10G / others); down links are red dashed and links with alarms turn orange. The "Fold parallel links" switch expands ×N into a fan
 - The right rail (about 25%) puts the stat cards in one row above "NEs with most critical alarms"; both are the same width. The breakdown under each number stays hidden until the number is clicked; the card title still drills. The topology canvas takes the left 75% and all height left under the toolbar. Click a node or a name in that list to focus: other nodes dim and only one-hop neighbors stay lit, and the detail drawer slides in from the right (Overview / Interfaces / Alarms / Impact). Click again, click empty space, click the mask, or press Esc to close. Use the wheel to zoom and drag empty space to pan
 - Impact analysis lists **root-cause candidates**, not a confirmed root cause: only a down device with no failed device further upstream is listed, and the API has no alarm timestamp. Utilization stays N/A when traffic is absent; port speed is never used as a substitute
@@ -2093,6 +2110,21 @@ The **geographic version** of the OLIB fiber topology: the 667 PDF sites are pla
 - The PDF layer is coloured as in the PDF legend: 40G fibre, 10G fibre, IPRAN/DWDM, P26A-D project links, planned/under construction and base links (the untyped black lines); dashed means planned. Endpoints are projected from PDF coordinates with a thin-plate spline and snapped to the nearest site, so **position error is about 1-10 km** and dense areas may snap to a neighbouring site. It shows which links are drawn on the PDF only - not the cable route, capacity or latency
 - Click a site for PDF region, GPS, master-data site and id, county/region, match method and verification; Locate / Zoom fly the map to it
 - **Static data page**: the GPS mapping is public/olib/olib-site-geo.json, generated by scripts/gen-olib-site-geo.mjs; the page does not call the GIS API. Auto-refresh defaults to 1800s and the content does not change
+
+#### NOC Topology Center（`nocTopology`）
+
+NOC unified network topology center (1.0): brings IPRAN, MW microwave and OLIB FO into **one data model and one visual language**, with four views - network overview, logical topology, traffic and geographic. It does not replace the three specialist pages: IPRAN, MW and OLIB keep owning their deep analysis; this page owns the unified picture, cross-domain browsing and a single entry point.
+
+- Two independent dimensions: **view** (overview / logical / traffic / geographic) and **source** (all / IPRAN / MW / OLIB FO). You can look at MW alone on the map, or all sources in the traffic view. Deep links are supported: `?page=nocTopology&view=traffic&source=mw&layer=ipran&gran=rt`
+- **Device identity = source + native ID** (for example `ipran:<UME uuid>`, `mw:<IP>`, `olib:<site index>`). Nothing is merged automatically across sources: similar names or nearby coordinates are not evidence. IPRAN site names come from UME and include fuzzy matches, so they cannot serve as a master-data siteId
+- Traffic semantics: **TX = source device to target device, RX = target device to source device**. Both directions use their native values and are never averaged. The eight-step Weathermap scale is the same one the IPRAN page uses; the MW healthy / minor / major / critical four levels (60 / 70 / 80 thresholds) are preserved verbatim - the eight colours express load only and never redefine severity
+- **No traffic sample means N/A, never 0%**: in the measured run only 50 of 141 IPRAN links had port traffic (KPI covers the 13 configured NEs), 20 MW physical links had no KPI for the period, and all OLIB links have no live traffic. Those links are drawn as neutral dashed lines and both the legend and the details say why
+- OLIB lines and some backbone links are **schematic connections** (592 page-1 digitised links covering 411 sites, plus 17 page-2 backbone links). They are not the cable route and have no live utilization; every OLIB edge carries `schematic=true` and never takes traffic colours
+- The link drawer shows real MW history (all daily periods, or the last 96 15-minute slots in realtime mode). The IPRAN `topo_traffic.py` reads only the latest KPI snapshot, so **there is no history endpoint and no curve is drawn** - no synthetic history is stitched together
+- The source health panel reports Connected / Partial / Stale / Unavailable / Static per source. The three fetches are independent (`Promise.allSettled` semantics), so one failing source only turns its own row red. The summary cards and risk list follow the source filter but not the search box
+- Canvas: scroll to zoom, drag to pan, double-click to fit. Click a device to focus its one-hop neighbours and open details; click a link for both endpoints, capacity, port details and history. Search and press Enter to locate (the viewport only moves on an explicit search)
+- Automatic refresh is throttled per source: IPRAN 300 s, MW 900 s (15-minute collection), OLIB 1800 s (static assets). The header suggestion is 300 s and this page is registered for **in-place refresh**: on `myapp-refresh` it silently refetches without rebuilding the map or canvas
+- Explicitly out of scope for 1.0: automatic cross-system device/link correlation, automatic fault propagation, inventing live utilization for OLIB, and inventing history for IPRAN
 
 #### MW Realtime（`mwRealTime`, iframe page）
 
@@ -2377,7 +2409,7 @@ Customer Service KPI dashboard: pulls Dong customer weekly service KPIs from the
 
 #### cn_kpi（`cn_kpi`）
 
-CN KPI dashboard: a native rebuild of the original FineBI "CN KPI" board, with 18 widgets (VLR / Voice / Data subscribers, USSD success rate, location-update success rate, USPP / MSC / xGW utilisation, FDD / TDD traffic, RG-6/11/12/30 and more). Data is read from db_ps_cs_cn through the remote read-only SQL API and does not depend on the my-finebi process. Note: this page draws on two independent pipelines — manually exported _EMS tables (which stall, and whose granularity follows the export range) and auto-synced _UME tables — so fetching degrades gracefully and the granularity is labelled on both the card and the page header.
+CN KPI dashboard: a native rebuild of the original FineBI "CN KPI" board, with 23 widgets (VLR / Voice / Data subscribers, incoming / outgoing call answer ratio, international MOU, MGW32 resource utilisation and usage, USSD success rate, location-update success rate, USPP / MSC / xGW utilisation, FDD / TDD traffic, RG-6/11/12/30 and more). Data is read from db_ps_cs_cn through the remote read-only SQL API and does not depend on the my-finebi process. Note: this page draws on two independent pipelines — manually exported _EMS tables (which stall, and whose granularity follows the export range) and auto-synced _UME tables — so fetching degrades gracefully and the granularity is labelled on both the card and the page header. The incoming / outgoing call answer ratio, international MOU and the two MGW32 charts (added 2026-11-20) read manually exported _EMS tables only: there is **no _UME twin and no 1month_* monthly table**, so they go empty when the export stops (no source switch, no zero filling); MGW32 is hourly and is averaged per day on the chart (not a peak), and today is excluded (only part of it is complete).
 
 - The default range is the last 31 days; after changing the range and querying, month-granularity widgets automatically widen to the last 13 months
 - An orange "Monthly" tag on a card means each point is one month, not one day; a gold "Switched" tag means the original table stalled and an auto-synced source of the same name is being used

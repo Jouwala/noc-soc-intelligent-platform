@@ -2,7 +2,7 @@
 
 > 基准日期：2026-09-22　|　适用：`D:\02_olbr_portal` 工作区根目录
 > **本文是入口导航**，不是功能大全。逐页说明书在：
-> - my_app：`apps\my_app\docs\manual\11-feature-guide.md`（89 个页面）与 `15-user-help.md`（**一站式使用者帮助**，含 85 个任务工作流、72 个页面指南、FAQ；英文版 `15-user-help-en.md`）
+> - my_app：`apps\my_app\docs\manual\11-feature-guide.md`（92 个页面）与 `15-user-help.md`（**一站式使用者帮助**，含 85 个任务工作流、75 个页面指南、FAQ；英文版 `15-user-help-en.md`）
 > - 门户：`apps\portal\README.md` 的「功能概览」
 
 ## 一、我该从哪进去

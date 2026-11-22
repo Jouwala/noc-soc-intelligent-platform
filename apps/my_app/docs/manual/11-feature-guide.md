@@ -15,6 +15,7 @@
 | --- | --- | --- | --- |
 | 1 | 任务管理 | `sync` | React |
 | 2 | 任务报告文件 | `email_reports` | React |
+| 2b | 数据同步操作 | `site_sync_ops` | React |
 | 3 | eFlow 知识库 | `eflow_qa` | React |
 | 4 | eFlow 全流程查询 | `eflow_flow` | React |
 | 5 | 实时告警看板 | `alarm` | React |
@@ -22,6 +23,7 @@
 | 7 | TT&WO 看板（v1·仅上半部分） | `v1_ttwo` | React（同组件切片） |
 | 8 | TT 看板 | `tt` | React（同组件切片，数据源 `eflow_tt`） |
 | 9 | WO 看板 | `wo` | React（同组件换数据源 `eflow_wo`） |
+| 9b | TT 州统计 | `tt_state` | React（按州 × 日/周/月矩阵） |
 | 10 | NUR 看板 | `nur` | React |
 | 11 | NUR 看板（仅 NUR） | `ms_nur_only` | React（同组件切片） |
 | 12 | MS Operation KPI 看板 | `ms_sla` | React |
@@ -52,6 +54,7 @@
 | 34 | UME iMonitor 大屏 | `imonitor` | **iframe** |
 | 35 | 告警管理看板 | `alarmManagement` | **iframe** |
 | 36 | 事件总览 | `incident_overview` | **iframe** |
+| 36a | NOC 网络拓扑中心 | `nocTopology` | React |
 | 37 | MW 微波拓扑 | `mwUmeTopology` | **iframe** |
 | 37b | IP RAN 光纤拓扑 | `ipranTopo` | React |
 | 37c | OLIB 光纤拓扑 | `olibTopo` | React |
@@ -425,6 +428,27 @@
 - **门户入口（2026-09-28 改）**：统一门户 `/v1/olbrportal/` 的 **FO View** 分组里本页占一张卡（目录 `no=75`，标题 `WO Dashboard`），与 `page=tt` 的 `no=74`（`TT Dashboard`）并列，**替换掉原 `no=13`「TT&WO Dashboard」（`?page=v1_ttwo`）**。做法与维护要点见 4c 节末尾一条（同一处改动）。
 
 
+### 4e. TT 州统计（`?page=tt_state`）—— 按州看「告警未清除 / WO 未关闭 / TT 未关闭 / 总数」
+
+2026-11-21 新增。回答的是「哪些州派了 WO 但还没关、告警还挂着的有多少」，与 4c 的 `page=tt` 是**同一张表、不同切法**，不是另一个看板。
+
+- **数据范围**：`eflow_tt` 里 `wo_no` 非空的行 —— 一行 = 一张派出了 WO 的 TT。当前库 `wo_no` 唯一（16,164 行 / 16,164 个 WO），所以行数 = WO 数；**不去重站点、不按 WO 二次去重**。
+- **每格四个数字，顺序固定为「告警未清除 / WO 未关闭 / TT 未关闭 / 总数」**（与页面图例一致）：
+  - **告警未清除** = `alarm_clear_time` 为空 / NULL（告警尚未恢复，通常是实时小量）；
+  - **WO 未关闭** = `LEFT JOIN eflow_wo ON wo_no` 后 `eflow_wo.status` 不以 `Closed` 开头；**关联不到 WO 记录时按未关闭计**（没有关闭证据），`meta.wo_missing` 计数并在页顶**常驻告警**；
+  - **TT 未关闭** = `eflow_tt.status` 不以 `Closed` 开头（TT 自身状态，与上一条是两个字段）；
+  - **总数** = 该州该时间桶的行数（不按告警/状态过滤）。
+  - ⚠ 前三个是**三个独立集合**，可以互相重叠，所以 A + B 不一定等于 D；四个数是独立计数，不是把总数拆开。
+- **两个 status 同时展示（2026-11-21 按需求加）**：`WO 未关闭` 与 `TT 未关闭` 并列进 KPI 卡与每个格子，下钻也各有 `flag`。原因：TT 要等 WO 确认后才 `Closed`，上游大量「WO 已关、TT 仍 Waiting」的行（实测 1,791 行 `Waiting for FO Process` 对应的 WO 已 `Closed`）只在 TT 未关闭里出现 —— 两个数通常差一个量级，同时展示才能看出「WO 关得快、TT 关得慢」这段流程落差。页面不拿一个冒充另一个。
+- **州与时间**：州取 `region_level1`（空值归 `__unknown__`，前端显示「未标注州」）；时间字段 `alarm_occur_time`（与 `page=tt` 同一字段），窗口左闭右开。日 = `YYYY-MM-DD`，周 = ISO 8601 `YYYY-Www`（周一起算），月 = `YYYY-MM` —— 三种粒度用**同一个分桶函数**，切粒度总数不变。
+- **为什么在 Python 里分桶**：日/周/月在 SQLite 与 PG 的 `strftime` / `date_trunc` 写法不同，而本库双模（`MY_APP_DB_MODE`）。服务层一次取回窗口内的行（全量 1.6 万行、30 天窗口实测约 1,400 行），用同一份 `_period_label` 在 Python 分桶 —— 与 `routers/tt_wo_dashboard.py` 的 MTTR 趋势同一做法，**概览与下钻因此共用同一份取数**，表格数字与弹窗「共 N 条」严格相等（超过 5000 行时弹窗常驻截断告警）。
+- **下钻**：`state` 传具体州 / `__unknown__` / `*`（不限州），`period` 空 = 全部桶，`flag` ∈ `alarm_uncleared` / `wo_unclosed` / `tt_unclosed` / `alarm_cleared`。KPI 卡点开后用 `state=*` + `flag`，所以卡片数字与弹窗行数也相等。`alarm_cleared` 是派生值（总数 − 告警未清除），对应下钻就是 `alarm_clear_time` 非空的行。
+- **接口**：`GET /api/tt-state-matrix/overview`（`start` / `end` / `gran` / `all=1`）与 `GET /api/tt-state-matrix/drilldown`（再加 `state` / `period` / `flag` / `limit`）。实现：`backend/routers/tt_state_matrix.py` + `backend/services/tt_state_matrix.py`；页面：`frontend/src/pages/TtStateMatrix.tsx` + `pages/ttState/`（矩阵表、下钻弹窗、类型）。
+- **UI 约定**：五张 KPI 卡（总数 / WO 未关闭 / TT 未关闭 / 告警未清除 / 告警已清除）都可点下钻、数字可悬浮看构成；矩阵每格可点、非零格可悬浮看「这一格怎么构成」；整页口径收在默认收起的 `CalcChainNote`（根 `AGENTS.md` 四.10）。算不全的两种情况（WO 记录缺失、告警时间无法解析）**常驻可见**。
+- **默认时间窗**：近 30 天、日粒度（与 `page=tt` 的档位一致：全部时间 / 近 7·30·90·180 天 / 自定义）。建议刷新间隔 300 秒，已在 `App.tsx` 的 `AR_PAGE_DEFAULTS` 登记。
+- **导出 Excel**：`exportReport` 两个 sheet —— 「州×时间」长表（州 / 时间 / 告警未清除 / WO 未关闭 / TT 未关闭 / 总数）与「按州汇总」（同一组列 + 告警已清除）；下钻弹窗也可单独导出，明细里同时带 TT 状态与 WO 状态。
+- **测试与验证**：`python tests/test_doc_consistency.py` 的页面数 / 路由数 / 帮助条目 / 按页刷新四道守卫都会覆盖本页；后端可用 `python -c "from backend.services import tt_state_matrix as s; print(s.overview('2026-10-22','2026-11-21','day')['summary'])"` 直接冒烟（不重启服务）。
+
 ## 5. NUR 看板（`?page=nur`）
 
 > **数字悬浮说明（2026-11-03，AGENTS.md 三.3c）**：NUR 表、SLA 表的 Achieve 列与计数列共 3 处
@@ -570,6 +594,7 @@ IP RAN 光纤层的网元—链路关系图（React + 自绘 SVG 画布），数
 - **三种布局**（`frontend/src/pages/ipranTopo/layouts.ts`，画布 760×540，`TOPO_W` :25）：力导向（默认，`layoutForce` :210，`cluster: true` 把接入点往主归属的水平位置拉近）、地理（`layoutGeo` :287）、分层（`layoutTier` :147）。原力导向保留为 `layoutForceClassic`（:277），不删。布局都是**确定性**的（固定种子）。2026-11-10 在真实 141 条边上扫出的 42 / 221 / 390 次交叉是旧算法、且交叉口径未留档；可重复基线在 `ipranTopo/__tests__/topoLayoutBaseline.test.ts`（合成图，力导向聚类后边交叉 271、层级分离 121.6、标签重叠 0）。
 - **交互**（2026-11-10 V2，同日改为与微波实时页同一套分栏；2026-11-11 统计卡移入右栏）：画布占左 75%，并吃掉工具条之下、页底说明之上的高度。缺坐标、近似匹配、告警饱和这几条说明和收起的口径条放在页面最下面，不插在工具条和画布之间；取数失败或降级仍留在工具条下。右 25% 从上到下是六张统计卡（排成一行，数字在上且同一行对齐，标题在数字下面，卡高取这一行里最高的那张）、「紧急告警最多的网元」，两块同宽，加起来的高度与左侧地图一致；名单超出时在告警榜内部滚动。数字下的构成说明（如在线数/层内网元数）默认不显示，点数字才弹出。不随聚焦展开而挪位。滚轮缩放、拖空白平移、适应画布；搜索与层级/状态过滤只降低透明度，不删设备和链路。点节点或点右侧榜上的名字，从右侧滑出详情抽屉（概览 / 接口 / 告警 / 影响分析，宽度 `min(95vw, 45rem)`，与 GIS / 微波实时页一致）；点链路看物理链路与容量。再点、点空白、点遮罩或 Esc 关闭。平行链路三态：down=0 正常、0<down<n 部分故障（橙色虚线）、down=n 全部故障（红色虚线）。影响分析只给**根因候选**（`faultAnalysis.ts`），没有告警时间时不写成已确认根因；收发利用率缺数据时显示 N/A。地理布局额外复用 GIS 的 PMTiles 底图（`TopoGeoMap.tsx`），精确与近似坐标样式不同，缺坐标不落点。KPI 下钻仍是 `ipranTopo/TopoDrillModal.tsx`。
 - **流量负载（Weathermap 模式，2026-11-19 新增）**：着色第 4 档「按流量负载」把链路按 Weathermap 的 8 档色阶（`0-1%` 灰白 … `85-100%` 红，定义在 `ipranTopo/trafficScale.ts`，区间左闭右开）上色，并把链路**从中点拆成两段**：前半段 = 源→宿（`txUtil`），后半段 = 宿→源（`rxUtil`），两侧各标一个百分比；**没有采集到的链路画中性灰虚线且不标数字，绝不用 0% 冒充**。切到这一档才发 `?traffic=1`（多读 6 张 15 分钟表，实测 +0.1~0.5s，服务端单独一个缓存槽），切走不重取。数据来自 `ipran_kpi_sync` 的端口性能表，只取每张表最新一个采样时刻，按 `(网元名, 端口名)` 大小写不敏感精确匹配（链路名里的设备名带下划线、板卡名带减号，不能按分隔符切，见 `backend/services/ipran_topo/topo_traffic.py`）；利用率 = `Mbps ÷ (端口速率 × 1000) × 100`，速率解析不出（`ETH:` 之类）显示 N/A，折叠边取组内**最大**、每条物理链路明细在悬停与详情里。**实测覆盖（2026-11-19 生产）**：ipran 层 50/141 条边、metro 40/51、ipcore 6/109 —— KPI 采集配置里只有 13 个网元，其余端口天然没有数据，页面底部用常驻提示写清楚「只覆盖 m/n（pct%）」，不静默。该模式下不展开平行链路（一排同色线只会干扰），导出 Excel 的链路 sheet 多了接收/发送利用率两列。
+- **整屏 Weathermap 视图（2026-11-19 新增）**：工具条右侧「Weathermap 视图」把页面切成整屏流量图，也可直链 `?page=ipranTopo&view=weathermap&layer=ipran`。设备画成 NMS 风格图标（层外用云），链路按 tx/rx 从 50% 处拆段上 8 档色、百分比标签压在线上（白底把线咬断）；图例与采样时刻叠在画布角上，工具条只留层 / 布局 / 全部标签 / 含接入层 / 重新取数 / 返回拓扑。**位置复用同一份 `layouts.ts` 结果**（`WeathermapCanvas.tsx` 只换版式语言，不另算布局，两个视图位置一致；为了让扁平的布局铺满画布，只对节点坐标做横竖独立拉伸、图标不变形）；节点名用站点名，默认画全量（含接入层，保持 Weathermap 的密度），关掉「含接入层」只看骨干 22 个点；默认只标核心与汇聚，接入点切「全部标签」后显示。点图标或链路开的是同一个详情抽屉（概览 / 接口 / 告警 / 影响分析），链路百分比数字可下钻；滚轮缩放、拖动平移、双击回到全图。**工具条「编辑布局」**进入拖拽态：拖动节点、松手按层保存（`PUT /api/ipran-topo/layout`，落 `backend/data/ipran_topo_layout.json`，仅本机 / 持 `X-API-Token` 可写），「重置布局」删除该层坐标回到自动布局；后端未重启或接口不可用时自动退回 localStorage，并在工具条提示「先存本机」。`GET /api/ipran-topo/graph?traffic=1` 与拓扑视图共用，服务端缓存 120 秒，两个视图来回切不会重复打 UME。
 - **口径说明与数字悬浮**：页内「数据源与口径」用 `CalcChainNote` 默认收起，和缺坐标 / 近似匹配 / 告警饱和的说明一起放在页面底部；KPI 卡与列头的 ⓘ 走 `MetricExplain`，气泡内容取接口既有字段，不在前端重算。
 - **刷新**：已登记 `AR_PAGE_DEFAULTS`（建议 300 秒，后端缓存 120 秒）与 `AR_INPLACE_REFRESH_PAGES` —— 顶栏开启自动刷新后监听 `myapp-refresh` **静默重取**（`IpranTopo.tsx:94`），画布不重建、聚焦状态不丢。页面上的「重新取数」走 `refresh=1` 绕缓存。
 - **导出**：`exportReport` 两个 sheet（网元 / 链路），文件名 `IPRAN_Topo_YYYYMMDD_HHmmss.xlsx`。
@@ -587,15 +612,15 @@ Orange Liberia 全国光纤网络拓扑的**静态参考页**：把《Orange net
 - **交互**：滚轮以光标为中心缩放、拖动平移、工具条缩放/重置/全屏/显示隐藏点位；右下角缩略图（仅物理图）显示当前视野并可点击跳转。画布按「原图尺寸 × 倍率」重新渲染 SVG（不是 CSS transform 拉伸），所以放大后文字、链路仍清晰；点位半径按 `1/scale` 反向补偿，放大后仍是细小圆点；选中站点画十字虚线 + 橙色脉冲光圈 + 名称标签。
 - **布局与高度自适应**（2026-11-16 用户要求「下面不要一大块空白」）：画布卡片不再固定 `62vh`，改为**认领内容区剩余高度**——embed 下 `#main-content` 是定高 `100vh`，直链下按内容高度；左画布 : 右栏 = 3 : 1。右栏（站点查询 / 详情 / 图例）内容比画布高时**在自己容器里滚动**，子卡片必须 `flex-shrink:0`，否则会被压扁、内容被 `overflow:hidden` 裁掉且滚不到（实测图例底部就是这样消失的）。窄屏（`<1000px`）换行堆叠，回到按内容高度排布。左右两栏用普通 flex 而非 antd `Row/Col`：Row 的 flex 行高在内容高于可用高度时不参与收缩，`Col` 会被内容撑到 1010px 再溢出视野。骨架见 `NetworkTopology.tsx` 的 `PAGE_CSS`。
 - **站点查询与详情**：站名/区域**模糊搜索**（忽略大小写与标点；多词都要出现；允许打错一个字母或漏写少量字母，见 `networkTopology/siteMatch.ts`）+ 区域下拉 +「全部 / 5G / ISP / 骨干核心」快捷筛选（`SiteSearch.tsx`）；结果超过 300 条时只渲染前 300 条并显示明确提示，不静默截断。点结果会放大到该站。点位后详情卡显示区域、原图相对位置（近似值，不是 GPS）与类型，并提供「全图定位 / 放大看周边链路」两个操作（`SiteDetail.tsx`；「在分布图上查看」随散点视图一起移除）。
-- **门户入口**（2026-11-16）：`/v3/olbrportal/` 以及勾了 IP 页签的团队门户（fo / bo / flm）的 GIS Map「IP」页签，内嵌 `?page=olibTopo&view=physical&maponly=1`。只留物理图，左上角搜索框做同样的模糊匹配，点一条结果放大到该站。Open Link 去掉 `maponly`，新窗口是完整页并停在物理图。直开不带 `maponly` 时三个视图都在。smc / cxo 按矩阵不显示这一页。
+- **门户入口**（2026-11-20 改挂 Knowledge Q&A）：`/v3/olbrportal/` 的 Knowledge Q&A 栏有两个本页页签 ——「MW Topology」内嵌 `?page=olibTopo&view=physical&maponly=1`（物理图），「Fiber Topology」内嵌 `?page=olibTopo&view=logical&maponly=1`（逻辑图）。两种都只留画布，左上角搜索框做同样的模糊匹配，点一条结果放大到该站；逻辑图上只覆盖原图有标签的站，搜不到时给出提示而不是静默无反应。Open Link 去掉 `maponly`，新窗口是完整页（默认物理图，可用页签切逻辑图）。**`maponly` 模式自 2026-11-20 起认 `?view=`**（此前写死物理图），非法值回落物理图。团队门户（fo / bo / flm 勾了矩阵）同步显示这两个页签；smc / cxo 按矩阵不显示这一页。
 - **口径与数字**：顶部**不再有统计卡**（2026-11-16 用户要求去掉 提取站点 / 9 个骨干核心 / 40G·10G 骨干光纤 / 2 个 AML 数据中心四张卡 —— 数字都在图例与说明里，卡只占首屏）。整页口径与来源走 `CalcChainNote`，以 **页面最下面一个问号**（`trigger="icon"`，点开气泡、不占一行）承载：数据来源、坐标口径、骨干核心与链路、已知限制四节。站点数等静态事实仍取 `SITES.length` / `CORE_SITE_COUNT` / `AML_DC_COUNT`（`topologyData.ts`），不在前端重算。
 - **刷新**：`AR_PAGE_DEFAULTS.olibTopo = 1800`。页面本身没有接口可重取，自动刷新只走外壳默认重挂载（会回到初始视图），不会产生新数据。
 
 ## 8d. OLIB 地理网络拓扑（`?page=olibTopo_v2`，2026-11-16 新增）
 
-v1（8c）的升级版，**v1 页面与它的三个文件完全不动**：v2 默认把 OLIB 站点画到真实的 Liberia 地理底图上，PDF 原图降级为参考视图。解决的核心问题是 v1「无论怎么缩放都还像一张拓扑图片」——v2 的站点用 `master_site_db` 的真实经纬度定位，县界、道路、海岸线来自自托管 PMTiles 底图。
+v1（8c）的升级版，**v2 不改 v1 的页面骨架**：v2 默认把 OLIB 站点画到真实的 Liberia 地理底图上，PDF 原图降级为参考视图。解决的核心问题是 v1「无论怎么缩放都还像一张拓扑图片」——v2 的站点用 `master_site_db` 的真实经纬度定位，县界、道路、海岸线来自自托管 PMTiles 底图。
 
-- **四种视图**：`地理地图`（默认）/ `物理拓扑` / `逻辑拓扑` / `骨干核心`。后三种直接复用 v1 的 `TopologyViewer`（只读引用，不改 v1 文件），页面级 tabs 与它的内部 tabs 状态同步；v2 用 CSS 隐藏内部重复 tabs。
+- **四种视图**：`地理地图`（默认）/ `物理拓扑` / `逻辑拓扑` / `骨干核心`。后三种直接复用 v1 的 `TopologyViewer`（共用组件，页面级 tabs 与它的内部 tabs 状态同步；v2 用 CSS 隐藏内部重复 tabs）。⚠️ 2026-11-20 v1 去掉「骨干示意」页签时**没有动 core 视图本身**：`views` 缺省仍是三档，v1 只声明两档，故 v2 的「骨干核心」不受影响。
 - **数据与资源**：667 条站名/相对坐标来自 `frontend/src/pages/networkTopology/topologyData.ts`（由第 1 页物理图重抽，见上一条）；GPS 映射表是 `frontend/public/olib/olib-site-geo.json`，由 `frontend/scripts/gen-olib-site-geo.mjs` 从 `GET /api/gis/sites` 生成，人工别名表在 `frontend/scripts/olib-site-aliases.json`。**页面不直连 GIS 接口**，映射口径可 diff、可复查。
 - **定位口径（宁缺勿错）**：站名规范化后唯一命中 → `name-exact`；拼写差异走人工别名 → `alias`；同名多坐标 → `ambiguous`；无同名 → `unmatched`，一律不上图。**不做自动模糊匹配**（避免 `6th Street → 16th Street` 这类错配）。2026-11-17 换版后实测 667 条中 **541 条已定位（504 精确 + 37 别名）、124 条未匹配、2 条同名歧义**；未定位名单可在右侧「未定位 N」弹窗逐条查看原因。映射表按站点下标对齐并复核站名，`topologyData.ts` 增删站点后不一致会自动判为未定位。
 - **地图交互**：Leaflet + 自托管 PMTiles（与 `?page=gis` 同一套，不依赖公网瓦片）；站点按屏幕像素网格聚合（zoom<11.5），点击聚合圈 `fitBounds` 展开；站点形状区分核心/ISP/5G/普通，只有选中站点有脉冲光环；名称分级显示（zoom≥9 显示重点站点、≥11 显示全部、悬浮 tooltip 兜底）；县界虚线 + 县名（zoom≥8.5）；点击站点看详情，搜索/详情「地图定位」用 `flyTo` 落到站点。
@@ -606,7 +631,23 @@ v1（8c）的升级版，**v1 页面与它的三个文件完全不动**：v2 默
 - **PDF 链路怎么投到经纬度**：第 1 页是**示意图不是比例地图**（蒙罗维亚被放大约 10 倍），所以用 541 个已定位站点的 PDF 坐标做**薄板样条（TPS）**拟合 → 经纬度（仿射不行：残差中位数 43km、只取主图仍有 14km），再把每段端点吸附到 4km 内最近站点（p50 吸附误差 0.7km）；吸附不上的段落丢弃并在脚本里计数（本次 133/814）。留一验证误差中位数约 8km、p90 约 20km，密集区可能吸到邻站 —— 所以这一层只在图例与口径说明里承诺「原图上画了哪些站到站链路」。换 PDF 版后重跑脚本即可（`python backend/scripts/gen_olib_fiber_links.py "<pdf>" --write`，依赖 PyMuPDF/numpy，不进 requirements）。
 - **布局**：左地图 : 右栏 ≈ 3 : 1；右栏 = 站点查询（模糊搜索 + 区域下拉 + 全部/5G/ISP/核心 + 未定位入口）、站点详情（PDF 区域、GPS、主数据站点 ID、县、匹配方式与核验状态、相连链路）、图例；右栏内容超长时在自己的容器里滚动。窄屏（<1000px）堆叠，地图至少 62vh。
 - **刷新**：`AR_PAGE_DEFAULTS.olibTopo_v2 = 1800`。页面只读一份静态映射表 + 县界（前端缓存 30 分钟），没有可实时变化的内容。
-- **生效位置**：`https://localhost/myapp/?page=olibTopo_v2`（直链）；v1 仍为 `?page=olibTopo`，未做任何修改。
+- **生效位置**：`https://localhost/myapp/?page=olibTopo_v2`（直链）；v1 仍是独立页 `?page=olibTopo`（2026-11-20 只删了它的「骨干示意」页签，见 8c），两页共用 `TopologyViewer` 但各用各的视图清单。
+
+## 8e. NOC 统一网络拓扑中心（`?page=nocTopology`，2026-11-19 新增）
+
+三个拓扑来源（IPRAN / MW 微波 / OLIB FO）的**统一展示入口**，不是三个专页的替代品：8b（IP RAN 光纤拓扑）、8（MW 微波拓扑）、8d（OLIB 地理网络拓扑）继续负责各自的深度分析，本页负责「一眼看全三个域 + 跨域定位 + 统一视觉语言」。代码在 `frontend/src/pages/nocTopology/`，数据契约见 `docs/NOC_TOPOLOGY_DATA_CONTRACT.md`。
+
+- **总体架构**：三层。`useTopologySources.ts` 分别取三个来源（IPRAN `GET /api/ipran-topo/graph`、MW `GET /api/mw-ume/topology` 或 `/realtime`、OLIB 静态文件），`adapters/{ipran,mw,olib}Adapter.ts` 翻译成统一模型 `NocNode` / `NocEdge` / `SourceMetadata`（`types.ts`），`NocTopologyCenter.tsx` 只消费统一模型。**不改任何现有后端服务与接口响应结构**，也不 iframe 嵌 `mw_ume_topology.html`。
+- **设备身份**：统一键 = `来源 + 原生 ID`（`ipran:<UME uuid>` / `mw:<IP>` / `olib:<站点下标>`）。三个来源之间**不做自动合并** —— 站名相似、坐标接近都不算关联依据；IPRAN 的站点名来自 UME 且含近似匹配（`meta.geoFuzzyPairs`），不能当主数据 siteId 用。跨域关联留到 Phase 4，且必须有 IP / siteId 精确匹配或人工确认映射。
+- **四个视图**：`全网总览`（Leaflet 地理分布 + 四个汇总数字 + 来源健康）、`逻辑拓扑`（SVG 分层环，状态色）、`流量视图`（Weathermap 8 档 + TX/RX 分段）、`地理视图`（Leaflet + 自托管 PMTiles）。视图与来源是两个独立维度，可只看 MW 的地理分布，也可看全部来源的流量。URL 深链接：`?page=nocTopology&view=traffic&source=mw&layer=ipran&gran=rt`。
+- **布局**（`layouts/graphLayout.ts`）：确定性的 O(n+e) 分层环，先拆连通分量，每个分量从最大度数节点做 BFS 画同心环，再按规模货架式排列、等比缩放进各自格子。**不用力导向**：MW 实测 649 节点 / 353 链路，O(n²) 斥力会卡主线程，而且每次刷新的抖动会让值班人员刚盯住的点跑掉。地理投影（`layouts/geographicLayout.ts`）用 Web Mercator + **两轴同一个 scale** + 居中留白，保证利比里亚地图不被拉伸。
+- **流量口径**：TX = 源设备→宿设备、RX = 宿设备→源设备，两个方向分别取原生值，**不平均、不互相冒充**。8 档色阶复用 `ipranTopo/trafficScale.ts`（Weathermap DEFAULT SCALE，区间左闭右开）；MW 的四级 healthy/minor/major/critical（60/70/80 阈值）原样保留在 `NocEdge.nativeStatus`，8 档色只表达负载，不重新定义故障严重度。
+- **没数据不是 0%**：IPRAN 只有 `?traffic=1` 才有 `txUtil/rxUtil`，未采集的边显示 N/A；MW 后端对无 KPI 的物理链路返回 `tx_util: 0.0` + `kpi_backed: false`，适配器**按 `kpi_backed` 判空**（`mwAdapter.ts` 头注释），否则 20 条未采集链路会被画成「0% 正常」；OLIB 恒 `trafficAvailable=false`。这三类链路画中性灰虚线、不写百分比。
+- **OLIB 的两条限制**：站点 GPS 来自静态映射快照（实测 667 站定位 541），光纤线来自 PDF 第 1 页数字化（592 条 / 覆盖 411 站），骨干线来自第 2 页逻辑图（17 条）。两者都是**连接关系示意**，不是光缆路由；适配器给所有 OLIB 边打 `schematic=true`，图例与链路详情都常驻写明。
+- **历史**：MW 有现成 `edge.history`（日粒度全部日期 / 实时最近 96 个 15 分钟槽），链路详情画 TX/RX 曲线；IPRAN 的 `topo_traffic.py` 只读最新 KPI 快照，**没有历史接口，不画曲线**（不拼伪历史）。
+- **降级**：三个取数相互独立（`Promise.allSettled` 语义），每个来源各自有 `Connected / Partial / Stale / Unavailable / Static` 状态；一个来源失败只把来源健康面板的对应行标红，另外两个照常渲染。旧数据在失败时保留并标 `stale`，不会因为一次超时清空整张图。
+- **刷新**：`AR_PAGE_DEFAULTS.nocTopology = 300`，并登记 `AR_INPLACE_REFRESH_PAGES` —— 收到 `myapp-refresh` 只静默重取，不重建地图与画布。页面内还有来源级节流：IPRAN 300 秒、MW 900 秒（15 分钟采集）、OLIB 1800 秒（静态资产）；手动刷新走 `force` 绕过节流与后端缓存。
+- **1.0 边界**：不做跨系统设备/链路自动关联、不做自动故障传播推理、不给 OLIB 编造实时利用率、不给 IPRAN 编造历史曲线。
 
 ## 9. MW 微波实时（`?page=mwRealTime`）— iframe
 
@@ -4591,7 +4632,9 @@ AND `Site ID != 'VMAX-DC'` AND `MTTR2 >= 0.25`。每张图两列：
 
 ## 33. CN KPI 看板（`?page=cn_kpi`）—— 核心网 KPI 日趋势（2026-10-01 补齐文档）
 
-原 FineBI「CN KPI」看板（公开链接 iYiQ）的原生重建，18 个组件。
+原 FineBI「CN KPI」看板（公开链接 iYiQ）的原生重建，23 个组件
+（原看板 18 个 + 2026-11-20 业务要求新增的 5 个：呼入/呼出应答率见 §33.3d，
+国际 MOU、MGW32 资源利用率与资源占用见 §33.3e）。
 **不依赖 my-finebi 进程**，只要求远端只读 SQL API（`192.168.100.19:8765`）可达。
 
 - **数字悬浮说明 + 整页口径条（2026-11-04，`AGENTS.md` 三.3b / 三.3c）**：本页此前**既没有 `CalcChainNote` 也没有任何 `MetricExplain`**。现在
@@ -4860,6 +4903,96 @@ python TMP\_backfill_vlr_voice_ume.py 80
 > 接口自查：`GET /api/cn-kpi/overview?start=2026-08-31&end=2026-11-18`，
 > 看 c1/c4 的 `columns`（应为 `t | HQ | ODC | Total`）与 `coverage`。
 
+### 33.3d 呼入 / 呼出应答率（`c14` / `c15`，2026-11-20 新增）
+
+用户要求在原看板之外补两张图。数据源是 `db_ps_cs_cn` 的两张**人工导出的日表**
+（与 c1/c4 的 `_EMS` 同一条链路，`ps_cs_core.write_via_api` 整表 `full_replace`）：
+
+| 组件 | 标题 | 表 | 指标项（列名） |
+| --- | --- | --- | --- |
+| `c14` | `Incoming Call Answer Ratio(%)` | `Incoming_Call_Answer_Ratio_OSS_EMS` | `(Incoming Call)Answer Ratio(%)` |
+| `c15` | `Outgoing Call Answer Ratio(%)` | `Outgoing_Call_Answer_Ratio_OSS_EMS` | `(Outgoing Call)Answer Ratio(%)` |
+
+实测（2026-11-20）：两表各 31 行、`Query Granularity = 1Day(s)`、覆盖 2026-10-20 ~ 11-19、
+只有一个网元 `ZTEMSCs,11`，值形态 `41.4024`（百分比文本，逐日 37~42）。
+
+**三条口径决定（改之前先读）**：
+
+1. **单级取数：刻意不登记 `source_table` / `fallback` / `monthly_table`。**
+   这两张表既没有 `_UME` 孪生表，也没有 `1month_*` 月表（2026-11-20 实查
+   `sqlite_master` 里只有 `*_OSS_EMS` 一张）。不登记 `source_table` 还顺带省掉
+   `_fallback_candidate()` 对 `*_UME` 的探测与 tier-2 重跑（两步注定失败，
+   只多两次远端往返 + 两条 warning 日志）。
+   **代价**：oss 停止导出时这两张图会直接空掉（空态 + 收起的口径条说明），
+   不换源、不插值、**不填 0**（`AGENTS.md` 三.6）。
+2. **日期键仍是 `substr("End Time",1,10)`**，与全页其余 18 个组件同口径。
+   这几张 EMS 表的 `End Time` 都是区间**右端点**（`Start Time` = 统计日 00:00、
+   `End Time` = 次日 00:00），所以横轴标签比实际统计日早一天 ——
+   **为对齐横轴这里不单独改**；真要改必须 23 个组件一起改，并同步改本节与该页口径条。
+3. **值必须过数值守卫。** 上游列是 TEXT，空串 / `-` 这类非数值用
+   `CASE WHEN TRIM(col) GLOB '*[0-9]*' THEN CAST(TRIM(col) AS REAL) END` 转成 NULL（断线），
+   **不能直接 `CAST(... AS REAL)`** —— 那会把「没有数」写成 `0%`。
+   `_has_any_value()` 因此在全空窗口判「暂无数据」而不是「有数」。
+
+回归：`GET /api/cn-kpi/overview?force=1` 的 `meta.count` 应为 **23**；c14/c15 各 31 行、
+`granularity="day"`、`degraded=""`、`error=""`。
+`python tests\test_cn_kpi_widgets.py` 用静态断言锁住这两条定义（表名 / SQL 只读 / 不登记降级源）。
+
+### 33.3e 国际 MOU 与 MGW32 资源利用率 / 占用（`c16` / `c17` / `c18`，2026-11-20 新增）
+
+这几张表也是同一天新登记进 PS_CS_CORE 那套 RPA 脚本的（见 §33.3f），由 oss 人工导出：
+
+| 组件 | 标题 | 表 | 列 / 指标项 | 粒度 |
+| --- | --- | --- | --- | --- |
+| `c16` | `International MOU` | `International_MOU_OSS_EMS` | `Outgoing MOU` / `Incoming MOU` | `1Day(s)`（每天一行，入库时已按天加总） |
+| `c17` | `MGW32 Resource Utilization(%)` | `CS_MGW32_Resource_Utilization_OSS_EMS` | `Utilization Ratio of TONE\|TC\|RTP Resource(%)` | **`1Hour(s)`**（每天 24 行） |
+| `c18` | `MGW32 Resource Usage(count)` | `CS_MGW32_Resource_Capacity_OSS_EMS` | `Average Number of TONE\|TC\|RTP being Used` | **`1Hour(s)`** |
+
+**口径要点（改之前先读）**：
+
+1. **`c16` 两条线同表**：原始 CSV 是按 `MO Location` 分行的（每天约 17 行、两个 MOU 列），
+   `PS_CS_CORE` 的 `daily_sum` 入库时已经把两个列按天加总（`MO Location` 合并掉），
+   所以库里就是「一天一行、Outgoing / Incoming 各一列」，一张卡两条线即可，不用拆两张。
+   日期键沿用全页 `substr("End Time",1,10)`（比统计日早一天），为的是和 VLR / Voice / 应答率横轴对齐。
+2. **`c17` / `c18` 是小时表，图上取日均**：每天 24 个样本，图上按天 `ROUND(AVG(…),2|0)` ——
+   **不是峰值**（要看峰值得另取 MAX：实测 11-18 RTP 日均 21.5%、峰值 45.0%）。
+   百分比与计数都不能求和（百分比相加会得到 300%+，同一天 24 小时的信道数相加也没有意义）。
+3. **`c17` / `c18` 按 `Start Time` 归日**，与全页其它卡不同，原因是：小时行 `23:00–24:00` 的
+   `End Time` 是次日 `00:00`，按 End Time 归日会把这一小时算进第二天，并凭空多出一个
+   **只含 1 个样本的末日点**。按 Start Time 归日后 31 天 × 24 行，末点完整。
+4. **`c17` 与 `c18` 是同一台 MGW 的同一次测量的两种表达**：利用率 = Used / Available，
+   Available 恒为 TONE 4,056 / TC 74,160 / RTP 90,000。`c18` 给绝对信道数（多少条在用），
+   两者相减即余量。⚠ 三种资源量级差两个数量级（日均 TONE≈400 / TC≈9,000 / RTP≈19,000），
+   `c18` 图上 TONE 贴着底走**是真实比例，不是丢数**。
+5. **两张 MGW 卡都不含今天**（SQL 里 `AND t < date('now')`）：小时表里今天只有已完成的
+   若干小时，拿去做日均会被拉低、看着像占用骤降；今天过完自然进图（表里今天的数据照常入库）。
+6. **这三张表都只有人工导出的 `_EMS` 一份**：没有 `_UME` 孪生表、没有 `1month_*` 月表
+   （自动链路那张 `CS_MRFP96_Resource_Utilization_OSS_UME` 是**另一种设备**，不是回退源），
+   所以同样不登记 `source_table` / `fallback` / `monthly_table`，走单级取数：
+   oss 停导就空图，不换源、不插值、不填 0。三条 SQL 都带数值守卫
+   （`GLOB '*[0-9]*'` → 空串/`-` 变 NULL，不 CAST 成 0）。
+
+回归：`GET /api/cn-kpi/overview?force=1` 的 `meta.count` 应为 **23**；
+`c16` 32 行（`Outgoing MOU` / `Incoming MOU`）、`c17` 31 行（`TONE/TC/RTP`）、
+`c18` 31 行（`TONE used/TC used/RTP used`），都有 `granularity="day"`、`degraded=""`、`error=""`。
+`python tests\test_cn_kpi_widgets.py` 静态锁住这五条新增组件的定义。
+
+### 33.3f 小时数据的入库脚本 `ps_mgw_hourly.py`（2026-11-20 新增）
+
+MGW32 的两个小时模板**没有**登记进 `PS_CS_CORE` 的 `CSV_EXTRA`，而是由同目录的
+`ps_mgw_hourly.py` 单独收（`D:\01_RPA\Task\PS_CS_CORE_Scripts\`）。分开的理由：
+
+| | `ps_cs_core.py`（日表线） | `ps_mgw_hourly.py`（小时线） |
+| --- | --- | --- |
+| 写入方式 | `full_replace`（整表 = 最后一次导出窗口） | **`upsert`**（PK = `Start Time` + `NE Location`），窗口外的老数据一条不删，历史自然累积 |
+| 不完整数据 | 丢掉**运行当天**整天 | 只丢掉**还没跑完的那个小时**（`End Time` > 现在） |
+| 岗位 | 日/月粒度模板 | `MGW32_Resource_Utilization_OSS` → `CS_MGW32_Resource_Utilization_OSS_EMS`；`MGW32_Resource_Capacity_OSS` → `CS_MGW32_Resource_Capacity_OSS_EMS` |
+
+两条线共用的部分（CSV 解析、目录遍历、API 地址、`_update_log` 记账）由
+`ps_mgw_hourly.py` 直接 `import ps_cs_core` 复用，**没有复制一份**。
+⚠ 同一个模板只能有一个岗位认领：两边都登记的话，先跑的把 CSV 删了，后跑的
+`open()` 会 `FileNotFoundError`、整轮中断。脚本用法：`python ps_mgw_hourly.py`（`--dry` 只看计划）。
+
 ### 33.4 界面必须显示的粒度提示（不要删）
 
 上游粒度会漂移，**用户看到「9-01 / 10-01 两个点」会读成「最近两天」**。因此：
@@ -4897,7 +5030,7 @@ python TMP\_backfill_vlr_voice_ume.py 80
 
 | 脚本 | 用途 |
 | --- | --- |
-| `TMP\_probe_cnkpi_all.py` | 18 个组件全量跑一遍，打印 `rows / degraded / granularity / error`；**末尾直接列出空数据组件**，是最快的回归手段 |
+| `TMP\_probe_cnkpi_all.py` | 20 个组件全量跑一遍，打印 `rows / degraded / granularity / error`；**末尾直接列出空数据组件**，是最快的回归手段 |
 | `TMP\_probe_cnkpi_fetch.py` | 聚焦 6 个曾出问题的组件（c1/c2/c11/c12/c13/c7），打印列名与头尾几行，用于核对口径 |
 | `TMP\_probe_cnkpi_tier3.py` | 把主表名替换成必然不存在的表，**强制走完三级降级**，验证「上游全停」时仍不出空白 |
 | `TMP\_probe_cnkpi_overlap.py` | 量化 `_EMS`/`_UME` 的**重叠日**，直接打印「双计后 vs 真实值」对照，用于确认 33.3a 的翻倍问题是否复现 |

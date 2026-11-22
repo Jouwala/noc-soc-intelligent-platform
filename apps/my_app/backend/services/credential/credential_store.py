@@ -450,7 +450,9 @@ CREDENTIAL_GROUPS = [
         "name_en": "SFTP Spare-parts Report Server (10.100.20.11)",
         "usage": "备件报表上传 / 下载任务使用此 SFTP 账号推送备件报表文件。",
         "usage_en": "Used by spare-parts report upload/download tasks over SFTP.",
-        "default_user": "ubuntu",
+        # 2026-11-20：上游账号从 ubuntu 迁到 pict，主目录随之变为 /home/pict/
+        # （SFTP 相对路径 sp/... 相对登录用户主目录解析）。
+        "default_user": "pict",
         "default_secret": "",
         "username_label": "用户名",
         "username_label_en": "Username",
@@ -464,6 +466,30 @@ CREDENTIAL_GROUPS = [
         "test_port": 22,
         "env_user": None,
         "env_secret": None,
+    },
+    {
+        # 2026-11-20：OCAuto 仍在 /home/ubuntu，pict SFTP 无权直读；
+        # 现场流程是 SSH 登录 pict 后 `su - root`，本分组只存 su 口令。
+        "key": "sftp_sp_root",
+        "name": "SFTP 备件服务器 root（su）",
+        "name_en": "SFTP Spare-parts root (su)",
+        "usage": "备件同步拉取 OCAuto/OCAutoOutput 时：先以 sftp_sp（pict）SSH 登录，再 su - root。"
+                 "root 不能直接 SFTP 口令登录；本分组只用于交互式 su。",
+        "usage_en": "For OCAuto/OCAutoOutput pulls: SSH as sftp_sp (pict), then su - root. "
+                    "Root cannot SFTP with a password; this group is only for interactive su.",
+        "default_user": "root",
+        "default_secret": "",
+        "username_label": "用户名",
+        "username_label_en": "Username",
+        "secret_label": "su 密码",
+        "secret_label_en": "su Password",
+        "has_username": True,
+        "testable": True,
+        "test_kind": "sftp_su_root",
+        "test_host": "10.100.20.11",
+        "test_port": 22,
+        "env_user": None,
+        "env_secret": "SFTP_SP_ROOT_PASSWORD",
     },
     {
         "key": "mail_126",

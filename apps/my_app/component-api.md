@@ -8,8 +8,8 @@
 
 | 端 | 位置 | 规模 |
 | --- | --- | --- |
-| **前端页面** | `frontend\src\pages\` | 81 个 `.tsx`（不含 `_` 前缀的模板与 `*_bak_*` 备份） |
-| **前端通用组件** | `frontend\src\components\` | 29 个 `.tsx` + `cards\` 子目录（卡片统一入口） |
+| **前端页面** | `frontend\src\pages\` | 83 个 `.tsx`（不含 `_` 前缀的模板与 `*_bak_*` 备份） |
+| **前端通用组件** | `frontend\src\components\` | 30 个 `.tsx` + `cards\` 子目录（卡片统一入口） |
 | **前端基础设施** | `frontend\src\*.ts(x)` | `api.ts`、`theme.ts`、`i18n.tsx`、`TaskStatusContext.tsx`、`cache.ts`、`datetime.ts`、`useDataTimestamps.ts`、`helpMarkdown.ts` |
 | **后端服务** | `backend\services\` | 业务服务层（各数据源采集与计算） |
 | **后端路由** | `backend\routers\` | API 端点 |
@@ -71,6 +71,7 @@ import { CardBase, StatCard } from '../components/cards'
 | `DraggableClickModal.tsx` | 可拖拽的点击弹窗（7KB）。**注意**：门户也有同名问题的 QC 弹窗拖拽需求，两端可互相参照 |
 | `ECharts.tsx` | **全站统一 ECharts 包装（2026-11-12 新增）**：`echarts-for-react/esm/core` + `utils/echarts` 的按需实例，props 与默认入口一致（option / notMerge / opts / onEvents / onChartReady / ref 全部透传）。页面一律从这里 import，**不要**直接 `from 'echarts-for-react'`（默认入口整包引入 echarts）。⚠ 必须用 `esm/` 入口：`lib/` 是 CommonJS，rolldown 的互操作会把默认导入解析成 module 对象，渲染即抛 React #130 → 全站用图的页面白屏（2026-11-16 事故，详见文件内注释）。新增图/组件去 `utils/echarts.ts` 登记 |
 | `PageErrorBoundary.tsx` | **页面级错误边界（2026-11-16 新增）**：包住 `App.tsx` 里 `renderPage()` 的输出，把「一次渲染异常 → 整棵树卸载 → 纯白屏」换成「标题 + 说明 + 原始报错 + 刷新按钮」，并对构建产物更新导致的 chunk 加载失败自动刷新一次（20 秒窗口去重）。新增页面无需接入，外壳统一包好 |
+| `PageLoading.tsx` | **切页首帧骨架 + 延后一帧挂载（2026-11-20 新增）**：导出 `PageLoading`（顶部进度条 + 卡片骨架）与 `DeferredMount`（先画一帧骨架，再用 `rAF + setTimeout` 挂载真正的页面）。目的是让重页面在办公机上的 4–6 秒主线程阻塞变成「看得见的加载中」而不是「点了没反应」；外壳已统一包好，**新增页面无需接入**。它只负责反馈，不减少渲染量 —— 重列表要自己分批（见 `DataSync.tsx` 的 `StaggerCard`） |
 | `LegacyToolFrame.tsx` | 遗留工具页容器框架（iframe 包装旧工具） |
 | `MapWheelZoomOnClick.tsx` | 「点击后才启用地图滚轮缩放」的行为包装 —— 解决地图嵌在长页面里时滚轮被地图吃掉的问题 |
 | `MetricExplain.tsx` | 指标口径解释（悬浮 ⓘ 气泡，带复制按钮）。四个导出：`ExplainPopover`（**底层**，把任意节点包成悬浮气泡，数字本身要用它）、`ExplainIcon`（ⓘ 图标，自带 `stopPropagation`，挂在可下钻的卡片标题上不会顺带开弹窗）、`ExplainCorner`（卡片右上角绝对定位）、`ExplainLabel`（文字 + 内联 ⓘ）。一句话级别的本指标说明用它；多段全局口径仍走 `CalcChainNote`（AGENTS.md 三.3b） |

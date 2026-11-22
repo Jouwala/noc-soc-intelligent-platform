@@ -227,3 +227,4 @@ export function emptyReason(w: SplitWidget, t: TFn): string {
       return t('cnkpiSplit.empty.noData')
   }
 }
+

@@ -274,6 +274,7 @@ function localeName(locale: Locale, key: string): string {
     incident_overview: '事件总览', warehouse: '仓库看板', overview: '数据总览', tables: '表浏览器',
     upload: '数据上传', archive: '分析归档', dashboard: '分析仪表盘', settings: '系统设置', portalLogin: '门户一键登录',
     imonitor: 'UME iMonitor 大屏',
+    nocTopology: 'NOC 网络拓扑中心',
   }
   const EN: Record<string, string> = {
     sync: 'Task Manager', email_reports: 'Task Report Files', alarm: 'Alarm Dashboard', ttwo: 'TT&WO Dashboard',
@@ -286,6 +287,7 @@ function localeName(locale: Locale, key: string): string {
     incident_overview: 'Incident Overview', warehouse: 'Warehouse', overview: 'Overview', tables: 'Table Browser',
     upload: 'Data Upload', archive: 'Archive', dashboard: 'Dashboard', settings: 'Settings', portalLogin: 'Portal Login',
     imonitor: 'UME iMonitor Screen',
+    nocTopology: 'NOC Topology Center',
   }
   return locale === 'zh' ? (ZH[key] ?? key) : (EN[key] ?? key)
 }

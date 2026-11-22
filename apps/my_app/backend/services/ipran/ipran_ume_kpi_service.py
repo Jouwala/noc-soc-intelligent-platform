@@ -475,6 +475,26 @@ def probe_ipran_session(cookie: str, forgery_token: str) -> bool:
         return False
 
 
+def _get_lock_helpers():
+    """取 auth_manager 的账号级熔断函数（读/写状态 + 终态错误判定）。
+
+    2026-11-20：自有登录分支补齐熔断所需。本函数是 auth_manager 不可用时的
+    兜底路径，因此导入失败必须静默降级为 (None, None, None)，保持本模块
+    独立运行能力 —— 拿不到熔断函数时登录流程与改动前完全一致。
+    """
+    for _mod in ("backend.services.auth_manager", "auth_manager"):
+        try:
+            _m = __import__(_mod, fromlist=["x"])
+            return (_m._read_lock_state, _m._write_lock_state,
+                    _m._is_terminal_login_error)
+        except ImportError:
+            continue
+        except Exception:
+            logger.debug("[LOGIN] 导入熔断函数异常，降级为无熔断", exc_info=True)
+            return None, None, None
+    return None, None, None
+
+
 def _get_shared_auth():
     """取一份「已存在且探活通过」的跨进程共享会话；取不到返回 None。
 
@@ -640,6 +660,20 @@ class UmeSessionClient:
         except ImportError:
             from env_role import assert_upstream_login_allowed  # 独立运行
         assert_upstream_login_allowed(HOST, PORT, caller="ipran_ume_kpi_service.login")
+        # 账号锁定熔断（2026-11-20 补）：自有登录分支此前既不读也不写熔断，
+        # 上游已锁时 19:00/20:00 仍硬撞，刷新失败计数、拖长锁定。这里对齐
+        # auth_manager 的账号级熔断：登录前读，冷却期内快速失败不碰上游。
+        _cred_user, _cred_pwd = _runtime_credentials()
+        _read_lock, _write_lock, _is_terminal = _get_lock_helpers()
+        if _read_lock:
+            _locked = _read_lock(HOST, PORT, _cred_user)
+            if _locked:
+                _remain = max(0, int(float(_locked.get("until", 0)) - time.time()))
+                _msg = (f"[LOGIN] 账号锁定冷却中（剩余 {_remain}s，共 {_locked.get('cooldown_sec')}s），"
+                        f"自有登录分支跳过，未向上游发起登录 ({HOST}:{PORT}, 账号 {_cred_user})。"
+                        f"原因：{_locked.get('reason', '未知')}")
+                logger.warning(_msg)
+                raise Exception(_msg)
         logger.info("[LOGIN] Starting authentication via requests.Session...")
         # 清空旧 cookie：首次登录时本就为空（行为不变）；401 恢复重登时带着已死
         # 会话进来，不清的话服务端新 Set-Cookie 与旧值可能在 jar 里并存，干扰后续请求。
@@ -661,7 +695,6 @@ class UmeSessionClient:
         if not public_key_b64:
             raise Exception("无法获取 RSA 公钥，登录中止")
 
-        _cred_user, _cred_pwd = _runtime_credentials()
         # 空密码护栏（2026-10-14）：与 auth_manager._do_login 同款保护，覆盖
         # 「auth_manager 不可用 → 本模块自有登录」这条独立脚本分支。
         # 空密码发出去会被上游按「密码错误」计数，连续 3 次锁号 1440 分钟。
@@ -691,7 +724,17 @@ class UmeSessionClient:
                 self.forgery_token = v
 
         if resp3.status_code not in (200, 302):
-            raise Exception(f"登录失败: {resp3.status_code}, response: {resp3.text[:200]}")
+            _err = f"登录失败: {resp3.status_code}, response: {resp3.text[:200]}"
+            # 终态错误写熔断（2026-11-20 补）：锁定/密码到期/密码错误立即写状态文件，
+            # 冷却期内所有 worker 快速失败，不再撞上游。判定复用 auth_manager 同款函数。
+            if _write_lock and _is_terminal and _is_terminal(_err):
+                try:
+                    _write_lock(HOST, PORT, _err, _cred_user)
+                    logger.warning("[LOGIN] 终态错误已写账号熔断（%s:%s, %s），冷却期内不再登录",
+                                   HOST, PORT, _cred_user)
+                except Exception:
+                    logger.debug("[LOGIN] 写锁定状态失败（不影响异常上抛）", exc_info=True)
+            raise Exception(_err)
 
         self._apply_session_headers()
 

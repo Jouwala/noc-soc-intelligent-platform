@@ -334,6 +334,18 @@ export function getRepeatSiteDownFilters() {
   return api.get('/repeat-site-down/filters')
 }
 
+// ========== TT 州维度统计（?page=tt_state）==========
+// 数据源：eflow_tt 里 wo_no 非空的行；WO 关闭状态 LEFT JOIN eflow_wo。
+// 口径（时间字段 / 告警未清除 / WO 未关闭 / 未标注州）见
+// backend/services/tt_state_matrix.py 的模块 docstring，页面「口径说明」与它逐条对应。
+export function getTtStateOverview(params?: Record<string, string | number>) {
+  return api.get('/tt-state-matrix/overview', { params })
+}
+
+export function getTtStateDrilldown(params: Record<string, string | number>) {
+  return api.get('/tt-state-matrix/drilldown', { params })
+}
+
 export function getRepeatSiteDownOverview(params?: Record<string, string | number>) {
   return api.get('/repeat-site-down/overview', { params })
 }
@@ -450,7 +462,8 @@ export function getAvailCountyDrilldown(params: Record<string, string | number>)
 
 // CN KPI 看板（原 my-finebi「CN KPI」看板原生重建）
 // 数据源：db_ps_cs_cn.sqlite3，经远端只读 SQL API（backend/config/remote_host.py）；
-// **不依赖 my-finebi 进程**。18 个组件的 SQL 与图表类型对齐 FineBI 原看板。
+// **不依赖 my-finebi 进程**。23 个组件（原看板 18 + 2026-11-20 新增的呼入/呼出应答率、
+// 国际 MOU、MGW32 资源利用率 / 资源占用共 5 个）的 SQL 与图表类型对齐 FineBI 原看板。
 // params: start/end=YYYY-MM-DD（自定义区间，留空=近31天）/ force=true 跳过后端 60s 缓存
 export function getCnKpiOverview(params?: { start?: string; end?: string; force?: boolean }) {
   const q: Record<string, string | number> = {}
@@ -463,21 +476,6 @@ export function getCnKpiOverview(params?: { start?: string; end?: string; force?
 // 远端只读 SQL API 连通性探测（供 CN KPI 页诊断提示）
 export function getCnKpiHealth() {
   return api.get('/cn-kpi/health')
-}
-
-// CS / PS 分组看板（?page=cs_cn_kpi / ?page=ps_cn_kpi）
-// 数据源：db_ps_cs_cn.sqlite3，经远端只读 SQL API；按 EMS / UME 两段返回组件。
-// board: 'cs' | 'ps'；params: start/end=YYYY-MM-DD（留空=近31天）/ force=true 跳过 60s 缓存
-export type CnKpiSplitBoard = 'cs' | 'ps'
-export function getCnKpiSplitOverview(
-  board: CnKpiSplitBoard,
-  params?: { start?: string; end?: string; force?: boolean },
-) {
-  const q: Record<string, string | number> = {}
-  if (params?.start) q.start = params.start
-  if (params?.end) q.end = params.end
-  if (params?.force) q.force = 1
-  return api.get(`/cn-kpi-split/${board}/overview`, { params: Object.keys(q).length ? q : undefined })
 }
 
 // CN KPI 5 分钟看板（?page=cn_kpi_5mins）
@@ -500,6 +498,21 @@ export function getCnHourlyKpiOverview(params?: { start?: string; end?: string; 
   if (params?.end) q.end = params.end
   if (params?.force) q.force = 1
   return api.get('/cn-hourly-kpi/overview', { params: Object.keys(q).length ? q : undefined })
+}
+
+// CS / PS 分组看板（?page=cs_cn_kpi / ?page=ps_cn_kpi）
+// 数据源：db_ps_cs_cn.sqlite3，经远端只读 SQL API；按 EMS / UME 两段返回组件。
+// board: 'cs' | 'ps'；params: start/end=YYYY-MM-DD（留空=近31天）/ force=true 跳过 60s 缓存
+export type CnKpiSplitBoard = 'cs' | 'ps'
+export function getCnKpiSplitOverview(
+  board: CnKpiSplitBoard,
+  params?: { start?: string; end?: string; force?: boolean },
+) {
+  const q: Record<string, string | number> = {}
+  if (params?.start) q.start = params.start
+  if (params?.end) q.end = params.end
+  if (params?.force) q.force = 1
+  return api.get(`/cn-kpi-split/${board}/overview`, { params: Object.keys(q).length ? q : undefined })
 }
 
 // ===== 原生看板（my-finebi 其余看板泛化迁移） =====
@@ -1153,9 +1166,158 @@ export function getIpranTopoGraph(layer: string, refresh = 0, traffic = 0) {
   return api.get('/ipran-topo/graph', { params: { layer, refresh, traffic } })
 }
 
+/** Weathermap 手工布局：按层读取保存的节点坐标（没保存过返回空对象）。 */
+export function getIpranTopoLayout(layer: string) {
+  return api.get('/ipran-topo/layout', { params: { layer } })
+}
+
+/** 整层覆盖保存 `{nodeId: [x, y]}`（仅本机 / 持 X-API-Token）。 */
+export function saveIpranTopoLayout(layer: string, nodes: Record<string, [number, number]>) {
+  return api.put('/ipran-topo/layout', { nodes }, { params: { layer } })
+}
+
+/** 删除该层手工布局，回到自动布局。 */
+export function resetIpranTopoLayout(layer: string) {
+  return api.delete('/ipran-topo/layout', { params: { layer } })
+}
+
 /** 页签清单（key / 中英名 / 是否有 UME 人工布局）。页面用静态层定义，此接口供门户与调试。 */
 export function getIpranTopoLayers() {
   return api.get('/ipran-topo/layers')
+}
+
+// ========== MW 微波拓扑（NOC 拓扑中心复用，2026-11-19）==========
+// 对应后端 routers/mw_ume.py → services/mw_ume/mw_ume_topology.py。
+// 与 legacy 页面（public/mw_ume_topology.html）读的是**同一个接口**，
+// 新中心只复用数据，不 iframe 嵌旧页面。
+//
+// 两级粒度：
+//   /topology —— 日粒度（mw_ume_kpi_sync 每日 05:15 写主表，服务端缓存 300s）
+//   /realtime —— 15 分钟槽位（mw_ume_kpi_sync_rt 每 15 分钟写 RT 表，缓存 60s）
+// `kpi_backed=false` 表示该物理链路当期没有 KPI：此时后端仍返回 tx_util=0.0，
+// **前端适配层必须按 kpi_backed 判空**（见 pages/nocTopology/adapters/mwAdapter.ts）。
+export interface MwUmeNode {
+  id: string
+  name: string
+  site: string
+  site_id: string
+  ne: string
+  ip: string
+  lat: number | null
+  lon: number | null
+  degree: number
+  status: string
+  max_util: number
+}
+
+export interface MwUmeCheckpoint {
+  cp: string
+  ncp: string
+  tx_t: string | number | null
+  tx_u: string | number | null
+  rx_t: string | number | null
+  rx_u: string | number | null
+}
+
+export interface MwUmeHistoryPoint {
+  date: string
+  tx_util: number
+  rx_util: number
+  max_util: number
+}
+
+export interface MwUmeEdge {
+  source: string
+  target: string
+  capacity: number | null
+  tx_throughput: number | null
+  rx_throughput: number | null
+  tx_util: number
+  rx_util: number
+  status: string
+  max_util: number
+  checkpoints: MwUmeCheckpoint[]
+  history: MwUmeHistoryPoint[]
+  /** false = 当期无 KPI（此时 tx_util/rx_util 的 0.0 不代表真实流量） */
+  kpi_backed: boolean
+}
+
+export interface MwUmeKpis {
+  nodes: number
+  links: number
+  physical_links: number
+  physical_nodes: number
+  healthy: number
+  minor: number
+  major: number
+  critical: number
+  unknown: number
+  max_utilization: number
+  max_util_link: {
+    source: string
+    target: string
+    source_site: string
+    target_site: string
+    tx_util: number
+    rx_util: number
+  } | null
+}
+
+export interface MwUmeMeta {
+  generated_at: string
+  granularity: string
+  thresholds: { minor: number; major: number; critical: number }
+  selected_date: string | null
+  available_dates: string[]
+  counts: Record<string, number>
+}
+
+export interface MwUmeTopRisk {
+  source: string
+  target: string
+  source_site: string
+  target_site: string
+  tx_util: number
+  rx_util: number
+  max_util: number
+  status: string
+  capacity: number | null
+}
+
+export interface MwUmeTrendPoint {
+  date: string
+  rows: number
+  avg_util: number
+  max_util: number
+  critical: number
+}
+
+export interface MwUmeTopologyResponse {
+  meta: MwUmeMeta
+  kpis: MwUmeKpis
+  nodes: MwUmeNode[]
+  edges: MwUmeEdge[]
+  top_risks: MwUmeTopRisk[]
+  trends: MwUmeTrendPoint[]
+}
+
+/** 日粒度拓扑；date 缺省 = 最新可用日期，backbone=1 只看骨干（两端 IP 均 10. 开头）。 */
+export function getMwUmeTopology(params?: { date?: string; backbone?: number; top_n?: number; refresh?: number }) {
+  return api.get('/mw-ume/topology', { params })
+}
+
+/** 15 分钟实时拓扑；date 缺省 = 最新槽位（完整 Begin Time）。 */
+export function getMwUmeRealtime(params?: { date?: string; backbone?: number; top_n?: number; refresh?: number }) {
+  return api.get('/mw-ume/realtime', { params })
+}
+
+/** IPRAN 层清单的一条（与后端 `layers.public_list()` 对应） */
+export interface IpranLayerInfo {
+  key: string
+  nameZh: string
+  nameEn: string
+  savedLayout: boolean
+  tierLabels: string[]
 }
 
 // ========== RAN 资产台账（?page=ran_inventory）==========

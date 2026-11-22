@@ -2611,6 +2611,75 @@ MW 弹窗内逐帧量：`html.mw-embed` 为 false；内层 `#kpis` 1555×104、`
 **验收。** 两份 olbr.js / olbr-data.js `node --check` 通过；无头浏览器实测见同日记录
 （GIS Map 页签条无 IP、Knowledge Q&A 出现 Topology 且内嵌物理拓扑画布）。
 
+## 九之二十三、2026-11-20 「Topology」改名 MW Topology + 新增 Fiber Topology
+
+**起因。** 用户要求（原话）：「`/v3/olbrportal/` 的 Knowledge Q&A 里面 topology 改为
+MW Topology，并增加页签 Fiber Topology，内容为 `?page=olibTopo&view=physical` 的
+Logical 的页签下的地图」；同一条要求里还有「`?page=olibTopo&view=physical` 页面去掉
+backbone 这个页签」（my_app 侧，见 `apps/my_app/docs/manual/11-feature-guide.md` 8c）。
+已与用户确认：**MW Topology 只改名、内容仍是那张 OLIB 物理拓扑原图**（不是
+`?page=mwUmeTopology` 那张微波看板）。
+
+**做法（门户壳）。**
+
+- `v3/olbrportal/assets/olbr.js`：
+  - `topologyItem()` → **`mwTopologyItem()`**（`no:-9003`，url 不变
+    `/myapp/?page=olibTopo&view=physical`），条目标题改为 `MW Topology（物理拓扑）`；
+  - 新增 **`fiberTopologyItem()`**（`no:-9004`，url `/myapp/?page=olibTopo&view=logical`，
+    同样 `icon: 'share-network'`）；
+  - `qaItems()` 的页签键由 `topology` 改为 `mw_topology`，并在其后追加
+    `fiber_topology`；两者都**加在末尾**，默认选中仍是 eFlow。旧
+    `localStorage.qatab === 'topology'` 由 `curQa()` 的既有兜底回落到 `list[0]`；
+  - `qaTabLabel()` 改用 `qa.tabMwTopology` / `qa.tabFiberTopology`（键跟着显示名走，
+    不留「键叫 topology、显示是 MW Topology」的第二套口径）；
+  - `qaSrc()` 的 `maponly=1` 规则不变（按 `page=olibTopo` 匹配，两张图都命中）：
+    iframe 里只留画布，**画哪张图由 url 的 `view=` 决定**。
+- `v3/olbrportal/assets/olbr-data.js`：`qa.tabTopology` 改名为 `qa.tabMwTopology`
+  （值 `MW Topology`），新增 `qa.tabFiberTopology`（值 `Fiber Topology`），中英两份字典
+  同值 —— 页签名是用户点名的写法，不翻译。
+- `v3/olbrportal/assets/olbr.css`：**本栏标题条改两行**（页签独占第二行），见下条「踩到的坑」。
+
+**my_app 侧（同一需求的后半截，缺了它 Fiber 页签会"看着像改名没生效"）。**
+
+- `NetworkTopology.tsx` 的 `maponly` 分支此前**写死物理图**，现改为认 `?view=`
+  （`physical` / `logical`，非法值回落物理图）；
+- 同日按用户要求**去掉「骨干示意（core）」页签**：`TopologyViewer` 新增 `views` 参数
+  （缺省三档），本页只声明 `['physical','logical']`；`CoreSchematic.tsx` 与
+  `CORE_NODES` / `CORE_LINKS` **不删** —— v2（`?page=olibTopo_v2`）的「骨干核心」视图
+  仍在用；`?view=core` 旧链接按物理图兜底。
+
+**踩到的坑（值得记住）。** 加第 5 个页签后，QA 栏 1600px 下的标题条实测：
+标题 135 + 页签内容 571 + 工具基准 0 = 706 < 可用 732，于是 flex 判定「不用收缩」；
+而 `.map-tools` 的基准是 0（吃剩余空间的弹簧），只剩 12px → 它分到 2px，
+「重新加载 / Open Link」两颗按钮溢出自己的盒子、**按 DOM 顺序画在第 5 个页签上**。
+无头浏览器命中测试：Fiber 页签中心点命中的是 `#qaOpen` 的图标，真实鼠标点下去
+切不到该页签。修法是把本栏 `.p-head` 改成两行（页签 `flex:1 1 100%`、工具
+`order:2; flex:0 0 auto`），5 个页签始终可见；**没有**改成「页签横向滚动」——
+`.map-tabs` 隐藏了滚动条（`scrollbar-width:none`），鼠标用户够不着第五个页签。
+
+> ⚠️ 同类缺陷在 GIS Map 栏**仍然存在（本次未修，属既有问题）**：该栏也是 5 个页签，
+> 视口 ≤1280px 时 `.map-tools` 同样被压到 70px 左右，末页签「Packet Loss」被
+> 「Open Link」压住（实测 1280px 命中 `gb gb--t`）。要修就照 QA 栏这两行 CSS 搬，
+> 或把 `.map-tools` 的 flex 基准从 0 改成 `0 0 auto` 让页签条自己滚。
+
+**团队门户。** 两个页签**同进同出**：`patch_team_portal.py` 的 `qa-filter` 钩子仍只判
+矩阵 **map 域的 `olibTopo` 子键**（fo / bo / flm 勾了），命中时两个都放行、不命中时
+两个都置 null（`if (!SCOPE.ok('map','olibTopo')) { mwTopo = null; fiberTopo = null; }`）。
+生成物已重跑 `patch_team_portal.py` + `sync_team_assets.py`，`npm run check:team-scope`
+四道全 ✓。
+
+**验收（无头浏览器，1600×1000，`npm run build` 后）。**
+
+| 检查 | 结果 |
+| --- | --- |
+| QA 页签条（5 个） | TT/Alarm Analysis · O&A · Master Site · **MW Topology** · **Fiber Topology**，1440/1280/1024/820 四档下**每个页签中心都命中自己**（可点） |
+| MW Topology iframe | `?page=olibTopo&view=physical&embed=1&maponly=1&lang=zh`，画布内 `physical.svg` |
+| Fiber Topology iframe | `?page=olibTopo&view=logical&embed=1&maponly=1&lang=zh`，画布内 `logical.svg` |
+| 真实鼠标点击 | 命中 `BUTTON.tab`，`aria-selected=true`，iframe 切到逻辑图 |
+| 页面 JS 报错 | 0 条 |
+| `?page=olibTopo` 直链 | 视图页签只剩「原图 · 物理拓扑 / 原图 · 逻辑拓扑」两个，backbone 已下线 |
+
+
 ## 十、相关文档
 
 | 内容 | 去哪里 |

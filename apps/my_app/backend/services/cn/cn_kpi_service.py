@@ -13,6 +13,10 @@
 来源与口径
     18 个组件的 SQL 与图表类型，逐条解析自 FineBI 原看板（公开链接 iYiQ）的
     数据集定义，与原版 1:1 对齐（见 my-finebi 的 backend/seed_cnkpi.json）。
+    2026-11-20 按业务要求**另加 5 个**原看板没有的组件，整页共 **23 个组件**：
+      c14/c15 呼入·呼出应答率（Incoming/Outgoing_Call_Answer_Ratio_OSS_EMS）
+      c16 国际 MOU（International_MOU_OSS_EMS）
+      c17 MGW32 资源利用率、c18 MGW32 资源占用（两张 CS_MGW32_*_OSS_EMS 小时表）
     - 折线类：GROUP BY substr("End Time",1,10)，默认近 31 天
     - pivot 类：SQL 返回 [时间, NE, 值] 三列，前端按 NE 透视成多序列
     - 单位换算：Byte→GB 除以 1000/1000/1000（1 GB = 1e9 字节）。
@@ -64,7 +68,7 @@
     **经过严格正则校验的字面量**（只允许 YYYY-MM-DD），绝不拼接任意用户输入。
 
 缓存
-    整页 18 个组件并发取数，结果按「时间区间」维度 TTL（默认 60s）缓存，
+    整页 23 个组件并发取数，结果按「时间区间」维度 TTL（默认 60s）缓存，
     避免每次刷新都打 18 次远端；单组件失败只标记该组件，不拖垮整页。
 ======================================================================
 """
@@ -494,6 +498,164 @@ WIDGETS: List[Dict[str, Any]] = [
             'WHERE "End Time" >= {{LO}} AND "End Time" < {{HI}} ORDER BY t'
         ),
     },
+    {
+        # 2026-11-20 新增（用户要求）：呼入应答率。
+        #
+        # 数据源：db_ps_cs_cn 的 Incoming_Call_Answer_Ratio_OSS_EMS —— 与 c1/c4 同一条
+        # **人工导出**链路（ps_cs_core 整表 full_replace），当前是 1Day(s) 日粒度，
+        # 31 行 / 2026-10-20~11-19、单一网元 ZTEMSCs,11，指标项原名
+        # "(Incoming Call)Answer Ratio(%)"（值形态如 41.4024）。
+        #
+        # ⚠ 这两张表**既没有 _UME 孪生表，也没有 1month_* 月表**（2026-11-20 实测
+        #    sqlite_master 只有 *_OSS_EMS 一张）。所以**不登记** source_table /
+        #    fallback / monthly_table，走「单级取数」：
+        #      · 不登记 source_table → _fallback_candidate() 为 False，不会去探测/重试
+        #        UME 表（省两次注定失败的远端往返）；
+        #      · oss 停止导出时曲线直接空掉，页面显示空态，**不拿 0 填补**
+        #        （AGENTS.md 三.6：取不到显示 —，不得显示成 0）。
+        #
+        # 口径与全页一致：日期键取 substr("End Time",1,10)（End Time 是区间右端点，
+        # 比统计日早一天 —— 全页 18 个老组件同此约定，为了横轴能对齐，这里不改）。
+        # 值的取法比老组件多一道数值守卫：上游列是 TEXT，空串或 "-" 这类非数值
+        # 必须变成 NULL（断线），**不能 CAST 成 0 混进均值**。
+        "id": "c14",
+        "title": "Incoming Call Answer Ratio(%)",
+        "chart": "line",
+        "pct": True,
+        "sql": (
+            'SELECT substr("End Time",1,10) AS t, '
+            'ROUND(AVG(v),2) AS "Incoming Call Answer Ratio(%)" FROM (\n'
+            'SELECT "End Time", CASE WHEN TRIM("(Incoming Call)Answer Ratio(%)") '
+            "GLOB '*[0-9]*' THEN "
+            'CAST(TRIM("(Incoming Call)Answer Ratio(%)") AS REAL) END AS v '
+            'FROM "Incoming_Call_Answer_Ratio_OSS_EMS"\n'
+            ")  GROUP BY substr(\"End Time\",1,10) "
+            "HAVING t >= {{LO}} AND t < {{HI}} ORDER BY t"
+        ),
+    },
+    {
+        # 呼出应答率（2026-11-20 新增，与 c14 成对）。
+        # 表名与列名是 Outgoing（不是用户口述的 Outcoming），口径、粒度、
+        # 单级取数的理由与 c14 完全相同，见上面的注释。
+        "id": "c15",
+        "title": "Outgoing Call Answer Ratio(%)",
+        "chart": "line",
+        "pct": True,
+        "sql": (
+            'SELECT substr("End Time",1,10) AS t, '
+            'ROUND(AVG(v),2) AS "Outgoing Call Answer Ratio(%)" FROM (\n'
+            'SELECT "End Time", CASE WHEN TRIM("(Outgoing Call)Answer Ratio(%)") '
+            "GLOB '*[0-9]*' THEN "
+            'CAST(TRIM("(Outgoing Call)Answer Ratio(%)") AS REAL) END AS v '
+            'FROM "Outgoing_Call_Answer_Ratio_OSS_EMS"\n'
+            ")  GROUP BY substr(\"End Time\",1,10) "
+            "HAVING t >= {{LO}} AND t < {{HI}} ORDER BY t"
+        ),
+    },
+    {
+        # 2026-11-20 新增：国际去话 / 来话 MOU（时长，单位分钟）。
+        #
+        # 表由 PS_CS_CORE 的 CSV_EXTRA 收录（keyword `International_MOU_OSS`，mode
+        # `daily_sum`）：oss 导出的原始 CSV 是 **1Day(s) 但按 MO Location 分行**
+        # （每天约 17 行），入库时按天把两个 MOU 列加总成一天一行，`MO Location` 合并掉。
+        # 所以这张表已经是「每天一行、Outgoing/Incoming 两列同表」—— 一张图两条线，
+        # 不需要拆成两张卡（与 MTN MOU 那张表同构）。
+        #
+        # 数据源只有人工导出的 _EMS 一张表（没有 _UME 孪生表、也没有 1month_* 月表）
+        # → 不登记 source_table / fallback / monthly_table，走单级取数：oss 停导就空。
+        #
+        # 日期键沿用全页口径 substr("End Time",1,10)（End Time 是区间右端点 = 次日 00:00，
+        # 标签比统计日早一天），这样与相邻的 VLR / Voice / 应答率卡片横轴能对齐。
+        # SUM 而非 MAX：正常一天只有一行，SUM 只为「将来多网元」时不出错。
+        "id": "c16",
+        "title": "International MOU",
+        "chart": "line",
+        "sql": (
+            'SELECT substr("End Time",1,10) AS t, ROUND(SUM(o),2) AS "Outgoing MOU", '
+            'ROUND(SUM(i),2) AS "Incoming MOU" FROM (\n'
+            'SELECT "End Time", '
+            "CASE WHEN TRIM(\"Outgoing MOU\") GLOB '*[0-9]*' THEN "
+            'CAST(TRIM("Outgoing MOU") AS REAL) END AS o, '
+            "CASE WHEN TRIM(\"Incoming MOU\") GLOB '*[0-9]*' THEN "
+            'CAST(TRIM("Incoming MOU") AS REAL) END AS i '
+            'FROM "International_MOU_OSS_EMS"\n'
+            ")  GROUP BY substr(\"End Time\",1,10) "
+            "HAVING t >= {{LO}} AND t < {{HI}} ORDER BY t"
+        ),
+    },
+    {
+        # 2026-11-20 新增：MGW32 物理资源利用率（TONE / TC / RTP 三个百分比）。
+        #
+        # ⚠ 这张表是 **1Hour(s) 小时粒度**（31 天 × 24 行 = 744 行，单网元
+        #   V4_MGW-NGMGW_W_32,32），所以与全页其它「日表」两处不同：
+        #   1) **按天取算术平均**，不是求和 —— 百分比相加会得到 300%+；
+        #      也不是峰值（峰值要看容量瓶颈的话得另开一列 MAX，见手册 §33.3e）。
+        #   2) **按 Start Time 归日**：每小时属于它开始的那天。若用 End Time，
+        #      23:00–24:00 那一小时（End Time = 次日 00:00）会被算进第二天，
+        #      并凭空多出一个「只含 1 个样本」的末日点，看图会像突然掉档。
+        #   两处都在口径条里写明，避免把「日均」读成「峰值」、把归日问题当数据异常。
+        #
+        # 同样没有 _UME 孪生表 / 1month_* 月表（自动链路那张 CS_MRFP96_…_UME 是
+        # **另一种设备**的资源利用率，不是这张表的回退源）→ 单级取数。
+        "id": "c17",
+        "title": "MGW32 Resource Utilization(%)",
+        "chart": "line",
+        "pct": True,
+        "sql": (
+            'SELECT substr("Start Time",1,10) AS t, '
+            'ROUND(AVG(tone),2) AS "TONE", ROUND(AVG(tc),2) AS "TC", '
+            'ROUND(AVG(rtp),2) AS "RTP" FROM (\n'
+            'SELECT "Start Time", '
+            "CASE WHEN TRIM(\"Utilization Ratio of TONE Resource(%)\") GLOB '*[0-9]*' "
+            'THEN CAST(TRIM("Utilization Ratio of TONE Resource(%)") AS REAL) END AS tone, '
+            "CASE WHEN TRIM(\"Utilization Ratio of TC Resource(%)\") GLOB '*[0-9]*' "
+            'THEN CAST(TRIM("Utilization Ratio of TC Resource(%)") AS REAL) END AS tc, '
+            "CASE WHEN TRIM(\"Utilization Ratio of RTP Resource(%)\") GLOB '*[0-9]*' "
+            'THEN CAST(TRIM("Utilization Ratio of RTP Resource(%)") AS REAL) END AS rtp '
+            'FROM "CS_MGW32_Resource_Utilization_OSS_EMS"\n'
+            ")  GROUP BY substr(\"Start Time\",1,10) "
+            # t < date('now')：**不含今天**。小时表里今天是「已完成到当前小时」的部分样本，
+            # 拿去算日均会被部分小时拉低，看着像资源占用骤降；等今天过完自然进图。
+            "HAVING t >= {{LO}} AND t < {{HI}} AND t < date('now') ORDER BY t"
+        ),
+    },
+    {
+        # 2026-11-20 新增：MGW32 资源**占用量**（信道数，capacity 模板）。
+        #
+        # 与 c17 是同一台 MGW、同一次测量的两种表达：
+        #   c17 = Utilization Ratio(%)，来源 CS_MGW32_Resource_Utilization_OSS_EMS；
+        #   c18 = Average Number ... being Used（占用的信道数），来源
+        #         CS_MGW32_Resource_Capacity_OSS_EMS（同表还有 Number of Available X，
+        #         实测恒为 TONE 4056 / TC 74160 / RTP 90000，即分母）。
+        # 所以这张卡给的是**绝对量**（多少条信道在用），c17 给的是占比；
+        # 要「还剩多少余量」用 Available - Used，两张卡对着看即可。
+        #
+        # ⚠ 三种资源量级差两个数量级（日均 TONE≈400 / TC≈9000 / RTP≈19000），
+        #   画在一根轴上 TONE 会贴着底走 —— 这是数据本身的比例，不是丢数；
+        #   横向比「各自的高低走势」，不要比三条线的高度差。
+        #
+        # 同样是 1Hour(s) 小时表（每天 24 行）→ 按天取平均、按 Start Time 归日
+        # （理由与 c17 完全一致）。计数不能求和（同一天 24 个小时相加没有意义）。
+        "id": "c18",
+        "title": "MGW32 Resource Usage(count)",
+        "chart": "line",
+        "sql": (
+            'SELECT substr("Start Time",1,10) AS t, '
+            'ROUND(AVG(tone),0) AS "TONE used", ROUND(AVG(tc),0) AS "TC used", '
+            'ROUND(AVG(rtp),0) AS "RTP used" FROM (\n'
+            'SELECT "Start Time", '
+            "CASE WHEN TRIM(\"Average Number of TONE being Used\") GLOB '*[0-9]*' "
+            'THEN CAST(TRIM("Average Number of TONE being Used") AS REAL) END AS tone, '
+            "CASE WHEN TRIM(\"Average Number of TC being Used\") GLOB '*[0-9]*' "
+            'THEN CAST(TRIM("Average Number of TC being Used") AS REAL) END AS tc, '
+            "CASE WHEN TRIM(\"Average Number of RTP being Used\") GLOB '*[0-9]*' "
+            'THEN CAST(TRIM("Average Number of RTP being Used") AS REAL) END AS rtp '
+            'FROM "CS_MGW32_Resource_Capacity_OSS_EMS"\n'
+            ")  GROUP BY substr(\"Start Time\",1,10) "
+            # 同上：不含今天（今天只有已完成的那几个小时，日均会被拉低）
+            "HAVING t >= {{LO}} AND t < {{HI}} AND t < date('now') ORDER BY t"
+        ),
+    },
 ]
 
 # 标题栏（原版 text 组件的 HTML）。
@@ -914,7 +1076,7 @@ def _save_last_good(key: str, entry: Dict[str, Any]) -> None:
 
 
 def _compute(key: str, start_v: Optional[str], end_v: Optional[str]) -> Dict[str, Any]:
-    """真正取数（18 个组件并发）。只在后台线程里跑，不直接服务请求。"""
+    """真正取数（23 个组件并发）。只在后台线程里跑，不直接服务请求。"""
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         widgets = list(pool.map(lambda w: _fetch_widget(w, start_v, end_v), WIDGETS))
