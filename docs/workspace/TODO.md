@@ -113,8 +113,11 @@
   International/MOU 邮件、CCN Free Rating 已切。
   实测：23 个 CN KPI 组件与 33 个 CS/PS 分组组件逐行对拍远端一致（仅 0.01 级浮点舍入），
   CN 15min 整页 0.6s、CS 分组 0.37s。回退：`PG_READ_ENABLED=0` / `PG_MIRROR_ENABLED=0`。
-  **后续批次**：① native 看板仍读本机 SQLite 镜像（不跨机，但未进 PG，需逐条评估
-  500+ 条 SQL 的方言）；② `db_freshness_check` / 各 health 探针仍读远端（诊断用途）；
+  **第二批（2026-11-22 同日完成）**：① native 看板 93 个组件（`db.sqlite3` 58 +
+  `db_ps_cs_cn` 33 + `fw_db` 2）已切本机 PG（`native_db` / `cn_kpi` / `fw_native`），
+  PG 优先、缺表/空结果回退本机 SQLite 镜像/远端；`db.sqlite3` 只镜像看板引用的 8 张表。
+  逐组件对拍远端：93/93 可执行，85 个逐行一致，8 个仅 0.01 级浮点舍入。
+  **仍保留**：② `db_freshness_check` / 各 health 探针读远端（诊断用途）；
   ③ IP RAN 的 `mirror_rows_to_local` 与通用镜像可考虑合并（当前保留，因按 ME 水位）。
 
 - [ ] **P1 告警推送加 ext 通道 fallback（2026-10-08）。** Baileys 主通道失败（群名解析不到 JID / 凭据过期 / WhatsApp 流控 428）时，自动把同一批 `messages` 投到 `data/tt_alert_job.json`，由已登录的 WhatsApp Web 扩展兜底。改动已落到 `apps\my_app\backend\services\tt_alarm_whatsapp_service.py`（新增 `try_ext_fallback`、在两个失败分支调用） + 4 条 stub 用例 + `architecture.md` 8.x ADR；**待验证**：① 重启 `m` 组 worker 后第一次跑 0 候选 → 任务历史页面要能看到新字段 `ext_fallback` 为空（`attempted: false`）；② 手动制造一次 Baileys 失败（把 `GROUPS` 临时改成一个不存在的群名跑一次）→ ext 通道应兜住（前提：Chrome 开着 + 扩展已登录）→ `out.success=True` + `warnings` 含"兜住 N/M 单"。**回滚手段**：revert 三个文件即可。

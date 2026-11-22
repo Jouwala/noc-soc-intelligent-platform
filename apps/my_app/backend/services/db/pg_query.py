@@ -17,10 +17,15 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 import time
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
+from backend.services.db.pg_ident import (  # noqa: F401 — 对外保留旧名
+    _columns_for_sql,
+    _fix_identifier_case,
+)
 from backend.services.db.pg_sql_compat import (  # noqa: F401 — 对外 re-export
     ensure_compat,
     ensure_schema_ready,
@@ -32,6 +37,8 @@ logger = logging.getLogger("pg_query")
 SCHEMA_BY_DB: Dict[str, str] = {
     "db_ps_cs_cn.sqlite3": "cn_kpi",
     "ran_kpi_daily.sqlite3": "ran_kpi",
+    "db.sqlite3": "native_db",
+    "fw_db.sqlite": "fw_native",
 }
 
 READ_ENABLED = os.environ.get("PG_READ_ENABLED", "1").strip().lower() not in (
@@ -47,9 +54,30 @@ class UnsupportedSql(RuntimeError):
 # ----------------------------------------------------------------------
 # SQLite 方言改写
 # ----------------------------------------------------------------------
-_AggBare = re.compile(r"\b(SUM|AVG)\s*\(\s*\"([^\"]+)\"\s*\)", re.I)
-_AggIdent = re.compile(r"\b(SUM|AVG)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", re.I)
+_AggBare = re.compile(r"\b(SUM|AVG|MAX|MIN)\s*\(\s*((?:[A-Za-z_]\w*\.)?\"[^\"]+\")\s*\)", re.I)
+_AggIdent = re.compile(r"\b(SUM|AVG|MAX|MIN)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", re.I)
 _AggExpr = re.compile(r"\b(SUM|AVG)\s*\(([^()]*)\)", re.I)
+_DivNumeric = re.compile(
+    r'(?P<lhs>"[^"]+"|[A-Za-z_][A-Za-z0-9_]*)\s*/\s*(?P<rhs>[0-9]+(?:\.[0-9]+)?)')
+_CmpNumeric = re.compile(
+    r'(?P<lhs>"[^"]+")\s*(?P<op>>=|<=|<>|!=|>|<|=)\s*(?P<rhs>-?[0-9]+(?:\.[0-9]+)?)')
+_MulNumeric = re.compile(
+    r'(?P<lhs>"[^"]+")\s*\*\s*(?P<rhs>[0-9]+(?:\.[0-9]+)?)')
+_MulNumericRev = re.compile(
+    r'(?P<lhs>[0-9]+(?:\.[0-9]+)?)\s*\*\s*(?P<rhs>"[^"]+")')
+_AddText = re.compile(r'(?P<a>"[^"]+")\s*\+\s*(?P<b>"[^"]+")')
+
+
+_TEXTUAL_AGG_COL = re.compile(
+    r"time|date|name|status|title|group|severity|region|no\.|_id\b|\bid\b", re.I)
+
+
+def _agg_bare_repl(m: "re.Match[str]") -> str:
+    """SUM/AVG/MAX/MIN(裸列) → safe_num；MAX/MIN 遇到时间/名称列保持文本比较。"""
+    fn, col = m.group(1).upper(), m.group(2)
+    if fn in ("MAX", "MIN") and _TEXTUAL_AGG_COL.search(col):
+        return m.group(0)
+    return f"{fn}(safe_num({col}))"
 
 
 def _wrap_agg_expr(m: "re.Match[str]") -> str:
@@ -213,10 +241,22 @@ def to_pg_sql(sql: str, schema: str = "") -> str:
     # SUM(gsm+umts+eps)：算术表达式里的裸标识符是 text，PG 的 text+text 不存在
     s = _AggExpr.sub(_wrap_agg_expr, s)
     # text 数值列：SUM/AVG(裸列) → safe_num()，避免 PG 的 sum(text) 报错
-    s = _AggBare.sub(lambda m: f"{m.group(1).upper()}(safe_num({_q(m.group(2))}))", s)
+    s = _AggBare.sub(_agg_bare_repl, s)
     # 别名也常是 text（子查询里 "列" AS v）：SUM(v) / AVG(v) 同样要过 safe_num。
     # safe_num 对 numeric / double / integer 有重载，命中数值别名时原样返回。
     s = _AggIdent.sub(lambda m: f"{m.group(1).upper()}(safe_num({_q(m.group(2))}))", s)
+    # text 列直接参与除法（"列" / 3000000.0）：PG 的 text / numeric 不存在
+    s = _DivNumeric.sub(
+        lambda m: f"safe_num({m.group('lhs')}) / {m.group('rhs')}", s)
+    # text 列与数值比较 / 相乘 / 相加：原生看板 SQL 大量写 "列" >= 0.985、"列"*100
+    s = _CmpNumeric.sub(
+        lambda m: f"safe_num({m.group('lhs')}) {m.group('op')} {m.group('rhs')}", s)
+    s = _MulNumeric.sub(
+        lambda m: f"safe_num({m.group('lhs')}) * {m.group('rhs')}", s)
+    s = _MulNumericRev.sub(
+        lambda m: f"{m.group('lhs')} * safe_num({m.group('rhs')})", s)
+    s = _AddText.sub(
+        lambda m: f"safe_num({m.group('a')}) + safe_num({m.group('b')})", s)
     # GLOB '*[0-9]*' → POSIX 正则（只这一种模式，别的留给回退）
     s = _Gob.sub(lambda m: f"({m.group('lhs')} ~ '[0-9]')", s)
     if re.search(r"\bGLOB\b", s, re.I):
@@ -229,96 +269,6 @@ def to_pg_sql(sql: str, schema: str = "") -> str:
 
 def _q(name: str) -> str:
     return '"' + str(name).replace('"', '""') + '"'
-
-
-# 裸标识符不参与大小写修正的词（SQL 关键字 / 看板 SQL 里的固定别名）
-_NOT_COLUMNS = {
-    "select", "from", "where", "group", "by", "order", "having", "limit",
-    "offset", "union", "all", "as", "and", "or", "not", "null", "is", "in",
-    "case", "when", "then", "else", "end", "on", "left", "right", "inner",
-    "outer", "join", "with", "recursive", "distinct", "asc", "desc", "between",
-    "like", "glob", "cast", "real", "integer", "text", "numeric", "true",
-    "false", "t", "v", "day", "series", "value", "time", "sum", "avg", "min",
-    "max", "count", "round", "substr", "trim", "printf", "strftime", "date",
-    "safe_num", "coalesce", "ifnull", "replace", "length", "lower", "upper",
-}
-
-_COLUMN_CACHE: Dict[str, Tuple[float, Dict[str, str]]] = {}
-
-
-def _schema_columns(conn, schema: str) -> Dict[str, str]:
-    """{lower(列名): 实际列名}；10 分钟缓存。"""
-    now = time.time()
-    hit = _COLUMN_CACHE.get(schema)
-    if hit and now - hit[0] < 600:
-        return hit[1]
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT column_name FROM information_schema.columns WHERE table_schema=%s",
-        (schema,))
-    mapping: Dict[str, str] = {}
-    for (name,) in cur.fetchall():
-        mapping.setdefault(str(name).lower(), str(name))
-    cur.close()
-    _COLUMN_CACHE[schema] = (now, mapping)
-    return mapping
-
-
-def _fix_identifier_case(sql: str, columns: Dict[str, str]) -> str:
-    """SQLite 标识符大小写不敏感，PG 的带引号标识符大小写敏感。
-
-    镜像建表时保留了源库大小写（`"NE"`），而看板 SQL 里既有 `"NE"` 也有裸
-    `NE`。裸写会被 PG 折成小写 `ne` → 报「字段 ne 不存在」。这里把裸标识符
-    按真实列名补引号，并把 `"ne"` 这类大小写不符的引号标识符改回真实列名。
-    """
-    out: List[str] = []
-    i = 0
-    n = len(sql)
-    while i < n:
-        ch = sql[i]
-        if ch == "'":  # 字符串字面量原样保留
-            j = i + 1
-            while j < n:
-                if sql[j] == "'":
-                    if j + 1 < n and sql[j + 1] == "'":
-                        j += 2
-                        continue
-                    break
-                j += 1
-            out.append(sql[i:j + 1])
-            i = j + 1
-            continue
-        if ch == '"':  # 带引号标识符
-            j = sql.find('"', i + 1)
-            if j < 0:
-                out.append(sql[i:])
-                break
-            inner = sql[i + 1:j].replace('""', '"')
-            # 超过 63 字节的列名在 PG 里被截断；information_schema 给的也是截断名，
-            # 查询里的全名要先截断再查表（CN 的 "Byte ... per APN(Byte)" 70 字节）。
-            from backend.dialect_helpers import pg_trunc_ident
-
-            real = columns.get(pg_trunc_ident(inner).lower())
-            out.append(_q(real) if real and real != inner else sql[i:j + 1])
-            i = j + 1
-            continue
-        if ch.isalpha() or ch == "_":  # 裸标识符
-            j = i + 1
-            while j < n and (sql[j].isalnum() or sql[j] == "_"):
-                j += 1
-            word = sql[i:j]
-            low = word.lower()
-            real = columns.get(low)
-            if real and low not in _NOT_COLUMNS:
-                # 裸标识符在 PG 里一律折小写，哪怕大小写与真实列名相同也要补引号
-                out.append(_q(real))
-            else:
-                out.append(word)
-            i = j
-            continue
-        out.append(ch)
-        i += 1
-    return "".join(out)
 
 
 # ----------------------------------------------------------------------
@@ -342,6 +292,7 @@ def _json_scalar(v: Any) -> Any:
 
 
 _COMPAT_READY: set = set()
+_COMPAT_LOCK = threading.Lock()
 
 
 def query_pg(sql: str, schema: str, limit: int = 5000,
@@ -356,8 +307,12 @@ def query_pg(sql: str, schema: str, limit: int = 5000,
     if not re.match(r"^\s*(select|with)\b", sql, re.I):
         raise ValueError("仅允许 SELECT / WITH 只读查询")
     if schema not in _COMPAT_READY:
-        ensure_schema_ready(schema)
-        _COMPAT_READY.add(schema)
+        with _COMPAT_LOCK:
+            if schema not in _COMPAT_READY:
+                # 多组件并发首次访问同一 schema：并发 CREATE OR REPLACE FUNCTION
+                # 会报 "tuple concurrently updated"（2026-11-22 实测），必须单飞。
+                ensure_schema_ready(schema)
+                _COMPAT_READY.add(schema)
     pg_sql = to_pg_sql(sql, schema)
     stmt_ms = int((timeout or 0) * 1000) or _QUERY_TIMEOUT_MS
     t0 = time.time()
@@ -367,7 +322,8 @@ def query_pg(sql: str, schema: str, limit: int = 5000,
                  f"-c statement_timeout={stmt_ms}"))
     try:
         conn.set_session(readonly=True, autocommit=True)
-        pg_sql = _fix_identifier_case(pg_sql, _schema_columns(conn, schema))
+        cols_map, exact = _columns_for_sql(conn, schema, pg_sql)
+        pg_sql = _fix_identifier_case(pg_sql, cols_map, exact)
         cur = conn.cursor()
         cur.execute(pg_sql)
         cols = [d[0] for d in (cur.description or [])]

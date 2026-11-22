@@ -71,3 +71,25 @@ def test_case_insensitive_identifier():
     out = _fix_identifier_case('SELECT NE FROM t WHERE "begin time" > 1', cols)
     assert '"NE"' in out
     assert '"Begin Time"' in out
+
+
+def test_exact_identifier_wins_over_lower_map():
+    """同 schema 里 "SITE Name"（2G）与 "Site Name"（Eflow）并存，精确命中优先。"""
+    cols = {"site name": "Site Name"}
+    out = _fix_identifier_case('SELECT "SITE Name" FROM t', cols, {"SITE Name", "Site Name"})
+    assert '"SITE Name"' in out
+
+
+def test_max_time_column_is_not_safe_num():
+    out = to_pg_sql('SELECT MAX("Update Time") FROM t')
+    assert 'safe_num' not in out
+    out2 = to_pg_sql('SELECT MAX("306004:TCH in service rate(%)") FROM t')
+    assert 'safe_num' in out2
+
+
+def test_text_numeric_comparison_and_multiplication():
+    out = to_pg_sql(
+        'SELECT 1 FROM t WHERE "306004:TCH in service rate(%)">=0.985 '
+        'AND "306004:TCH in service rate(%)"*100 > 1')
+    assert 'safe_num("306004:TCH in service rate(%)") >= 0.985' in out
+    assert 'safe_num("306004:TCH in service rate(%)") * 100' in out
