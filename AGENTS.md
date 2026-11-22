@@ -227,19 +227,23 @@
 - 开始前先完成本节「GitHub 同步门禁」；先看代码、文档、任务状态和 Git 状态，再制定计划。
 - 计划确认后立即实施；发现需求范围内的 Bug、遗漏和必要的前后端/i18n/文档关联改动，直接一并处理。
 - **自主执行仅授权分析、编码、重构和本地验证，不代表获得远程发布授权。** 用户没有明确确认前，不得 commit、push、创建/更新 PR、合并 PR 或对远程仓库执行其他写操作。
-- **不要在「分析完」「计划写完」「改了一部分」时收尾。** 应完成开发和验证，再进入「等待用户验收」状态；该状态是规定的强制交接点，不是任务失败。
+- **不要在「分析完」「计划写完」「改了一部分」时收尾。** 应完成开发和验证，再进入「等待用户验收」状态；该状态是规定的强制交接点，不是任务失败（GitHub 派发的任务按 1b 例外直接进 1c）。
 
 ### 1a. GitHub 同步门禁（Preflight Sync Gate）
 
-每项需要修改代码/文档的任务，开始前必须以 GitHub `origin/main` 为基线核实；不得凭本地缓存或旧会话结论判断主线状态。
+每项需要修改代码/文档的任务，开始前必须以 GitHub 主线 `main` 为基线核实；不得凭本地缓存或旧会话结论判断主线状态。
+
+> **主线 remote 名**：本机 `D:\02_olbr_portal` 是 `platform`（`origin` 指向旧的
+> `MS-Intelligent-O-M-Platform`，**没有** `origin/main`）；新克隆通常是 `origin`。
+> 下文命令以 `platform` 为例，remote 名不同就按实际替换。
 
 按以下顺序执行，并在任务记录中报告结果：
 
 1. 确认仓库根目录、当前分支、HEAD、remote URL 和工作区状态：`git rev-parse --show-toplevel`、`git branch --show-current`、`git status --short --branch`、`git remote -v`。
 2. **先检查再同步**：识别所有已修改、暂存、未跟踪文件及其归属；这些改动可能属于用户或其他 Agent。不得擅自 stash、丢弃、覆盖、重置或纳入本任务提交。
-3. 执行 `git fetch origin --prune`，读取最新 `origin/main` 和目标分支状态；记录主线最新 commit。
+3. 执行 `git fetch platform --prune`（remote 名见本节开头），读取最新 `platform/main` 和目标分支状态；记录主线最新 commit。
 4. 在独立任务分支/worktree 上开发。分支命名建议 `agent/<agent-slug>-<task-slug>`；不要在 `main` 上开发。
-5. 若当前分支落后于 `origin/main`，先判断是否存在本地提交和冲突，再选择安全的 rebase/merge；若有无法确认归属的本地修改、分支历史异常或潜在覆盖风险，停止同步并向用户报告，不得猜测。
+5. 若当前分支落后于 `platform/main`，先判断是否存在本地提交和冲突，再选择安全的 rebase/merge；若有无法确认归属的本地修改、分支历史异常或潜在覆盖风险，停止同步并向用户报告，不得猜测。
 6. **禁止**未经用户明确授权执行 `git reset --hard`、`git clean -fd`、强制推送、覆盖他人分支或删除他人 worktree/分支。禁止以「同步最新代码」为由丢弃任何现存工作。
 
 如果当前执行环境无法访问 GitHub、无法 fetch，或无法确认远程基线，必须明确报告；不得声称已同步。可以先做只读分析，但不得开始可能基于过期代码的修改。
@@ -253,7 +257,7 @@
 - 关键实现说明、兼容性/数据迁移/安全影响；
 - 实际执行的测试命令、结果和未通过/未执行项目；
 - `agent-done-check` 输出、CI 预期门禁及 Smoke/QA 风险；
-- 当前分支、相对最新 `origin/main` 的差异、建议的 commit message 和 PR 标题/描述；
+- 当前分支、相对最新 `platform/main` 的差异、建议的 commit message 和 PR 标题/描述；
 - 尚未解决的问题、需要用户决定的事项。
 
 报告完成后，将任务状态设为 **WAITING_FOR_USER_APPROVAL（等待用户验收）**，并停止所有远程写操作。**不得**执行以下动作，直到用户针对本次任务给出明确肯定确认：
@@ -267,11 +271,13 @@
 
 若用户要求修改验收内容，Agent 应按反馈继续修改并重新验证，然后再次进入等待验收状态；旧的确认不自动覆盖后续新增改动。
 
+**例外：GitHub 派发的任务视为已授权。** 经 Issue 认领或 `auto-dispatch.yml` 派发（TASK_ASSIGNED）启动的任务，按 `docs/workspace/agent-protocol.md` 执行：建分支、提交、推送、开 PR 都在派发授权范围内，不再逐任务等用户确认，也不进入等待验收状态，直接走 1c；合并仍由 `auto-merge.yml` 的双门禁裁决（CI 全绿 + `smoke-passed` 绑定当前 head + 独立审核记录），Agent 自身不得手动合并。用户在交互会话里直接提出的任务不适用本例外，仍按上文等待确认。
+
 ### 1c. PR 生命周期门禁（PR Lifecycle Gate）
 
 收到本次任务的明确发布确认后，才可执行：
 
-1. 再次 `git fetch origin`，确认工作分支基于最新 `origin/main`；必要时安全 rebase，并重新运行受影响验证。
+1. 再次 `git fetch platform --prune`，确认工作分支基于最新 `platform/main`；必要时安全 rebase，并重新运行受影响验证。
 2. 检查提交范围，确保只包含本任务内容；提交信息遵循仓库约定，并按多 Agent 署名约定添加 `Agent: Muse`（或当前执行 Agent 的标识）。
 3. 推送任务分支并创建目标为 `main` 的 PR。PR 正文说明目的、变更范围、测试证据、风险、回滚方式和执行者标识。
 4. PR 创建后持续检查 CI、必需状态检查、Smoke/QA 结果、Review 评论及 `do-not-merge` 等阻断标记。失败时分析原因、修复、补充测试并更新 PR；不得绕过、伪造或放宽门禁。
@@ -309,13 +315,14 @@ node ops\deploy\agent-done-check.mjs --full
 - 改了**帮助内容源**（`helpContent.ts` / `helpTaskDocs.ts`）→ `npm run docs` 重生成
 - 改了**表结构** → `alembic upgrade head` 并核对回滚
 - 新增**外部副作用**（发信/投递/调外部 API）→ 按 `docs\workspace\development.md` A0 用「地雷」证伪一次
-- **发布必须遵守本节 1a/1b/1c 三道门禁**：开发和验证完成后先向用户提交验收报告并暂停；只有用户明确确认本次发布，才可 commit、push 和创建 PR。PR 创建后持续跟踪 CI/Smoke/QA/Review，直到合并；默认合并前还须单独取得用户授权。**禁止**直接推送 `main`。主线为 `main`；PR 目标必须是 `main`，创建/更新 PR 前必须 fetch 并确认分支基于最新 `origin/main`。
+- **发布必须遵守本节 1a/1b/1c 三道门禁**：开发和验证完成后先向用户提交验收报告并暂停；只有用户明确确认本次发布，才可 commit、push 和创建 PR。PR 创建后持续跟踪 CI/Smoke/QA/Review，直到合并；默认合并前还须单独取得用户授权。**禁止**直接推送 `main`。主线为 `main`；PR 目标必须是 `main`，创建/更新 PR 前必须 fetch 并确认分支基于最新 `platform/main`（remote 名见 1a）。
 
-### 3. 唯一允许停下来的三种情况
+### 3. 允许停下来的情况（三种卡住 + 一种强制交接）
 
 1. **需要人的授权或决定** —— 真实账号、生产库写操作、业务口径选择。
 2. **必须改动 VMAX 数仓** —— 第四节第 8 条：立即停止编码并上报，由用户找领导申请。
 3. **完成标准跑不通且自行判断解决不了** —— 必须说明卡点、已尝试的方案、需要什么。
+4. **发布前验收交接（本节 1b）** —— 开发与验证完成后交验收报告、等用户确认。这是规定的交接点，不是任务失败，也不算「卡住」；GitHub 派发的任务按 1b 的例外直接进 1c。
 
 **停下来之前必须写进度**，否则视为任务失败：
 
