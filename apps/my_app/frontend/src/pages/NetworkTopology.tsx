@@ -25,6 +25,14 @@
  *   「Fiber Topology」页签要逻辑图，所以 maponly 模式不再写死物理图，
  *   改为认 ?view=（见 readMapOnlyMode + mapOnly 分支）。
  *
+ * 2026-11-22 用户要求「搜索的时候，地图上定位后不要显示标注」，随后明确为「只去掉黑色
+ *   站名标签、保留橙色光圈和十字虚线」：搜索定位（右栏结果 / 回车 / maponly 浮动搜索）
+ *   照旧把画布平移缩放到该站点、照旧画十字虚线 + 橙色脉冲圈 + 圆点、照旧放大该站点圆点，
+ *   只是不弹出那个黑底站名标签（名字 / 区域 / ✕）—— 它正好盖住被搜出来的那段链路。
+ *   开关由 TopologyViewer 的 `showSearchTag={false}` 控制（缺省 true，v2 不受影响）；
+ *   详情卡「定位 / 放大」和直接点数据点仍会弹出标签（那是「我要看这个点」而不是「我搜到它」）。
+ *   右栏结果行高亮、详情卡内容照旧跟着搜索走。
+ *
  * 数据与坐标口径见 networkTopology/topologyData.ts 文件头。
  * ========================================================================== */
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -137,6 +145,7 @@ export default function NetworkTopology() {
           onSitesVisibleChange={setSitesVisible}
           selected={selected}
           onSelect={setSelected}
+          showSearchTag={false}
         />
         <MapSiteSearch
           query={query}
@@ -175,6 +184,7 @@ export default function NetworkTopology() {
                 onSitesVisibleChange={setSitesVisible}
                 selected={selected}
                 onSelect={setSelected}
+                showSearchTag={false}
               />
             </div>
           </CardBase>
