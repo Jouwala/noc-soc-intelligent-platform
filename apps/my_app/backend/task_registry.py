@@ -504,6 +504,20 @@ TASK_SPECS = [
          description_en="CNN UME core-network KPI sync at 5-minute granularity (same 8 templates, incremental window of the last 120 minutes by default; falls back to the full yesterday-00:00-to-now window after a failed run), API write to DB CNN 5mins_* tables for the 5-minute Day0/Day1/Day7 board",
          default_cron="*/15 * * * *", category="cnn_kpi"),
 
+    # 11b-2. RAN KPI 15 分钟粒度同步（每 15 分钟的第 6 分钟：6/21/36/51）
+    #      4 个 UME NOC Platform 模板（2G/3G/4G/5G，2026-11-22 建立）：
+    #        templates.txt 见 backend/services/ran_kpi_assurance/templates.txt
+    #      Object Group = all（payload filterlayer="all" + grouplayer="all"），
+    #      粒度 gr=900（模板本身即 15 minutes），每轮写远端 ran_kpi_daily.sqlite3
+    #      的 ran_kpi_15mins 长表，供 ?page=ran_kpi_15mins 做 Day0/Day1/Day7 叠画。
+    #      首轮/无水位回补 8 天（Day7 需要），之后只补最近 3 小时（RAN_KPI_15M_OVERLAP_HOURS 可调）；
+    #      历史靠 upsert 累积。归 u 组：与其它 RAN UME 任务共用 zte_ume 单账号会话。
+    dict(task_id="ran_kpi_15mins_sync", name="RAN KPI 15分钟同步", name_en="RAN KPI 15-Min Sync",
+         loader=("backend.services.ran_kpi_assurance.ran_kpi_15mins_service", "run_ran_kpi_15mins_sync"),
+         description="RAN UME 15 分钟粒度 KPI 同步（2G/3G/4G/5G 四个 NOC Platform 模板，Object Group=all，gr=900），API 写入远端 ran_kpi_daily.sqlite3 的 ran_kpi_15mins 长表，供 15 分钟看板 Day0/Day1/Day7 对比",
+         description_en="RAN UME KPI sync at 15-minute granularity (four NOC Platform templates for 2G/3G/4G/5G, Object Group=all, gr=900), API write to remote ran_kpi_daily.sqlite3 table ran_kpi_15mins for the 15-minute Day0/Day1/Day7 board",
+         default_cron="6,21,36,51 * * * *", category="ran_ume"),
+
     # 11c. CN 小时粒度 KPI 同步（每天 06:20，与 11 的 06:00 错开 20 分钟）
     #      模板来自 UME「KPI 模板管理」导出件 KPI Template.xlsx（2026-11-17 新建一批），
     #      由 cn_kpl/cn_hourly_kpi_service.py 解析后交给既有 CNN 查询管线组包。
@@ -515,9 +529,9 @@ TASK_SPECS = [
     #      错开高峰；小时行 append-only，2 天窗口足够补齐跨天档。
     dict(task_id="cn_hourly_kpi_sync", name="CN 小时KPI同步", name_en="CN Hourly KPI Sync",
          loader=("backend.services.cn_kpl.cn_hourly_kpi_service", "run_cn_hourly_kpi_sync"),
-         description="CN UME 小时粒度 KPI 同步（KPI Template.xlsx 模板 + 补采的 DNS 成功率：xGW 会话/吞吐容量 + MGW/MRFP 资源利用率与容量 + DNS 成功率，gr=3600，默认 2 天增量窗口），API 写入 DB CNN 的 <模板名>_UME 表，供小时 KPI、CS 与 PS CN KPI 看板按日期区间出图",
-         description_en="CN UME hourly KPI sync (KPI Template.xlsx templates plus a manually added DNS success ratio: xGW session/throughput capacity + MGW/MRFP resource utilization and capacity + DNS success ratio, gr=3600, 2-day incremental window by default), API write to DB CNN <template>_UME tables for the hourly, CS and PS CN KPI boards",
-         default_cron="20 6 * * *", category="cnn_kpi"),
+         description="CN UME 小时粒度 KPI 同步（KPI Template.xlsx 模板 + 补采的 DNS 成功率：xGW 会话/吞吐容量 + MGW/MRFP 资源利用率与容量 + DNS 成功率，gr=3600，默认 2 天增量窗口）。5 个模板并行查/导出（单模板约 95~180 秒，串行 9 分钟 → 并行约 3 分钟），每小时 :05 跑一次，API 写入 DB CNN 的 <模板名>_UME 表，供小时 KPI、CS 与 PS CN KPI 看板出图；2026-11-22 起由「每天 06:20」改为每小时，15 分钟页的「小时源」卡片滞后从 8~24 小时降到约 1~2 小时",
+         description_en="CN UME hourly-granularity KPI sync (KPI Template.xlsx templates plus a manually added DNS success ratio: xGW session/throughput capacity + MGW/MRFP resource utilization and capacity + DNS success ratio, gr=3600, 2-day incremental window by default). Five templates are queried/exported in parallel (95-180 s each; 9 min serial -> about 3 min parallel) and run every hour at :05, writing the <template>_UME tables in DB CNN for the hourly, CS and PS CN KPI boards; since 2026-11-22 the schedule changed from daily 06:20 to hourly, cutting the 15-minute boards' hourly-source lag from 8-24 h to about 1-2 h",
+         default_cron="5 * * * *", category="cnn_kpi"),
 
     # 12. SP 备件数据同步（2026-09-20 起改为每小时 :10，原为每天 07:00）
     #     为什么改小时级：上游 SFTP（sp/inbound、sp/outbound）本来就是**每小时 :00:03

@@ -101,43 +101,17 @@ def _resolve_recipients() -> Tuple[list, list]:
 
 
 def _query_remote_api(mo: str) -> Optional[pd.DataFrame]:
-    """尝试从远程 API 读取数据。"""
+    """从本机 PG 读 Free Rating（缺表/空结果自动回落远端，2026-11-22）。"""
     try:
-        from backend.services.remote.remote_db_reader import get_remote_reader
-        
-        reader = get_remote_reader()
-        
-        # 先检查 API 是否可达
+        from backend.services.db.pg_query import query_data
+
+        # 用 SELECT * 而非指定短列名：上游真实列名是长名称（如
+        # "Bytes of flows of uplink packets based RG(Byte)"），不是 C550400011。
         try:
-            health = reader.health_check()
-            if health.get("status") != "ok":
-                logger.warning("远程 API 健康检查失败")
-                return None
-        except Exception as e:
-            logger.warning(f"无法连接远程 API: {e}")
-            return None
-        
-        # 检查表是否存在
-        try:
-            tables = reader.list_tables("db_ps_cs_cn.sqlite3")
-            table_names = [t['name'] for t in tables]
-            if "FREE_RATING_GROUP_TEMPLATE_OSS_update_UME" not in table_names:
-                logger.warning("远程数据库中不存在目标表")
-                return None
-        except Exception as e:
-            logger.warning(f"列出远程表失败: {e}")
-            return None
-        
-        # 调用查询 API（用 SELECT * 而非指定列名，因为远程数据库列名是长名称
-        # 如 "Bytes of flows of uplink packets based RG(Byte)"，而非 C550400011。
-        # 如果指定不存在的列名，SQLite 会将其当作字符串常量返回，导致数据全为列名字符串。）
-        try:
-            result = reader.read_table(
-                db="db_ps_cs_cn.sqlite3",
-                table="FREE_RATING_GROUP_TEMPLATE_OSS_update_UME",
-                columns=None,  # SELECT *
-                where='"Measurement Object" = "' + mo + '"',
-                limit=10000
+            result = query_data(
+                'SELECT * FROM "FREE_RATING_GROUP_TEMPLATE_OSS_update_UME" '
+                f"WHERE \"Measurement Object\" = '{mo}'",
+                db="db_ps_cs_cn.sqlite3", limit=10000,
             )
             
             if result.get("success") and result.get("rows"):

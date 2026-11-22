@@ -69,19 +69,14 @@ DISPLAY_DAYS = 31
 def _fetch_mou_data() -> Optional[pd.DataFrame]:
     """从远程 API 读取按日 MOU 数据；先剔除运行当天（不完整）。"""
     try:
-        from backend.services.remote.remote_db_reader import get_remote_reader
+        # 本机 PG 优先、远端回退（2026-11-22）。表是 EMS 全量重建，
+        # pg_mirror 会按 6h 周期整表刷新；缺表/空结果自动回落远端。
+        from backend.services.db.pg_query import query_data
 
-        reader = get_remote_reader()
-        health = reader.health_check()
-        if health.get("status") != "ok":
-            logger.warning("远程 API 健康检查未通过: %s", health)
-
-        result = reader.read_table(
-            db=REMOTE_DB,
-            table=REMOTE_TABLE,
-            columns=["Start Time", "Outgoing MOU", "Incoming MOU"],
-            order_by='"Start Time"',
-            limit=2000,
+        result = query_data(
+            f'SELECT "Start Time", "Outgoing MOU", "Incoming MOU" '
+            f'FROM "{REMOTE_TABLE}" ORDER BY "Start Time"',
+            db=REMOTE_DB, limit=2000,
         )
         rows = result.get("rows") or []
         if not rows:

@@ -45,6 +45,9 @@
 | 27b | CN 小时KPI | `cn_hourly_kpi` | React |
 | 27c | CS CN KPI（语音域） | `cs_cn_kpi` | React |
 | 27d | PS CN KPI（分组域） | `ps_cn_kpi` | React |
+| 27e | CS CN KPI 15 分钟 | `cs_cn_kpi_15mins` | React |
+| 27f | PS CN KPI 15 分钟 | `ps_cn_kpi_15mins` | React |
+| 27g | RAN KPI 15 分钟 | `ran_kpi_15mins` | React |
 | 28 | 客户业务 KPI | `ume_in_kpi` | React |
 | 29 | CXO 经营看板 | `cxoDashboard` | **iframe** |
 | 30 | VMAX CXO 原版看板 | `vmaxCxoDashboard` | **iframe** |
@@ -5253,8 +5256,8 @@ xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**（gr=3600
    因此 `load_hourly_configs()` 对它的「xlsx 缺模板」告警按 `XLSX_OPTIONAL` 豁免。
 4. **首次回补一个月**（31 天）：`python -m backend.services.cn_kpl.cn_hourly_kpi_service --days 31`；
    新增模板可只回补一张：加 `--templates CS_MRFP96_Resource_Capacity_OSS`
-   （每次查询约 1.5~3 分钟，全量 5 个模板约 8~12 分钟）。
-   日常由任务 `cn_hourly_kpi_sync` 每天 06:20 增量（默认 2 天窗口）。
+   （单模板约 1.5~3 分钟；5 个模板并行约 3 分钟，串行才是 8~12 分钟）。
+   日常由任务 `cn_hourly_kpi_sync` 每小时 :05 增量（5 个模板并行，约 3 分钟；默认 2 天窗口）。
 
 ### 33c.2 解析坑（实测踩过，改代码前必读）
 
@@ -5372,6 +5375,156 @@ xGWU22 / xGWU122 取算术平均，31 天区间约 700+ 个小时点。
 1. 改完后端必须重启 uvicorn（未开 `--reload`），否则 `/api/cn-kpi-split/*` 是 404。
 2. 新增/修改 UME 模板后，先 `--templates <模板名>` 单模板回补，再等每日任务增量。
 3. 远端 `db_ps_cs_cn` 只读：本服务只发 SELECT；写库只由既有同步任务经 `DbWriterClient` 完成。
+
+### 33e. CS / PS CN KPI 15 分钟看板（`?page=cs_cn_kpi_15mins` / `?page=ps_cn_kpi_15mins`，2026-11-22 新增）
+
+33d 两个分组看板的**细粒度对照版**：指标与 33d 的 **UME 段**一一对应（同一批表、
+同一批列名），但**只取 UME、不出现 EMS**，窗口固定为「D0 今天 / D1 昨天 /
+D7 7 天前（同一星期几）」，横轴为 **15 分钟桶**（00:00 / 00:15 / … / 23:45）。
+用途是看「同一时刻，今天比昨天、比上周同一天是涨是跌」，而不是按日期区间回看。
+
+#### 33e.1 页面结构
+
+| 页面 | 组件数 | 内容 |
+| --- | --- | --- |
+| CS | 20 | MRFP96 / MGW92 / MGW91 × (TONE/TC/RTP 利用率各 3 张 + TONE/TC/RTP 容量各 3 张) = 18 张，VLR 用户数、Voice 流量各 1 张 |
+| PS | 20 | xGW 吞吐容量 2 张（Used/Authorized）、xGW 会话容量 2 张、xGW CPU 3 张（Current/Mean/Peak）、xGW License 2 张（PFCP/Throughput）、数据用户 4 张（2G/3G/4G/5G）、DNS 1 张、RG-6/11/12/30 4 张、4G FDD / 3G FDD 各 1 张 |
+
+**每张卡只画一个指标、固定三条线 D0/D1/D7**（用户 2026-11-22 定）：参考页里的
+TONE/TC/RTP、Used/Authorized、2G/3G/4G/5G、RG 组等维度**全部拆成独立卡片**，
+不再用「颜色=维度」在一张图里叠 9~12 条线。拆分只发生在服务端组装阶段：取数仍是
+「一个指标组一条 SQL」（页面 20 张卡 = CS 8 条 / PS 9 条 SQL），取回后按 series 过滤成
+多张卡 —— 如果每张卡各发一条 SQL，实测 PS 页冷加载会从约 1 秒涨到 48 秒。
+参考页 PS 段的「License 日粒度 / CPU 日粒度 / RG 月粒度」三张卡**不搬过来**：
+它们是同一指标的日/月视角，在 15 分钟页上会是一条恒定直线，没有信息量；日/月口径仍在
+`ps_cn_kpi` 看。指标本身（CPU、License、RG）一张不少。
+
+#### 33e.2 15 分钟数据从哪来（三种源粒度）
+
+远端没有统一的 15 分钟宽表，同一页的卡片按上游能力分三档，卡头用角标写明：
+
+| 角标 | 源 | 组件 |
+| --- | --- | --- |
+| `15min 原生` | 上游模板本身就是 15 分钟档 | xGW CPU、xGW License、3G FDD |
+| `5min→15min` | 上游 5 分钟档，按 15 分钟桶聚合（一桶 3 个采样） | VLR、Voice、Data Subscribers、4G FDD、RG-6/11/12/30 |
+| `小时源` | 上游只有小时档（`cn_hourly_kpi_sync`，gr=3600） | MGW/MRFP 利用率与容量、xGW 吞吐/会话容量、DNS |
+
+小时源卡片只会在整点出现数据点，**不做前向填充**：没有 15 分钟数据就是没有，
+不造点、不补 0。
+
+#### 33e.3 口径要点
+
+- **只取 UME**：不读任何 `*_EMS` 表；空表/空数据只在卡片上显示原因（`no_table` /
+  `no_rows`），不换另一条流水线顶替。
+- **日切与横轴取统计区间左端点 `Begin Time`**（UTC）：23:45 的点属于当天，
+  不会被算到次日 00:00。33d 的 UME 段同样取 Begin Time。
+- **窗口固定**：`date('now')` / `date('now','-1 day')` / `date('now','-7 day')`
+  三个日子，不是连续 7 天；D7 能否画出取决于库里已攒几天。
+- **聚合**：比率/百分比取桶内**算术平均**（不是加权、不是峰值）；流量字节按桶
+  **SUM** 后 /1e9 换算 GB；用户数、占用信道数这类 gauge 先按时刻把网元加起来，
+  再对桶内采样取平均（`SUM(值)/COUNT(DISTINCT "Begin Time")`），不把 3 个采样
+  重复相加；Voice 的 `Seized Traffic(Erl)` 是话务强度，取平均。
+- **D0 的末端比 D1/D7 短是正常的**：15 分钟 / 5 分钟链路约滞后半小时；小时源由
+  `cn_hourly_kpi_sync` **每小时 :05 增量同步**（2 天窗口、5 个模板并行，约 3 分钟），D0 通常滞后 1~2 小时（上游每小时数据本身约 1 小时时延）——
+  这是采集时延，不是缺数。D7 能否画出取决于库里已攒几天，缺哪天就少哪条线、不补零。
+- **列名守卫**直接复用 `cn_kpi_5mins_service._verify_columns`：SQLite 会把不存在的
+  双引号标识符当字符串字面量，写错列名不报错、结果恒为 0。
+
+#### 33e.4 API 与缓存
+
+- `GET /api/cn-kpi-15mins/{cs|ps}/overview?force=` —— 返回
+  `{meta{db,host,board,count,failed,empty,elapsed_ms,cached,window{d0,d1,d7}}, title, widgets[]}`；
+  每行 `[HH:MM, 指标序列, 日, 值]`；每张卡只有一个指标序列，前端按「颜色=日子、线型=日子」
+  画 D0/D1/D7 三条线。
+- `GET /api/cn-kpi-15mins/health` —— 远端只读 API 连通性。
+- 未知 board 返回 404；窗口固定，不接收日期参数。
+- 后端 300s 缓存 + 每块看板单飞（6 并发）；顶栏自动刷新按页记 300 秒，
+  两个页面已登记 `AR_INPLACE_REFRESH_PAGES`，刷新时监听 `myapp-refresh` 静默重取。
+
+#### 33e.5 相关文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `backend\services\cn\cn_kpi_15mins_widgets.py` | 两块看板的组件清单与 SQL（**改口径只改这里**） |
+| `backend\services\cn\cn_kpi_15mins_service.py` | 取数 / 缓存 / 空态判定 |
+| `backend\routers\cn_kpi_15mins.py` | `/api/cn-kpi-15mins/*` |
+| `frontend\src\pages\cnKpi15m\CnKpi15mBoard.tsx` | 两个页面共用的主体（工具条 + 卡片 + 导出） |
+| `frontend\src\pages\cnKpi15m\CnKpi15mHelpers.tsx` | ECharts option（维度配色 / 日子线型）与卡头 ⓘ 文案 |
+| `frontend\src\pages\CsCnKpi15mins.tsx` / `PsCnKpi15mins.tsx` | 薄壳，只钉 board id |
+| `frontend\src\api.ts` | `getCnKpi15minsOverview()` |
+| `frontend\src\App.tsx` | `PageKey` / `VALID_PAGES` / `PAGE_META` / `DEFAULT_GROUPS` / `AR_PAGE_DEFAULTS` / `AR_INPLACE_REFRESH_PAGES` / 路由 case |
+| `frontend\src\i18n.tsx` | `nav.csCnKpi15m` / `nav.psCnKpi15m` 与 `cnkpi15.*`（中英双份） |
+| `backend\main.py` | `app.include_router(cn_kpi_15mins.router)` |
+
+> 运维注意：改完后端必须重启 uvicorn（未开 `--reload`），否则
+> `/api/cn-kpi-15mins/*` 是 404；远端 `db_ps_cs_cn` 只读，本服务只发 SELECT。
+
+### 33f. RAN KPI 15 分钟看板（`?page=ran_kpi_15mins`，2026-11-22 新增）
+
+33e 的 **RAN 版**：2G / 3G / 4G / 5G 四个页签，每页签按模板指标铺卡片，
+每张卡把 **D0 今天 / D1 昨天 / D7 7 天前（同一星期几）** 三条曲线叠画，
+横轴为 15 分钟时刻（00:00 / 00:15 / …，一天 96 点）。与 33e 的差别是
+**数据源和落库形状**：33e 读 CN UME 已有的 `*_UME` 表，本页则是**直接查 RAN UME**
+（4 个 NOC Platform 模板、Object Group = all、`gr=900`），落一张长表。
+
+#### 33f.1 数据源与模板
+
+| 制式 | 模板（`templates.txt`） | 模板 id | 指标数 |
+| --- | --- | --- | --- |
+| 2G | `2G_NW_KPI_Monitor_NOC_Platform` | 1638004472760 | 13 |
+| 3G | `3G_NW_KPI_Monitor_NOC_Platform` | 1638004472762 | 11 |
+| 4G | `4G_NW_KPI_Monitor_NOC_Platform` | 1638004472763 | 18 |
+| 5G | `5G_NW_KPI_Monitor_NOC_Platform` | 1638004472759 | 24 |
+
+- 4 个模板在 UME 侧本身就是 **15 分钟档**（`gr=900` / `grname=15 minutes`），不是
+  从 5 分钟或小时档聚合来的。
+- **Object Group = all**：payload 用 `filterlayer="all"` + `grouplayer="all"` +
+  `uilocations=[]`。实测 `filterlayer="group"` + 空 uilocations 会被 UME 拒绝
+  （`0001610001 The object information can't be empty`）；`all` 才是全网汇总。
+- **模板定义不写死**：每轮同步先 `GET /api/pm-model/v1/templates/detail?id=` 取
+  items / unit / datatypeshow / position，模板加指标后下一轮自动跟随。
+
+#### 33f.2 落库与页面取数
+
+- 同步任务 `ran_kpi_15mins_sync`（`6,21,36,51 * * * *`，即每 15 分钟的第 6 分钟；u 组串行）：4 个制式并发查询 →
+  导出 xlsx → 解析成**长表** → `DbWriterClient.write_data(mode="upsert")` 写远端
+  `ran_kpi_daily.sqlite3` 的 `ran_kpi_15mins`。
+- 长表列：`tech / metric_key / metric_name / metric_order / unit / is_pct /
+  begin_time / end_time / granularity / value`，主键
+  `(tech, metric_key, begin_time)`。`is_pct=1` 对应模板 `datatypeshow=7`
+  （比率型，值域 0~1）。
+- **窗口**：首轮/无水位回补 8 天（Day7 需要）；之后每轮从「最新数据 − 3 小时」
+  起（`RAN_KPI_15M_OVERLAP_HOURS` 可调），最多回看 8 天，历史靠 upsert 累积。
+  任务停跑几天时起点跟着最新数据后移，缺口不会漏在中间。单轮全量约 5.4 万行。
+- 页面 API `GET /api/ran-kpi-15mins/overview?tech=2G|3G|4G|5G&force=`：按制式查
+  D0/D1/D7 三天，SQL 直接产出 `[HH:MM, Day0|Day1|Day7, 值]`；300s 缓存 + 单飞。
+  四个页签**按需取数**，切到哪个制式才查哪个。
+
+#### 33f.3 口径要点
+
+- **日切与横轴取右端点 `End Time`**（UTC，与 `cn_kpi_5mins` 同口径）；
+  `date('now')` 也是 UTC，本机时区 `Atlantic/Reykjavik` 全年 UTC+0。
+- **百分比**：`is_pct=1` 的指标上游给 0~1 比例，页面 ×100 显示（卡头有 `%` 角标）。
+- **单位照抄模板**（erl / Mbps / ms / dBm / MByte …），不做二次换算。
+- **D0 只到最近一次采集时刻**，末端短是采集时延；**D7 缺就少一条线**，不补零。
+- 卡头「较昨日同时段」由前端按接口原始行现算：Day0 全部点均值 vs Day1 截到
+  Day0 最后时刻的均值（同时长比较）。
+
+#### 33f.4 相关文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `backend\services\ran_kpi_assurance\ran_kpi_15mins_service.py` | 同步 + 页面取数（**改口径先改这里**） |
+| `backend\services\ran_kpi_assurance\templates.txt` | 4 个模板的 UME 清单（建档依据） |
+| `backend\routers\ran_kpi_15mins.py` | `/api/ran-kpi-15mins/*` |
+| `frontend\src\pages\RanKpi15mins.tsx` | 页面主体（页签 / 卡片 / 导出） |
+| `frontend\src\pages\ranKpi15m\helpers.tsx` | ECharts option 与「今日 vs 昨日」工具 |
+| `frontend\src\api.ts` | `getRanKpi15minsOverview()` |
+| `backend\task_registry.py` | `ran_kpi_15mins_sync` 任务登记 |
+
+> 运维注意：改完后端必须重启 uvicorn；新任务首次上线要手动跑一次
+> `python -c "...run_ran_kpi_15mins_sync(full_backfill=True)"` 回补 8 天，
+> 否则 Day7 要等 8 天后才出现。
 
 ## 34. WO 清理 —— 批量关闭待确认工单（`?page=eflow_qa` 左栏，2026-10-01 新增）
 

@@ -21,6 +21,14 @@
  * 清晰度：原图是 PDF 矢量导出的 SVG，缩放时改的是**布局宽高**（内容尺寸 × scale），
  * 让浏览器按新尺寸重绘矢量，而不是用 CSS transform 把小图放大 —— 后者在放大后一定糊。
  * 平移只改 transform，不触发重绘。
+ *
+ * 2026-11-22（用户要求「搜索的时候，地图上定位后不要显示标注」，随后收窄为
+ *   「只去掉黑色站名标签，保留橙色光圈和十字虚线」）：搜索定位照旧把画布平移缩放到
+ *   该站点、照旧画十字虚线 + 橙色脉冲圈 + 圆点（那是「在这儿」的位置提示），只是不再
+ *   弹出右上那个黑底站名标签（名字 / 区域 / ✕）—— 它正好盖住被搜出来的那段链路。
+ *   开关是 `showSearchTag`（缺省 true，保持 v2 现状），v1（?page=olibTopo）传 false。
+ *   右栏详情卡、结果列表高亮不受影响；从详情卡点「定位 / 放大」或直接点数据点仍会
+ *   弹出站名标签（那是「我要看这个点」而不是「我搜到它」）。
  * ========================================================================== */
 import {
   forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,
@@ -47,7 +55,8 @@ export interface TopologyViewerHandle {
   locate: (site: TopoSite) => void
   /** 当前页签内放大到站点（物理 / 逻辑标签 / 骨干节点） */
   zoomTo: (site: TopoSite) => void
-  /** 搜索选中：同 zoomTo，始终留在当前页签 */
+  /** 搜索选中：同 zoomTo，始终留在当前页签。
+   *  是否顺带弹出黑色站名标签由 `showSearchTag` 决定（v1 为 false）。 */
   focusHere: (site: TopoSite) => void
 }
 
@@ -60,6 +69,10 @@ interface Props {
   onSitesVisibleChange: (v: boolean) => void
   selected: TopoSite | null
   onSelect: (s: TopoSite | null) => void
+  /** 搜索定位后是否弹出黑色站名标签（名字 / 区域 / ✕）。
+   *  缺省 true（v2 保持原样）；v1 传 false —— 见文件头 2026-11-22 说明。
+   *  光圈、十字虚线与点位选中态不受它影响。 */
+  showSearchTag?: boolean
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -195,10 +208,15 @@ const CSS = `
 
 const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function TopologyViewer({
   view, onViewChange, views = ALL_VIEWS, sitesVisible, onSitesVisibleChange, selected, onSelect,
+  showSearchTag = true,
 }, ref) {
   const { t } = useI18n()
   const { isDark } = useTheme()
   const viewerRef = useRef<HTMLDivElement>(null)
+
+  /** 只藏站名标签，不藏位置提示（光圈 / 十字虚线 / 点位选中态照旧由 selected 驱动）。
+   *  由「搜索定位」置位，见 focusOnView 的 hideTag。 */
+  const [tagHidden, setTagHidden] = useState(false)
 
   const [viewSize, setViewSize] = useState({ w: 0, h: 0 })
   const [transform, setTransform] = useState({ s: 1, x: 0, y: 0 })
@@ -291,8 +309,10 @@ const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function Topology
     setPending(null)
   }, [pending, view, content, fit, zoomToSite, zoomToPoint])
 
-  /* 一律留在当前页签定位，不再强制切到物理图 */
-  const focusOnView = useCallback((site: TopoSite, mode: 'fit' | 'zoom') => {
+  /* 一律留在当前页签定位，不再强制切到物理图。
+   * hideTag=true：位置提示照画，但不弹出黑色站名标签（搜索定位用）。 */
+  const focusOnView = useCallback((site: TopoSite, mode: 'fit' | 'zoom', hideTag = false) => {
+    setTagHidden(hideTag)
     onSelect(site)
     if (view === 'physical') {
       setPending({ site, mode, expectView: 'physical' })
@@ -331,12 +351,21 @@ const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function Topology
     }
   }, [content, onSelect, t, view])
 
+  /* 直接点图上的数据点 / 骨干节点：用户是「要看这个点」，标签照弹 */
+  const pickDot = useCallback((s: TopoSite) => {
+    setTagHidden(false)
+    onSelect(s)
+  }, [onSelect])
+
+  /* 选中被清空后不要再让「藏标签」残留到下一次选中 */
+  useEffect(() => { if (!selected) setTagHidden(false) }, [selected])
+
   useImperativeHandle(ref, () => ({
     fit,
     locate: (site: TopoSite) => focusOnView(site, 'fit'),
     zoomTo: (site: TopoSite) => focusOnView(site, 'zoom'),
-    focusHere: (site: TopoSite) => focusOnView(site, 'zoom'),
-  }), [fit, focusOnView])
+    focusHere: (site: TopoSite) => focusOnView(site, 'zoom', !showSearchTag),
+  }), [fit, focusOnView, showSearchTag])
 
   const toggleFullscreen = () => {
     const el = viewerRef.current
@@ -500,7 +529,7 @@ const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function Topology
                     h={natural.h}
                     scale={transform.s}
                     selectedIndex={selectedIndex}
-                    onSelect={onSelect}
+                    onSelect={pickDot}
                   />
                 </svg>
               )}
@@ -517,7 +546,7 @@ const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function Topology
                     h={natural.h}
                     scale={transform.s}
                     selectedName={selected?.name ?? null}
-                    onSelect={onSelect}
+                    onSelect={pickDot}
                   />
                 </svg>
               )}
@@ -525,7 +554,7 @@ const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function Topology
           )}
           {view === 'core' && (
             <CoreSchematic
-              onSelect={onSelect}
+              onSelect={pickDot}
               selected={selected}
               width={1040 * transform.s}
               height={540 * transform.s}
@@ -542,7 +571,8 @@ const TopologyViewer = forwardRef<TopologyViewerHandle, Props>(function Topology
           </div>
         )}
 
-        {highlight && selected && (
+        {/* 黑色站名标签：搜索定位时藏起来（tagHidden），位置提示仍由上面那段画 */}
+        {highlight && selected && !tagHidden && (
           <div
             className="topo-tag"
             style={{

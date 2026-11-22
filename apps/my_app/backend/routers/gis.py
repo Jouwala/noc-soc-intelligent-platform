@@ -95,13 +95,17 @@ def _detect_gis_schema(force: bool = False) -> dict:
 
 
 # GIS 筛选列配置：(param_name, db_column, label)
+# db_column 可以给**候选列名元组**：按顺序取站点表里实际存在的第一个。
+# 2026-11-22：CMDB 源表头把 Supervisor 改名成 New Supervisor，重建后列名
+# 从 `supervisor` 变成 `new_supervisor`（与 eflow_data_mapper._pick_col 同一套处理），
+# 写死单列名会让「督导」筛选静默消失。
 _GIS_FILTER_COLS = [
     ("trm_type", "trm_type", "TRM Type"),
     ("site_type", "site_type", "Site Type"),
     ("hubsite", "hub_site", "Hub Site"),
     ("vip_site", "vip_site", "VIP Site"),
     # 现场维护与区域职责
-    ("supervisor", "supervisor", "Supervisor"),
+    ("supervisor", ("supervisor", "new_supervisor"), "Supervisor"),
     # 注意：GIS 站点表(master_site_db)的 FME 列名是 fme_name（人名，如 "Mark D. Paye"）。
     # 早前误用了 updated_fme_name_new —— 那是 eFlow 侧(eflow_site)的维护班组编码
     # （如 "FE_FE_112;FE_FE_115"），在站点表里并不存在，导致该筛选项恒为空。
@@ -114,6 +118,35 @@ _GIS_FILTER_COLS = [
     # 属于历史遗留的失效配置（前端因此永远渲染不出这两个下拉框），已移除。
     # 若后续站点表补上这两列，按 (参数名, 列名, 标签) 三元组加回即可，无需改动其它逻辑。
 ]
+
+
+def _resolve_filter_cols(site_cols) -> list:
+    """把 `_GIS_FILTER_COLS` 展开成**实际可用**的 (param_name, 真实列名, label)。
+
+    列名漂移兜底（2026-11-22）：CMDB 源表头把 Supervisor 改成 New Supervisor，
+    重建后的 `master_site_db` 只有 `new_supervisor`。db_column 给元组时按顺序
+    取存在的第一个；一个都不存在就跳过该筛选项 —— 单个可选筛选列缺失不应该
+    让整条站点查询报 `UndefinedColumn`。
+    """
+    out = []
+    for param_name, db_col, label in _GIS_FILTER_COLS:
+        cands = db_col if isinstance(db_col, (tuple, list)) else (db_col,)
+        actual = next((c for c in cands if c in site_cols), None)
+        if actual:
+            out.append((param_name, actual, label))
+    return out
+
+
+def _site_type_sel(S) -> str:
+    """`site_type`（物理形态 Indoor/Outdoor）的 SELECT 表达式。
+
+    2026-11-22 事故：`master_site_db` 被 CMDB 源表整表重建后 `site_type` 列消失，
+    而 `/sites` 与 `/realtime/sites` 把它写死在 SELECT 里 → PG 报 UndefinedColumn，
+    两个端点整条 500，GIS 地图与实时告警地图**全空**（用户看到的就是「没有告警数据」）。
+    缺列时退化为 NULL：前端该字段显示空、筛选项自动消失，页面其余部分照常出数。
+    数据恢复见 `backend/scripts/restore_master_site_columns.py`。
+    """
+    return "site_type" if "site_type" in S["site_cols"] else "NULL AS site_type"
 
 # 下钻 TT 列表候选列（按存在性动态选择）
 # ⚠️ 2026-10-19 修复：原列表里没有 `tt_no`，却把 `ticket_no` 放进去了。
@@ -273,26 +306,25 @@ def _get_site_meta(conn, st, site_cols):
         f"SELECT DISTINCT region FROM {st} WHERE region IS NOT NULL AND region != '' ORDER BY region"
     ).fetchall()]
     filter_options = {}
-    for param_name, db_col, _ in _GIS_FILTER_COLS:
-        if db_col in site_cols:
-            vals = [r[0] for r in conn.execute(
-                f"SELECT DISTINCT {db_col} FROM {st} WHERE {db_col} IS NOT NULL AND {db_col} != '' ORDER BY {db_col}"
-            ).fetchall()]
-            # ⚠️ site_caregory 必须**归一化**后再当候选值（2026-09-28）。
-            # 前端高级筛选走的是**客户端精确匹配**（`site[key] !== val`，见 GISMap.tsx
-            # 的 filteredSites），所以候选值必须与站点上那个值逐字符相等才能筛出来。
-            # 库里该列已知有 `REGULAR（NORMAL)` / `REGULAR(COOL.I）` 这类脏写法
-            # （全角括号 + 制式后缀），若不归一化，用户会看到一串看着像重复的选项，
-            # 且选了 `NORMAL` 筛不到写作 `REGULAR（NORMAL)` 的站 —— 数字对不上。
-            # 归一化口径见 _norm_site_category，与 _site_type_stats 同源。
-            # 顺带：归一化后只留 ERA/COOL/NORMAL 三档（用户要的就是这三个），
-            # 排序也按这个固定顺序，而不是字母序 COOL/ERA/NORMAL。
-            if param_name == "site_caregory":
-                norm = {_norm_site_category(v) for v in vals}
-                norm.discard("")
-                order = ["ERA", "COOL", "NORMAL"]
-                vals = [k for k in order if k in norm] + sorted(norm - set(order))
-            filter_options[param_name] = vals
+    for param_name, db_col, _ in _resolve_filter_cols(site_cols):
+        vals = [r[0] for r in conn.execute(
+            f"SELECT DISTINCT {db_col} FROM {st} WHERE {db_col} IS NOT NULL AND {db_col} != '' ORDER BY {db_col}"
+        ).fetchall()]
+        # ⚠️ site_caregory 必须**归一化**后再当候选值（2026-09-28）。
+        # 前端高级筛选走的是**客户端精确匹配**（`site[key] !== val`，见 GISMap.tsx
+        # 的 filteredSites），所以候选值必须与站点上那个值逐字符相等才能筛出来。
+        # 库里该列已知有 `REGULAR（NORMAL)` / `REGULAR(COOL.I）` 这类脏写法
+        # （全角括号 + 制式后缀），若不归一化，用户会看到一串看着像重复的选项，
+        # 且选了 `NORMAL` 筛不到写作 `REGULAR（NORMAL)` 的站 —— 数字对不上。
+        # 归一化口径见 _norm_site_category，与 _site_type_stats 同源。
+        # 顺带：归一化后只留 ERA/COOL/NORMAL 三档（用户要的就是这三个），
+        # 排序也按这个固定顺序，而不是字母序 COOL/ERA/NORMAL。
+        if param_name == "site_caregory":
+            norm = {_norm_site_category(v) for v in vals}
+            norm.discard("")
+            order = ["ERA", "COOL", "NORMAL"]
+            vals = [k for k in order if k in norm] + sorted(norm - set(order))
+        filter_options[param_name] = vals
     site_type_stats = _site_type_stats(conn, st, site_cols)
     _meta_cache.update({
         "ts": now, "regions": regions,
@@ -307,9 +339,9 @@ def _build_filter_where(S, filter_params, region, network_type):
     """动态筛选条件 → (where_parts, params)"""
     where_parts = []
     params = []
-    for param_name, db_col, _ in _GIS_FILTER_COLS:
+    for param_name, db_col, _ in _resolve_filter_cols(S["site_cols"]):
         val = filter_params.get(param_name)
-        if val and db_col in S["site_cols"]:
+        if val:
             where_parts.append(f"{db_col} = ?")
             params.append(val)
     if region:
@@ -329,10 +361,9 @@ def _build_site_select(S):
     filter_select_parts = []
     filter_col_indices = {}  # param_name -> index in row
     base_cols = 10  # site_id, site_name, lat, lng, region, prov, network, site_type, vip, hub
-    for param_name, db_col, _ in _GIS_FILTER_COLS:
-        if db_col in S["site_cols"]:
-            filter_select_parts.append(db_col)
-            filter_col_indices[param_name] = base_cols + len(filter_select_parts) - 1
+    for param_name, db_col, _ in _resolve_filter_cols(S["site_cols"]):
+        filter_select_parts.append(db_col)
+        filter_col_indices[param_name] = base_cols + len(filter_select_parts) - 1
     filter_select_sql = ", " + ", ".join(filter_select_parts) if filter_select_parts else ""
     return filter_select_sql, filter_col_indices, prov_sel, vip_sel, hub_sel
 
@@ -1227,13 +1258,14 @@ def get_sites(
 
         tt_time_where, wo_time_where, his_time_where = _time_window_clauses(time_start, time_end)
         filter_select_sql, filter_col_indices, prov_sel, vip_sel, hub_sel = _build_site_select(S)
+        site_type_sel = _site_type_sel(S)
 
         sql = f"""
             SELECT
                 site_id, site_name,
                 CAST(latitude AS REAL) as lat,
                 CAST(longitude AS REAL) as lng,
-                region, {prov_sel}, network_type, site_type,
+                region, {prov_sel}, network_type, {site_type_sel},
                 {vip_sel}, {hub_sel}{filter_select_sql}
             FROM {st}
             WHERE {where_clause}
@@ -2140,7 +2172,7 @@ def get_realtime_sites(
 
         rows = conn.execute(f"""
             SELECT site_id, site_name, CAST(latitude AS REAL) as lat, CAST(longitude AS REAL) as lng,
-                   region, {prov_sel}, network_type, site_type, {vip_sel}, {hub_sel}{filter_select_sql}
+                   region, {prov_sel}, network_type, {_site_type_sel(S)}, {vip_sel}, {hub_sel}{filter_select_sql}
             FROM {st} WHERE {where_clause}
         """, params).fetchall()
 

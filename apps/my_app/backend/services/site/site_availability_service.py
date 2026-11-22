@@ -7,6 +7,10 @@
     db/app.db -> master_site_db（805 站）
     使用字段：site_id, site_name, region, province_county, network_type,
               fme_name, supervisor, vip_site, site_type
+    ⚠️ 2026-11-22：CMDB 源表头把 Supervisor 改名成 New Supervisor，整表重建后
+       实际列名是 `new_supervisor`；`site_type` 也可能因源表重建丢失。
+       `load_master_sites()` 会按实际列名取（supervisor → new_supervisor 兜底），
+       缺列不再让整表读取失败。
 
 可用率（站点级天粒度，四种制式各一份）
     ⚠️ 2026-10-15 起 G/U/L 优先读**本地 PG**（Hourly_KPI_RPA_SITE_MS_SLA_*1day_SITE），
@@ -59,6 +63,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.database import get_raw_connection, get_sqlite_readonly_connection, DB_MODE
+from backend.dialect_helpers import table_columns
 from backend.services.remote.remote_db_reader import get_remote_reader
 
 logger = logging.getLogger("site_availability")
@@ -388,15 +393,26 @@ def load_master_sites() -> List[Dict[str, Any]]:
     cached = _cache_get(ck)
     if cached is not None:
         return cached
-    sql = """
-        SELECT site_id, site_name, region, province_county, network_type,
-               fme_name, supervisor, vip_site, site_type
-        FROM master_site_db
-    """
     out: List[Dict[str, Any]] = []
     try:
         # 双模约定：sqlite 原生写法（? 占位 + fetchall），PG 由连接层适配
         with get_raw_connection(timeout=30) as conn:
+            # 列名漂移容错（2026-11-22）：CMDB 源表头把 Supervisor 改名成
+            # New Supervisor，整表重建后列名从 `supervisor` 变成 `new_supervisor`；
+            # `site_type` 则可能被源表重建整列洗掉。过去这里写死两个列名，
+            # 任一缺失就抛 UndefinedColumn → 整个 load 失败 → 可用率看板
+            # 站点数 0、筛选器全空（错误只进日志，页面看起来像「没数据」）。
+            # 现在按实际列名取，缺 site_type 用 NULL、缺两个 supervisor 列用 NULL。
+            cols = {str(c).lower() for c in table_columns(conn, "master_site_db")}
+            sup_col = ("supervisor" if "supervisor" in cols
+                       else "new_supervisor" if "new_supervisor" in cols else None)
+            site_type_expr = "site_type" if "site_type" in cols else "NULL AS site_type"
+            sql = f"""
+                SELECT site_id, site_name, region, province_county, network_type,
+                       fme_name, {sup_col or 'NULL AS supervisor'}, vip_site,
+                       {site_type_expr}
+                FROM master_site_db
+            """
             for r in conn.execute(sql).fetchall():
                 out.append({
                     "site_id": r[0],

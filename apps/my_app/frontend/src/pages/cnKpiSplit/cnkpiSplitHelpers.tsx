@@ -46,6 +46,12 @@ export type SplitOverview = {
     truncated: number
     elapsed_ms: number
     cached: boolean
+    // 2026-11-22：整页取数预算 / 缓存年龄。stale=true 表示数据源当时不可用，
+    // 返回的是最近一次成功结果（页面顶部有提示标签）。
+    degraded?: number
+    stale?: boolean
+    age_s?: number
+    built_at?: string
   }
   title: string
   sections: SplitSection[]

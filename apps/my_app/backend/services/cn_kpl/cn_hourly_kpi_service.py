@@ -27,7 +27,9 @@
   2. **Object Scope = ALL**：既有 payload 的 `filterlayer="all"` 即对应此选择，
      实测导出自动包含全部 NE（MGW_91 / MGW_92 / MRFP_96 / xGWU22 / xGWU122），
      无需额外参数。
-  3. **粒度 gr=3600（1 小时）**；首次回补一个月（31 天），日常每天增量（默认 2 天窗口）。
+  3. **粒度 gr=3600（1 小时）**；首次回补一个月（31 天），日常**每小时 :05** 增量（默认 2 天窗口，
+     5 个模板并行查/导出）。单模板导出轮询约 95~180 秒且**与窗口长度无关**（实测 13 小时窗口
+     与 2 天窗口都是 96 秒），所以串行 5 个要 9 分钟；并行后约 3 分钟，才撑得起每小时一轮。
   4. **落库走 DbWriterClient → db_ps_cs_cn.sqlite3**（与既有 CNN 表同一库同一通道），
      表名 `<模板名>_UME`，读取走 `cn_kpi_service.query_remote`（远端只读 API）。
 
@@ -55,6 +57,7 @@ import json
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -83,6 +86,11 @@ XLSX_OPTIONAL = {"DNS_SUCCESS_RATIO_OSS_updated"}
 BACKFILL_DAYS = int(os.environ.get("CN_HOURLY_KPI_BACKFILL_DAYS", "31"))
 # 日常增量窗口（天）：小时行 append-only，2 天窗口容忍跨天补档
 RECENT_DAYS = int(os.environ.get("CN_HOURLY_KPI_DAYS_BACK", "2"))
+
+# 并行上限：5 个模板一起查。实测单模板的导出轮询约 95~180 秒（与窗口长度无关，
+# 2 天窗口与 13 小时窗口都是 96 秒），串行 5 个要 9 分钟；并行后一轮约 2~3 分钟，
+# 才撑得起「每小时跑一次」。与 cnn_kpi_sync_5mins 的 8 路并行是同一套做法。
+MAX_PARALLEL_WORKERS = int(os.environ.get("CN_HOURLY_KPI_PARALLEL", "5"))
 
 # xlsx 缺失/解析失败时的兜底配置（与 2026-11-18 实测解析结果逐字段一致；
 # 修改上游模板后应重新导出 xlsx 而不是手改这里 —— 这里只是保险丝）
@@ -329,6 +337,20 @@ def _upsert_table(table_name: str, xlsx_bytes: bytes) -> int:
     return len(rows)
 
 
+def _run_one_hourly(auth: dict, key: str, cfg: dict,
+                    start_iso: str, end_iso: str, idx: int) -> tuple:
+    """并行任务：错峰启动后查一个模板并导出，返回 (key, table_name, xlsx_bytes)。
+
+    错峰 0.8 秒/个与 `cnn_ume_kpi_5mins_service._run_one_5mins` 同款，
+    避免 5 个查询在同一毫秒打过去被上游限流。
+    """
+    delay = idx * 0.8
+    if delay > 0:
+        time.sleep(delay)
+    table_name, xlsx_bytes = _query_export_one(auth, cfg, start_iso, end_iso)
+    return key, table_name, xlsx_bytes
+
+
 def run_cn_hourly_kpi_sync(days_back: int = None,
                            templates: list[str] | None = None) -> dict:
     """CN 小时 KPI 同步主流程：登录 → 逐模板查询/导出 → upsert 落库。
@@ -355,15 +377,35 @@ def run_cn_hourly_kpi_sync(days_back: int = None,
     try:
         auth = base._login()
         errors: list[str] = []
-        for key, cfg in configs.items():
+        exports: dict[str, tuple] = {}
+        # 5 个模板并行查/导出；写库仍串行（db_writer 一次写一张表，避免争锁）
+        with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_WORKERS, len(configs))) as pool:
+            futures = {
+                pool.submit(base._run_with_cleanup, _run_one_hourly,
+                            auth, key, cfg, start_iso, end_iso, idx): key
+                for idx, (key, cfg) in enumerate(configs.items())
+            }
+            for fut in as_completed(futures):
+                key = futures[fut]
+                try:
+                    k, table_name, xlsx_bytes = fut.result()
+                    exports[k] = (table_name, xlsx_bytes)
+                except Exception as e:  # noqa: BLE001 — 单模板失败不拖垮其余模板
+                    errors.append(f"[{key}] {e}")
+                    logger.error("[CN-HOURLY] %s 失败: %s", key, e)
+
+        # 按 configs 顺序写库，保证结果/日志顺序稳定
+        for key in configs:
+            if key not in exports:
+                continue
+            table_name, xlsx_bytes = exports[key]
             try:
-                table_name, xlsx_bytes = _query_export_one(auth, cfg, start_iso, end_iso)
                 rows = _upsert_table(table_name, xlsx_bytes)
                 result["tables"][table_name] = {"rows": rows}
-            except Exception as e:  # noqa: BLE001 — 单模板失败不拖垮其余模板
-                msg = f"[{key}] {e}"
-                errors.append(msg)
-                logger.error("[CN-HOURLY] %s 失败: %s", key, e)
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"[{key}] {e}")
+                logger.error("[CN-HOURLY] %s 写库失败: %s", key, e)
+
         result["errors"] = errors
         result["success"] = len(errors) == 0
     except Exception as e:
@@ -389,6 +431,7 @@ import threading as _threading
 from typing import Any, Dict, List, Optional  # noqa: E402
 
 from backend.services.cn.cn_kpi_service import REMOTE_DB, query_remote  # noqa: E402
+from backend.services.db.pg_query import query_data  # noqa: E402
 from backend.services.cn.cn_kpi_5mins_service import _known_columns, _verify_columns  # noqa: E402
 
 CACHE_TTL = 300          # 任务每天才写库，300s 缓存绰绰有余
@@ -479,7 +522,8 @@ def _fetch_widget(w: Dict[str, Any]) -> Dict[str, Any]:
         logger.error("CN hourly 组件 %s 列名校验失败：%s", w["id"], col_err)
         return out
     try:
-        res = query_remote(w["sql"], db=REMOTE_DB, limit=20000)
+        # 本机 PG 优先、远端回退（2026-11-22）
+        res = query_data(w["sql"], db=REMOTE_DB, limit=20000)
     except Exception as e:  # noqa: BLE001 — 表不存在也算空态
         msg = str(e)
         if "no such table" in msg.lower():

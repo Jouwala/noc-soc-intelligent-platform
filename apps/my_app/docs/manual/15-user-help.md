@@ -10,7 +10,7 @@
 
 - [1. 平台简介](#1-平台简介)
 - [2. 通用操作](#2-通用操作)
-- [3. 任务管理详解（86 个任务）](#3-任务管理详解)
+- [3. 任务管理详解（87 个任务）](#3-任务管理详解)
 - [4. 页面指南](#4-页面指南)
 - [5. 运维与排障](#5-运维与排障)
 - [6. 常见问题](#6-常见问题)
@@ -83,7 +83,7 @@
 
 > ⚠️ **新增任务必须同时登记进 `worker_watchdog.py` 的 `GROUP_TASK_MAP`** —— 只写 `TASK_SPECS` 不分组 = 任务入队后永远 pending。这是本项目已发生过四次的事故模式（finebi_report_sync / whatsapp_send_ext / sp_email_details / 2026-09-18 的 olib_soc 与 vmax_multi_data_sync）。
 
-### 3.3 全量任务清单（86 个）
+### 3.3 全量任务清单（87 个）
 
 | 任务 | task_id | 默认 cron | 组 | 工作流脚本 |
 | --- | --- | --- | --- | --- |
@@ -110,7 +110,7 @@
 | BP Cells Report 更新 | `bp_report_sync` | `20 6 * * *` | u | `services/bp/bp_report_sync.py → run_bp_report_sync` |
 | CNN UME KPI 同步 | `cnn_kpi_sync` | `0 6 * * *` | n | `services/cnn/ccn_ume_kpi_service.py → run_cnn_kpi_sync` |
 | CNN UME KPI 5分钟同步 | `cnn_kpi_sync_5mins` | `*/15 * * * *` | n | `services/cnn/cnn_ume_kpi_5mins_service.py → run_cnn_kpi_sync_5mins` |
-| CN 小时KPI同步 | `cn_hourly_kpi_sync` | `20 6 * * *` | n | `services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync` |
+| CN 小时KPI同步 | `cn_hourly_kpi_sync` | `5 * * * *` | n | `services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync` |
 | SP 备件数据同步 | `sp_data_sync` | `10 * * * *` | s | `services/sp/get_sp_table.py → run_sp_data_sync` |
 | iPRAN UME KPI 同步 | `ipran_kpi_sync` | `0 * * * *` | u | `services/ipran/ipran_ume_kpi_service.py → run_ipran_kpi_sync` |
 | Liberia 宕站 1小时报告邮件 | `liberia_email_1h` | `15 * * * *` | m | `services/email/liberia_email_report.py → run_1h_report` |
@@ -173,6 +173,7 @@
 | RAN 用户身份清单（VoLTE/N78） | `gp_ran_user_sync` | `20 13 * * *` | g | `services/gp_ran/gp_ran_sync.py → run_gp_ran_user_sync` |
 | IPT 站点电源采集 | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN 网元管理表同步 | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
+| RAN KPI 15分钟同步 | `ran_kpi_15mins_sync` | `6,21,36,51 * * * *` | u | `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync` |
 
 每个任务的工作流与维护要点：
 
@@ -640,16 +641,16 @@
 
 #### CN 小时KPI同步（`cn_hourly_kpi_sync`）
 
-- 默认 cron: `20 6 * * *`　|　worker 组: **n**
+- 默认 cron: `5 * * * *`　|　worker 组: **n**
 - 工作流脚本: `services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync`
 
-**功能**: 从 UME「KPI 模板管理」导出件 KPI Template.xlsx 解析 4 个模板（PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS），另按用户抓到的请求体补采 1 个不在 xlsx 里的模板（DNS_SUCCESS_RATIO_OSS_updated，templateid 1649220598196 / motid 4927），共 5 个；以小时粒度（gr=3600）查询并 API 写入 DB CNN 的 <模板名>_UME 五张表，供「CN 小时KPI」「CS CN KPI」与「PS CN KPI」看板按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization 与 Capacity 两族各自重复、各留一张做载体（用户 2026-11-18 定，Capacity 与 DNS 2026-11-20 补入）
+**功能**: 从 UME「KPI 模板管理」导出件 KPI Template.xlsx 解析 4 个模板（PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS），另按用户抓到的请求体补采 1 个不在 xlsx 里的模板（DNS_SUCCESS_RATIO_OSS_updated，templateid 1649220598196 / motid 4927），共 5 个；以小时粒度（gr=3600）查询并 API 写入 DB CNN 的 <模板名>_UME 五张表，供「CN 小时KPI」「CS CN KPI」与「PS CN KPI」看板按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization 与 Capacity 两族各自重复、各留一张做载体（用户 2026-11-18 定，Capacity 与 DNS 2026-11-20 补入）；2026-11-22 起由「每天 06:20」改为每小时 :05，5 个模板并行查/导出（单模板 95~180 秒，串行 9 分钟 → 并行约 3 分钟），15 分钟看板的小时源卡片滞后从 8~24 小时降到约 1~2 小时
 
 **工作流与数据流**:
 
 1. 解析 KPI Template.xlsx（缺文件时用内置兜底配置并告警）
 1. 登录 CNN UME（与 cnn_kpi_sync 共用会话缓存）
-1. 按模板逐个查询小时粒度数据（默认 2 天增量窗口；首次回补 python -m ... --days 31，新增模板可加 --templates <模板名> 单跑）
+1. 5 个模板并行查询小时粒度数据（每个 95~180 秒；默认 2 天增量窗口；首次回补 python -m ... --days 31，新增模板可加 --templates <模板名> 单跑）
 1. 写入 db_ps_cs_cn 的 <模板名>_UME 表（upsert，主键 Begin Time+NE(+SERVICE)）
 
 **维护要点**:
@@ -1816,6 +1817,28 @@
 - 表结构由服务内 DDL 幂等创建（CREATE TABLE IF NOT EXISTS），无需 Alembic 迁移；改字段映射 FIELDS 时要同步改 DDL 与索引
 - 排障顺序：先看 app.ran_element_management_sync_log 的 status / error，再看任务执行日志；rows 突然变少查是否被执行日志里的行数下限拦住；会话问题去「系统设置 → 凭据」测 zte_ume
 
+#### RAN KPI 15分钟同步（`ran_kpi_15mins_sync`）
+
+- 默认 cron: `6,21,36,51 * * * *`　|　worker 组: **u**
+- 工作流脚本: `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync`
+
+**功能**: 每 15 分钟从 RAN UME 取 2G/3G/4G/5G 四个 NOC Platform 模板（*_NW_KPI_Monitor_NOC_Platform）的 15 分钟粒度 KPI，查询条件 Object Group = all（全网汇总，payload filterlayer="all" + grouplayer="all"）、gr=900；导出 xlsx 后解析成长表，API upsert 进远端 ran_kpi_daily.sqlite3 的 ran_kpi_15mins，供「RAN KPI 15分钟」看板四个页签做 Day0/Day1/Day7 叠画
+
+**工作流与数据流**:
+
+1. 登录 RAN UME（auth_manager + credential_store 的 zte_ume 共享会话）
+1. 每个制式先 GET /api/pm-model/v1/templates/detail?id=<模板id> 取指标清单（不把列名写死在代码里，模板加指标下一轮自动跟随）
+1. 按制式并发创建 history 查询（gr=900、filterlayer=all、grouplayer=all），轮询到完成再导出 xlsx
+1. 解析成 (tech, metric_key, begin_time) 为主键的长表，DbWriterClient.write_data(mode="upsert") 写入 ran_kpi_daily.sqlite3.ran_kpi_15mins
+
+**维护要点**:
+
+- ⚠ 首轮/表里没有水位时回补 8 天（Day7 需要）；之后每轮从「最新数据 − 3 小时」起（RAN_KPI_15M_OVERLAP_HOURS 可调），最多回看 8 天，历史靠 upsert 累积。要强制全量回补：run_ran_kpi_15mins_sync(full_backfill=True) 或 RAN_KPI_15M_FULL=1
+- ⚠ Object Group = all 不是某个 rangroup：filterlayer="group" + 空 uilocations 会被 UME 拒绝（0001610001 object information can't be empty），必须用 filterlayer="all"
+- ⚠ 归 u 组：与其它 RAN UME 任务共用同一个 zte_ume 账号与会话，并发登录会互踢；15 分钟节拍，单轮实测约 4.5 分钟（4 个制式，含 5G 24 个指标）
+- ⚠ 导出 0 行视为空态跳过、不计失败（与 cnn_kpi_sync_5mins 同约定）
+- 页面消费方：?page=ran_kpi_15mins（routers/ran_kpi_15mins.py + services/ran_kpi_assurance/ran_kpi_15mins_service.py 读取侧）
+
 ### 3.4 可靠性机制（超时 / 重试 / 自愈）
 
 | 机制 | 说明 |
@@ -2455,12 +2478,12 @@ CN KPI 5 分钟看板：把「今天（Day0）」「昨天（Day1）」「7 天�
 
 #### cn_hourly_kpi（`cn_hourly_kpi`）
 
-CN 小时 KPI 看板：xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**视图，可按日期区间（默认最近 7 天、上限 31 天）回看。数据源是 UME 网管「KPI 模板管理」导出件 KPI Template.xlsx（2026-11-17 新建模板批）解析出的 4 个模板，另有 1 个模板来自 xlsx 之外（DNS_SUCCESS_RATIO_OSS_updated），共 5 个模板，由任务 cn_hourly_kpi_sync 每天 06:20 以 gr=3600 增量拉取，写入 db_ps_cs_cn 的 <模板名>_UME 五张表。口径（2026-11-18 定，Capacity 于 2026-11-20 加入）：Resource_Utilization 与 Resource_Capacity 两族模板各自内部重复，每族只保留一张承载表（CS_MRFP96），两族都覆盖全部网元；Object Scope=ALL，数据覆盖全部网元。
+CN 小时 KPI 看板：xGW 会话/吞吐容量与 MGW/MRFP 资源利用率的**小时粒度**视图，可按日期区间（默认最近 7 天、上限 31 天）回看。数据源是 UME 网管「KPI 模板管理」导出件 KPI Template.xlsx（2026-11-17 新建模板批）解析出的 4 个模板，另有 1 个模板来自 xlsx 之外（DNS_SUCCESS_RATIO_OSS_updated），共 5 个模板，由任务 cn_hourly_kpi_sync 每小时 :05 以 gr=3600 并行拉取（5 个模板，约 3 分钟），写入 db_ps_cs_cn 的 <模板名>_UME 五张表。口径（2026-11-18 定，Capacity 于 2026-11-20 加入）：Resource_Utilization 与 Resource_Capacity 两族模板各自内部重复，每族只保留一张承载表（CS_MRFP96），两族都覆盖全部网元；Object Scope=ALL，数据覆盖全部网元。
 
 - 页面 7 张组件卡：xGW PFCP 会话用量、xGW 会话占用率(%)、xGW 吞吐用量(Mbps)、xGW 吞吐占用率(%)、MGW/MRFP 的 TONE/TC/RTP 利用率(%)；前四张的线是 xGWU22/xGWU122 两个网元（占用率为全 NE 合并的 ALL 线），后三张的线是 MGW_91/MGW_92/MRFP_96 三个网元
 - 日期区间用右上角区间选择器改（含端点），改完立即重新取数；上限 31 天（与回补窗口同档）
 - **每张组件卡的标题都能悬浮看这一格怎么算**：ⓘ 按组件写清聚合式 —— 会话/吞吐用量是按网元小时的 SUM，占用率是 SUM(已用)×100÷SUM(授权) 的全网元加权，资源利用率是上游复合 KPI 直接返回的原值（公式如 100*C408230024/(Gr*C408230021)，Gr=3600 秒），页面不做二次换算
-- 首次上线的一个月历史由回补命令生成：python -m backend.services.cn_kpl.cn_hourly_kpi_service --days 31；此后每天 06:20 增量（默认 2 天窗口）自动补新
+- 首次上线的一个月历史由回补命令生成：python -m backend.services.cn_kpl.cn_hourly_kpi_service --days 31；此后每小时 :05 增量（5 个模板并行，默认 2 天窗口）自动补新
 - 页头标签「N/N 个组件有数据」「日期区间」「失败 N」都可悬浮：空态与失败不计入「有数据」
 - 「数据口径说明」默认收起（点标题展开）：模板来源、Utilization/Capacity 取舍、Object Scope=ALL 与利用率公式都在里面
 - 「导出 Excel」每个组件一张表，按小时展开各网元列，便于对账
@@ -2485,6 +2508,37 @@ PS CN KPI 分组看板（分组域）：把 PS 侧的 CN KPI 按**数据来源**
 - xGW 吞吐/会话容量卡同时画 used 与 authorized 两条线，差值即余量；RG-6/11/12/30 按 Measurement Object 拆成四条线（与 CN KPI 页的四张 RG 卡同源同口径，这里合成一张）
 - 卡头 ⓘ 写明数据表、实际粒度、返回行数与后端实际执行的 SQL；本页不做二次计算
 - 「数据口径说明」默认收起（点标题展开）；「导出 Excel」总览 + 每个组件一张宽表，便于对账
+
+#### cs_cn_kpi_15mins（`cs_cn_kpi_15mins`）
+
+CS CN KPI 15 分钟看板：**只取 UME**，把今天（D0）/昨天（D1）/7 天前（D7，同一星期几）三条曲线叠在同一张图上，横轴为 15 分钟桶（00:00 / 00:15 / …）。指标与 ?page=cs_cn_kpi 的 UME 段一一对应：MRFP96 / MGW92 / MGW91 的资源利用率与容量、VLR 用户数、Voice 流量。数据经远端只读 SQL API 读 db_ps_cs_cn 的 *_UME 表，不出现 EMS；窗口固定，不随页面日期变化。
+
+- 每张卡只画**一个指标**（TONE、TC、RTP、used 各自一张卡），固定三条线：D0 今天、D1 昨天、D7 七天前；颜色与线型都区分日子（D0 绿实线 / D1 蓝虚线 / D7 青点线）。横轴是时刻，同一个横坐标即同一时刻
+- 源粒度以卡头角标为准：MGW/MRFP 的资源卡是**小时源**（只在整点有点，不做前向填充）；VLR / Voice 是 5 分钟档按 15 分钟桶聚合；上游原生 15 分钟档的资源卡在 PS 页
+- D0 只到最近一次采集时刻，末端比 D1/D7 短是采集时延、不是缺数；D7 能否画出取决于库里已攒几天，缺哪天就少哪条线，不补零
+- 页头三枚日期标签就是本次窗口的 D0/D1/D7 日期；「导出 Excel」按时刻展开，每个组件一张表
+- 「数据口径说明」默认收起（点标题展开）：只取 UME、日切取 Begin Time（左端点）、比率取平均而流量取 SUM、三种源粒度的差别都写在里面
+
+#### ps_cn_kpi_15mins（`ps_cn_kpi_15mins`）
+
+PS CN KPI 15 分钟看板：**只取 UME**，D0/D1/D7 三条曲线叠画，横轴为 15 分钟桶。指标与 ?page=ps_cn_kpi 的 UME 段一一对应：xGW 吞吐容量、xGW 会话容量、xGW CPU（Current/Mean/Peak）、xGW License 占用（PFCP 会话 + 吞吐）、数据用户（2G/3G/4G/5G）、DNS 成功率、RG-6/11/12/30 流量、4G / 3G FDD。参考页的三张日/月重复视角（License 日、CPU 日、RG 月）不搬过来 —— 在 15 分钟页上是恒定直线，仍在 ps_cn_kpi 看。
+
+- 每张卡只画**一个指标**（Used/Authorized、2G/3G/4G/5G、RG 组各自一张卡），固定三条线：D0 今天、D1 昨天、D7 七天前；颜色与线型都区分日子（D0 绿实线 / D1 蓝虚线 / D7 青点线）
+- 源粒度以卡头角标为准：xGW CPU、xGW License、3G FDD 是**原生 15 分钟**；Data Subscribers、4G FDD、RG 是 5 分钟档按 15 分钟桶聚合；xGW 吞吐/会话容量与 DNS 是**小时源**（只在整点有点）
+- 比率/百分比取桶内算术平均（不是加权、不是峰值）；流量字节按桶 SUM 后 /1e9 换算 GB；用户数这类 gauge 先按时刻把网元加起来再对桶内采样取平均，不重复相加
+- D0 只到最近一次采集时刻，末端比 D1/D7 短是采集时延、不是缺数；D7 能否画出取决于库里已攒几天
+- 「数据口径说明」默认收起（点标题展开）；「导出 Excel」按时刻展开，每个组件一张表
+
+#### ran_kpi_15mins（`ran_kpi_15mins`）
+
+RAN KPI 15 分钟看板：2G / 3G / 4G / 5G 四个页签，每个页签下按模板指标铺卡片，每张卡把**今天（D0）/ 昨天（D1）/ 7 天前（D7，同一星期几）**三条曲线叠在同一张图上，横轴为 15 分钟时刻（00:00 / 00:15 / …，一天 96 点）。数据由任务 ran_kpi_15mins_sync 每 15 分钟从 RAN UME 取 4 个 NOC Platform 模板（*_NW_KPI_Monitor_NOC_Platform），查询条件是 **Object Group = all（全网汇总）**、粒度 gr=900；写入远端 ran_kpi_daily.sqlite3 的 ran_kpi_15mins 长表，页面经只读 SQL API 按页签取数。
+
+- 页签按制式切换（2G / 3G / 4G / 5G）；切到哪个制式才取哪个制式的数，来回切不重复拉，刷新与自动刷新只重取当前页签
+- 每张卡固定三条线：Day0 今天、Day1 昨天、Day7 七天前；颜色即日子（绿 / 蓝 / 青），横轴是时刻，同一横坐标即同一时刻
+- D0 只到最近一次采集时刻，末端比 D1/D7 短是采集时延、不是缺数；D7 能否画出取决于表里已攒几天（首轮回补 8 天），缺 Day7 时页头会明说，不补零
+- 比率型指标（成功率、掉线率、利用率、可用率等，模板 datatypeshow=7）上游给 0~1 比例，页面 ×100 显示为百分比；其余指标按模板单位原样展示
+- 卡头 ⓘ 写明指标原名、粒度、Object Group 与源表；卡头「较昨日同时段」由前端按接口原始行现算（昨天截到今天最后时刻，同时长比较）
+- 「数据口径说明」默认收起（点标题展开）；「导出 Excel」总览 + 每个指标一张宽表（时刻 × D0/D1/D7），百分比列已 ×100
 
 #### UME iMonitor 大屏（`imonitor`，iframe 页）
 

@@ -898,8 +898,14 @@ def _fme_site_index(conn, tables: set[str]) -> tuple[dict[str, list[dict]], dict
     # 缺列时给空串（不伪造），前端按「—」显示。
     _st_sel = "site_type" if "site_type" in _cols else "'' AS site_type"
     _nt_sel = "network_type" if "network_type" in _cols else "'' AS network_type"
+    # supervisor 列名漂移（2026-11-22）：CMDB 源表头把 Supervisor 改成
+    # New Supervisor，整表重建后的实际列名是 `new_supervisor`。这里过去写死
+    # `supervisor`，缺列时整条 SELECT 报 UndefinedColumn → 人员页 stats 500。
+    # 与 gis.py::_resolve_filter_cols、site_availability_service 同一套兜底。
+    _sup_sel = ("supervisor" if "supervisor" in _cols
+                else "new_supervisor" if "new_supervisor" in _cols else "'' AS supervisor")
     for sid, sname, region, county, fme, sup, vip, stype, ntype, lat_raw, lng_raw in conn.execute(
-        f"SELECT site_id, site_name, region, province_county, fme_name, supervisor, "
+        f"SELECT site_id, site_name, region, province_county, fme_name, {_sup_sel}, "
         f"{_vip_sel}, {_st_sel}, {_nt_sel}, latitude, longitude "
         f"FROM master_site_db"
     ).fetchall():

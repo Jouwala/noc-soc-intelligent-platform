@@ -310,7 +310,10 @@ GROUP_TASK_MAP = {
         # auth_cache 会话**，并发登录会互踢；同组串行也顺带避免与 02:00 的
         # ran_ume_daily 抢会话。cron 23:00 与 u 组其它任务错峰，单轮实测 <1s。
         # ⚠ 新任务漏登记本表 → 队列 pending 无人认领直到 300s 超时（本组已踩过多次）。
-        "ran_element_management_sync"),
+        # ran_kpi_15mins_sync 2026-11-22 注册：RAN UME 2G/3G/4G/5G 15 分钟 KPI 同步。
+        # 归 u 组：与 ran_ume_daily / main_kpi_sync 共用 zte_ume 单账号会话，
+        # 15 分钟节拍，必须与其它 RAN UME 任务串行，不能并发登录互踢。
+        "ran_element_management_sync,ran_kpi_15mins_sync"),
     "n": (  # eFlow API / config-center 同源会话组（2026-09-27 收窄：s/w 两组已拆出）
         # 【2026-09-27 拆组背景】本组原先 17 项，实测近 24h 单 worker 串行占用：
         #   sp_data_sync 347min + eflow_sync 236min + eflow_active_alarm 103min = 686min/天，

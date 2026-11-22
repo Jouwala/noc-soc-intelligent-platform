@@ -45,10 +45,21 @@ REQUIRED_COLUMNS = {"site_id", "site_name"}
 # nur_calc 的 `SELECT ... starlink_recently_migrated FROM master_site_db` 直接报
 # 「字段不存在」，NUR 看板站点维度全部失效；同一轮还把 Supervisor 列改名
 # new_supervisor，打断 SITE DOWN 报表的三个映射，导致 11-22 TTs/MTTR 报表 0 行。
+# 事故（2026-11-22）：同一轮重建还洗掉了 site_type（物理形态 Indoor/Outdoor）与
+# power_sources（供电方式）。GIS 的两条站点查询对 site_type 是硬编码 SELECT →
+# `/api/gis/sites`、`/api/gis/realtime/sites` 整条 500，GIS 地图与实时告警地图全空；
+# `site_availability_service.load_master_sites()` 写死 supervisor/site_type 也整表读取失败。
 # 处理：重建前按 site_id 把补充列抢救出来、并进待写 DataFrame 一起 replace；
 #       读不到旧表就中止（不再「读失败 → 空 {} → 照常 replace」）。
-SUPPLEMENTARY_COLUMNS = ("starlink_recently_migrated",)
-SUPPLEMENTARY_DEFAULTS = {"starlink_recently_migrated": "No"}
+#       已经丢掉的存量数据用 `restore_master_site_columns.py` 从旧快照回填。
+SUPPLEMENTARY_COLUMNS = ("starlink_recently_migrated", "site_type", "power_sources")
+SUPPLEMENTARY_DEFAULTS = {
+    "starlink_recently_migrated": "No",
+    # 源表没有这两列：旧表也没有值时留空（不臆造 Indoor/Outdoor / 供电方式），
+    # GIS 的筛选项会因该列为空而不出现，但页面其余部分照常出数。
+    "site_type": "",
+    "power_sources": "",
+}
 # 关键列非空率下限：低于阈值直接拒绝 replace（宁可失败也不静默洗掉主数据）
 KEY_COVERAGE = {"site_name": 0.95, "site_caregory": 0.95}
 

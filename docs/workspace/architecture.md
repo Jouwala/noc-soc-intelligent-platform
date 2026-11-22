@@ -38,7 +38,7 @@
 | `/webroot/decision` | FineBI | **直连 `192.168.100.19`**，不经过本机 nginx |
 | `/uniplam/` | 统一门户 | 门户前端 + 门户自身后端 API（`9267`） |
 | `9267` | 门户生产端口 | Express 服务；**不可**复用 7038/7090 |
-| `8765` | 远端 SQLite HTTP 服务 | 如 `db_ps_cs_cn`，经 `RemoteDBReader` 读取 |
+| `8765` | 远端 SQLite HTTP 服务 | 远端权威库（`db_ps_cs_cn` 等）；my_app 看板 2026-11-22 起改读**本机 PG 镜像**（`cn_kpi` / `ran_kpi` schema），仅在 PG 缺表/空结果时回退它 |
 
 > **`/uniplam/api` 与 `/api` 必须分清。** 门户前端若请求绝对路径 `/api/auth/login`，会命中 nginx 的通用 `location /api/` 从而打到 my_app 的 7038，POST 被回成 `405`——这正是"其他电脑经 80 端口登录失败"的历史原因。门户因此必须带应用 base 前缀 `/uniplam/api`。原因原文见 `apps\portal\src\config.ts` 顶部注释。
 
@@ -63,7 +63,9 @@ SQLite (db\app.db、eflow.sqlite3、lbr_ms_sla_kpi.sqlite3 ...) 或 PostgreSQL
 - 运行期存在**绕过 `get_raw_connection` 的裸 `sqlite3.connect`**（已知如 `ipran_chart_service.py:233`、`fw_kpi_services.py:488`），它们是**图表数据源**——任何"统一改数据访问层"的改动都会静默坏图。
 - `get_raw_connection` 调用点密集（实测 76 处），不要假设可以一次性替换。
 - `eflow_tt` 存在**双库**（`app.db.eflow_tt` 与 `eflow.sqlite3.eflow_tt`）：**同步任务只写 `app.db`**，`eflow.sqlite3` 的副本是旧流水线遗留快照。
-- `db_ps_cs_cn` 的**真数据在远端**（`LBR_Tools\KPI\`，经 HTTP `8765` 读），项目内同名本地文件是 0 字节占位。
+- `db_ps_cs_cn` 的**权威数据在远端**（`LBR_Tools\KPI\`，经 HTTP `8765` 写/读），项目内同名本地文件是 0 字节占位。
+  ⚠ 2026-11-22 起看板不再直接读远端：`pg_mirror` 增量镜像到本机 PG（`cn_kpi` schema），
+  页面走 `query_data`（PG 优先、缺表/空结果回退远端）。详见 `apps\my_app\docs\manual\03-data-layer.md`。
 - 告警表 `realtime_alarm` / `history_alarm` 被**同时写入** `app.db` 与 `eflow.sqlite3`，但**页面只读 `app.db`**。
 
 > 上述内容的完整版与逐条出处见 `docs\archive\PROJECT_DOCS.md` §2 及其引用的稽核小节。**这些是"规划中的迁移"的前提事实，不是已完成的现状**——目前仍是 SQLite 为主。

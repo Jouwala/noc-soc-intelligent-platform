@@ -5,7 +5,7 @@
 
 ## 一、这个项目是什么
 
-**my_app / Data Insight MVP** —— 利比里亚电信网络运维的**自研数据平台**，是整个工作区的数据底座。它负责把上游系统（UME、eFlow、CCN、PM、邮件、WhatsApp 等）的数据采集、入库、计算、展示，并提供 92 个功能页与 86 个定时任务。
+**my_app / Data Insight MVP** —— 利比里亚电信网络运维的**自研数据平台**，是整个工作区的数据底座。它负责把上游系统（UME、eFlow、CCN、PM、邮件、WhatsApp 等）的数据采集、入库、计算、展示，并提供 95 个功能页与 87 个定时任务。
 
 **技术栈**：后端 FastAPI + SQLAlchemy（SQLite / PostgreSQL 双模）+ Alembic + APScheduler；前端 React + Vite；任务由多组 worker 进程执行 + 看门狗守护。
 
@@ -190,7 +190,11 @@
 1. **存在绕过 `get_raw_connection` 的裸 `sqlite3.connect`**，已知如 `ipran_chart_service.py:233`、`fw_kpi_services.py:488` —— 它们是**图表数据源**。
 2. `get_raw_connection` 调用点实测约 **76 处**，不要假设能一次性替换。
 3. `eflow_tt` 有**双库**（`app.db` 与 `eflow.sqlite3`）：同步任务**只写 `app.db`**；`eflow.sqlite3` 的副本是旧流水线遗留快照。
-4. `db_ps_cs_cn` 的**真数据在远端**（经 HTTP `8765` 读），项目内同名文件是 **0 字节占位** —— 误当数据源会得到空结果而非报错。
+4. `db_ps_cs_cn` 的**权威数据在远端**（经 HTTP `8765` 写/读），项目内同名文件是 **0 字节占位** —— 误当数据源会得到空结果而非报错。
+   ⚠ **2026-11-22 起看板不再直接读远端**：`pg_mirror` 把 `db_ps_cs_cn` / `ran_kpi_daily`
+   增量镜像到本机 PG（schema `cn_kpi` / `ran_kpi`），页面走 `query_data`（PG 优先、缺表/空结果
+   回退远端）。新增取数请用 `query_data`，不要再用 `query_remote` 直连远端；细节见
+   `docs/manual/03-data-layer.md`「远端 SQLite → 本机 PG 镜像」。
 5. 告警表 `realtime_alarm` / `history_alarm` 被**同时写** `app.db` 与 `eflow.sqlite3`，但**页面只读 `app.db`**。
 
 > **⚠ 现状已是 PostgreSQL 为主（2026-09-23 实测更正）。**

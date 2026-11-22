@@ -504,12 +504,12 @@ export const TASK_DOCS: TaskDoc[] = [
     },
   },
   {
-    id: 'cn_hourly_kpi_sync', group: 'n', cron: '20 6 * * *',
+    id: 'cn_hourly_kpi_sync', group: 'n', cron: '5 * * * *',
     script: 'services/cn_kpl/cn_hourly_kpi_service.py → run_cn_hourly_kpi_sync',
     zh: {
       name: 'CN 小时KPI同步',
-      desc: '从 UME「KPI 模板管理」导出件 KPI Template.xlsx 解析 4 个模板（PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS），另按用户抓到的请求体补采 1 个不在 xlsx 里的模板（DNS_SUCCESS_RATIO_OSS_updated，templateid 1649220598196 / motid 4927），共 5 个；以小时粒度（gr=3600）查询并 API 写入 DB CNN 的 <模板名>_UME 五张表，供「CN 小时KPI」「CS CN KPI」与「PS CN KPI」看板按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization 与 Capacity 两族各自重复、各留一张做载体（用户 2026-11-18 定，Capacity 与 DNS 2026-11-20 补入）',
-      flow: ['解析 KPI Template.xlsx（缺文件时用内置兜底配置并告警）', '登录 CNN UME（与 cnn_kpi_sync 共用会话缓存）', '按模板逐个查询小时粒度数据（默认 2 天增量窗口；首次回补 python -m ... --days 31，新增模板可加 --templates <模板名> 单跑）', '写入 db_ps_cs_cn 的 <模板名>_UME 表（upsert，主键 Begin Time+NE(+SERVICE)）'],
+      desc: '从 UME「KPI 模板管理」导出件 KPI Template.xlsx 解析 4 个模板（PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS），另按用户抓到的请求体补采 1 个不在 xlsx 里的模板（DNS_SUCCESS_RATIO_OSS_updated，templateid 1649220598196 / motid 4927），共 5 个；以小时粒度（gr=3600）查询并 API 写入 DB CNN 的 <模板名>_UME 五张表，供「CN 小时KPI」「CS CN KPI」与「PS CN KPI」看板按日期区间出图；Object Scope=ALL 覆盖全部网元，Utilization 与 Capacity 两族各自重复、各留一张做载体（用户 2026-11-18 定，Capacity 与 DNS 2026-11-20 补入）；2026-11-22 起由「每天 06:20」改为每小时 :05，5 个模板并行查/导出（单模板 95~180 秒，串行 9 分钟 → 并行约 3 分钟），15 分钟看板的小时源卡片滞后从 8~24 小时降到约 1~2 小时',
+      flow: ['解析 KPI Template.xlsx（缺文件时用内置兜底配置并告警）', '登录 CNN UME（与 cnn_kpi_sync 共用会话缓存）', '5 个模板并行查询小时粒度数据（每个 95~180 秒；默认 2 天增量窗口；首次回补 python -m ... --days 31，新增模板可加 --templates <模板名> 单跑）', '写入 db_ps_cs_cn 的 <模板名>_UME 表（upsert，主键 Begin Time+NE(+SERVICE)）'],
       maintain: [
         '⚠ 导出 0 行视为空态跳过、不计失败（与 5 分钟任务同约定）',
         '与 cnn_kpi_sync / cnn_kpi_sync_5mins 同在 n 组串行，避免共用 CNN UME 会话互踢',
@@ -519,8 +519,8 @@ export const TASK_DOCS: TaskDoc[] = [
     },
     en: {
       name: 'CN Hourly KPI Sync',
-      desc: 'Parses 4 templates from the UME "KPI Template" export file KPI Template.xlsx (PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS) and adds 1 more that is not in the xlsx from the request body captured by the user (DNS_SUCCESS_RATIO_OSS_updated, templateid 1649220598196 / motid 4927), five in total; it queries them at hourly granularity (gr=3600) and writes the <template>_UME tables in DB CNN for the date-rangeable CN Hourly KPI, CS CN KPI and PS CN KPI boards; Object Scope=ALL covers every NE, and one carrier table is kept per family because Utilization and Capacity each duplicate internally (user decision 2026-11-18; Capacity and DNS added 2026-11-20)',
-      flow: ['Parse KPI Template.xlsx (falls back to embedded configs with a warning if the file is missing)', 'Log into CNN UME (shares the session cache with cnn_kpi_sync)', 'Query each template at hourly granularity (2-day incremental window by default; first backfill via python -m ... --days 31, or --templates <name> for a single new template)', 'Upsert into db_ps_cs_cn tables named <template>_UME (PK Begin Time+NE(+SERVICE))'],
+      desc: 'Parses 4 templates from the UME "KPI Template" export file KPI Template.xlsx (PS_xGW_Session_Capacity_OSS / PS_xGW_Throughput_Capacity_OSS / CS_MRFP96_Resource_Utilization_OSS / CS_MRFP96_Resource_Capacity_OSS) and adds 1 more that is not in the xlsx from the request body captured by the user (DNS_SUCCESS_RATIO_OSS_updated, templateid 1649220598196 / motid 4927), five in total; it queries them at hourly granularity (gr=3600) and writes the <template>_UME tables in DB CNN for the date-rangeable CN Hourly KPI, CS CN KPI and PS CN KPI boards; Object Scope=ALL covers every NE, and one carrier table is kept per family because Utilization and Capacity each duplicate internally (user decision 2026-11-18; Capacity and DNS added 2026-11-20); since 2026-11-22 it runs every hour at :05 instead of daily 06:20, querying/exporting the five templates in parallel (95-180 s each; 9 min serial -> about 3 min parallel), which cuts the hourly-source lag on the 15-minute boards from 8-24 h to about 1-2 h',
+      flow: ['Parse KPI Template.xlsx (falls back to embedded configs with a warning if the file is missing)', 'Log into CNN UME (shares the session cache with cnn_kpi_sync)', 'Query the five templates in parallel at hourly granularity (95-180 s each; 2-day incremental window by default; first backfill via python -m ... --days 31, or --templates <name> for a single new template)', 'Upsert into db_ps_cs_cn tables named <template>_UME (PK Begin Time+NE(+SERVICE))'],
       maintain: [
         'WARNING: a 0-row export is treated as an empty state and skipped, not a failure (same as the 5-minute task)',
         'Runs in group n alongside cnn_kpi_sync / cnn_kpi_sync_5mins so the shared CNN UME session never gets kicked',
@@ -1863,6 +1863,44 @@ export const TASK_DOCS: TaskDoc[] = [
         'get_raw_connection() is autocommit on PG and its cursor rewrites ? to %s, so the transaction must be an explicit BEGIN/COMMIT; on failure the whole batch rolls back with no half-written table',
         'The schema is created idempotently by DDL inside the service (CREATE TABLE IF NOT EXISTS) - no Alembic migration needed. When changing the FIELDS mapping, update the DDL and indexes too',
         'Troubleshooting order: check status / error in app.ran_element_management_sync_log first, then the task execution log; a sudden drop in rows usually means the minimum-row guard rejected a partial response; for session issues test the zte_ume credential in Settings -> Credentials',
+      ],
+    },
+  },
+  {
+    id: 'ran_kpi_15mins_sync', group: 'u', cron: '6,21,36,51 * * * *',
+    script: 'services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync',
+    zh: {
+      name: 'RAN KPI 15分钟同步',
+      desc: '每 15 分钟从 RAN UME 取 2G/3G/4G/5G 四个 NOC Platform 模板（*_NW_KPI_Monitor_NOC_Platform）的 15 分钟粒度 KPI，查询条件 Object Group = all（全网汇总，payload filterlayer="all" + grouplayer="all"）、gr=900；导出 xlsx 后解析成长表，API upsert 进远端 ran_kpi_daily.sqlite3 的 ran_kpi_15mins，供「RAN KPI 15分钟」看板四个页签做 Day0/Day1/Day7 叠画',
+      flow: [
+        '登录 RAN UME（auth_manager + credential_store 的 zte_ume 共享会话）',
+        '每个制式先 GET /api/pm-model/v1/templates/detail?id=<模板id> 取指标清单（不把列名写死在代码里，模板加指标下一轮自动跟随）',
+        '按制式并发创建 history 查询（gr=900、filterlayer=all、grouplayer=all），轮询到完成再导出 xlsx',
+        '解析成 (tech, metric_key, begin_time) 为主键的长表，DbWriterClient.write_data(mode="upsert") 写入 ran_kpi_daily.sqlite3.ran_kpi_15mins',
+      ],
+      maintain: [
+        '⚠ 首轮/表里没有水位时回补 8 天（Day7 需要）；之后每轮从「最新数据 − 3 小时」起（RAN_KPI_15M_OVERLAP_HOURS 可调），最多回看 8 天，历史靠 upsert 累积。要强制全量回补：run_ran_kpi_15mins_sync(full_backfill=True) 或 RAN_KPI_15M_FULL=1',
+        '⚠ Object Group = all 不是某个 rangroup：filterlayer="group" + 空 uilocations 会被 UME 拒绝（0001610001 object information can\'t be empty），必须用 filterlayer="all"',
+        '⚠ 归 u 组：与其它 RAN UME 任务共用同一个 zte_ume 账号与会话，并发登录会互踢；15 分钟节拍，单轮实测约 4.5 分钟（4 个制式，含 5G 24 个指标）',
+        '⚠ 导出 0 行视为空态跳过、不计失败（与 cnn_kpi_sync_5mins 同约定）',
+        '页面消费方：?page=ran_kpi_15mins（routers/ran_kpi_15mins.py + services/ran_kpi_assurance/ran_kpi_15mins_service.py 读取侧）',
+      ],
+    },
+    en: {
+      name: 'RAN KPI 15-Min Sync',
+      desc: 'Every 15 minutes, fetch 15-minute KPIs for the four NOC Platform templates (*_NW_KPI_Monitor_NOC_Platform) from RAN UME for 2G/3G/4G/5G with Object Group = all (whole network: payload filterlayer="all" + grouplayer="all") and gr=900; parse the exported xlsx into a long table and upsert it into ran_kpi_15mins in the remote ran_kpi_daily.sqlite3 for the four-tab Day0/Day1/Day7 overlay on the RAN KPI 15-Minute board',
+      flow: [
+        'Log into RAN UME (shared session via auth_manager + credential_store key zte_ume)',
+        'For each tech, GET /api/pm-model/v1/templates/detail?id=<template id> to read the metric list (column names are not hardcoded, so template changes are picked up next round)',
+        'Create history queries per tech in parallel (gr=900, filterlayer=all, grouplayer=all), poll until done, then export xlsx',
+        'Parse into a long table keyed by (tech, metric_key, begin_time) and write it with DbWriterClient.write_data(mode="upsert") into ran_kpi_daily.sqlite3.ran_kpi_15mins',
+      ],
+      maintain: [
+        'WARNING: the first run (or a table with no watermark) backfills 8 days because Day7 needs them; later runs start from latest data minus 3 hours (tunable via RAN_KPI_15M_OVERLAP_HOURS), capped at 8 days back, and history accumulates via upsert. Force a full backfill with run_ran_kpi_15mins_sync(full_backfill=True) or RAN_KPI_15M_FULL=1',
+        'WARNING: Object Group = all is not a specific rangroup. filterlayer="group" with empty uilocations is rejected by UME (0001610001 object information cannot be empty); use filterlayer="all"',
+        'WARNING: belongs to group u because it shares the same zte_ume account and session with the other RAN UME tasks; concurrent logins kick each other. It runs every 15 minutes and a measured run takes about 4.5 minutes (four techs, including 24 metrics for 5G)',
+        'WARNING: an export with 0 rows is treated as an empty state and skipped, not failed (same convention as cnn_kpi_sync_5mins)',
+        'The only consumer is ?page=ran_kpi_15mins (routers/ran_kpi_15mins.py + the read side of services/ran_kpi_assurance/ran_kpi_15mins_service.py)',
       ],
     },
   },
