@@ -336,6 +336,21 @@ APScheduler 到点 (backend 进程内)
 > 不可达时**跳过重试且不消耗重试额度**，目标恢复后立即重投。2026-11-16 04:35 那次失败后
 > 2 次自动重试在 1 小时内烧光额度、知识库陈旧一整天，缺的就是这条链路。
 
+> **派生规则源缺了会自动补（2026-11-22）**
+>
+> 四份规则源里前三份由 eFlow 采集任务产出（`backend/services/eflow_rules/*.xlsx`），
+> 第四份 `data/eflow_tt_alarm_code_distinct.xlsx` 是 **my_app 从 `app.eflow_tt` 现算的派生文件**
+> （生成器 `tools/export_eflow_tt_alarm_codes.py`），并且落在被 `.gitignore` 挡住的 `data/` 下 ——
+> 新克隆的仓库天然没有它，误删、`data/` 清理、换机都会让它消失。
+> 2026-11-21 它被删后，三个 `whatsapp_kb_sync_*` 全部报「规则源文件缺失」失败一整夜，
+> bot 一直按旧规则回答且没有任何告警。
+>
+> 现在 `whatsapp-kb-bot/scripts/sync-kb.mjs` 在判「源文件缺失」之前先试一次
+> `regenerateDerivedSource()` 就地重建；重建失败才报错，并把补文件的命令直接打出来。
+> 前三份采集源仍按原样要求先跑采集任务（生成器补不出来）。
+> 生成器本身改成「写临时文件 + 原子替换」，避免中途被杀留下半截 xlsx ——
+> 那种文件能骗过「存在性」检查，却会让导出脚本读坏数据。
+
 ### WhatsApp 发送通道矩阵（2026-10-08）
 
 目前 `site_outage` 截图与文档的发送有**三种并行实现**，共享同一份图片目录

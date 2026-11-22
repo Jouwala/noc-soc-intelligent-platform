@@ -91,9 +91,23 @@ def main() -> int:
         if col in df_distinct.columns:
             df_distinct[col] = pd.to_datetime(df_distinct[col]).dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    with pd.ExcelWriter(OUT_XLSX, engine="openpyxl") as writer:
-        df_distinct.to_excel(writer, sheet_name="alarm_code_distinct", index=False)
-        df_raw.to_excel(writer, sheet_name="alarm_code_raw", index=False)
+    # 先写同目录临时文件再原子替换：本文件是 whatsapp_kb_sync_* 的必需输入，
+    # 直接覆盖写时一旦进程被杀/盘满，会留下半截 xlsx —— 比「文件不存在」更坏，
+    # 因为 sync-kb.mjs 的缺失检测看不出来，导出脚本还会拿它当正常文件读。
+    # 临时名必须仍以 .xlsx 结尾：pandas 按扩展名选引擎，`.tmp` 会被直接拒绝。
+    tmp_xlsx = f"{OUT_XLSX}.{os.getpid()}.tmp.xlsx"
+    try:
+        with pd.ExcelWriter(tmp_xlsx, engine="openpyxl") as writer:
+            df_distinct.to_excel(writer, sheet_name="alarm_code_distinct", index=False)
+            df_raw.to_excel(writer, sheet_name="alarm_code_raw", index=False)
+        os.replace(tmp_xlsx, OUT_XLSX)
+    finally:
+        # 写失败时别把半截临时文件留在 data/ 里（下次 atomic 检查也认不出它）
+        if os.path.exists(tmp_xlsx):
+            try:
+                os.unlink(tmp_xlsx)
+            except OSError:
+                pass
 
     print(f"输出 {OUT_XLSX}")
     print(f"  alarm_code_distinct: {len(df_distinct)} 行")

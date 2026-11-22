@@ -87,7 +87,11 @@ def write_doc(filename: str, lines: list[str]) -> str:
                 return path
     except OSError:
         pass  # 文件不存在 / 读不了 → 直接写
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        # newline='\n' 不是可省略的细节：Windows 文本模式默认把 \n 翻成 \r\n，
+        # 而版本库里的 md 是 LF（见 HEAD 里的 blob）。一旦正文真的变化，整份文件
+        # 会从 CRLF 重写一遍，git diff 变成 265 行删 + 265 行加，真实改动（十几行
+        # 计数）被行尾噪声淹没 —— 2026-11-22 实测。
         f.write(text)
     return path
 
