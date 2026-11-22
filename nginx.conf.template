@@ -28,6 +28,7 @@
 #   /api/        my_app 后端 FastAPI（{{BE_PORT}}），含 /api/portal-qa/*（问答助手）
 #   /MsPortal/   v3 页面依赖它的 assets 与 viewer.html（相对路径 ../../MsPortal/）
 #   /v3/olbrportal/  门户问答助手挂件所在页 + 团队自动跳转
+#   /v4/olbrportal/  V3 的 clay/pastel 改版样张（PR #217，静态壳，暂无团队闸门）
 #   /v3/<team>_portal/  五个团队门户（共用 v3/team_portal/ 一套资产）
 #   /tiles/      离线地图瓦片 liberia.pmtiles（29.4MB，必须随副本带）
 # =============================================================================
@@ -209,6 +210,14 @@ http {
             # ⚠ 不写 sub_filter_types：text/html 是默认值，写出来会报 duplicate MIME type 警告。
             sub_filter_once  on;
             sub_filter '</head>' '<script src="/v3/team-gate.js"></script></head>';
+        }
+
+        # ---- v4：V3 的 clay/pastel 改版样张（PR #217 引入，静态壳，暂无团队闸门）----
+        # 目录深度同样保持「前缀目录 /olbrportal/」，index.html 里 ../../MsPortal/ 才能落到 /MsPortal/。
+        location /v4/olbrportal/ {
+            alias              "{{ROOT}}/apps/portal/v4/olbrportal/";
+            index              index.html index.htm;
+            add_header         Cache-Control "no-cache, no-store, must-revalidate";
         }
 
         # 公开静态脚本，**不加** auth_request（未登录时也要能取到，否则闸门页无法引导登录）

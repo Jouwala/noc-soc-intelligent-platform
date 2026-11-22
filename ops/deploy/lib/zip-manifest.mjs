@@ -50,6 +50,8 @@ export const INCLUDE_DIRS = [
   { src: 'apps/portal/v1', requiredIn: 'any' },
   { src: 'apps/portal/v2', requiredIn: 'any' },
   { src: 'apps/portal/v3', requiredIn: 'any' },
+  // v4 是 V3 的改版样张（PR #217），nginx.conf.template 有 /v4/olbrportal/ 别名，必须随包。
+  { src: 'apps/portal/v4', requiredIn: 'any' },
   // 问答助手：bot 的 src + 知识库 + 运行时用到的 Python 工具（tt-analyze 等）。
   { src: 'apps/whatsapp-kb-bot/src', requiredIn: 'any' },
   { src: 'apps/whatsapp-kb-bot/knowledge', requiredIn: 'any' },
