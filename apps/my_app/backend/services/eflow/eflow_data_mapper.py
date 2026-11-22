@@ -1527,6 +1527,25 @@ def _find_col_fuzzy(df, keyword):
     return None
 
 
+def _pick_col(df, names):
+    """按候选列名（小写精确优先，其次包含匹配）找实际列，返回原列名或 None。
+
+    2026-11-22 事故引入：master_site_db 的 Supervisor 列在 2026-11-21 由新 CMDB
+    源文件重建后从 `supervisor` 变成 `new_supervisor`（源表头 New Supervisor），
+    旧代码把列名写死在 SELECT 里 → 整条 SQL no such column → 三列映射全丢。
+    统一走本函数探测，改列名不再连坐。
+    """
+    lower = {str(c).strip().lower(): c for c in df.columns}
+    for n in names:
+        if n in lower:
+            return lower[n]
+    for n in names:
+        for k, c in lower.items():
+            if n in k:
+                return c
+    return None
+
+
 def _build_site_attr_map(sheets_data, processor_cls):
     """构建 TRM Type / FME / Supervisor / Site Category 的映射。
 
@@ -1586,10 +1605,21 @@ def _build_site_attr_map(sheets_data, processor_cls):
     try:
         if os.path.exists(APP_DB_PATH):
             with get_raw_connection(APP_DB_PATH) as conn:
-                df_master = pd.read_sql_query(
-                    'SELECT site_id, site_name, fme_name, supervisor, site_caregory FROM master_site_db', conn)
+                # 不写死列名：2026-11-21 新 CMDB 源文件重建 master_site_db 后，
+                # Supervisor → new_supervisor；旧写法 SELECT ..., supervisor, ...
+                # 直接 no such column，异常被下面 except 吞成 warning，导致
+                # FME / Supervisor / Site Category 三列全部写空，
+                # 下游 tt_mttr 报表按「Site Category 非空」过滤后 0 行（2026-11-22 07:26）。
+                df_master = pd.read_sql_query('SELECT * FROM master_site_db', conn)
                 conn.close()
                 logger.info(f"master_site_db 读取: {len(df_master)} 行")
+                sup_col = _pick_col(df_master, ("supervisor", "new_supervisor"))
+                cat_col = _pick_col(df_master, ("site_caregory", "site_category"))
+                if sup_col is None or cat_col is None:
+                    logger.error(
+                        "master_site_db 列名异常（supervisor=%r / site_category=%r），"
+                        "FME/Supervisor/Site Category 映射将为空；现有列: %s",
+                        sup_col, cat_col, list(df_master.columns))
 
                 # FME 映射
                 fme_id, fme_name_map = {}, {}
@@ -1604,10 +1634,11 @@ def _build_site_attr_map(sheets_data, processor_cls):
                 fme_result = (fme_id, fme_name_map)
                 logger.info(f"fme 映射(master_site_db): {len(fme_id)} by ID, {len(fme_name_map)} by Name")
 
-                # Supervisor 映射
+                # Supervisor 映射（列名随 CMDB 版本变化：supervisor / new_supervisor）
                 sup_id, sup_name_map = {}, {}
                 for _, r in df_master.iterrows():
-                    val = str(r.get("supervisor", "")).strip() if pd.notna(r.get("supervisor")) else ""
+                    val = (str(r.get(sup_col, "")).strip()
+                           if sup_col and pd.notna(r.get(sup_col)) else "")
                     sid = processor_cls.normalize_id(r.get("site_id"))
                     sname = str(r.get("site_name", "")).strip()
                     if sid:
@@ -1617,10 +1648,11 @@ def _build_site_attr_map(sheets_data, processor_cls):
                 sup_result = (sup_id, sup_name_map)
                 logger.info(f"supervisor 映射(master_site_db): {len(sup_id)} by ID, {len(sup_name_map)} by Name")
 
-                # Site Category 映射（列名 site_caregory 为 master_site_db 原始拼写）
+                # Site Category 映射（列名 site_caregory 为 master_site_db 历史拼写，兼容 site_category）
                 cat_id, cat_name_map = {}, {}
                 for _, r in df_master.iterrows():
-                    val = str(r.get("site_caregory", "")).strip() if pd.notna(r.get("site_caregory")) else ""
+                    val = (str(r.get(cat_col, "")).strip()
+                           if cat_col and pd.notna(r.get(cat_col)) else "")
                     sid = processor_cls.normalize_id(r.get("site_id"))
                     sname = str(r.get("site_name", "")).strip()
                     if sid:
@@ -1632,7 +1664,10 @@ def _build_site_attr_map(sheets_data, processor_cls):
         else:
             logger.warning(f"master_site_db 不可用: {APP_DB_PATH} 不存在")
     except Exception as e:
-        logger.warning(f"从 master_site_db 读取 FME/Supervisor/Site Category 失败: {e}")
+        # 不再只 warning：这三列映射失败会让 Site Down 报表的 Site Category 全空，
+        # 下游 TTs/MTTR 任务整批过滤成 0 行（2026-11-22 事故）。日志升到 error 便于第一时间发现。
+        logger.error(f"从 master_site_db 读取 FME/Supervisor/Site Category 失败，"
+                     f"三列将为空: {e}", exc_info=True)
 
     return {
         "trm_type": trm_result,
