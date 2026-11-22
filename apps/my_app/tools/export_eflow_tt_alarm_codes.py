@@ -14,8 +14,13 @@
 
     所以本脚本必须能随时重跑，且幂等（同样的库数据 → 同样的内容）。
 
+    脚本放在 tools/ 而不是 data/：`data/` 是运行期产物目录（.gitignore 的 `data/`
+    规则覆盖它），脚本本身是源码，混进去会被「仓库不得跟踪已忽略文件」守卫拦下
+    （2026-11-22 CI 实测）。产物仍固定写到 data/，因为 RULE_SOURCE_FILES 认的就是
+    那个路径。
+
 用法：
-    python data/export_eflow_tt_alarm_codes.py
+    python tools/export_eflow_tt_alarm_codes.py
 """
 from __future__ import annotations
 
@@ -32,7 +37,8 @@ if APP_ROOT not in sys.path:
 
 from backend.database import engine  # noqa: E402
 
-OUT_XLSX = os.path.join(HERE, "eflow_tt_alarm_code_distinct.xlsx")
+# 脚本在 tools/，产物仍固定落 my_app/data/ —— RULE_SOURCE_FILES 认的就是这个路径。
+OUT_XLSX = os.path.join(APP_ROOT, "data", "eflow_tt_alarm_code_distinct.xlsx")
 
 # 按告警码聚合：规范化 code（去掉 Excel 带出来的 .0 尾巴），同一 code 取最常见的描述
 SQL_DISTINCT = """
@@ -72,6 +78,7 @@ ORDER BY alarm_code
 
 
 def main() -> int:
+    os.makedirs(os.path.dirname(OUT_XLSX), exist_ok=True)
     with engine.connect() as conn:
         df_distinct = pd.read_sql_query(text(SQL_DISTINCT), conn)
         df_raw = pd.read_sql_query(text(SQL_RAW), conn)
