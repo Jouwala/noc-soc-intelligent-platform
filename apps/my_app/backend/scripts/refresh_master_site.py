@@ -45,7 +45,8 @@ REQUIRED_COLUMNS = {"site_id", "site_name"}
 # nur_calc 的 `SELECT ... starlink_recently_migrated FROM master_site_db` 直接报
 # 「字段不存在」，NUR 看板站点维度全部失效；同一轮还把 Supervisor 列改名
 # new_supervisor，打断 SITE DOWN 报表的三个映射，导致 11-22 TTs/MTTR 报表 0 行。
-# 处理：重建前按 site_id 把补充列抢救出来，重建后逐行搬回；新站给默认值。
+# 处理：重建前按 site_id 把补充列抢救出来、并进待写 DataFrame 一起 replace；
+#       读不到旧表就中止（不再「读失败 → 空 {} → 照常 replace」）。
 SUPPLEMENTARY_COLUMNS = ("starlink_recently_migrated",)
 SUPPLEMENTARY_DEFAULTS = {"starlink_recently_migrated": "No"}
 # 关键列非空率下限：低于阈值直接拒绝 replace（宁可失败也不静默洗掉主数据）
@@ -102,16 +103,35 @@ def health_check(df) -> list[str]:
     return problems
 
 
+_MISSING_TABLE_HINTS = ("does not exist", "no such table", "undefinedtable")
+
+
+def _is_missing_table(exc: Exception) -> bool:
+    """区分「表还不存在（首次导入）」与「表存在但读不出来」——后者不能放行。"""
+    msg = str(exc).lower()
+    return any(h in msg for h in _MISSING_TABLE_HINTS)
+
+
 def salvage_supplementary() -> dict:
-    """重建前把补充列抢救出来：返回 {列名: Series(site_id -> 值)}；表/列不存在时返回 {}。"""
+    """重建前把补充列抢救出来：返回 {列名: Series(site_id -> 值)}。
+
+    表不存在（首次导入）返回 {}；**其它任何读取失败都中止整个导入** ——
+    replace 是整表重建，拿不到旧表就无法回填，继续跑等于把补充列静默洗掉
+    （2026-11-21 事故：一次重建丢了 starlink_recently_migrated）。
+    """
     import pandas as pd
     from sqlalchemy import text
 
     try:
         old = pd.read_sql_query(text(f'SELECT * FROM "{TARGET_TABLE}"'), engine)
-    except Exception as exc:  # noqa: BLE001 首次导入时表可能不存在
-        print(f"  [skip] 现有 {TARGET_TABLE} 不可读（首次导入？）: {exc}")
-        return {}
+    except Exception as exc:  # noqa: BLE001
+        if _is_missing_table(exc):
+            print(f"  [skip] 现有 {TARGET_TABLE} 不存在（首次导入），补充列用默认值")
+            return {}
+        raise SystemExit(
+            f"[FATAL] 读取现有 {TARGET_TABLE} 失败，无法抢救补充列，拒绝继续 replace："
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
     keep: dict = {}
     for col in SUPPLEMENTARY_COLUMNS:
         if col in old.columns:
@@ -123,39 +143,27 @@ def salvage_supplementary() -> dict:
     return keep
 
 
-def restore_supplementary(kept: dict) -> None:
-    """重建后把抢救到的补充列按 site_id 逐行写回；新站填列级默认值。
+def apply_supplementary(df, kept: dict):
+    """把补充列并入待写 DataFrame，随 replace 一次写入（不再事后 ALTER/UPDATE）。
 
-    源文件里没有这些列，replace 之后新表也不会有 —— 所以必须先 ADD COLUMN 再 UPDATE，
-    否则 UPDATE 会报「字段不存在」（2026-11-22 实测踩到）。
+    为什么不先 replace 再回填：那是两个事务，回填失败会留下「表已重建、补充列缺失」
+    的中间态 —— 2026-11-21 事故就是 supplement 列被 replace 洗掉后没人补回。
+    并进 df 后只有一次整表写入：有旧值按 site_id 搬回，没有的用列级默认值。
     """
-    import pandas as pd
-    from sqlalchemy import inspect, text
-
-    if not kept:
-        return
-    with engine.begin() as conn:
-        have = {c["name"] for c in inspect(conn).get_columns(TARGET_TABLE)}
-        for col, series in kept.items():
-            if col not in have:
-                conn.execute(text(f'ALTER TABLE "{TARGET_TABLE}" ADD COLUMN "{col}" TEXT'))
-                print(f"  补充列 {col} 不在源文件里，已重建该列（TEXT）")
-            written = 0
-            for sid, val in series.items():
-                if pd.isna(val):
-                    continue
-                conn.execute(
-                    text(f'UPDATE "{TARGET_TABLE}" SET "{col}" = :v '
-                         f'WHERE CAST(site_id AS TEXT) = :sid'),
-                    {"v": str(val), "sid": str(sid)})
-                written += 1
-            print(f"  补充列 {col} 已回填 {written} 行")
-            default = SUPPLEMENTARY_DEFAULTS.get(col)
-            if default is not None:
-                res = conn.execute(
-                    text(f'UPDATE "{TARGET_TABLE}" SET "{col}" = :d WHERE "{col}" IS NULL'),
-                    {"d": default})
-                print(f"  补充列 {col} 新站默认值 {default!r}: {res.rowcount} 行")
+    for col in SUPPLEMENTARY_COLUMNS:
+        default = SUPPLEMENTARY_DEFAULTS.get(col)
+        series = kept.get(col)
+        if series is not None:
+            vals = df["site_id"].astype(str).map(series)
+            restored = int(vals.notna().sum())
+            df[col] = vals.where(vals.notna(), default)
+            print(f"  补充列 {col}: 从旧表恢复 {restored} 行，"
+                  f"其余 {len(df) - restored} 行用默认值 {default!r}")
+        else:
+            df[col] = default
+            print(f"  补充列 {col}: 旧表里没有该列，全量用默认值 {default!r}"
+                  f"（历史值可能已丢失，需业务补数据）")
+    return df
 
 
 def main() -> int:
@@ -211,11 +219,13 @@ def main() -> int:
 
     print(f"体检通过: {len(df)} 行 / {len(df.columns)} 列")
 
-    # replace 是整表重建，源文件没有的补充列必须先抢救（见文件头 SUPPLEMENTARY_COLUMNS）
+    # replace 是整表重建，源文件没有的补充列必须先抢救并**并入 df**（见文件头
+    # SUPPLEMENTARY_COLUMNS）：这样 rebuild 只有一次写入，不存在「已 replace、列未回填」。
     kept = salvage_supplementary()
+    df = apply_supplementary(df, kept)
 
     if args.dry_run:
-        print(f"[DRY-RUN] 未写库。将恢复补充列: {sorted(kept.keys()) or '无'}")
+        print(f"[DRY-RUN] 未写库。补充列: {list(SUPPLEMENTARY_COLUMNS)}（有旧值则恢复，无则默认值）")
         return 0
 
     with get_raw_connection() as conn:
@@ -224,7 +234,6 @@ def main() -> int:
         conn.commit()
         for name in idx:
             print(f"  索引: {name}")
-    restore_supplementary(kept)
     print(f"{TARGET_TABLE} 更新完成（{len(df)} 行，来源 {src.name}）")
     return 0
 

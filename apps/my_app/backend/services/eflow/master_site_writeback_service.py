@@ -30,9 +30,13 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-SCRIPT = Path(__file__).resolve().parents[3] / "data" / "eflow" / "cmdb_site_update" / "build_cmdb_site_update_v2.py"
-DB_DIR = Path(__file__).resolve().parents[3] / "db"
-SUMMARY_JSON = SCRIPT.parent / "modify" / "last_writeback.json"
+APP_ROOT = Path(__file__).resolve().parents[3]
+# 脚本自 2026-11-22 起在 backend/scripts/cmdb_site_update/（纳入版本库，data/ 是忽略目录）；
+# 源表、modify/ 产出与备份仍在 data/eflow/cmdb_site_update/。
+DATA_DIR = APP_ROOT / "data" / "eflow" / "cmdb_site_update"
+SCRIPT = APP_ROOT / "backend" / "scripts" / "cmdb_site_update" / "build_cmdb_site_update_v2.py"
+DB_DIR = APP_ROOT / "db"
+SUMMARY_JSON = DATA_DIR / "modify" / "last_writeback.json"
 
 _LOCK = threading.Lock()
 _TIMEOUT = 1800
@@ -89,7 +93,7 @@ def _run(extra_args: list[str], src: Path | None = None) -> dict:
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     try:
         proc = subprocess.run(
-            cmd, cwd=str(SCRIPT.parent), capture_output=True, text=True,
+            cmd, cwd=str(DATA_DIR), capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=_TIMEOUT,
             env=env, creationflags=flags,
         )
