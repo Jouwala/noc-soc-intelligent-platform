@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """CMDB 站点同步比对任务（eflow_site_update）
 
-把 `data/eflow/cmdb_site_update/build_cmdb_site_update_v2.py` 包装成一个可被
+把 `backend/scripts/cmdb_site_update/build_cmdb_site_update_v2.py` 包装成一个可被
 task_runner 调度、也可由 Email Reports 页签按钮一键触发的手动任务。
+
+（脚本原在 `data/eflow/cmdb_site_update/`，2026-11-22 起随其余四步一起移入
+`backend/scripts/cmdb_site_update/` 并纳入版本库：`data/` 被 .gitignore 覆盖，
+脚本留在那里会在干净检出 / CI / 便携包里直接缺失。）
 
 **四步流水线**（与 `run_site_update.bat` 完全一致，顺序不可颠倒）：
 1. `build_cmdb_site_update_v2.py` —— 生成 xlsx（审查全量 + 导入副本 + 报告）
@@ -63,15 +67,25 @@ _DEFAULT_TIMEOUT = 1800  # 30 分钟：源表 876 行 + 43 列着色，实测数
 
 
 def _resolve_work_dir() -> Path:
-    """脚本目录。默认 my_app/data/eflow/cmdb_site_update（本文件在 backend/services/ 下）。"""
+    """产出/工作目录（源表、modify/、backup/）。默认 my_app/data/eflow/cmdb_site_update。
+
+    脚本自 2026-11-22 起移到 backend/scripts/cmdb_site_update/ 并纳入版本库 ——
+    data/ 被 .gitignore 覆盖，脚本放在那里会让干净检出 / CI / 便携包直接缺文件。
+    """
     env = os.environ.get("CMDB_SITE_UPDATE_DIR", "").strip()
     if env:
         return Path(env).expanduser().resolve()
     return (Path(__file__).resolve().parents[3] / "data" / "eflow" / "cmdb_site_update").resolve()
 
 
+def _resolve_script_dir() -> Path:
+    """脚本目录（本文件在 backend/services/eflow/ 下）。"""
+    return (Path(__file__).resolve().parents[2] / "scripts" / "cmdb_site_update").resolve()
+
+
 WORK_DIR = _resolve_work_dir()
-SCRIPT_PATH = WORK_DIR / _SCRIPT_NAME
+SCRIPT_DIR = _resolve_script_dir()
+SCRIPT_PATH = SCRIPT_DIR / _SCRIPT_NAME
 OUT_DIR = WORK_DIR / "modify"
 SUMMARY_JSON = OUT_DIR / "last_run_summary.json"
 # CMDB 主数据 xlsx 所在目录（与 build 脚本 DEFAULT_SRC_DIR 同口径）
@@ -170,7 +184,7 @@ def _run_derived(env: dict, creationflags: int) -> list[dict]:
     """依次跑汇总 / 邮件 / 校验。任一步失败都只做记录，不改变主任务成功状态。"""
     results: list[dict] = []
     for step, name in _DERIVED_STEPS:
-        path = WORK_DIR / name
+        path = SCRIPT_DIR / name
         if not path.is_file():
             results.append({"step": step, "ok": False, "error": f"脚本不存在：{name}"})
             continue
