@@ -748,6 +748,17 @@ TASK_SPECS = [
          description_en="Read daily MOU from MTN_Outgoing_MOU_OSS_EMS in db_ps_cs_cn.sqlite3, plot Outgoing/Incoming line charts and email them with subject 'MTN MOU Daily Traffic'; the unfinished current day is excluded",
          default_cron="0 7 * * *", category="email"),
 
+    # 24c. International MOU 日报图表邮件（每天 07:00，与 MTN MOU 同档）
+    #      数据源与 ?page=cn_kpi 的「International MOU」图表是**同一个组件（c16）**：
+    #      服务直接复用 cn_kpi_service 里 c16 的 SQL，保证图上与邮件里逐点同数。
+    #      日期键的 End Time → 统计日换算见 services/intl_mou_chart_service.py 文件头。
+    #      收件人：Settings → 邮件收件人 → intl_mou_daily_email。
+    dict(task_id="intl_mou_daily_email", name="International MOU 日报图表邮件", name_en="International MOU Daily Traffic Email",
+         loader=("backend.services.intl_mou_chart_service", "run_intl_mou_chart_email"),
+         description="取 ?page=cn_kpi 的 International MOU 图表数据（International_MOU_OSS_EMS，复用 c16 的 SQL），生成 Outgoing/Incoming 两张折线图，主题 International MOU Daily Traffic 发送；运行当天数据不完整故剔除",
+         description_en="Use the International MOU chart data on ?page=cn_kpi (International_MOU_OSS_EMS, reusing the c16 SQL), plot Outgoing/Incoming line charts and email them with subject 'International MOU Daily Traffic'; the unfinished current day is excluded",
+         default_cron="0 7 * * *", category="email"),
+
     # 25. FW 整机吞吐 KPI 同步 + 图表邮件 - 每天 7:15
     dict(task_id="fw_kpi_sync", name="FW 吞吐 KPI 同步+图表邮件", name_en="FW Throughput KPI Sync + Chart Email",
          loader=("backend.services.fw_kpi.fw_kpi_services", "run_fw_kpi_sync"),
@@ -1292,6 +1303,9 @@ EWS_DEFERRABLE_IDS = frozenset({
     "packet_loss_email",
     "ccn_free_rating_chart_email",
     "mtn_mou_daily_email",
+    # 2026-11-22 新增：International MOU 日报。纯发信（只读远端库 + EWS），
+    # 与 MTN MOU 同型，通道不可用时整轮延后、恢复后按 daily 档补发。
+    "intl_mou_daily_email",
     "battery_email",
     "ipran_m6k_chart_email",
     # 不是报表发信任务，但整条链路都依赖 EWS：通道不可用时探测/清理都无意义，

@@ -25,7 +25,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 _SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
@@ -37,10 +37,16 @@ try:
 except Exception as exc:
     logger.debug("设置 stdout 编码失败: %s", exc)
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import pandas as pd
+
+from backend.services.mou_chart_common import (
+    COLOR_IN,
+    COLOR_OUT,
+    INLINE_IMAGES_PLACEHOLDER,
+    cleanup_old_run_dirs,
+    plot_series,
+    summary_table,
+)
 
 # ===== 路径 / 数据源配置 =====
 MY_APP_DIR = Path(__file__).resolve().parent.parent.parent
@@ -56,22 +62,8 @@ REMOTE_TABLE = "MTN_Outgoing_MOU_OSS_EMS"
 SUBJECT = "MTN MOU Daily Traffic"
 EMAIL_GROUP_KEY = "mtn_mou_daily_email"
 
-# 图表风格与 ccn_free_rating_chart_service / ran_ume 看板一致
-COLOR_OUT = "#2E86AB"
-COLOR_IN = "#F18F01"
-BG_COLOR = "#E8F0FE"
-TITLE_COLOR = "#2F5496"
-GRID_COLOR = "#C5C5C5"
-TEXT_COLOR = "#333333"
-
 # 展示窗口（完整自然日）
 DISPLAY_DAYS = 31
-
-# 正文里的内嵌图片插入点。owa_mail_report.py 按这个占位符把 --images 的图片插进正文；
-# 正文里没有占位符时图片会**追加到正文末尾**，签名 "Best regards" 就会被挤到图片中间
-# （2026-11-17 用户反馈：MTN MOU Daily Traffic 的图落在 "Best regards, ZTENOC OLR" 下面）。
-# 常量必须与 email_reports/owa_mail_report.py 的 _INLINE_PLACEHOLDER 完全一致。
-INLINE_IMAGES_PLACEHOLDER = "<!-- inline images inserted here -->"
 
 
 def _fetch_mou_data() -> Optional[pd.DataFrame]:
@@ -123,118 +115,6 @@ def _fetch_mou_data() -> Optional[pd.DataFrame]:
     logger.info("读取 %d 天数据：%s ~ %s",
                 len(df), df["Start Time"].iloc[0].date(), df["Start Time"].iloc[-1].date())
     return df
-
-
-def _safe_savefig(fig, output_path: Path) -> Path:
-    """保存图表；同名文件被占用时重试，仍失败则换带序号的文件名。"""
-    output_path = Path(output_path)
-    for attempt in range(4):
-        try:
-            fig.savefig(output_path, dpi=150, bbox_inches="tight",
-                        facecolor=BG_COLOR, edgecolor="none")
-            return output_path
-        except PermissionError:
-            if attempt < 3:
-                time.sleep(0.5)
-                continue
-            break
-    idx = 1
-    stem, suffix = output_path.stem, output_path.suffix
-    while True:
-        alt = output_path.with_name(f"{stem}_{idx}{suffix}")
-        if not alt.exists():
-            break
-        idx += 1
-    fig.savefig(alt, dpi=150, bbox_inches="tight",
-                facecolor=BG_COLOR, edgecolor="none")
-    return alt
-
-
-def _compact_number(v: float, _pos=None) -> str:
-    """Y 轴刻度用紧凑单位，避免 matplotlib 的 1e6 偏移量。"""
-    try:
-        v = float(v)
-    except (TypeError, ValueError):
-        return ""
-    if abs(v) >= 1e6:
-        return f"{v / 1e6:.1f}M"
-    if abs(v) >= 1e3:
-        return f"{v / 1e3:.0f}K"
-    return f"{v:.0f}"
-
-
-def _plot_series(df: pd.DataFrame, column: str, title: str, color: str,
-                 output_path: Path) -> Optional[Path]:
-    """画单指标折线图（按日）。"""
-    if column not in df.columns or df[column].notna().sum() == 0:
-        logger.warning("无 %s 数据，跳过出图", column)
-        return None
-
-    fig, ax = plt.subplots(figsize=(12, 4.8))
-    ax.set_facecolor(BG_COLOR)
-    fig.patch.set_facecolor(BG_COLOR)
-
-    x = list(range(len(df)))
-    ax.plot(x, df[column], linewidth=1.6, color=color, label=column)
-    ax.fill_between(x, df[column].fillna(0), color=color, alpha=0.12)
-    ax.set_ylim(bottom=0)
-
-    # 最新一个点的数值直接标在图上
-    last_x = x[-1]
-    last_v = df[column].iloc[-1]
-    if pd.notna(last_v):
-        ax.annotate(_compact_number(last_v), (last_x, last_v),
-                    textcoords="offset points", xytext=(0, 8),
-                    ha="center", fontsize=8, color=color, fontweight="bold")
-
-    ax.set_title(title, fontsize=13, fontweight="bold", color=TITLE_COLOR, pad=12)
-    ax.set_ylabel("MOU", fontsize=9, color=TEXT_COLOR)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(_compact_number))
-    ax.grid(axis="y", linestyle="--", color=GRID_COLOR, linewidth=0.6, alpha=0.6)
-    ax.set_axisbelow(True)
-    for spine in ax.spines.values():
-        spine.set_color("#B0B0B0")
-        spine.set_linewidth(0.5)
-
-    labels = [t.strftime("%m-%d") for t in df["Start Time"]]
-    n = len(labels)
-    step = max(1, n // 16) if n > 16 else 1
-    positions = list(range(0, n, step))
-    ax.set_xticks(positions)
-    ax.set_xticklabels([labels[i] for i in positions],
-                       rotation=45, fontsize=7, ha="right")
-    ax.tick_params(axis="both", labelsize=8)
-    ax.legend(loc="upper left", fontsize=8, frameon=True,
-              facecolor="white", framealpha=0.8, edgecolor="#CCCCCC")
-
-    plt.tight_layout()
-    final_path = _safe_savefig(fig, output_path)
-    plt.close(fig)
-    logger.info("图表已保存: %s", Path(final_path).name)
-    return Path(final_path)
-
-
-def _summary_table(df: pd.DataFrame) -> str:
-    """正文里的最近 7 天汇总表（HTML）。"""
-    tail = df.tail(7)
-    rows = []
-    for _, r in tail.iterrows():
-        out_v = r.get("Outgoing MOU")
-        in_v = r.get("Incoming MOU")
-        rows.append(
-            "<tr>"
-            f"<td>{r['Start Time'].strftime('%Y-%m-%d')}</td>"
-            f"<td align='right'>{'' if pd.isna(out_v) else f'{out_v:,.2f}'}</td>"
-            f"<td align='right'>{'' if pd.isna(in_v) else f'{in_v:,.2f}'}</td>"
-            "</tr>"
-        )
-    return (
-        "<table border='1' cellspacing='0' cellpadding='6' "
-        "style='border-collapse:collapse;font-family:Segoe UI,Arial;font-size:12px'>"
-        "<thead><tr style='background:#2F5496;color:#fff'>"
-        "<th>Date</th><th>Outgoing MOU</th><th>Incoming MOU</th>"
-        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
-    )
 
 
 def _send_email(to: List[str], cc: List[str], body: str,
@@ -306,12 +186,12 @@ def run_mtn_mou_daily_email(to_override: Optional[str] = None,
     run_dir.mkdir(parents=True, exist_ok=True)
 
     charts: List[Path] = []
-    p = _plot_series(df, "Outgoing MOU", "MTN Outgoing MOU (Daily)",
-                     COLOR_OUT, run_dir / "Outgoing MOU.png")
+    p = plot_series(df, "Outgoing MOU", "MTN Outgoing MOU (Daily)",
+                    COLOR_OUT, run_dir / "Outgoing MOU.png")
     if p:
         charts.append(p)
-    p = _plot_series(df, "Incoming MOU", "MTN Incoming MOU (Daily)",
-                     COLOR_IN, run_dir / "Incoming MOU.png")
+    p = plot_series(df, "Incoming MOU", "MTN Incoming MOU (Daily)",
+                    COLOR_IN, run_dir / "Incoming MOU.png")
     if p:
         charts.append(p)
 
@@ -327,7 +207,7 @@ def run_mtn_mou_daily_email(to_override: Optional[str] = None,
         f"<p>Please find the MTN MOU traffic for the last {len(df)} complete days "
         f"(latest: <b>{last['Start Time'].strftime('%Y-%m-%d')}</b>).</p>"
         "<p>Last 7 days:</p>"
-        + _summary_table(df)
+        + summary_table(df, ["Outgoing MOU", "Incoming MOU"])
         + INLINE_IMAGES_PLACEHOLDER
         + "<br><p>Best regards,<br>ZTENOC OLR</p>"
     )
@@ -337,7 +217,7 @@ def run_mtn_mou_daily_email(to_override: Optional[str] = None,
     result["rows"] = len(df)
     result["elapsed_seconds"] = round(time.perf_counter() - t0, 2)
 
-    _cleanup_old_run_dirs(keep_days=14)
+    cleanup_old_run_dirs(OUTPUT_DIR, keep_days=14)
     logger.info("任务完成: %s", result)
     return result
 

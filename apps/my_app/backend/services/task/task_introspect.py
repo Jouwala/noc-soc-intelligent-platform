@@ -333,6 +333,8 @@ TASK_IO: dict[str, list[str]] = {
     "ccn_free_rating_chart_email": ["远程DB: db_ps_cs_cn.sqlite3 (via API)", "本地文件: TMP/ccn_free_rating_charts/*.png (图表)", "邮件发送"],
     # 24b. MTN MOU 日报图表邮件（2026-11-12）
     "mtn_mou_daily_email": ["远程DB: db_ps_cs_cn.sqlite3 → MTN_Outgoing_MOU_OSS_EMS (via API)", "本地文件: TMP/mtn_mou_charts/*.png (图表)", "邮件发送"],
+    # 24c. International MOU 日报图表邮件（2026-11-22；SQL 复用 cn_kpi 的 c16 组件）
+    "intl_mou_daily_email": ["远程DB: db_ps_cs_cn.sqlite3 → International_MOU_OSS_EMS (via API, cn_kpi c16 SQL)", "本地文件: TMP/intl_mou_charts/*.png (图表)", "邮件发送"],
     # 25. FW 吞吐 KPI
     "fw_kpi_sync": ["远程DB: fw_db.sqlite (via API)", "本地文件: TMP/fw_charts + email_reports", "邮件发送"],
     # 26. 电池 KPI（全程内存不落盘：无 Excel/CSV/JSON 导出，无 FTP 上传）
