@@ -1,6 +1,6 @@
 # 04 任务与调度系统
 
-my_app 的"心脏"。85 个定时任务负责全部数据采集与报表投递，页面上看到的数据新鲜度、失败告警、补跑行为都在这里定义。
+my_app 的"心脏"。86 个定时任务负责全部数据采集与报表投递，页面上看到的数据新鲜度、失败告警、补跑行为都在这里定义。
 
 > 另有两个**模块级说明文件**更贴近代码：`backend/WORKER.md`（worker 进程架构、容错、启停、环境变量）与 `backend/task_registry.md`（注册表字段与对外接口）。本章是归口叙述，改动这两处代码时请同步更新三份文档。
 
@@ -35,7 +35,7 @@ APScheduler 到点 (backend 进程内)
 | `s` | 1 | SP 备件 SFTP（独立 SFTP 服务器 + UNC 镜像库）。2026-09-27 从 `n` 拆出：它是 `n` 组最大单体负载（实测 347min/天）且是已知挂死源（SFTP channel 读挂死 5.5h 曾拖停整组） | `sp_data_sync` |
 | `w` | 2 | MW UME 微波网管（凭证分组 `mw_ume`），独立会话。2026-09-27 从 `n` 拆出：`mw_ume_kpi_sync_rt` 为 `*/15` 高频任务，此前每次排在 `sp_data_sync` 后，实测队列等待 964s（全场最久） | `mw_ume_kpi_sync`, `mw_ume_kpi_sync_rt` |
 | `v` | 4 | VMAX 门户（本机 8790 单会话代理）：四个任务共用同一个 VMAX 会话，必须彼此串行；2026-09-18 从 `n` 组拆出（原先排在 `sp_data_sync` 这类 1.5~2h 长任务后面，小时级采集滞后一个多小时）；2026-10-31 新增 `soc_trend_sync`（直连 VMAX 数仓 GBase，与门户会话无交集但同属 VMAX 数据域，故同组串行） | `cxo_dashboard_cache_sync`, `vmax_cxo_daily_sync`, `vmax_multi_data_sync`, `soc_trend_sync` |
-| `m` | 41 | 内务轻任务：EWS 邮件会话 + 截图/WhatsApp 文件依赖 + VMAX 数仓 GBase 直连取数 | `site_outage_screenshot`, `whatsapp_send`, `liberia_email_1h`, `liberia_email_8h`, `kpi_ms_contract`, `kpi_ms_wo_sla`, `kpi_sp_spareparts`, `kpi_sp_consumables`, `kpi_ran_availability`, `email_recovery`, `ipran_m6k_chart_email`, `ccn_free_rating_chart_email`, `mtn_mou_daily_email`, `battery_email`, `mailbox_cleanup`, `incident_overview_sync`, `auto_retry_failed`, `db_freshness_check`, `auth_health_check`, `sp_report_generate`, `sp_email_details`, `sp_online_report_generate`, `sp_online_report_send`, `sp_weekly_report`, `mttr_tt_sync`, `progress_sync`, `sp_whatsapp_report`, `sp_material_report`, `log_cleanup`, `tmp_cleanup`, `olib_soc_kpi_daily_sync`, `olib_soc_vmax_report`, `tt_alarm_whatsapp_alert`, `ume_alarm_whatsapp_alert`, `sp_details_files_email`, `tt_mttr_report_generate`, `whatsapp_send_baileys`, `eflow_fiber_assign`, `eflow_5g_assign`, `ipt_power_collect`, `eflow_site_update` |
+| `m` | 42 | 内务轻任务：EWS 邮件会话 + 截图/WhatsApp 文件依赖 + VMAX 数仓 GBase 直连取数 | `site_outage_screenshot`, `whatsapp_send`, `liberia_email_1h`, `liberia_email_8h`, `kpi_ms_contract`, `kpi_ms_wo_sla`, `kpi_sp_spareparts`, `kpi_sp_consumables`, `kpi_ran_availability`, `email_recovery`, `ipran_m6k_chart_email`, `ccn_free_rating_chart_email`, `mtn_mou_daily_email`, `intl_mou_daily_email`, `battery_email`, `mailbox_cleanup`, `incident_overview_sync`, `auto_retry_failed`, `db_freshness_check`, `auth_health_check`, `sp_report_generate`, `sp_email_details`, `sp_online_report_generate`, `sp_online_report_send`, `sp_weekly_report`, `mttr_tt_sync`, `progress_sync`, `sp_whatsapp_report`, `sp_material_report`, `log_cleanup`, `tmp_cleanup`, `olib_soc_kpi_daily_sync`, `olib_soc_vmax_report`, `tt_alarm_whatsapp_alert`, `ume_alarm_whatsapp_alert`, `sp_details_files_email`, `tt_mttr_report_generate`, `whatsapp_send_baileys`, `eflow_fiber_assign`, `eflow_5g_assign`, `ipt_power_collect`, `eflow_site_update` |
 | `c` | 2 | CN EMS 独立会话，两个任务共享 `_pmcache`/`daily_raw.json`，同组保证互斥 | `ems_kpi_cache_sync`, `ems_kpi_daily` |
 | `x` | 1 | 实时告警专属组（2026-10-15 从 `n` 拆出）。要求告警滞后 ≤1 分钟，而 `n` 组是一条串行道，cron 改 `*/1` 也会被 `eflow_sync`（实测平均 192.5s）/`ms_sla_full`（最久 600.1s）挡住 —— 实测 856 次采样中 5.3% 等待 >60s、最差 853.9s | `eflow_active_alarm` |
 | `g` | 1 | RAN Greenplum 取数（2026-10-19 新增）：经 control1 两跳 SSH 到 193.168.0.6，与 eFlow/UME/VMAX GBase/SFTP 无任何会话与写库交集。独立成组的理由是**故障域**：SSH 通道挂死的风险与当年 s 组 sp_data_sync 同型（worker.py:83-93 记载其 channel 读挂死 5.5h 拖停整组）；实测单轮 72.6s（10.4 亿行明细靠 12h 分区裁剪 + 列存），虽短于 m 组每分钟的告警推送周期，但不愿让它去挤那条道 | `gp_ran_user_sync` |
@@ -90,7 +90,7 @@ APScheduler 到点 (backend 进程内)
 > 上一条 22 小时的 `DELETE` 把 `DROP INDEX` 和后续 8 个读全堵在锁队列里，
 > 连带 `pg_to_sqlite_sync` 卡 1h49m、`eflow_sync` 跑满 7265s。
 
-`m` 组末尾几条有注释记录：`finebi_report_sync`/`pg_to_sqlite_sync`（2026-08-25）、`whatsapp_send_ext`（08-31）、`sp_email_details`（09-01）、`cells_kpi_sync`/`sp_material_sync`（09-09~11）在启用分组模式后都因**未归入任何组而无人认领，队列 pending 卡死断档**才补进来（`worker_watchdog.py` 内的补录注释）。其中 `pg_to_sqlite_sync` 已于 2026-10-28 拆到独立的 `p` 组（见上文拆组依据），`m` 组现为 41 项（2026-11-12 新增 `auth_health_check` 与 `mtn_mou_daily_email`，同日删除 `finebi_report_sync` 后曾为 40；**2026-11-16 再删除 `whatsapp_send_ext`，由 42 减为 41**）。
+`m` 组末尾几条有注释记录：`finebi_report_sync`/`pg_to_sqlite_sync`（2026-08-25）、`whatsapp_send_ext`（08-31）、`sp_email_details`（09-01）、`cells_kpi_sync`/`sp_material_sync`（09-09~11）在启用分组模式后都因**未归入任何组而无人认领，队列 pending 卡死断档**才补进来（`worker_watchdog.py` 内的补录注释）。其中 `pg_to_sqlite_sync` 已于 2026-10-28 拆到独立的 `p` 组（见上文拆组依据），`m` 组现为 42 项（2026-11-12 新增 `auth_health_check` 与 `mtn_mou_daily_email`，同日删除 `finebi_report_sync` 后曾为 40；**2026-11-16 再删除 `whatsapp_send_ext`，由 42 减为 41**；**2026-11-22 新增 `intl_mou_daily_email`，回到 42**）。
 
 > **新增任务必须同时登记进 `GROUP_TASK_MAP`；新增/调整「组」必须同步五处**（2026-10-15 补全：原文档只写了 2 处，拆 `x` 组时守卫当场抓出 `start.bat` 与帮助文档两处遗漏）：`worker_watchdog.py::GROUP_TASK_MAP` 的键、`start_hidden.ps1` 的 `$env:MY_APP_WORKER_GROUPS` **与** `$groups` 等待清单（两处）、`restart_workers.py::ALL_GROUPS` 兜底值、`start.bat` 的 worker pid 计数与 `%WCOUNT% / N` 分母、`frontend/src/pages/helpTaskDocs.ts` 的 `group` 字段与 `WORKER_GROUP_INFO`。只加分组表不改启动脚本 = 该组 worker 从不被拉起，症状与漏登记完全一样；漏改 `start.bat` 则「该组 worker 死了仍报全绿」。`restart_workers.py::ALL_GROUPS` 已改为从 `GROUP_TASK_MAP` 取键，其字面值只是 import 失败时的兜底。
 >
@@ -263,6 +263,7 @@ APScheduler 到点 (backend 进程内)
 | `ipran_m6k_chart_email` | IP RAN M6K-FW 图表邮件 | `45 6 * * *` | m |
 | `ccn_free_rating_chart_email` | CNN Free Rating 图表邮件 | `45 7 * * *` | m |
 | `mtn_mou_daily_email` | MTN MOU 日报图表邮件 | `0 7 * * *` | m |
+| `intl_mou_daily_email` | International MOU 日报图表邮件（数据复用 `?page=cn_kpi` 的 c16 图表 SQL） | `0 7 * * *` | m |
 | `fw_kpi_sync` | FW 吞吐 KPI 同步+图表邮件 | `15 7 * * *` | n |
 | `battery_kpi_sync` | 电池 KPI 同步 | `5 * * * *` | u |
 | `battery_email` | 电池 KPI 邮件 | `10 7,19 * * *` | m |
@@ -1159,7 +1160,7 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 
 - **判定**：`backend/services/email/ews_deferral.py` 读 `email_recovery` 落盘的探测状态（每 10 分钟一次真实 SOAP 探测，**唯一直相源，不另做探测**）。仅当 `status=down`（`server_down` / `auth_error` / `cred_mismatch` 都算）且 `last_probe_at` 不超过 30 分钟（`EWS_DEFER_MAX_PROBE_AGE_MIN`）时延后；状态缺失或过期一律 **fail-open**（照常执行）。
 - **范围**：只对 `TASK_SPECS` 里标注 `EWS_DEFERRABLE_IDS` 的任务生效，且只对**定时触发**生效。手动触发照常跑（人可能刚改完密码要立刻验证）。
-  - 收：纯发信任务（`liberia_email_*`、`kpi_ms_*`、`kpi_sp_*`、`sp_material_report`、`sp_details_files_email`、`sp_weekly_report`、`packet_loss_email`、`battery_email`、`ipran_m6k_chart_email`、`ccn_free_rating_chart_email`、`mtn_mou_daily_email`、`kpi_ran_availability`、`mailbox_cleanup`）。
+  - 收：纯发信任务（`liberia_email_*`、`kpi_ms_*`、`kpi_sp_*`、`sp_material_report`、`sp_details_files_email`、`sp_weekly_report`、`packet_loss_email`、`battery_email`、`ipran_m6k_chart_email`、`ccn_free_rating_chart_email`、`mtn_mou_daily_email`、`intl_mou_daily_email`、`kpi_ran_availability`、`mailbox_cleanup`）。
   - **不收**：带数据同步的 `fw_kpi_sync` / `ume_in_osg_report`（延后会让同步一起停），带 WhatsApp 副通道的 `sp_email_details` / `sp_online_report_send`（邮件失败时它们仍照发群，整轮延后等于把还能用的群发停掉）。
 - **记录与补发**：延后写成一条 `trigger_type=deferred`、`error` 含 `EWS_DEFERRED` 的失败记录。`email_recovery` 把它当失败链成员 —— 恢复后立即补发，后续失败按 `RETRY_POLICIES` 重试；越过各任务时效窗口（小时报=本小时、8 小时报=本 8 小时块、日报=24h）的照旧丢弃。
 - **不告警**：通道不可用属「依赖不可用」，不是任务故障；延后记录跳过失败告警，通道状态由 `email_recovery` 的「翻转通知 + 持续故障升级」统一负责。

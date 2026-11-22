@@ -1,6 +1,6 @@
 # my_app 使用帮助
 
-> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-21。
+> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-22。
 
 > 站内入口：侧边栏「使用帮助」，或直链 `http://<host>/myapp/?page=help`。
 
@@ -10,7 +10,7 @@
 
 - [1. 平台简介](#1-平台简介)
 - [2. 通用操作](#2-通用操作)
-- [3. 任务管理详解（85 个任务）](#3-任务管理详解)
+- [3. 任务管理详解（86 个任务）](#3-任务管理详解)
 - [4. 页面指南](#4-页面指南)
 - [5. 运维与排障](#5-运维与排障)
 - [6. 常见问题](#6-常见问题)
@@ -83,7 +83,7 @@
 
 > ⚠️ **新增任务必须同时登记进 `worker_watchdog.py` 的 `GROUP_TASK_MAP`** —— 只写 `TASK_SPECS` 不分组 = 任务入队后永远 pending。这是本项目已发生过四次的事故模式（finebi_report_sync / whatsapp_send_ext / sp_email_details / 2026-09-18 的 olib_soc 与 vmax_multi_data_sync）。
 
-### 3.3 全量任务清单（85 个）
+### 3.3 全量任务清单（86 个）
 
 | 任务 | task_id | 默认 cron | 组 | 工作流脚本 |
 | --- | --- | --- | --- | --- |
@@ -132,6 +132,7 @@
 | IP RAN M6K-FW 图表邮件 | `ipran_m6k_chart_email` | `45 6 * * *` | m | `services/ipran/ipran_chart_service.py → run_ipran_m6k_chart_email` |
 | CNN Free Rating 图表邮件 | `ccn_free_rating_chart_email` | `45 7 * * *` | m | `services/cnn/ccn_free_rating_chart_service.py → run_ccn_free_rating_chart_email` |
 | MTN MOU 日报图表邮件 | `mtn_mou_daily_email` | `0 7 * * *` | m | `services/mtn_mou_chart_service.py → run_mtn_mou_chart_email` |
+| International MOU 日报图表邮件 | `intl_mou_daily_email` | `0 7 * * *` | m | `services/intl_mou_chart_service.py → run_intl_mou_chart_email` |
 | FW 吞吐 KPI 同步+图表邮件 | `fw_kpi_sync` | `15 7 * * *` | n | `services/fw_kpi/fw_kpi_services.py → run_fw_kpi_sync` |
 | 电池 KPI 同步 | `battery_kpi_sync` | `5 * * * *` | u | `services/battary_kpi_fetch/battery_kpi_service.py → run_battery_kpi_sync` |
 | 电池 KPI 邮件 | `battery_email` | `10 7,19 * * *` | m | `services/battary_kpi_fetch/battery_kpi_service.py → run_battery_email` |
@@ -1042,6 +1043,25 @@
 
 - 数据由 PS_CS_CORE 脚本（ps_cs_core.py / ps_cs_core_1month.py）写入远程 db_ps_cs_cn；脚本不跑则日报会缺天
 - 收件人在「设置 → 邮件收件人 → MTN MOU 日报图表邮件」修改
+
+#### International MOU 日报图表邮件（`intl_mou_daily_email`）
+
+- 默认 cron: `0 7 * * *`　|　worker 组: **m**
+- 工作流脚本: `services/intl_mou_chart_service.py → run_intl_mou_chart_email`
+
+**功能**: 取 ?page=cn_kpi 的「International MOU」图表数据（International_MOU_OSS_EMS，复用 c16 的 SQL），生成 Outgoing / Incoming 两张折线图，主题 International MOU Daily Traffic 发送
+
+**工作流与数据流**:
+
+1. 复用 cn_kpi 组件 c16 的 SQL 读 International_MOU_OSS_EMS（与图表逐点同数）
+1. 把图表用的 End Time 日期键还原成统计日，并剔除运行当天未过完的数据
+1. 生成 Outgoing / Incoming 两张折线图并发送
+
+**维护要点**:
+
+- 数据由 PS_CS_CORE 的 CSV_EXTRA（daily_sum）写入远程 db_ps_cs_cn；oss 停导则日报缺天
+- 收件人在「设置 → 邮件收件人 → International MOU 日报图表邮件」修改
+- 日期换算依赖 c16 的 End Time 口径；c16 改日期键时服务会显式报错，不会错标一天
 
 #### FW 吞吐 KPI 同步+图表邮件（`fw_kpi_sync`）
 

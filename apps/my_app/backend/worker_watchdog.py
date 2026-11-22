@@ -424,7 +424,12 @@ GROUP_TASK_MAP = {
         # 读远程 db_ps_cs_cn 的 MTN_Outgoing_MOU_OSS_EMS，出两张折线图走 EWS 发信）。
         # 归 m 组：与 ccn_free_rating_chart_email 同型（只读远端库 + EWS 邮件），
         # 不占任何上游会话；组内串行避免多封邮件同时握手。
-        "mtn_mou_daily_email,battery_email,mailbox_cleanup,"
+        "mtn_mou_daily_email,"
+        # intl_mou_daily_email 2026-11-22 注册：International MOU 日报图表邮件
+        # （每天 07:00，复用 ?page=cn_kpi 的 c16 图表 SQL 读远端 db_ps_cs_cn，
+        # 出两张折线图走 EWS 发信）。归 m 组的理由与 MTN MOU 完全相同：
+        # 只读远端库 + 只发邮件，不占上游会话；与 MTN 同档时由组内串行排队。
+        "intl_mou_daily_email,battery_email,mailbox_cleanup,"
         "incident_overview_sync,auto_retry_failed,db_freshness_check,sp_report_generate,"
         # auth_health_check 2026-11-12 注册：鉴权健康巡检（每天 07:00，只读扫
         # 锁定标记/近 1 天日志鉴权错误/会话缓存新鲜度，报告落 outputs/auth_health/）。

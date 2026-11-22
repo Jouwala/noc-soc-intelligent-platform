@@ -1,5 +1,5 @@
 /* ==================== 任务清单详解数据（供 Help 页「任务管理详解」使用） ====================
- * 内容依据 backend/task_registry.py 的 TASK_SPECS（84 条声明）、
+ * 内容依据 backend/task_registry.py 的 TASK_SPECS（86 条声明）、
  * backend/worker_watchdog.py 的 GROUP_TASK_MAP（worker 分组 u/n/s/w/v/m/c/x/g/p）以及
  * docs/manual/04-task-system.md、14-integrations.md、03-data-layer.md 整理。
  * 改动后端任务注册表时请同步更新本文件（字段：cron / group / script / flow / maintain）。
@@ -939,6 +939,22 @@ export const TASK_DOCS: TaskDoc[] = [
       desc: 'Read daily MOU from MTN_Outgoing_MOU_OSS_EMS in db_ps_cs_cn.sqlite3, plot Outgoing / Incoming line charts and email them with subject MTN MOU Daily Traffic',
       flow: ['Read MTN_Outgoing_MOU_OSS_EMS (daily-aggregated by PS_CS_CORE)', 'Drop the unfinished current day', 'Plot and send the Outgoing / Incoming charts'],
       maintain: ['Data is written into remote db_ps_cs_cn by the PS_CS_CORE scripts (ps_cs_core.py / ps_cs_core_1month.py); if they stop, days go missing', 'Recipients are edited under Settings → Email Recipients → MTN MOU Daily Traffic Email'],
+    },
+  },
+  {
+    id: 'intl_mou_daily_email', group: 'm', cron: '0 7 * * *',
+    script: 'services/intl_mou_chart_service.py → run_intl_mou_chart_email',
+    zh: {
+      name: 'International MOU 日报图表邮件',
+      desc: '取 ?page=cn_kpi 的「International MOU」图表数据（International_MOU_OSS_EMS，复用 c16 的 SQL），生成 Outgoing / Incoming 两张折线图，主题 International MOU Daily Traffic 发送',
+      flow: ['复用 cn_kpi 组件 c16 的 SQL 读 International_MOU_OSS_EMS（与图表逐点同数）', '把图表用的 End Time 日期键还原成统计日，并剔除运行当天未过完的数据', '生成 Outgoing / Incoming 两张折线图并发送'],
+      maintain: ['数据由 PS_CS_CORE 的 CSV_EXTRA（daily_sum）写入远程 db_ps_cs_cn；oss 停导则日报缺天', '收件人在「设置 → 邮件收件人 → International MOU 日报图表邮件」修改', '日期换算依赖 c16 的 End Time 口径；c16 改日期键时服务会显式报错，不会错标一天'],
+    },
+    en: {
+      name: 'International MOU Daily Traffic Email',
+      desc: 'Use the International MOU chart data on ?page=cn_kpi (International_MOU_OSS_EMS, reusing the c16 SQL), plot Outgoing / Incoming line charts and email them with subject International MOU Daily Traffic',
+      flow: ['Reuse the cn_kpi c16 SQL to read International_MOU_OSS_EMS (same points as the chart)', 'Convert the chart End Time key back to the statistical day and drop the unfinished current day', 'Plot and send the Outgoing / Incoming charts'],
+      maintain: ['Data is written into remote db_ps_cs_cn by the PS_CS_CORE CSV_EXTRA (daily_sum) step; if oss stops exporting, days go missing', 'Recipients are edited under Settings → Email Recipients → International MOU Daily Traffic Email', 'The date conversion relies on the c16 End Time convention; if c16 changes its date key the service fails loudly instead of shifting labels wrongly'],
     },
   },
   {

@@ -181,6 +181,15 @@ def _default_mtn_mou() -> Tuple[List[str], List[str]]:
     return ["dong.xinmin@zte.com.cn"], []
 
 
+def _default_intl_mou() -> Tuple[List[str], List[str]]:
+    """International MOU 日报默认收件人：沿用 MTN MOU 日报的默认名单。
+
+    两支日报都是每天 07:00 的 CN 流量图表邮件，2026-11-22 由用户确认
+    「同样的任务」；用户以后在「Settings → 邮件收件人」分别保存后互不影响。
+    """
+    return _default_mtn_mou()
+
+
 def _default_fw_kpi() -> Tuple[List[str], List[str]]:
     from backend.services.fw_kpi.fw_kpi_services import SS_EMAIL_FILE, CC_EMAIL_FILE
     return _read_local_file(SS_EMAIL_FILE), _read_local_file(CC_EMAIL_FILE)
@@ -302,6 +311,13 @@ EMAIL_RECIPIENT_GROUPS = [
         "name": "MTN MOU 日报图表邮件",
         "name_en": "MTN MOU Daily Traffic Email",
         "default_loader": _default_mtn_mou,
+    },
+    {
+        # 2026-11-22 新增：International MOU 日报图表邮件（每天 07:00）
+        "key": "intl_mou_daily_email",
+        "name": "International MOU 日报图表邮件",
+        "name_en": "International MOU Daily Traffic Email",
+        "default_loader": _default_intl_mou,
     },
     {
         "key": "fw_kpi_sync",

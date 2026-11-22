@@ -570,6 +570,8 @@ def _log_recovery(orig_task_id: str, success: bool, detail: str, started_iso: st
             "ccn_free_rating_chart_email": "CNN Free Rating Chart Email",
             # 2026-11-12 新增：MTN MOU 日报图表邮件
             "mtn_mou_daily_email": "MTN MOU Daily Traffic Email",
+            # 2026-11-22 新增：International MOU 日报图表邮件
+            "intl_mou_daily_email": "International MOU Daily Traffic Email",
             "battery_email": "Battery KPI Email",
             "ipran_m6k_chart_email": "IP RAN M6K-FW Chart Email",
             "fw_kpi_sync": "FW KPI Daily Report Email",
@@ -640,6 +642,11 @@ _TASK_DISPATCH = {
     # 且 EWS 降级后日报无法补发。
     "mtn_mou_daily_email": (
         "backend.services.mtn_mou_chart_service", "run_mtn_mou_chart_email"),
+    # 2026-11-22 新增：International MOU 日报图表邮件（每天 07:00）。
+    # 入口同样经 _send_email 调 owa_mail_report.py，会被推导进 EMAIL_TASK_IDS；
+    # 不在此登记会命中 _UNDISPATCHED_EMAIL_TASKS 自检，且 EWS 降级后无法补发。
+    "intl_mou_daily_email": (
+        "backend.services.intl_mou_chart_service", "run_intl_mou_chart_email"),
     "battery_email": ("backend.services.battary_kpi_fetch.battery_kpi_service", "run_battery_email"),
     "ipran_m6k_chart_email": ("backend.services.ipran.ipran_chart_service", "run_ipran_m6k_chart_email"),
     # 2026-09-18 新增：FW KPI 日报（经 owa_mail_report.py 走 EWS）
