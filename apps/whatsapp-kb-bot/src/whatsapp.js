@@ -900,6 +900,8 @@ export async function startWhatsApp({ onQuestion, builtins = null }) {
         const result = await onQuestion(question, {
           chatJid,
           sender,
+          // 群里 sender 常是 LID；Baileys 把真实号码放在 participantPn / senderPn（号码查询鉴权用）
+          senderPn: msg.key?.participantPn || msg.key?.senderPn || '',
           lang,
           // 最近几轮问答，供「那个单子未闭环」这类**追问**落地。
           // 没有它，追问只能被当成一个全新的、缺主语的问题去猜。

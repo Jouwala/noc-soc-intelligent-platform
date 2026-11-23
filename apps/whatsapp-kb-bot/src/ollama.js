@@ -50,7 +50,11 @@ export async function embed(texts, { model = CONFIG.embedModel, batchSize = 16, 
   const out = [];
   for (let i = 0; i < texts.length; i += batchSize) {
     const slice = texts.slice(i, i + batchSize);
-    const data = await request('/api/embed', { body: { model, input: slice, keep_alive: keepAlive } });
+    const body = { model, input: slice, keep_alive: keepAlive };
+    // num_gpu=0：嵌入只用 CPU。A400 只有 4GB，bge-m3 一进显存就把对话模型挤掉，
+    // 每问都要重载（2026-11-23 实测 +4~28 秒）；放 CPU 后两者同时常驻，单次嵌入仍很快。
+    if (CONFIG.embedNumGpu != null) body.options = { num_gpu: CONFIG.embedNumGpu };
+    const data = await request('/api/embed', { body });
     if (!Array.isArray(data.embeddings)) {
       throw new Error('嵌入返回格式异常：缺少 embeddings 字段');
     }
@@ -80,6 +84,9 @@ export async function ollamaChat(messages, opts = {}) {
       options: {
         temperature: opts.temperature ?? CONFIG.temperature,
         num_predict: opts.maxTokens ?? CONFIG.maxTokens,
+        // 显式定上下文：bot 一次塞 ~2500 token 资料，Ollama 默认值可能更小（会截断资料），
+        // 设太大又放不进 4GB 显存。所有调用用同一个值，避免 Ollama 因参数不同反复重载模型。
+        ...(CONFIG.localChat?.numCtx > 0 ? { num_ctx: CONFIG.localChat.numCtx } : {}),
       },
       keep_alive: opts.keepAlive ?? CONFIG.keepAlive,
     },
