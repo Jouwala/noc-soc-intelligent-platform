@@ -122,9 +122,12 @@ H(
      ⚠️ 2026-11-04 加 loadCxort()：矩阵未就绪时 loadKpi 的第 4 路
        （CXO RealTime Dashboard）被 wantCxortGroup() fail-closed 跳过，
        bo 门户首屏这一路要等矩阵到位才补发；只 render() 不取数的话，
-       卡片会一直是「—」直到下一个 5 分钟刻度。 */
+       卡片会一直是「—」直到下一个 5 分钟刻度。
+     ⚠️ 2026-11-23 加 loadKeybiz()：关键业务行同理 —— loadKeybiz 在
+       kbWantRow() 为假时直接跳过；矩阵到位、kpi 域有勾选后要补发一次，
+       否则整行停在骨架屏直到下一个 15 分钟 / 5 分钟刻度。 */
   if (SCOPE) {
-    document.addEventListener('olbr:scope-ready', function () { render(); loadCxort(); });
+    document.addEventListener('olbr:scope-ready', function () { render(); loadCxort(); loadKeybiz(); });
   }
   function boot() {
     applyI18n();""",
@@ -759,7 +762,7 @@ H(
 
 H(
     "render-complaint",
-    """  function render() { renderBand(); renderKpi(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderAux(); renderArchive(); applyI18n(); }""",
+    """  function render() { renderBand(); renderKpi(); renderKeybiz(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderAux(); renderArchive(); applyI18n(); }""",
     """  /* ⚠️ renderComplaintSection() 是**团队门户专有**的（上游页面没有 #complaintSlot，
      那个函数找不到节点就直接返回）。放在 renderAux 之前，与 DOM 顺序一致。 */
   function render() {
@@ -770,7 +773,7 @@ H(
        ⚠️ 判据用 state.signedOut，**不能**用 !state.authOk：boot() 里这一次 render()
          是同步跑的，那一刻 probe() 还没回来、authOk 天然是 false —— 用它会把首屏锁死。 */
     if (state.signedOut) { mainLocked(true); return; }
-    renderBand(); renderKpi(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderComplaintSection(); renderAux(); renderArchive(); applyI18n(); }""",
+    renderBand(); renderKpi(); renderKeybiz(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderComplaintSection(); renderAux(); renderArchive(); applyI18n(); }""",
 )
 
 

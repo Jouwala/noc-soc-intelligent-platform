@@ -287,6 +287,13 @@
        数据口径、下钻、两档刷新节奏都没动 —— 改的只是呈现。 -->
   <section class="band" id="band" aria-label="Quality Control"></section>
 
+  <!-- ===================== L0.4 · 关键业务（2026-11-23 新增） =====================
+       与上游 /v3/olbrportal/ 同名同位置：Network Status 之上的一行六卡。
+       上游由 olbr.js 的 renderKeybiz 渲染；团队门户按 kpi 域决定显隐
+       （window.OLBR_SCOPE.ok('kpi')，矩阵没勾任何 Network Status 子项时整行隐藏）。
+       容器必须与上游同名 —— scripts/check_scope_coverage.py 的「检查 6」会核对。 -->
+  <section class="band" id="keybiz" aria-label="Key Business"></section>
+
   <!-- ===================== L0.5 · CXO 每日经营指标（v1 新增） =====================
        「CXO Daily Dashboard」里最常被追问的三个值，从那张看板里提出来平铺：
          · Total Traffic / Active Users / Valid Throughput of Video Download
