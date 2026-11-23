@@ -2583,7 +2583,7 @@ UME iMonitor 大屏（guard-imonitor-iui，screen_id=1）：把 UME 门户（172
 - MW 链路取 GIS 页同一份 KML 链路并按点到线段距离排序，最近一条加粗；点链路打开「链路详情」抽屉，字段与 ?page=mwRealTime 点链路一致（容量 / Node IP / 接口 / TX-RX 吞吐与利用率 / 24H 趋势 / 端口明细）
 - 两套 MW 数据（KML 与实时 KPI）只部分重合：匹配不上时抽屉如实写「无 KPI 明细」并保留 GIS 侧结构信息，不冒充一条别的链路，也不把「不知道」画成绿色
 - 光纤链路来自 OLIB 拓扑 PDF 第 1 页数字化的站点对，是连接关系示意、没有实时指标；点链路只显示端点、类型与距离
-- 输入订阅者号码 → 调用与 ?page=vmax_user_query 相同的 VMAX 诊断；地图按返回顺序画出有坐标的驻留小区，**最后一个小区用人形符号**标出（列表最后一行同样标 👤），拿到轨迹后地图自动缩放到这些点；点小区或列表行打开右侧抽屉：Subscriber Info / Terminal Info / User Track Cells / Evidence timeline / Fault analysis / Root cause & recommendations
+- 输入订阅者号码 → 调用与 ?page=vmax_user_query 相同的 VMAX 诊断；地图按 CCA usertrack 的**倒序**画出有坐标的驻留小区，**第 1 条即最新，用人形符号**标出（列表第一行同样标 👤），拿到轨迹后地图自动缩放到这些点；卡片顶部显示查询时间窗，表格「最新出现」列来自 VMAX 1100/1300/1301 的 start_time，匹配不到显示 —；点小区或列表行打开右侧抽屉：Subscriber Info / Terminal Info / User Track Cells / Evidence timeline / Fault analysis / Root cause & recommendations
 - 顶栏「按页刷新」在本页是原地刷新：不重挂载地图，只静默重取站点、MW、光纤与订阅者数据
 
 #### 实时告警地图（`realtime_alarm`）

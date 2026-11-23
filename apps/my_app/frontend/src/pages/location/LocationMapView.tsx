@@ -24,6 +24,7 @@ import { BASEMAP_MAX_ZOOM, BASEMAP_PMTILES_URL } from '../gismap/basemap'
 import type { Site, TopologyLink } from '../gismap/types'
 import { UTIL_LEVEL_COLORS, colorFor, utilLevelOf } from '../gismap/types'
 import { circlePolygon, fmtKm, type LatLon } from './geo'
+import { fmtSeen } from './trackTime'
 import type { FiberLink } from './useLocationData'
 import { siteColor } from './siteColors'
 
@@ -35,6 +36,10 @@ export type TrackCell = {
   lon: number
   vendor?: string
   rat?: number | string
+  /** 该小区在 VMAX 诊断记录里最后一次出现的时间（可能为空） */
+  lastSeen?: string
+  /** 命中记录条数（悬浮说明用） */
+  hits?: number
 }
 
 const FIBER_COLOR = '#b197fc'
@@ -268,8 +273,10 @@ export function LocationMapView({
             **只画点、不画连线**（连线会被读成「用户按这个顺序走过」，是错的）。
             最后一个有坐标的小区用**人形符号**标出，即用户最近一次驻留的小区。 */}
         {trackCells.map((c, i) => {
-          const isLast = i === trackCells.length - 1
-          if (!isLast) {
+          /* CCA usertrack 是**倒序**（用户 2026-11-23 确认）：第 1 条即最新，
+             所以人形符号画在 i === 0，而不是最后一条。 */
+          const isLatest = i === 0
+          if (!isLatest) {
             return (
               <CircleMarker
                 key={c.key}
@@ -283,7 +290,10 @@ export function LocationMapView({
                 onClick={() => onTrack(c)}
               >
                 <Tooltip>
-                  <span style={{ fontSize: 12 }}>#{i + 1} {c.name}{c.vendor ? ` · ${c.vendor}` : ''}</span>
+                  <span style={{ fontSize: 12 }}>
+                    #{i + 1} {c.name}{c.vendor ? ` · ${c.vendor}` : ''}
+                    {c.lastSeen ? ` · ${fmtSeen(c.lastSeen)}` : ''}
+                  </span>
                 </Tooltip>
               </CircleMarker>
             )
@@ -302,7 +312,8 @@ export function LocationMapView({
             >
               <Tooltip direction="top">
                 <span style={{ fontSize: 12 }}>
-                  <b>{t('loc.map.trackLast')}</b> · {c.name}{c.vendor ? ` · ${c.vendor}` : ''}
+                  <b>{t('loc.map.trackLast')}</b>（#1）· {c.name}{c.vendor ? ` · ${c.vendor}` : ''}
+                  {c.lastSeen ? ` · ${fmtSeen(c.lastSeen)}` : ''}
                 </span>
               </Tooltip>
             </Marker>

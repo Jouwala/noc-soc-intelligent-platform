@@ -55,6 +55,7 @@ import { useVmaxDiagnosis, LEGACY_NS } from './useVmaxDiagnosis'
 import { SitePanel, LinksPanel, SubscriberPanel } from './location/LocationPanels'
 import LocationMapCard from './location/LocationMapCard'
 import type { TrackCell } from './location/LocationMapView'
+import { buildTrackTimes, timeOfCell } from './location/trackTime'
 import LocationControls from './location/LocationControls'
 import MwLinkDrawer from './location/MwLinkDrawer'
 import FiberLinkDrawer from './location/FiberLinkDrawer'
@@ -160,6 +161,10 @@ export default function LocationMap() {
   const nearestMw = mwNear[0]?.link ?? null
   const nearestFiber = fiberNear[0]?.link ?? null
 
+  /* 诊断源（1100/1300/1301）里的 start_time → 小区最后出现时间。
+     CCA 的 usertrack 本身没有时间戳，这一层只作补充，匹配不到就是空。 */
+  const trackTimes = useMemo(() => buildTrackTimes(sub.sources), [sub.sources])
+
   /** 订阅者驻留小区 → 地图轨迹点（同一小区只留一个；缺坐标的丢弃并计数）。 */
   const track = useMemo(() => {
     const cells = sub.result?.cells?.cells || []
@@ -173,10 +178,24 @@ export default function LocationMap() {
       const key = cellKeyOf(c, i)
       if (seen.has(key)) return
       seen.add(key)
-      out.push({ key, name: c.cellname || c.cellkey || key, lat, lon, vendor: c.vendor, rat: c.rat })
+      const t = timeOfCell(trackTimes, c)
+      out.push({
+        key, name: c.cellname || c.cellkey || key, lat, lon,
+        vendor: c.vendor, rat: c.rat,
+        lastSeen: t?.lastSeen, hits: t?.hits,
+      })
     })
     return { cells: out, missing }
-  }, [sub.result])
+  }, [sub.result, trackTimes])
+
+  /** 查询时间窗（诊断窗口优先，回退 CCA 窗口）——展示在轨迹卡上，回答「时间信息」。 */
+  const subWindowText = useMemo(() => {
+    const w = sub.diag?.window
+    if (w?.start && w?.end) return `${w.start} ~ ${w.end}`
+    const cw = sub.result?.window
+    if (cw?.starttime && cw?.endtime) return `${cw.starttime} ~ ${cw.endtime}`
+    return ''
+  }, [sub.diag, sub.result])
 
   const trackWithKm = useMemo(
     () => track.cells.map((c) => ({ cell: c, km: haversineKm(location, { lat: c.lat, lon: c.lon }) })),
@@ -463,6 +482,7 @@ export default function LocationMap() {
         missing={track.missing}
         resultMsisdn={sub.result?.msisdn}
         hasResult={!!sub.result}
+        windowText={subWindowText}
         onOpen={() => setSubOpen(true)}
       />
 

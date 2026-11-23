@@ -1409,8 +1409,9 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 - **光纤链路**：取 `public/olib/olib-fiber-links.json` + `olib-site-geo.json` 拼出的 OLIB PDF 站点对（`useLocationData.ts::joinFiberLinks`），点击只展示端点、图例类型与距离；文案明确写「示意图、无实时指标」。
 - **订阅者轨迹与右侧抽屉**：
   - 输入 MSISDN 后调用 `pages/useVmaxDiagnosis.ts`（与 `?page=vmax_user_query` / `vmax_user_cca` 同源），一次查询同时取四源诊断与 CCA；
-  - 地图上按返回顺序标出 CCA `usertrack/query_cell` 返回的驻留小区（只画有坐标的，缺坐标的数量单独写出来）；**最后一个小区用「人形」符号**标出，并在列表最后一行用 👤 对应；
-  - usertrack **没有时间字段、返回顺序也不保证时间序**，所以地图只画点、不画连线（连线会被读成「用户按这个顺序走过」）；拿到轨迹后地图会自动 fit 到这些点，输了号码就能直接看到人；
+  - 地图按 CCA `usertrack/query_cell` 的返回顺序标出驻留小区（只画有坐标的，缺坐标的数量单独写出来）；**usertrack 是倒序的，第 1 条即最新小区**，人形符号标第 1 条，列表第一行用 👤 对应；
+  - usertrack **本身没有时间字段**，所以地图只画点、不画连线（连线会被读成「按时间走过」）；拿到轨迹后地图自动 fit 到这些点，输了号码就能直接看到人；
+  - **时间信息**：卡片顶部显示本次查询时间窗（诊断窗口优先）；表格「最新出现」列按小区匹配 VMAX 1100/1300/1301 记录的 `start_time` 取最后一次，匹配不到显示 `—`（只代表该窗口内没有对应记录，不代表没去过）；
   - 点小区圆点或列表行打开 `location/SubscriberDrawer.tsx`：复用 `VmaxCcaCards`（Subscriber Info / Terminal Info / User Track Cells / CCA 根因）、`VmaxWorkspaceAnalysis`（Fault analysis，内嵌 Evidence timeline）、`VmaxWorkspaceVerdict`（Root cause & recommendations），KPI / 根因明细沿用 `DraggableClickModal`。
 - **刷新**：本页登记在 `AR_PAGE_DEFAULTS`（300 秒）且进 `AR_INPLACE_REFRESH_PAGES`，收到 `myapp-refresh` 后只静默重取三层数据与订阅者数据，地图不重挂载。
 
