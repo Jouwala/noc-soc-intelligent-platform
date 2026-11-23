@@ -7533,6 +7533,7 @@ KPI 卡讲 <strong>FE 人群</strong> —— 32 名 FE（<code>isfe=Yes</code>�
 <li>「问问答助手」：向 <code>POST /api/portal-qa/ask</code> 提问，再从<strong>答案文字</strong>里解析经纬度（<code>parseLatLon</code> 支持 <code>6.29, -10.78</code>、<code>lat: … lng: …</code>、<code>6.29 N, 10.78 W</code> 等写法）。答案原样显示在输入框下方；解析不到坐标时如实提示，<strong>不猜点</strong>。</li>
 </ul>
 </li>
+<li><strong>页面结构（2026-11-23 用户要求）</strong>：地图在上、控制条在下。地图右上角是「查询订阅者」手机号搜索窗，右下角是「按经纬度定位」坐标搜索窗；经纬度、半径、站点数、问答助手等完整控制条在<strong>页面最下面</strong>，与地图坐标窗共用同一份 lat/lon 状态（两边显示永远一致）。订阅者轨迹结果表放在控制条之后，是全页最后一块。</li>
 <li><strong>底图与 <code>?page=gis</code> 完全同源</strong>：本机自托管 PMTiles 离线瓦片（nginx <code>/tiles/liberia.pmtiles</code>），不依赖公网；默认<strong>关闭地名注记与道路</strong>（瓦片自带 1.7 万个地名，全开会糊住站点），地图左上角「图层」浮层可分别打开。右下角 attribution 里的 <code>© OpenStreetMap contributors</code> 是<strong>瓦片数据的署名要求</strong>（数据本身由 OSM 衍生），不代表浏览器在请求在线 OSM。</li>
 <li><strong>最近一圈站点</strong>：<code>ringOf()</code>（<code>pages/location/geo.ts</code>）先按所选半径筛，再按 haversine 距离升序取前 N 个；半径内不足 3 个时自动扩到第 3 个最近站点，地图虚线圈与列表同步改用扩后半径，控制条下方用 <code>loc.warn.widened</code> 写明原因与数字。</li>
 <li><strong>站点配色与下钻与 GIS 完全同源</strong>：
@@ -21809,6 +21810,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <ul>
 <li>坐标有四个入口：URL 的 lat / lon（问答助手答案里的链接直接可达）、手动输入、浏览器定位（需 https）、以及「问问答助手」——向 /api/portal-qa/ask 提问后从答案文字里解析坐标</li>
 <li>底图与 ?page=gis 共用本机自托管的 PMTiles 离线瓦片（/tiles/liberia.pmtiles），不依赖公网；默认关闭地名注记与道路，地图左上角「图层」浮层可分别打开。右下角 © OpenStreetMap 是瓦片数据的署名要求，不是在线请求</li>
+<li>地图上有两个搜索窗：右上角「查询订阅者」输手机号查轨迹，右下角「按经纬度定位」输纬度/经度直接定位；经纬度、半径、站点数、问答助手等完整控制条在<strong>页面最下面</strong>，与地图坐标窗共用同一份经纬度状态</li>
 <li>「最近的一圈站点」按所选半径筛站点、按距离升序取前 N 个；半径内不足 3 个时自动扩到第 3 个最近站点，地图虚线圈与列表同步改用扩后半径，并在控制条下方提示</li>
 <li>站点颜色与 ?page=gis 完全同一套规则与色值（实时告警 / 历史 / VIP / 普通）；点站点打开的是 GIS 页同一个下钻抽屉（基本信息 + KPI 图表 + 明细页签）</li>
 <li>MW 链路取 GIS 页同一份 KML 链路并按点到线段距离排序，最近一条加粗；点链路打开「链路详情」抽屉，字段与 ?page=mwRealTime 点链路一致（容量 / Node IP / 接口 / TX-RX 吞吐与利用率 / 24H 趋势 / 端口明细）</li>

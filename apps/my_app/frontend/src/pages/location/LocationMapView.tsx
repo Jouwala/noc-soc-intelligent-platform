@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CircleMarker, MapContainer, Marker, Polygon, Polyline, Tooltip, useMap } from '../../components/LeafletMap'
 import { useI18n } from '../../i18n'
-import { useTheme } from '../../theme'
+import { useIsMobile, useTheme } from '../../theme'
 import { PmtilesLayer } from '../gismap/PmtilesLayer'
 import { LayerToggleControl } from '../gismap/LayerToggleControl'
 import { BASEMAP_MAX_ZOOM, BASEMAP_PMTILES_URL } from '../gismap/basemap'
@@ -120,6 +120,7 @@ export function LocationMapView({
 }) {
   const { t } = useI18n()
   const { isDark } = useTheme()
+  const isMobile = useIsMobile()
   /* 底图开关与 ?page=gis 一致：**默认全关**。瓦片自带 1.7 万个地名，全开会糊住
      站点；道路全开也会让离线矢量图看起来像「在线 OSM」。需要时由用户在这里开。
      2026-11-23 用户问「为什么没用项目的离线地图」：底图本来就是本机 PMTiles，
@@ -324,56 +325,59 @@ export function LocationMapView({
         </CircleMarker>
       </MapContainer>
 
-      {/* 图例：只解释地图上真实存在的图层，避免图例骗人 */}
-      <div
-        style={{
-          position: 'absolute', left: 10, bottom: 10, zIndex: 500,
-          background: isDark ? 'rgba(5,13,34,0.82)' : 'rgba(255,255,255,0.9)',
-          border: `1px solid ${isDark ? 'rgba(0,217,255,0.28)' : 'rgba(13,148,136,0.28)'}`,
-          borderRadius: 8, padding: '7px 9px', fontSize: 11, lineHeight: 1.7,
-          pointerEvents: 'none', maxWidth: 220,
-        }}
-      >
-        <div style={{ fontWeight: 600 }}>{t('loc.map.legend')}</div>
-        {([
-          ['rt_alarm', t('loc.map.legend.rt')],
-          ['his_alarm', t('loc.map.legend.his')],
-          ['vip', t('loc.map.legend.vip')],
-          ['normal', t('loc.map.legend.normal')],
-        ] as const).map(([key, label]) => (
-          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: colorFor(key), display: 'inline-block' }} />
-            {label}
+      {/* 图例：窄屏隐藏 —— 390px 下它会与「按经纬度定位」搜索窗互相遮挡，
+          且地图本身只剩很窄一条；图例信息在桌面端保留。 */}
+      {!isMobile && (
+        <div
+          style={{
+            position: 'absolute', left: 10, bottom: 10, zIndex: 500,
+            background: isDark ? 'rgba(5,13,34,0.82)' : 'rgba(255,255,255,0.9)',
+            border: `1px solid ${isDark ? 'rgba(0,217,255,0.28)' : 'rgba(13,148,136,0.28)'}`,
+            borderRadius: 8, padding: '7px 9px', fontSize: 11, lineHeight: 1.7,
+            pointerEvents: 'none', maxWidth: 220,
+          }}
+        >
+          <div style={{ fontWeight: 600 }}>{t('loc.map.legend')}</div>
+          {([
+            ['rt_alarm', t('loc.map.legend.rt')],
+            ['his_alarm', t('loc.map.legend.his')],
+            ['vip', t('loc.map.legend.vip')],
+            ['normal', t('loc.map.legend.normal')],
+          ] as const).map(([key, label]) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: colorFor(key), display: 'inline-block' }} />
+              {label}
+            </div>
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 14, height: 2, background: UTIL_LEVEL_COLORS.critical, display: 'inline-block' }} />
+            {t('loc.map.legend.mw')}
           </div>
-        ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 14, height: 2, background: UTIL_LEVEL_COLORS.critical, display: 'inline-block' }} />
-          {t('loc.map.legend.mw')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 14, height: 0, borderTop: `2px dashed ${FIBER_COLOR}`, display: 'inline-block' }} />
+            {t('loc.map.legend.fiber')}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: isDark ? '#ffd43b' : '#b45309', display: 'inline-block' }} />
+            {t('loc.map.legend.track')}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              width: 13, height: 13, borderRadius: '50%', background: isDark ? '#ffd43b' : '#f59e0b',
+              border: '1.5px solid #fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="7" height="7" viewBox="0 0 24 24" fill="#111827">
+                <circle cx="12" cy="7" r="3.4" /><path d="M4.8 21c0-4.3 3.2-7.2 7.2-7.2s7.2 2.9 7.2 7.2H4.8z" />
+              </svg>
+            </span>
+            {t('loc.map.legend.trackLast')}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#ff3b30', display: 'inline-block' }} />
+            {t('loc.map.legend.here')}
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 14, height: 0, borderTop: `2px dashed ${FIBER_COLOR}`, display: 'inline-block' }} />
-          {t('loc.map.legend.fiber')}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: isDark ? '#ffd43b' : '#b45309', display: 'inline-block' }} />
-          {t('loc.map.legend.track')}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{
-            width: 13, height: 13, borderRadius: '50%', background: isDark ? '#ffd43b' : '#f59e0b',
-            border: '1.5px solid #fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <svg width="7" height="7" viewBox="0 0 24 24" fill="#111827">
-              <circle cx="12" cy="7" r="3.4" /><path d="M4.8 21c0-4.3 3.2-7.2 7.2-7.2s7.2 2.9 7.2 7.2H4.8z" />
-            </svg>
-          </span>
-          {t('loc.map.legend.trackLast')}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#ff3b30', display: 'inline-block' }} />
-          {t('loc.map.legend.here')}
-        </div>
-      </div>
+      )}
     </div>
   )
 }

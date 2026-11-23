@@ -39,7 +39,7 @@
  *   · location/geo、useLocationData、siteColors  纯计算 / 取数 / 配色
  * ========================================================================== */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Col, Row, Spin, Typography } from 'antd'
+import { Alert, Col, Row, Typography } from 'antd'
 import { EnvironmentOutlined } from '@ant-design/icons'
 
 import api from '../api'
@@ -52,8 +52,9 @@ import { readParam, writeParams } from '../urlState'
 import type { DrilldownAnalytics, DrilldownData, Site, TopologyLink } from './gismap/types'
 import { SiteDrilldownDrawer } from './gismap/SiteDrilldownDrawer'
 import { useVmaxDiagnosis, LEGACY_NS } from './useVmaxDiagnosis'
-import { LocationMapView } from './location/LocationMapView'
 import { SitePanel, LinksPanel, SubscriberPanel } from './location/LocationPanels'
+import LocationMapCard from './location/LocationMapCard'
+import type { TrackCell } from './location/LocationMapView'
 import LocationControls from './location/LocationControls'
 import MwLinkDrawer from './location/MwLinkDrawer'
 import FiberLinkDrawer from './location/FiberLinkDrawer'
@@ -63,7 +64,6 @@ import { siteFromAnswer } from './location/answerSite'
 import {
   distanceToSegmentKm, fmtKm, fmtLatLon, haversineKm, parseLatLon, ringOf, type LatLon,
 } from './location/geo'
-
 const { Text } = Typography
 
 /** 默认位置：蒙罗维亚市区。没有 URL 参数时给一个「一打开就有一圈站点」的起点。 */
@@ -164,7 +164,7 @@ export default function LocationMap() {
   const track = useMemo(() => {
     const cells = sub.result?.cells?.cells || []
     const seen = new Set<string>()
-    const out: Parameters<typeof LocationMapView>[0]['trackCells'] = []
+    const out: TrackCell[] = []
     let missing = 0
     cells.forEach((c, i) => {
       const lat = Number(c.celllat)
@@ -363,7 +363,63 @@ export default function LocationMap() {
         </div>
       </CardBase>
 
-      {/* 控制条 */}
+      <Row gutter={[12, 12]} align="stretch">
+        <Col xs={24} xl={15}>
+          <LocationMapCard
+            center={location}
+            radiusKm={ring.radiusKm}
+            ringSites={ring.items}
+            mwLinks={mwNear.map((x) => x.link)}
+            fiberLinks={fiberNear.map((x) => x.link)}
+            nearestMw={nearestMw}
+            nearestFiber={nearestFiber}
+            trackCells={track.cells}
+            fitToken={fitToken}
+            loadingSites={data.loadingSites && !data.sites.length}
+            onSite={(x) => void openSite(x)}
+            onMw={setMwLink}
+            onFiber={setFiberLink}
+            onTrack={() => setSubOpen(true)}
+            sub={{
+              msisdn: sub.msisdn,
+              onMsisdnChange: sub.setMsisdn,
+              onSearch: submitSubscriber,
+              loading: sub.loading,
+              diagLoading: sub.diagLoading,
+              searched: sub.searched,
+              resultMsisdn: sub.result?.msisdn,
+              cellCount: track.cells.length,
+              missing: track.missing,
+              hasResult: !!sub.result,
+              onOpen: () => setSubOpen(true),
+            }}
+            coord={{
+              latText,
+              lonText,
+              onLatText: setLatText,
+              onLonText: setLonText,
+              onApply: applyManual,
+              error: locError,
+            }}
+          />
+        </Col>
+
+        <Col xs={24} xl={9}>
+          <SitePanel items={ring.items} radiusKm={ring.radiusKm} onOpen={(s) => void openSite(s)} />
+          <div style={{ height: 12 }} />
+          <LinksPanel
+            mw={mwNear}
+            fiber={fiberNear}
+            loadingMw={data.loadingMw}
+            loadingFiber={data.loadingFiber}
+            onOpenMw={setMwLink}
+            onOpenFiber={setFiberLink}
+          />
+        </Col>
+      </Row>
+
+      {/* 控制条：经纬度/半径/问答助手都放在页面最下面（用户 2026-11-23 要求）。
+          地图上另有「按经纬度定位」与「查询订阅者」两个浮窗，常用操作不用滚到底。 */}
       <LocationControls
         latText={latText}
         lonText={lonText}
@@ -393,75 +449,22 @@ export default function LocationMap() {
         } : null}
       />
 
-      {/* 订阅者分析是本页的**主用途**（用户 2026-11-23 明确），所以整条放在地图之前：
-          先输号码、看轨迹，再看周围站点与链路，不用先滚过两张表。
-          宽屏下这张表一行能放下 6 个小区，比塞进右栏更像「用户分析工作台」。 */}
+
+      {/* 订阅者轨迹结果表：放在页面最下面（用户 2026-11-23 要求）。
+          输入窗已经在地图上，这里只负责展示本次查询的结果；
+          表格行仍可点开右侧 VMAX 诊断抽屉。 */}
+      <div style={{ height: 12 }} />
       <SubscriberPanel
         msisdn={sub.msisdn}
-        onMsisdnChange={sub.setMsisdn}
         searched={sub.searched}
         loading={sub.loading}
         diagLoading={sub.diagLoading}
-        onSearch={submitSubscriber}
         trackKm={trackWithKm}
         missing={track.missing}
         resultMsisdn={sub.result?.msisdn}
         hasResult={!!sub.result}
         onOpen={() => setSubOpen(true)}
       />
-      <div style={{ height: 12 }} />
-
-      <Row gutter={[12, 12]} align="stretch">
-        <Col xs={24} xl={15}>
-          <CardBase
-            title={<span>{t('loc.map.title')}</span>}
-            extra={
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {fmtLatLon(location)} · {t('loc.map.radiusPlain', { r: radiusKm })}
-                {' · '}{t('loc.map.offline')}
-                {track.cells.length > 0 ? ` · ${t('loc.map.trackShown', { n: track.cells.length })}` : ''}
-              </Text>
-            }
-            style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-            bodyStyle={{ padding: 0, position: 'relative', flex: '1 1 0%', minHeight: 520 }}
-          >
-            {(data.loadingSites && !data.sites.length) ? (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Spin />
-              </div>
-            ) : (
-              <LocationMapView
-                center={location}
-                radiusKm={ring.radiusKm}
-                ringSites={ring.items}
-                mwLinks={mwNear.map((x) => x.link)}
-                fiberLinks={fiberNear.map((x) => x.link)}
-                nearestMw={nearestMw}
-                nearestFiber={nearestFiber}
-                trackCells={track.cells}
-                fitToken={fitToken}
-                onSite={(s) => void openSite(s)}
-                onMw={setMwLink}
-                onFiber={setFiberLink}
-                onTrack={() => setSubOpen(true)}
-              />
-            )}
-          </CardBase>
-        </Col>
-
-        <Col xs={24} xl={9}>
-          <SitePanel items={ring.items} radiusKm={ring.radiusKm} onOpen={(s) => void openSite(s)} />
-          <div style={{ height: 12 }} />
-          <LinksPanel
-            mw={mwNear}
-            fiber={fiberNear}
-            loadingMw={data.loadingMw}
-            loadingFiber={data.loadingFiber}
-            onOpenMw={setMwLink}
-            onOpenFiber={setFiberLink}
-          />
-        </Col>
-      </Row>
 
       {/* ---------------- 抽屉 ---------------- */}
       <SiteDrilldownDrawer

@@ -10,8 +10,7 @@
  *   · LinksPanel      最近 MW + 光纤链路：点行开各自的详情抽屉
  *   · SubscriberPanel 订阅者号码输入 + 驻留小区列表：点行开 VMAX 诊断抽屉
  * ========================================================================== */
-import { Button, Empty, Input, Spin, Table, Tag, Typography } from 'antd'
-import { SearchOutlined } from '@ant-design/icons'
+import { Button, Empty, Spin, Table, Tag, Typography } from 'antd'
 
 import { useI18n } from '../../i18n'
 import { useIsMobile } from '../../theme'
@@ -203,15 +202,14 @@ export function LinksPanel({
 /* ------------------------------ 订阅者轨迹 ------------------------------ */
 
 export function SubscriberPanel({
-  msisdn, onMsisdnChange, searched, loading, diagLoading, onSearch,
+  msisdn, searched, loading, diagLoading,
   trackKm, missing, resultMsisdn, hasResult, onOpen,
 }: {
+  /** 当前输入框里的号码（没查过时用于标题标注） */
   msisdn: string
-  onMsisdnChange: (v: string) => void
   searched: boolean
   loading: boolean
   diagLoading: boolean
-  onSearch: () => void
   trackKm: { cell: TrackCell; km: number }[]
   missing: number
   resultMsisdn?: string
@@ -272,26 +270,16 @@ export function SubscriberPanel({
 
   return (
     <CardBase
-      title={<span>{t('loc.sub.cardTitle')}</span>}
-      extra={resultMsisdn ? <Tag color="cyan">{resultMsisdn}</Tag> : undefined}
+      title={<span>{t('loc.sub.cardTitle')}<ExplainIcon text={t('loc.sub.explain')} size="0.8rem" /></span>}
+      extra={(resultMsisdn || msisdn) ? <Tag color="cyan">{resultMsisdn || msisdn}</Tag> : undefined}
       bodyStyle={{ padding: 12 }}
     >
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-        <Input
-          prefix={<SearchOutlined style={{ color: 'var(--wh-text-dim)' }} />}
-          value={msisdn}
-          onChange={(e) => onMsisdnChange(e.target.value)}
-          onPressEnter={onSearch}
-          placeholder={t('loc.sub.inputPlaceholder')}
-          style={{ width: 200 }}
-          maxLength={24}
-          allowClear
+      {!searched && (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={<Text type="secondary">{t('loc.sub.emptyNoQuery')}</Text>}
         />
-        <Button type="primary" loading={loading || diagLoading} onClick={onSearch}>
-          {t('loc.sub.search')}
-        </Button>
-        <ExplainIcon text={t('loc.sub.explain')} size="0.85rem" />
-      </div>
+      )}
       {searched && (loading || diagLoading) && (
         <div style={{ padding: 8 }}>
           <Spin size="small" /> <Text type="secondary" style={{ fontSize: 12 }}>{t('loc.sub.loading')}</Text>
