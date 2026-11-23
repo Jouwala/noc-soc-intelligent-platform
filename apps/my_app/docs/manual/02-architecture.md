@@ -85,7 +85,7 @@ schemas/   预留，实际为空
 
 ## 构建产物
 
-`vite.config.ts`：`base: '/myapp/'`（:6）；dev/preview 同为 `0.0.0.0:7090` 且带 `strictPort`，`/api` 与 `/myapp/api` 代理到 `http://localhost:7038`（:9-21,27-41）；`chunkSizeWarningLimit:1200` + 手工 vendor 分包（:55-68）。
+`vite.config.ts`：`base: '/myapp/'`（:39）；dev/preview 同为 `0.0.0.0:7090` 且 preview 带 `strictPort`，`/api` 与 `/myapp/api` 都代理到 `http://localhost:7038`；`chunkSizeWarningLimit:1200`（:95）+ rolldown `codeSplitting.groups` 按依赖分包（:144-165：exceljs / xlsx / react-vendor / date-lib / antd-icons / antd-rc / echarts / leaflet / antd / vendor，按 `priority` 高者先认领）。**2026-11-23 起 exceljs 改为点导出时动态 import**（`src/utils/excelReport.ts:45-77`），≈930KB 不再进首屏；实测各 chunk 均 <1200KB（最大 `index` ≈1.11MB，主体是 `i18n.tsx` 双字典），首屏 modulepreload 合计 3.99MB→2.77MB 裸 / 1268→897KB gzip。改分包规则时保留 `strictExecutionOrder`（:126）—— 它防的是分包图成环导致的整站白屏，理由见该处注释。
 
 脚本只有三条（`frontend/package.json:7-9`）：`dev` / `build`（`tsc && vite build`）/ `preview`，其中 dev 与 preview 走 `../scripts/start-app.mjs` 包装。
 

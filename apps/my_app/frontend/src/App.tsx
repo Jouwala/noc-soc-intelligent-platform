@@ -1045,12 +1045,11 @@ function AppContent() {
    * antd chunk（实测 zhCN 的 '请选择时间' 在 antd chunk 内）。现在按
    * i18n 的语言检测结果（useI18n 的 locale）动态 import()，另一个语言包
    * 只在用户切换语言时才加载。ConfigProvider 行为不变：locale 切换仍生效。
-   * 实测说明：当前 vite.config.ts 的 manualChunks 会把 antd/locale 的
-   * 动态 import 也收进预加载的 antd chunk，所以本轮改动后 antd chunk
-   * 体积不变（字节级一致），语言包仍随首屏下发；要真拆出去，需在
-   * manualChunks 里给动态导入的库开口子，那是 vite.config.ts 的改动，
-   * 本轮按任务要求不动它。这里先把调用形态改成动态 import，到时
-   * 配置一松即自动拆分。首帧 antdLocale 为 undefined 时 ConfigProvider
+   * 实测说明：vite.config.ts 用 rolldown 的 codeSplitting.groups 分包，antd/locale
+   * 仍落在预加载的 antd 组里（体积仅几 KB，且语言切换要秒生效），所以语言包
+   * 依旧随首屏下发；真要拆，需要给它单开一个更高 priority 的组。
+   * 这里先把调用形态改成动态 import，配置一松即自动拆分。首帧 antdLocale
+   * 为 undefined 时 ConfigProvider
    * 用 antd 默认（英文）语言包，但语言包所在 chunk 已预加载，import
    * 在挂载时即从缓存解析，不会闪烁。
    */
