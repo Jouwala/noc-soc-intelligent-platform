@@ -12,7 +12,8 @@
       （bot 不占端口，11-18 重写时漏掉了）；
     · 修备注乱码：WScript.Shell 写 Description 会按 ANSI 代码页（本机 1252）转码，
       中文全部变成 ?；现在备注改由 Shell.Application（Unicode）写入，并回读校验。
-
+    · 修 my_app-Start：powershell.exe 真实路径在 WindowsPowerShell\v1.0 下，
+      原来写成 System32\powershell.exe，生成出的快捷方式双击报「找不到项目」（2026-11-23 用户报告）。
   用法：
     powershell -NoProfile -File desktop_shortcuts\make_desktop_shortcuts.ps1              # 只生成到 TMP\shortcuts
     powershell -NoProfile -File desktop_shortcuts\make_desktop_shortcuts.ps1 -WriteDesktop  # 写到桌面
@@ -36,8 +37,20 @@ if (-not (Test-Path -LiteralPath $OutDir)) { New-Item -ItemType Directory -Path 
 $ws = New-Object -ComObject WScript.Shell
 $shellApp = New-Object -ComObject Shell.Application
 $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
-$ps = Join-Path $env:SystemRoot 'System32\powershell.exe'
+# 2026-11-23 修：powershell.exe **不在** System32 根下（那是 cmd.exe 的位置），
+# 真实路径是 System32\WindowsPowerShell\v1.0\powershell.exe。原来这里写成
+# System32\powershell.exe，生成出的 my_app-Start.lnk 目标为空路径，双击就是
+# 「找不到项目 / 找不到快捷方式」。32 位宿主下 System32 会被重定向到 SysWOW64，
+# 所以两个候选都试，再逐个断言存在 —— 宁可在生成时报错，也不要发出打不开的 .lnk。
+$psCandidates = @(
+    (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'),
+    (Join-Path $env:SystemRoot 'SysWOW64\WindowsPowerShell\v1.0\powershell.exe')
+)
+$ps = $psCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 $icon = Join-Path $env:SystemRoot 'System32\shell32.dll'
+foreach ($exe in @($cmd, $ps, $icon)) {
+    if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { throw "系统程序不存在，生成的快捷方式会打不开：$exe" }
+}
 
 # 备注（Description）不能交给 WScript.Shell：它按 ANSI 代码页（本机 Windows-1252）转码，
 # 中文会无声地变成 ?（2026-11-23 实测：TMP\shortcuts 里 9 个快捷方式的备注全是 ??）。
@@ -124,6 +137,18 @@ foreach ($c in $components) {
     New-Lnk -AsciiName $c.ascii -Name $c.name -Target $c.target -Arguments $c.args `
         -WorkingDirectory $c.wd -IconIndex $c.icon -Description $c.desc
 }
+
+# 生成后自检：目标空/不存在一律算失败。2026-11-23 的 powershell 路径写错就是这样漏出去的
+# （快捷方式生成成功、也不报错，只有人双击时才发现打不开）。
+$broken = @()
+foreach ($lnkFile in @(Get-ChildItem -LiteralPath $OutDir -Filter *.lnk -Force)) {
+    $link = $shellApp.Namespace($lnkFile.DirectoryName).ParseName($lnkFile.Name).GetLink
+    $tp = $link.Target.Path
+    if ([string]::IsNullOrEmpty($tp) -or -not (Test-Path -LiteralPath $tp)) {
+        $broken += ("{0} -> {1}" -f $lnkFile.Name, $tp)
+    }
+}
+if ($broken.Count -gt 0) { throw ("生成出无法打开的快捷方式：`n  " + ($broken -join "`n  ")) }
 
 Write-Host ''
 Write-Host ("完成：{0} 个快捷方式 -> {1}" -f ($controls.Count + $components.Count), $OutDir) -ForegroundColor Green
