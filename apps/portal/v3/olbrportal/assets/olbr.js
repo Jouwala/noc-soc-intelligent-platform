@@ -5560,7 +5560,10 @@
        ⚠️ 检索轨（含侧栏分组 chips）已于 2026-10-16 整块移除，这条闸门只剩
        renderArchive() 自己在用 —— 保留口径不变：用户当场归档过才露出来。 */
     if (!state.recall) { box.innerHTML = ''; box.hidden = true; return; }
-    box.hidden = false;
+    /* ⚠️ 2026-11-23（#237 事后评审 B1）：与 renderKeybiz() 同一模式 —— 登录闸门
+       锁住时只改 hidden、不清内容。否则登出后 render() → renderArchive() 会把
+       mainLocked(true) 藏起来的 #arch 重新解隐（recall 在登出前已被置真）。 */
+    box.hidden = !!state.mainLocked;
     list = list.slice().sort(sorter(DATA.ARCHIVE));
     var open = !!state.auxOpen[DATA.ARCHIVE], cut = list.length > DATA.AUX_ROWS;
     var show = open || !cut ? list : list.slice(0, DATA.AUX_ROWS);
@@ -5972,7 +5975,10 @@
        都会把 hidden 重新写成 false，登录框下面于是又冒出内容。
        state.mainLocked 让「锁定」成为渲染函数也能读到的状态，而不是一次性的 DOM 操作。 */
     state.mainLocked = !!on;
-    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux']
+    /* ⚠️ 2026-11-23（#237 事后评审 B1）：清单里补 '#arch'。
+       归档区由 renderArchive() 异步渲染，只靠这里的一次性 DOM 赋值藏不住 ——
+       登出后任何一次 render() 都会把它重新解隐（recall 还为真时）。 */
+    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux', '#arch']
       .forEach(function (s) { var e = $(s); if (e) e.hidden = on; });
     /* 解锁后按「锁定态 + 团队作用域」重算一次 #keybiz 的 hidden：
        它在上面那份清单里会被**无条件**解隐，而团队门户矩阵没勾任何 kpi 子项时
@@ -6053,6 +6059,12 @@
     }).catch(function () {});
     try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
     state.user = null; state.authOk = false; renderGate(); renderWho();
+    /* ⚠️ 2026-11-23（#237 事后评审 B1）：登出必须收回归档区的「当场归档过」开关，
+       并立刻把 #arch 藏起来。否则 recall 仍为真时，后续 render() → renderArchive()
+       会在登录闸门下面重新露出归档区（renderGate → mainLocked(true) 只藏清单里的
+       区块，renderArchive 自己的解隐要靠上面的 state.mainLocked 守卫）。 */
+    state.recall = false;
+    var arch = $('#arch'); if (arch) arch.hidden = true;
   }
 
   /* =============================================================== 用户管理 -- */
