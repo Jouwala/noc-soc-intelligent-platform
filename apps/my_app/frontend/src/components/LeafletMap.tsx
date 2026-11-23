@@ -375,12 +375,18 @@ type CircleMarkerProps = {
       CSS 动画只能作用在 DOM 元素上，而 CircleMarker 的 props 走的是 SVG 属性，
       没有 className 就无从在 CSS 里选到它 —— 故这里透传一层。 */
   className?: string
+  /** 是否响应鼠标事件（默认 true，Leaflet 默认）。
+      2026-11-23 新增：GIS 页「站点类别」圈叠在站点圆点之上，传 false 让点击
+      穿透到下面的站点圆点（否则「点站点开抽屉」会被这层圈吞掉）。
+      与 Marker 的同名 prop 语义一致。 */
+  interactive?: boolean
   onClick?: () => void
   children?: ReactNode
 }
 
 export function CircleMarker({
-  center, radius, fillColor, color, weight, opacity, fillOpacity, pane, className, onClick, children,
+  center, radius, fillColor, color, weight, opacity, fillOpacity, pane, className,
+  interactive, onClick, children,
 }: CircleMarkerProps) {
   const { map, parent } = useLeafletParent()
 
@@ -391,9 +397,12 @@ export function CircleMarker({
     if (pane && map && !map.getPane(pane)) map.createPane(pane)
     /* pane 用条件展开：传 pane: undefined 会把 Path 默认的 'overlayPane'
      * 覆盖成 undefined，onAdd 时 getPane() 拿到 undefined 直接崩。
-     * 与 TileLayer 同一类坑（见该组件注释）。 */
+     * 与 TileLayer 同一类坑（见该组件注释）。
+     * interactive 同理条件展开：只在明确传 false 时才写进 options，
+     * 不传时严格保持 Leaflet 默认（true），既有圆点行为不变。 */
     return L.circleMarker(center, {
       radius, fillColor, color, weight, opacity, fillOpacity,
+      ...(interactive === false ? { interactive: false } : {}),
       ...(className ? { className } : {}),
       ...(pane ? { pane } : {}),
     })

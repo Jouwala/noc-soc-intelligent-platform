@@ -31,7 +31,13 @@ import type { SiteClassGroup, SiteClassSite, SiteClassesResp } from './types'
 /** 缓存键 —— 与 GIS 页其它 personnel 端点同风格（前缀 `gis:personnel:`） */
 const CACHE_KEY = 'gis:personnel:site-classes'
 
-export function useSiteClasses() {
+/**
+ * @param enabled 是否取数。默认 true（人员页的用法，保持不变）。
+ *   2026-11-23 新增：GIS 页（?page=gis）也复用这块面板，但同一个
+ *   GISMap 组件还承担 ?page=realtime_alarm（`mode === 'realtime'`）——
+ *   那里不显示本面板，传 false 可省掉一次约 100KB 的请求。
+ */
+export function useSiteClasses({ enabled = true }: { enabled?: boolean } = {}) {
   const { t, locale } = useI18n()
   const [groups, setGroups] = useState<SiteClassGroup[]>([])
   const [sites, setSites] = useState<SiteClassSite[]>([])
@@ -43,6 +49,12 @@ export function useSiteClasses() {
   /* 挂载即拉：图例上要显示每类的站点数（「COOL 64」），没有数据就只能空着。
      824 行精简字段约 100KB，cachedGet 缓存 30s，切页签回来不会重复下载。 */
   useEffect(() => {
+    /* 不取数的模式要**主动把 loading 关掉**：loading 初值是 true，
+       不关的话面板会永远停在「正在加载站点类别…」，看起来像接口挂了。 */
+    if (!enabled) {
+      setLoading(false)
+      return
+    }
     let alive = true
     setLoading(true)
     cachedGet<SiteClassesResp>(CACHE_KEY, () => api.get('/gis/personnel/site-classes'))
@@ -61,7 +73,7 @@ export function useSiteClasses() {
       })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [])
+  }, [enabled])
 
   /** 点击某个类别 → 切换选中。整组清空时把分组键一起删掉，
    *  免得留下 `{ trm_type: [] }` 这种"有分组但没选值"的僵尸状态。 */

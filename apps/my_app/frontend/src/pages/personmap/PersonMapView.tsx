@@ -215,6 +215,28 @@ export function PersonMapView({
   const visiblePins = showPeople ? pinPersons : (showTerritory ? territoryPins : [])
   const pinsVisible = showPeople || showTerritory
 
+  /* ---------- 搜索聚焦：搜索人员时地图只留该人员（2026-11-23 用户需求） ----------
+     需求原话：「地图搜索人员的时候不显示其他人员，搜索站点的时候要显示其他站点，
+     但是搜索站点自动居中。跟当前一样」。
+     即：人员搜索 = 收窄到被搜到的那个人（其余人员针不画）；站点搜索 = 照旧
+     （自动 flyTo 居中、其他站点圆点不受影响）。
+     ⚠️ 只在**搜索选中**时收窄，直接点人员针/表格行不改行为 —— 用户没要求
+        点选也隐藏其他人，把点选也收窄会让「点一个人再对比另一个人」变得不可能。
+     ⚠️ 地图只画这个针，但 `MapSearch` 的人员源仍是完整 `visiblePins`，
+        否则搜过一个人之后就再也搜不到别人（搜索框里只剩他自己）。 */
+  const [searchPinKey, setSearchPinKey] = useState<string | null>(null)
+  useEffect(() => {
+    if (!searchPinKey) return
+    /* 选中态离开这个人（点地图空白 / 点卡片「取消选中」/ 表格改选别人），
+       或该人已不在可见集合里（两个图层开关切换）→ 恢复全部人员。 */
+    if (selectedKey !== searchPinKey || !visiblePins.some(p => p.name_key === searchPinKey)) {
+      setSearchPinKey(null)
+    }
+  }, [searchPinKey, selectedKey, visiblePins])
+  const pinsToDraw = searchPinKey
+    ? visiblePins.filter(p => p.name_key === searchPinKey)
+    : visiblePins
+
   useEffect(() => {
     if (!isMapAlive(map)) return
     const onMapClick = (e: any) => {
@@ -428,8 +450,10 @@ export function PersonMapView({
   }, [flyTarget?.tick])
 
   /* 搜索选中人员 → 与点击人员针同义：交给页面更新 selectedKey，
-     取景由上面的聚焦 effect 接管（自动飞到「人 + 站点」的包围盒）。 */
+     取景由上面的聚焦 effect 接管（自动飞到「人 + 站点」的包围盒）。
+     额外记下 searchPinKey：地图只画这个人（见上方的搜索聚焦说明）。 */
   const handlePickPerson = useCallback((nameKey: string) => {
+    setSearchPinKey(nameKey)
     onSelect(nameKey)
   }, [onSelect])
 
@@ -443,6 +467,9 @@ export function PersonMapView({
      负责人的针被藏了，选中一个看不见的人只会让抽屉和地图对不上。
      2026-10-29：辖区开着时中心有标签，针看得见，故判据从 showPeople 换成 pinsVisible。 */
   const handlePickSite = useCallback((site: ManagedSite) => {
+    /* 搜索站点 → 解除「只显示被搜人员」的收窄，其他站点/人员照常显示
+       （2026-11-23 用户要求「搜索站点的时候要显示其他站点，但是搜索站点自动居中」）。 */
+    setSearchPinKey(null)
     setFlyTarget({ lat: site.lat, lng: site.lng, tick: Date.now() })
     if (!pinsVisible) return
     const ownerKey = site.owner_keys?.[0]
@@ -485,7 +512,9 @@ export function PersonMapView({
           「默认站点」模式下人员源换 pinPersons —— 辖区人员（含无登记坐标者）
           也要能被搜到并选中，否则开关一开图上有针、搜索框里却没有此人。
           人员源与地图上**实际可见**的针同源（visiblePins）：针藏起来时，
-          搜索框不该再提供「选中一个看不见的人」的入口（站点搜索不受影响）。 */}
+          搜索框不该再提供「选中一个看不见的人」的入口（站点搜索不受影响）。
+          ⚠️ 搜索选中人员后地图会收窄成只画他一个（pinsToDraw），但**搜索源仍是
+             完整的 visiblePins** —— 否则搜过一次就再也搜不到别人。 */}
       <MapSearch
         people={visiblePins}
         selectedKey={selectedKey}
@@ -590,10 +619,11 @@ export function PersonMapView({
           见 personPinHtml.ts 文件头，2026-10-21 实测踩过）。
           2026-10-29：判据从 showPeople 换成 pinsVisible —— 「默认站点」开着时，
           每个辖区的几何中心要带与 People 同样的标签（图标 + 姓名 + 电话 + 站点数），
-          即使「人员」开关是关的。集合见上方 visiblePins 的注释。 */}
+          即使「人员」开关是关的。集合见上方 visiblePins 的注释。
+          2026-11-23：集合再经 `pinsToDraw` 收窄 —— 搜索选中某人后只画他。 */}
       {pinsVisible && (
         <PersonPinsLayer
-          persons={visiblePins}
+          persons={pinsToDraw}
           selectedKey={selectedKey}
           isDark={isDark}
           pane={PERSON_PANE}
