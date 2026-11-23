@@ -15,6 +15,12 @@
     powershell -NoProfile -File ops\deploy\portal-ctl.ps1 -Action stop
     powershell -NoProfile -File ops\deploy\portal-ctl.ps1 -Action restart
   桌面快捷方式见同目录 olbr-start.bat / olbr-stop.bat / olbr-status.bat。
+
+  WhatsApp bot（2026-11-23 补进总控，对齐老 my_portal 的 8/9 号）：
+    bot（src/index.js）不占端口，也没有 stopped.flag 机制，所以不进 $Ports / $Tasks，
+    单独走 apps\whatsapp-kb-bot\autostart.ps1（与 WhatsAppKB_Bot_* 任务跑的是同一个脚本）：
+    start 起它、stop 用 -Stop 优雅停、status 读 data\bot_heartbeat.json + 9269（网页问答助手）。
+    P1 告警推送（notify.js / autostart-notify.ps1）是独立进程，这里不动。
 #>
 [CmdletBinding()]
 param(
@@ -32,6 +38,11 @@ foreach ($need in @('apps\my_app\start_hidden.ps1', 'apps\portal\start_hidden.ps
 $NginxDir = Join-Path $Root 'nginx-1.28.0'
 $Ports = @(80, 443, 7038, 7090, 9267, 9268)
 $Tasks = @('MyApp_EnsureRunning', 'Portal_EnsureRunning', 'Nginx_EnsureRunning')
+$BotDir = Join-Path $Root 'apps\whatsapp-kb-bot'
+$BotScript = Join-Path $BotDir 'autostart.ps1'
+$BotPort = 9269   # 网页问答助手 src/http-server.js（autostart.ps1 一并管）
+$BotTasks = @('WhatsAppKB_Bot_Autostart', 'WhatsAppKB_Bot_EnsureRunning')
+$PsExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
 function Get-PortPid {
     param([int]$Port)
@@ -88,7 +99,57 @@ function Show-Status {
         $t = Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue
         if ($t) { Write-Host ("  任务 {0,-22} {1}" -f $n, $t.State) -ForegroundColor DarkGray }
     }
+    Show-BotStatus
     Write-Host ''
+}
+
+# bot 不占端口，端口扫描看不到它；存活只能看 data\bot_heartbeat.json
+# （src/whatsapp.js 每次连上都写、之后每 30 秒刷新）。
+function Show-BotStatus {
+    $hbFile = Join-Path $BotDir 'data\bot_heartbeat.json'
+    if (-not (Test-Path -LiteralPath $hbFile)) {
+        Write-Host '  WhatsApp bot：无心跳文件（从没跑过，或刚停）' -ForegroundColor Yellow
+    } else {
+        try {
+            $hb = Get-Content -LiteralPath $hbFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $age = -1
+            try { $age = [int]([datetime]::UtcNow - [datetime]::Parse($hb.at).ToUniversalTime()).TotalSeconds } catch { }
+            if ($hb.connected -and $age -ge 0 -and $age -le 300) {
+                Write-Host ("  WhatsApp bot：已连接  pid={0}  心跳 {1} 秒前" -f $hb.pid, $age) -ForegroundColor Green
+            } else {
+                Write-Host ("  WhatsApp bot：未连接  pid={0}  心跳 {1} 秒前" -f $hb.pid, $age) -ForegroundColor Yellow
+                Write-Host '               刚停过属正常；若进程在跑却一直未连接，需重新扫码：cd apps\whatsapp-kb-bot ; npm run relogin' -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host ("  WhatsApp bot：心跳文件读不了 - {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+        }
+    }
+    if ((Get-PortPid $BotPort) -ne 0) {
+        Write-Host ("  {0,-5} 跑着  网页问答助手" -f $BotPort) -ForegroundColor Green
+    } else {
+        Write-Host ("  {0,-5} 停    网页问答助手" -f $BotPort) -ForegroundColor Red
+    }
+    foreach ($n in $BotTasks) {
+        $t = Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue
+        if ($t) { Write-Host ("  任务 {0,-28} {1}" -f $n, $t.State) -ForegroundColor DarkGray }
+    }
+}
+
+# 调 autostart.ps1（无参数 = 起；-Stop = 停）。
+# 不走管道、不用 Start-Process -Wait：bot 是脱离的 node 守护进程，管道可能等不到 EOF，
+# -Wait 会连它这个子孙进程一起等，都会让本脚本卡住（见 my_portal_ctl.ps1 2026-11-06 的说明）。
+function Invoke-Bot {
+    param([string[]]$BotArgs = @())
+    if (-not (Test-Path -LiteralPath $BotScript)) {
+        Write-Host ("[WARN] 找不到 {0}，跳过 WhatsApp bot" -f $BotScript) -ForegroundColor Yellow
+        return
+    }
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $PsExe -NoProfile -ExecutionPolicy Bypass -File $BotScript @BotArgs
+        if ($LASTEXITCODE -ne 0) { Write-Host ("[WARN] autostart.ps1 退出码 {0}" -f $LASTEXITCODE) -ForegroundColor Yellow }
+    } finally { $ErrorActionPreference = $prev }
 }
 
 function Wait-AllPorts {
@@ -132,6 +193,8 @@ function Invoke-Start {
     } else {
         Write-Host '[OK] 全部端口已就绪' -ForegroundColor Green
     }
+    Write-Host '  启动 WhatsApp bot + 网页问答助手（9269），最多等 60 秒握手...' -ForegroundColor DarkGray
+    Invoke-Bot
     Show-Status
 }
 
@@ -158,12 +221,18 @@ function Invoke-Stop {
         $ErrorActionPreference = 'Continue'   # nginx 把提示写 stderr，Stop 会中断
         try { & .\nginx.exe -s quit 2>&1 | Out-Null } catch { } finally { $ErrorActionPreference = $prev; Pop-Location }
     }
+    Write-Host '  停 WhatsApp bot + 网页问答助手（9269）...' -ForegroundColor DarkGray
+    Invoke-Bot -BotArgs @('-Stop')
     $busy = Wait-AllFree -Seconds 90
     if ($busy.Count -gt 0) {
         Write-Host ("[WARN] 这些端口仍被占用：{0}" -f ($busy -join ', ')) -ForegroundColor Yellow
     } else {
         Write-Host '[OK] 全部端口已释放' -ForegroundColor Green
     }
+    Write-Host '[注意] WhatsApp bot 没有 stopped.flag：WhatsAppKB_Bot_EnsureRunning 任务 5 分钟内会把它拉回来。' -ForegroundColor Yellow
+    Write-Host '       要让它保持停止，先禁用这两个任务：' -ForegroundColor Yellow
+    Write-Host '         Disable-ScheduledTask -TaskName WhatsAppKB_Bot_Autostart' -ForegroundColor Yellow
+    Write-Host '         Disable-ScheduledTask -TaskName WhatsAppKB_Bot_EnsureRunning' -ForegroundColor Yellow
     Show-Status
 }
 
