@@ -39,21 +39,20 @@
  *   · location/geo、useLocationData、siteColors  纯计算 / 取数 / 配色
  * ========================================================================== */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Col, Row, Typography } from 'antd'
-import { EnvironmentOutlined } from '@ant-design/icons'
+import { Alert, Col, Row } from 'antd'
 
 import api from '../api'
 import { useI18n } from '../i18n'
 import { pageWrap } from '../theme'
 import { CardBase } from '../components/cards'
 import { ExplainIcon } from '../components/MetricExplain'
-import CalcChainNote from '../components/CalcChainNote'
 import { readParam, writeParams } from '../urlState'
 import type { DrilldownAnalytics, DrilldownData, Site, TopologyLink } from './gismap/types'
 import { SiteDrilldownDrawer } from './gismap/SiteDrilldownDrawer'
 import { useVmaxDiagnosis, LEGACY_NS } from './useVmaxDiagnosis'
 import { SitePanel, LinksPanel, SubscriberPanel } from './location/LocationPanels'
 import LocationMapCard from './location/LocationMapCard'
+import LocationIntroCard from './location/LocationIntroCard'
 import type { TrackCell } from './location/LocationMapView'
 import { buildTrackTimes, timeOfCell } from './location/trackTime'
 import LocationControls from './location/LocationControls'
@@ -65,7 +64,6 @@ import { siteFromAnswer } from './location/answerSite'
 import {
   distanceToSegmentKm, fmtKm, fmtLatLon, haversineKm, parseLatLon, ringOf, type LatLon,
 } from './location/geo'
-const { Text } = Typography
 
 /** 默认位置：蒙罗维亚市区。没有 URL 参数时给一个「一打开就有一圈站点」的起点。 */
 const DEFAULT_LOCATION: LatLon = { lat: 6.3, lon: -10.795 }
@@ -355,33 +353,6 @@ export default function LocationMap() {
 
   return (
     <div style={pageWrap}>
-      {/* 标题 + 口径说明（默认收起） */}
-      <CardBase style={{ marginBottom: 'var(--wh-space-md)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <EnvironmentOutlined style={{ fontSize: 18 }} />
-          <span style={{ fontSize: 16, fontWeight: 700 }}>{t('loc.title')}</span>
-          <Text type="secondary" style={{ fontSize: 12 }}>{t('loc.subtitle')}</Text>
-        </div>
-        <div style={{ marginTop: 'var(--wh-space-sm)' }}>
-          <CalcChainNote
-            title={t('loc.calc.title')}
-            sections={[
-              { title: t('loc.calc.posTitle'), lines: [t('loc.calc.pos')] },
-              { title: t('loc.calc.ringTitle'), lines: [t('loc.calc.ring')] },
-              { title: t('loc.calc.linkTitle'), lines: [t('loc.calc.link')] },
-              { title: t('loc.calc.subTitle'), lines: [t('loc.calc.sub')] },
-            ]}
-            warning={layerErrors.length ? (
-              <Alert
-                type="warning" showIcon style={{ marginBottom: 6 }}
-                message={t('loc.warn.layers')}
-                description={layerErrors.join('；')}
-              />
-            ) : undefined}
-          />
-        </div>
-      </CardBase>
-
       <Row gutter={[12, 12]} align="stretch">
         <Col xs={24} xl={15}>
           <LocationMapCard
@@ -485,6 +456,8 @@ export default function LocationMap() {
         windowText={subWindowText}
         onOpen={() => setSubOpen(true)}
       />
+
+      <LocationIntroCard layerErrors={layerErrors} />
 
       {/* ---------------- 抽屉 ---------------- */}
       <SiteDrilldownDrawer
