@@ -45,6 +45,7 @@ function groupLabelKey(group: string): string {
 
 export function SiteClassLegend({
   groups, loading, error, selected, onToggle, onClear, shown, total, nf, labelOf,
+  maxHeight,
 }: {
   groups: SiteClassGroup[]
   loading: boolean
@@ -60,6 +61,11 @@ export function SiteClassLegend({
   total: number
   nf: (n: number) => string
   labelOf: (group: string, value: string) => string
+  /** 面板最大高度。默认 `calc(100vh - 120px)`（人员页：门户嵌入下地图容器
+   *  会被撑到 1122px，按容器百分比算等于不限制，只能按视口限高）。
+   *  2026-11-23 新增：GIS 页（?page=gis）把这个面板搬进地图卡片的右上角，
+   *  那里卡片高度由 flex 分配、不是视口，故传 `'none'`，让外层容器滚动。 */
+  maxHeight?: string | number
 }) {
   const { t } = useI18n()
   /** 折叠态默认展开 —— 图例不展开就没人知道可以点（需求要的是"点击时显示站点"，
@@ -84,7 +90,7 @@ export function SiteClassLegend({
       style={{
         /* 宽度由外层浮层列给定（`width: '100%'`，见 MapTopRightOverlays.tsx
            的同宽说明），这里撑满即可 —— 与上方「人员 / 默认站点」开关卡同宽。 */
-        width: '100%', maxHeight: 'calc(100vh - 120px)', overflow: 'auto',
+        width: '100%', maxHeight: maxHeight ?? 'calc(100vh - 120px)', overflow: 'auto',
         padding: '6px 8px',
         borderRadius: 'var(--wh-radius-sm, 4px)',
         background: 'var(--wh-card-bg, rgba(255,255,255,0.92))',

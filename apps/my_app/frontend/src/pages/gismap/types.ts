@@ -437,6 +437,46 @@ export const LEGEND_COLORS: Record<string, string> = {
    未知 key 回落到 SITE_COLORS.normal（与改动前一致，不臆造颜色）。 */
 export const colorFor = (key: string): string => LEGEND_COLORS[key] || SITE_COLORS.normal
 
+/**
+ * 站点 → 图例分档（**站点颜色规则的唯一真相源**）。
+ *
+ * 2026-11-23 从 GISMap.tsx 的内联 `getSiteCategory` 原样抽出：位置页
+ * （?page=location）要画与 GIS 完全同色的站点圆点，而两页各写一份必然漂移。
+ * GISMap 改为调用本函数（行为逐字不变），位置页直接复用，改分档顺序只改这里。
+ *
+ * @param mode     'all' = GIS 页；'realtime' = 实时告警页（实时页多出门禁超时/工单档）
+ * @param layers   当前打开的图层集合；关掉的图层不参与分档（与 GIS 的
+ *                 `activeLayers.has(...)` 守卫一致，关掉实时告警图层后站点会自然
+ *                 落到 VIP / normal，不会被涂成告警色）
+ *
+ * 优先级（2026-10-17 用户实测后确定，勿随手改回 tt > wo > 告警）：
+ *   realtime: overdue > wo > tt > ontime > vip > normal
+ *   all:      rt_alarm > his_alarm > vip > normal
+ * 「His」三合一：历史告警 / 未关闭 TT / WO 任一命中即算，见 hisAnyHit 注释。
+ */
+export function siteLegendKey(
+  site: Site,
+  mode: 'all' | 'realtime',
+  layers: Set<LayerKey>,
+): LegendKey {
+  const hisAnyHit = (s: Site): boolean =>
+    (s.his_alarm_count || 0) > 0 || (s.open_tt || 0) > 0 || (s.wo_count || 0) > 0
+  const isVip = site.vip_site === 'Y' || site.vip_site === 'Yes'
+
+  if (mode === 'realtime') {
+    if (layers.has('rt_alarm') && (site.rt_alarm_overdue || 0) > 0) return 'rt_alarm_overdue'
+    if (layers.has('wo') && (site.rt_wo_count || 0) > 0) return 'wo'
+    if (layers.has('tt') && (site.rt_tt_count || 0) > 0) return 'tt'
+    if (layers.has('rt_alarm') && (site.rt_alarm_count || 0) > 0) return 'rt_alarm_ontime'
+    if (isVip) return 'vip'
+    return 'normal'
+  }
+  if (layers.has('rt_alarm') && (site.rt_alarm_count || 0) > 0) return 'rt_alarm'
+  if (layers.has('his_alarm') && hisAnyHit(site)) return 'his_alarm'
+  if (isVip) return 'vip'
+  return 'normal'
+}
+
 /* MW 链路线色图例 —— 与 backend/services/mw_ume/mw_links_store.py 的
    STYLE_COLORS 一一对应（KML 样式名 → 色值），是那 4 个颜色的前端副本。
    改 KML 样式色时两处要一起改（后端 `STYLE_COLORS` 已声明同源约束）。 */

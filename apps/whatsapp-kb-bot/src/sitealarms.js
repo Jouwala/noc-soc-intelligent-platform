@@ -36,6 +36,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CONFIG, ROOT } from './config.js';
 import { resolvePython } from './pythonPath.js';
+import { renderSiteInfo } from './siteinfo.js';
 
 const SCRIPT = resolve(ROOT, 'scripts', 'eflow-live-alarms.py');
 
@@ -201,11 +202,18 @@ function render(obj, lang, code) {
   if (code === 4) return { answered: false, text: t.notFound(site) };
   if (code === 2) return { answered: false, text: t.unavailable };
 
+  // 站点基本信息（GIS 下钻口径）—— 与告警是不同事实，作为附加块拼在告警正文后。
+  // 查询失败/查无此站都由 siteinfo.js 如实标注，不影响告警通道的 answered 判定。
+  const info = renderSiteInfo(obj?.site_info, lang);
+
   const matched = Number(obj?.matched || 0);
   if (code === 1 || matched === 0) {
     // 站点干净：这是**明确结论**（有依据），故 answered=true。
     // 仍然附 footer —— 用户问的可能是**已恢复**的告警，只查活动列表会说成「没有」。
-    return { answered: true, text: `${t.clean(site)}\n\n${t.footer}` };
+    const text = [t.clean(site), info, t.footer]
+      .filter((x) => x && x.trim())
+      .join('\n\n');
+    return { answered: true, text };
   }
 
   const alarms = Array.isArray(obj.alarms) ? obj.alarms : [];
@@ -225,6 +233,11 @@ function render(obj, lang, code) {
   }
   lines.push('');
   lines.push(t.source);
+  // 站点信息块：与告警来源行之间空一行，聊天窗口里分得清两块。
+  if (info) {
+    lines.push('');
+    lines.push(info);
+  }
   lines.push(t.footer);
   return { answered: true, text: lines.join('\n') };
 }

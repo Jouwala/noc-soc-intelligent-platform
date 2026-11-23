@@ -320,6 +320,59 @@ window.OLBR_DATA = (function () {
       'kpi.thrLine': '达标线',
       'kpi.gapThr': '距阈值',
       'kpi.pp': 'pp',
+      /* ---- 关键业务行（#keybiz，2026-11-23 加）----
+         六张卡（VIP 告警 / VIP 链路容量 / VIP FTTH / VLR / Voice / Data 4G）。
+         口径：VIP 告警取 /api/gis/realtime/sites 里 vip_site 为真的站点；
+         三条 15 分钟指标取 /api/cn-kpi-15mins/{cs|ps}/overview 的 **D0 最新点**，
+         波动 = 今日最新点 vs 昨日同一时刻（D1 同 HH:MM），|波动| > 5% 标红。
+         ⚠️ 为什么锚「昨日同一时刻」而不是「上一个 15 分钟点」：
+            相邻两点的抖动主要是采样噪声；同钟点对比才回答
+            「今天这个时段比昨天这个时段如何」，也正好是 my_app 那两页
+            把 D0/D1/D7 叠在同一根时刻轴上的读法。 */
+      'keybiz.title': '关键业务',
+      'keybiz.sub': 'VIP 站点告警为实时；VLR / Voice / Data Subscribers 取 CS/PS CN KPI 15 分钟看板最新点，波动对比昨日同一时刻，超过 ±5% 标红',
+      'keybiz.vip': 'VIP 站点的告警',
+      'keybiz.vipLink': 'VIP 链路的容量利用率',
+      'keybiz.vipFtth': 'VIP FTTH 的状态',
+      'keybiz.vlr': 'VLR Subscribers',
+      'keybiz.voice': 'Voice Traffic(Erl)',
+      'keybiz.data': 'Data Subscribers · 4G',
+      'keybiz.unitAlarm': '条',
+      'keybiz.unitSubs': '户',
+      'keybiz.unitErl': 'Erl',
+      'keybiz.unitPct': '%',
+      'keybiz.chg': '波动 {p}',
+      'keybiz.chgNa': '无从对比',
+      'keybiz.chgTip': '较昨日同一时刻（{t}）：昨日 {b}，今日 {v}。|波动| 超过 {s}% 标红。',
+      'keybiz.latest': '最新 {t}',
+      'keybiz.yday': '昨日同时',
+      'keybiz.d7': '7 天前同时',
+      'keybiz.thr': '波动阈值',
+      'keybiz.thrVal': '±{p}%',
+      'keybiz.thrNote': '超阈标红',
+      'keybiz.vipAsOf': '实时快照 · {t}',
+      'keybiz.vipSites': '{n} 个告警站点',
+      'keybiz.vipClear': '无 VIP 告警',
+      'keybiz.vipSiteFoot': '告警站点',
+      'keybiz.vipScope': '统计口径',
+      'keybiz.vipScopeVal': '实时',
+      'keybiz.vipScopeNote': '快照',
+      'keybiz.drill': '下钻',
+      'keybiz.drillGis': 'GIS 地图',
+      'keybiz.map': '地图',
+      'keybiz.vipTip': '来源：实时告警站点（与 GIS 地图同一份数据）中 VIP 站点（master site 的 VIP 标记）的告警条数。点击打开 GIS 地图。',
+      'keybiz.cnTip': '来源：{b} 最新点（{t}）；波动 = 今日最新值 vs 昨日同一时刻，|波动| 超过 {s}% 标红。',
+      'keybiz.boardCs': 'CS CN KPI 15 分钟看板',
+      'keybiz.boardPs': 'PS CN KPI 15 分钟看板',
+      'keybiz.openTip': '打开 {b}',
+      'keybiz.placeholder': '占位',
+      'keybiz.placeholderTip': '下钻数据尚未接入，先占位展示。',
+      'keybiz.noDrill': '下钻暂无数据',
+      'keybiz.noData': '暂无数据',
+      'keybiz.pending': '待接入',
+      'keybiz.src': '数据源',
+      'keybiz.err': '读取失败',
+      'keybiz.siteUnit': '个',
       /* ---- 富卡片专用文案（kpiRichHtml）---- */
       'kpi.wow': '周同比',
       'kpi.mom': '月同比',
@@ -1072,6 +1125,57 @@ window.OLBR_DATA = (function () {
       'kpi.thrLine': 'Target',
       'kpi.gapThr': 'vs target',
       'kpi.pp': 'pp',
+      /* ---- Key Business row (#keybiz, 2026-11-23) ----
+         Six cards (VIP alarms / VIP link capacity / VIP FTTH / VLR / Voice / Data 4G).
+         Definition: VIP alarms count real-time alarming sites whose master-site VIP
+         flag is set; the three 15-minute KPIs take the latest D0 point and compare it
+         with the same HH:MM on D1 (yesterday). |change| above 5% is shown in red.
+         ⚠️ Comparing with "the same time yesterday" (not the previous 15-minute
+            point) mirrors how the my_app boards overlay D0/D1/D7 on one time axis. */
+      'keybiz.title': 'Key Business',
+      'keybiz.sub': 'VIP alarms are real-time; VLR / Voice / Data Subscribers use the latest point of the CS/PS CN KPI 15-minute boards, compared with the same time yesterday — changes beyond ±5% are shown in red',
+      'keybiz.vip': 'VIP Site Alarms',
+      'keybiz.vipLink': 'VIP Link Capacity Utilization',
+      'keybiz.vipFtth': 'VIP FTTH Status',
+      'keybiz.vlr': 'VLR Subscribers',
+      'keybiz.voice': 'Voice Traffic(Erl)',
+      'keybiz.data': 'Data Subscribers · 4G',
+      'keybiz.unitAlarm': 'alarms',
+      'keybiz.unitSubs': 'subs',
+      'keybiz.unitErl': 'Erl',
+      'keybiz.unitPct': '%',
+      'keybiz.chg': 'Change {p}',
+      'keybiz.chgNa': 'No baseline',
+      'keybiz.chgTip': 'vs the same time yesterday ({t}): {b} yesterday, {v} today. |Change| above {s}% is shown in red.',
+      'keybiz.latest': 'Latest {t}',
+      'keybiz.yday': 'Yesterday',
+      'keybiz.d7': '7 days ago',
+      'keybiz.thr': 'Threshold',
+      'keybiz.thrVal': '±{p}%',
+      'keybiz.thrNote': '>5% = red',
+      'keybiz.vipAsOf': 'Live snapshot · {t}',
+      'keybiz.vipSites': '{n} alarming site(s)',
+      'keybiz.vipClear': 'No VIP alarms',
+      'keybiz.vipSiteFoot': 'Alarming sites',
+      'keybiz.vipScope': 'Scope',
+      'keybiz.vipScopeVal': 'Live',
+      'keybiz.vipScopeNote': 'snapshot',
+      'keybiz.drill': 'Drilldown',
+      'keybiz.drillGis': 'GIS map',
+      'keybiz.map': 'map',
+      'keybiz.vipTip': 'Source: real-time alarming sites (same feed as the GIS map) whose master-site VIP flag is set. Click to open the GIS map.',
+      'keybiz.cnTip': 'Source: {b}, latest point ({t}); change = today\'s latest vs the same time yesterday, |change| above {s}% is shown in red.',
+      'keybiz.boardCs': 'CS CN KPI 15-minute board',
+      'keybiz.boardPs': 'PS CN KPI 15-minute board',
+      'keybiz.openTip': 'Open {b}',
+      'keybiz.placeholder': 'Placeholder',
+      'keybiz.placeholderTip': 'Drilldown data is not available yet; this card is a placeholder.',
+      'keybiz.noDrill': 'No drilldown data yet',
+      'keybiz.noData': 'No data',
+      'keybiz.pending': 'Not connected',
+      'keybiz.src': 'Source',
+      'keybiz.err': 'Unavailable',
+      'keybiz.siteUnit': 'sites',
       /* ---- Rich-card strings (kpiRichHtml) ----
          Anything containing punctuation goes through a {placeholder} template so
          the punctuation follows the language (full-width for zh, ASCII for en).
@@ -2074,6 +2178,41 @@ window.OLBR_DATA = (function () {
           不取数（上游一行不多、bo 门户按矩阵 kpi.cxort 显示）。 */
     { id: 'cxort', name: 'kpi.boardCxort', page: 'vmaxCxoDashboard', items: KPI_CXO_RT, teamOnly: true }
   ];
+  /* ---- 关键业务行（#keybiz，2026-11-23 加）--------------------------------
+     位置：Network Status 之上的一行六卡（用户 2026-11-23 要求）。
+     六项里 ②③ 是**明确要求的占位**（用户原话「占位，下钻还没有数据，可以」），
+     其余四项各有一个真实数据源：
+
+       kind='vip'         /api/gis/realtime/sites 里 vip_site 为真的站点告警
+       kind='cn'          /api/cn-kpi-15mins/{board}/overview 的 widget 最新 D0 点
+       kind='placeholder' 只有卡面，没有取数、没有下钻
+
+     page：点卡打开的 my_app 页面，必须是 App.tsx 的 PageKey（VALID_PAGES）。
+       VIP 卡按用户要求进 GIS 地图；VLR / Voice 进 CS 15 分钟页、
+       Data Subscribers 进 PS 15 分钟页 —— 卡上的数就是从那一页取的。
+     digits：与 my_app 15 分钟页一致（VLR / Data Subscribers 0 位、Voice 2 位），
+       两个门户对同一个数不能给出两种精度。
+     boardName：tooltip 里「来源：XX 看板」的看板名 i18n 键，不复用页面标题
+       （页面标题是 my_app 的，门户这边另有写法）。
+     ⚠️ 这里**不写**「哪个 widget 属于哪个看板」的推断逻辑：board 与 widget
+       逐条写死，接口改了组件 id 时卡片显示「—」，比悄悄换错指标好。
+     ⚠️ 15 分钟数据的刷新节奏见 KEYBIZ_CN_MIN / KEYBIZ_CN_OFFSET：它是
+       15 分钟桶，按 5 分钟去拉只会拿到同一批数、白给上游加压。 */
+  var KEYBIZ = [
+    { id: 'vip',    kind: 'vip',         name: 'keybiz.vip',     unit: 'keybiz.unitAlarm', page: 'gis' },
+    { id: 'vipLink', kind: 'placeholder', name: 'keybiz.vipLink', unit: 'keybiz.unitPct',   page: '' },
+    { id: 'vipFtth', kind: 'placeholder', name: 'keybiz.vipFtth', unit: '',                 page: '' },
+    { id: 'vlr',    kind: 'cn', name: 'keybiz.vlr',   unit: 'keybiz.unitSubs', page: 'cs_cn_kpi_15mins',
+      board: 'cs', widget: 'cs_15m_vlr',           digits: 0, boardName: 'keybiz.boardCs' },
+    { id: 'voice',  kind: 'cn', name: 'keybiz.voice', unit: 'keybiz.unitErl',  page: 'cs_cn_kpi_15mins',
+      board: 'cs', widget: 'cs_15m_voice',         digits: 2, boardName: 'keybiz.boardCs' },
+    { id: 'data4g', kind: 'cn', name: 'keybiz.data',  unit: 'keybiz.unitSubs', page: 'ps_cn_kpi_15mins',
+      board: 'ps', widget: 'ps_15m_data_subs_4g', digits: 0, boardName: 'keybiz.boardPs' }
+  ];
+  /* 三条 15 分钟指标的刷新间隔：15 分钟一档 + 120s 偏移。
+     偏移是给上游同步任务留落库时间 —— 整点后立刻取，经常还是上一个桶。
+     VIP 告警是实时的，跟 QC 告警那一档（5 分钟），不用这组常量。 */
+  var KEYBIZ_CN_MIN = 15, KEYBIZ_CN_OFFSET = 120;
   /* ---- Benchmark（竞对速率）三张卡：ORANGE vs MTN 关键指标对比 ----------
      数据源 /api/bm-speedtest/overview?start=&end=，即 my_app
      `?page=bm_speedtest` 那个页面「Key metrics comparison」那组卡的只读接口。
@@ -2340,6 +2479,7 @@ window.OLBR_DATA = (function () {
     KPI_AVAIL_ROWS: KPI_AVAIL_ROWS, KPI_GROUPS: KPI_GROUPS,
     KPI_SPEED: KPI_SPEED, SPEED_ROW_LABEL: SPEED_ROW_LABEL, BENCH_BRANDS: BENCH_BRANDS,
     KPI_META: KPI_META, KPI_META_BP: KPI_META_BP, BF_GROUPS: BF_GROUPS,
+    KEYBIZ: KEYBIZ, KEYBIZ_CN_MIN: KEYBIZ_CN_MIN, KEYBIZ_CN_OFFSET: KEYBIZ_CN_OFFSET,
     OOKLA_LOGO: OOKLA_LOGO, META_LOGO: META_LOGO
   };
 })();

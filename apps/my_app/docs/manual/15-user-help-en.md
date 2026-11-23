@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-22.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-23.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -2525,6 +2525,7 @@ PS CN KPI 15-minute board: **UME only**, overlaying D0/D1/D7 on a 15-minute axis
 - Every card plots exactly one metric (Used/Authorized, 2G/3G/4G/5G and each RG group get their own card) with three lines: D0 today, D1 yesterday and D7 seven days ago; colour and line style both identify the day (D0 green solid / D1 blue dashed / D7 cyan dotted)
 - The card badge states the source granularity: xGW CPU, xGW License and 3G FDD are **native 15-minute**; Data Subscribers, 4G FDD and RG are 5-minute data aggregated into 15-minute buckets; xGW throughput/session capacity and DNS are **hourly source** (points only on the hour)
 - Ratios and percentages use the arithmetic mean within the bucket (not weighted, not peak); traffic bytes are summed per bucket and /1e9 to GB; gauges such as subscriber counts sum network elements per timestamp first and then average the samples in the bucket
+- Traffic cards (RG-6/11/12/30, 4G FDD) are drawn only when the 15-minute bucket holds **all three 5-minute samples**: upstream lags about half an hour, so the newest bucket usually has only two of three samples and drawn as-is it looks like "the last point fell by a third" (measured 2026-11-23: RG-6 1.357 vs about 2.0 for a full bucket). Incomplete buckets are not drawn at all and appear once the next sync fills them, so these cards ending one slot earlier than the mean-based cards is expected
 - D0 ends at the latest collection time, so a shorter tail than D1/D7 is collection lag, not missing data; D7 appears only after eight days of accumulated history
 - "Data caliber notes" is collapsed by default (click to expand); "Export Excel" expands one sheet per widget by clock time
 
@@ -2556,6 +2557,8 @@ Site map: alarm/ticket distribution, topology lines, region polygons and multi-d
 
 - Region dropdown + layer tags to filter; click a legend item to hide that layer; time supports segments and custom range
 - The top-left "Layers" panel has three checkboxes — Place labels / Roads / Personnel — all **off by default**: place labels (17k names in the tiles) would bury the sites, and personnel are registered positions (not live GPS), so turn them on only when needed
+- The "Site Classes" panel at the top right is the same one as on the Person Location Map (added 2026-11-23): Site Category / VIP Site / Hub Site / TRM Type, with values and site counts read from the database. **Nothing is selected by default**; click a class to ring those sites on the map (union within a group, intersection across groups), click again to unselect, and "Clear" returns to nothing shown
+- Class rings are outline-only with an almost transparent fill, so they **do not hide the sites' alarm colors**, and they do not block clicking a site to open the drawer (clicks pass through to the site dot)
 - The first cell of the "Advanced Filter" panel is a "Site Name" input: fuzzy match on a name fragment (case-insensitive); the rest are dropdowns for region/grade/form/FME etc.
 - Statistics follow the filter: site total and the ERA/COOL/NORMAL grades, the map legend, the county block colors and county labels, and the "MAINTENANCE ALERTS" county ranking panel are all recomputed from the filtered sites instead of showing the full-set numbers;
 - Click a site to open the right drawer: four tabs, searchable, exportable to Excel
@@ -2566,6 +2569,21 @@ Site map: alarm/ticket distribution, topology lines, region polygons and multi-d
 - Each of the "2G KPI / 3G KPI / 4G KPI" tabs now shows **two charts**: network quality (availability, setup and handover success rates — ratios sharing one % axis) and **traffic volume trend** (CS traffic in Erl, data volume in GB, throughput in Mbps, 4G RRC users, outage minutes — **one y-axis per unit**). Each chart has its own metric picker, and the volume chart already plots 3 series by default instead of hiding them in a dropdown
 - The volume chart follows the drawer's "Statistics range" (since 2026-11-04). Before that the KPI series was fixed at 60 days and ignored the 7/30/90/180 switch — now fixed
 - When a site sits under several BSC/RNC the upstream writes one row per ID per day: the API folds them by calendar day, **summing traffic** into the site total and **averaging ratios**. The ⓘ on each chart title, the table column headers and every number in the daily table are hover-explainable, and the text comes from API fields — nothing is recalculated in the browser
+
+#### location（`location`）
+
+Location analysis: centre the map on a coordinate, inspect the nearest ring of sites and the nearest MW / fiber links, and query a subscriber number to see its network track and VMAX diagnosis.
+
+- Four coordinate entry points: URL lat / lon (a link in a QA answer opens the page directly), manual input, browser geolocation (https only), and Ask the assistant — POST /api/portal-qa/ask and parse the coordinate from the answer text
+- The basemap is the same self-hosted PMTiles offline archive as ?page=gis (/tiles/liberia.pmtiles), with no public-internet dependency. Place labels and roads are off by default and can be enabled in the Layers panel at the top left. The © OpenStreetMap credit at the bottom right is the required attribution for the tile data, not an online request
+- The map has two search windows: Find subscriber (phone number, top right) and Locate by coordinates (latitude/longitude, bottom right). The full control bar — coordinates, radius, site count and the QA assistant — sits at the **bottom of the page**, sharing the same coordinate state as the map window
+- The nearest ring takes the sites inside the chosen radius sorted by distance and keeps the first N. When fewer than three fall inside, the radius is widened to the third nearest site; the dashed circle and the list use the widened radius and a note states it below the controls
+- Site colours use exactly the same rule and values as ?page=gis (real-time alarm / history / VIP / normal). Clicking a site opens the same drill-down drawer as the GIS page (basic info + KPI charts + detail tabs)
+- MW links come from the same KML links as the GIS page sorted by point-to-segment distance; the nearest one is thicker. Clicking a link opens the "link details" drawer with the same fields as clicking a link on ?page=mwRealTime (capacity / node IP / interface / TX-RX throughput and utilization / 24H trend / interface details)
+- The two MW datasets (KML and live KPI) only partly overlap: when a link cannot be matched the drawer says "no KPI details" and keeps the GIS-side structure — it never substitutes another link, and never paints "unknown" green
+- Fiber links are the site pairs digitised from OLIB topology PDF page 1; they are connection schematics with no live metric, so clicking one only shows endpoints, type and distance
+- Entering a subscriber number runs the same VMAX diagnosis as ?page=vmax_user_query; the map plots dwelling cells that have coordinates in returned order, marks the **last cell with a person icon** (the last table row shows 👤), and auto-fits the map to the track. Clicking a cell or a table row opens the right drawer with Subscriber Info / Terminal Info / User Track Cells / Evidence timeline / Fault analysis / Root cause & recommendations
+- The top-bar per-page refresh works in place on this page: the map is not remounted, only sites / MW / fiber / subscriber data are refetched quietly
 
 #### Realtime Alarm Map（`realtime_alarm`）
 
@@ -2584,7 +2602,8 @@ Person Location Map: the registered position of field staff (map pins) + the dis
 
 - Two-column layout: map on the left, KPI 2x2 + two charts on the right; `?maponly=1` leaves the map alone
 - Click a person to select them and slide open the drill-down drawer from the right; clicking blank map area or anywhere outside cancels the selection (search / paging / tab switches inside the drawer do not close it accidentally)
-- The persistent pin badge has two lines: name + phone on the first, "sites handled | open WOs | open PMTs" on the second
+- The map search box finds people and sites alike: picking a person narrows the map to that person only (other people are hidden); picking a site centres the map on it and keeps other sites visible
+- The name/phone badge on each pin is hidden by default and appears on hover (two lines: name + phone on the first, "sites handled | open WOs | open PMTs" on the second); pins are small by default and enlarge when selected so the current selection is obvious
 - Phone numbers are shown in full (not masked); some upstream records were already stored as `231****7417`, and the backend restores them uniquely by "same name + same last 4 digits" from the site master — the ones it cannot restore stay masked, which is a data fact
 - Site coloring is fully aligned with `?page=realtime_alarm` (same color source and same grading): both pages look at the same sites from the same snapshot
 - PMT shows — rather than 0 when unavailable; the per-person badge sum is not the full set (see the filter-bar info note for the caliber)

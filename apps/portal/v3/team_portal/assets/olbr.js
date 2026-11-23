@@ -183,6 +183,11 @@
        （一份是测试库、一份是 Excel 导入的快照），混在一份 state 里
        任一边失败都会把另一边的卡擦成 —。 */
     kpi: { loading: true, err: '', at: '', avail: null, olib: null, speed: null, meta: null, cxort: null },
+    /* 关键业务行（#keybiz，2026-11-23 加）：与 kpi 分开存 —— 它有自己的三条
+       数据源、自己的两档刷新节奏（VIP 5 分钟 / 15 分钟指标 15 分钟），
+       混进 state.kpi 会让任一路的失败或 loading 把另一块也拖成空。
+       vip / cs / ps 是**按来源分**的三份快照；cs / ps 是 { 组件 id: 点位 }。 */
+    keybiz: { vipLoading: true, cnLoading: true, vip: null, cs: null, ps: null, vipErr: '', cnErr: '' },
     /* v1 新增：六个视图入口卡里「展开其余 N 项」的开合态。
        与 auxOpen 同一套语义（键 = 视图分组 id），但**分开存** ——
        上面的 L2 辅助区与这里的入口卡是两处独立的 UI，
@@ -2661,6 +2666,279 @@
         '<button type="button" class="gb" data-act="kpi-reload" title="' + esc(t('kpi.retry')) + '">' +
           ic('refresh') + esc(t('kpi.retry')) + '</button>' +
       '</div><div class="qc-grid">' + top + '</div>' : '') + bf;
+  }
+
+  /* ================================================================ 关键业务 ==
+     关键业务行（#keybiz，2026-11-23 加）
+     ----------------------------------------------------------------------------
+     用户要求：在 Network Status 之上新增一行「关键业务」，六张卡：
+       ① VIP 站点的告警（点卡进 GIS 地图）
+       ② VIP 链路的容量利用率（占位）
+       ③ VIP FTTH 的状态（占位）
+       ④ VLR Subscribers（CS CN KPI 15 分钟看板）
+       ⑤ Voice Traffic(Erl)（CS CN KPI 15 分钟看板）
+       ⑥ Data Subscribers · 4G（PS CN KPI 15 分钟看板）
+
+     数据源与口径（卡片清单在 olbr-data.js 的 KEYBIZ）：
+       · ①：/api/gis/realtime/sites 是 GIS 地图同一份「有实时告警的站点」，
+         本行只取 vip_site 为真（Y / YES / 1 / TRUE，归一后判）的站点，
+         大数字 = 这些站点的告警条数合计（rt_alarm_count 求和），
+         徽章给涉及的站点数；>0 时大数字与徽章标红。
+         ⚠️ 为什么不直接带 ?vip_site=Y 让后端过滤：那个参数比的是
+            master_site_db 里的**原始值**（当前是 Y/N），值域一旦变化
+            （Yes / 1）后端会静默回 0，卡片就成了「永远没有 VIP 告警」。
+            这里拿全量、在归一化之后再判真，与 GIS 地图的站点集合同源。
+       · ④⑤⑥：/api/cn-kpi-15mins/{cs|ps}/overview 的 widget，取其中
+         **D0 最新点**为「最新值」；波动 = (D0 最新值 − D1 同一时刻)
+         ÷ D1 同一时刻 × 100。D1 缺那一格时退到该时刻之前最近的一格，
+         实际对比时刻写在卡片 tooltip 里（不假装是同一点）。
+         ⚠️ 锚「昨日同一时刻」而不是「上一个 15 分钟点」：相邻两点的抖动
+            主要是采样噪声；同钟点才回答「今天这个时段比昨天这个时段如何」，
+            这也正是 my_app 那两页把 D0/D1/D7 叠在同一根时刻轴上的读法。
+         ⚠️ 超过 ±5% 只把**百分比**染红，不染大数字 —— 大数字是量级，
+            本次要判断的对象是波动。
+       · ②③：按用户要求先占位（「占位，下钻还没有数据，可以」）：
+         大数字 —、徽章「占位」、页脚「数据源 待接入 / 下钻 暂无」，
+         并去掉点击手势（.is-static）—— 不可点的卡不能长成可点的样子。
+
+     刷新节奏：VIP 告警跟 QC 告警那一档（5 分钟，见 startQcLoops）；
+     三条 15 分钟指标单独 15 分钟一档（KEYBIZ_CN_MIN，偏移 120s 留落库时间）。
+     15 分钟数据在后端还有 300s 缓存，所以这一档不会把上游打穿。
+
+     团队门户：可见性跟 kpi 域（window.OLBR_SCOPE.ok('kpi')）—— 团队矩阵没勾
+     任何 Network Status 子项时整行不显示；上游主门户没有这个全局，恒显示。
+     ⚠️ 用 window.OLBR_SCOPE 而不是 SCOPE 变量：后者只在团队门户的生成物里
+        存在（patch_team_portal.py 注入），上游源文件引用它会 ReferenceError，
+        这与 wantCxortGroup 的既有写法同一条理由。
+     ======================================================================== */
+  function kbWantRow() {
+    var s = window.OLBR_SCOPE;
+    return !s || !s.ok || s.ok('kpi');
+  }
+  /* master_site_db.vip_site 的历史值域是 Y/N；下游 Excel 来的是 Yes/No。
+     两种都认，顺便兜住 1/0 —— 只认 'Y' 会在换数据源那天变成静默 0。 */
+  function kbIsVip(v) {
+    return ['Y', 'YES', '1', 'TRUE'].indexOf(String(v == null ? '' : v).trim().toUpperCase()) !== -1;
+  }
+  /* 千分位 + 固定小数位：与 my_app 15 分钟页的 formatNum 同档（计数 0 位、
+     Erl 2 位），两个门户对同一个数不能给出两种精度。取不到一律 —，不显示 0。 */
+  function kbNumText(v, digits) {
+    if (v == null || v === '' || isNaN(Number(v))) return '—';
+    var d = digits == null ? 0 : digits;
+    return Number(v).toLocaleString('en-US', {
+      minimumFractionDigits: d, maximumFractionDigits: d
+    });
+  }
+  /* 波动文案：±1 位小数；比值极端时封顶为 ±>999%（与 my_app CnKpi5mins 同款），
+     避免 Voice 昨日贴地时出现一长串数字。 */
+  function kbPctText(p) {
+    if (p == null || !isFinite(p)) return '—';
+    var a = Math.abs(p);
+    if (a >= 999.95) return (p > 0 ? '+' : '-') + '>999%';
+    return (p > 0 ? '+' : (p < 0 ? '-' : '')) + a.toFixed(1) + '%';
+  }
+  function kbFootCell(label, value, note, cls) {
+    /* cls 只用于窄屏取舍：≤760px 时隐藏「7 天前同时」与 VIP 的「统计口径」，
+       让余下两格各占 50% 而不是三格挤在 50px 里被省略号切掉。 */
+    return '<div' + (cls ? ' class="' + cls + '"' : '') + '><span>' + esc(label) + '</span><b>' +
+      esc(value) + '</b><span>' + esc(note) + '</span></div>';
+  }
+  /* tone：neu（默认）/ is-hot（红）/ is-ok（绿）。类名定义见 olbr.css 的
+     「关键业务行」段 —— 不在这里写死颜色，夜间主题才能跟着令牌走。 */
+  function kbChip(text, tone, tip) {
+    return '<span class="qc-chip kb-chip ' + (tone || 'neu') + '"' +
+      (tip ? ' title="' + esc(tip) + '"' : '') + '>' + esc(text) + '</span>';
+  }
+  /* 卡片外壳：与富卡片（kpiRichHtml）同构 —— 标题+单位 / 大数字 / 口径行 /
+     徽章 / 三格页脚。刻意**不画走势**：这一行是"一眼看数"，三条序列的走势
+     在同源的 my_app 页面里看，门户不重复画一遍。 */
+  function kbFrame(spec, o) {
+    var name = t(spec.name);
+    var unit = spec.unit ? t(spec.unit) : '';
+    var cls = 'qc-card qc-card--rich' + (o.na ? ' is-na' : '') + (o.static ? ' is-static' : '');
+    var tip = o.tip || '';
+    var open = o.href
+      ? '<a class="' + cls + ' qc-card--open" href="' + esc(o.href) + '" target="_blank" ' +
+        'rel="noopener nofollow" title="' + esc(tip) + '">'
+      : '<div class="' + cls + '" title="' + esc(tip) + '">';
+    var close = o.href ? '</a>' : '</div>';
+    return open +
+      '<div class="qc-ttl"><b title="' + esc(name) + '">' + esc(name) + '</b>' +
+        (unit ? '<i>' + esc(unit) + '</i>' : '') + '</div>' +
+      '<div class="qc-val"><span' + (o.crit ? ' class="kb-crit"' : '') + '>' + esc(o.value) + '</span>' +
+        (unit ? '<em>' + esc(unit) + '</em>' : '') + '</div>' +
+      '<div class="qc-asof">' + esc(o.asof) + '</div>' +
+      '<div class="qc-chips">' + (o.chip || '') + '</div>' +
+      '<div class="qc-ext">' + (o.foot || '') + '</div>' + close;
+  }
+  /* 骨架：按真卡的分段同构（标题 19 / 数值 25 / 口径 14 / 徽章 21 / 三格页脚 45），
+     数据到位时是替换而不是位移 —— 与 renderKpi 骨架的同一条纪律。 */
+  function kbSkFrame() {
+    var cell = '<span class="sk" style="height:45px;width:70%"></span>';
+    return '<div class="qc-card qc-card--rich is-static">' +
+      '<div class="qc-ttl"><span class="sk" style="height:19px;width:56%"></span></div>' +
+      '<div class="qc-val"><span class="sk" style="height:25px;width:62%"></span></div>' +
+      '<div class="qc-asof"><span class="sk" style="height:14px;width:40%"></span></div>' +
+      '<div class="qc-chips"><span class="sk" style="height:21px;width:80%"></span></div>' +
+      '<div class="qc-ext">' + cell + cell + cell + '</div>' +
+    '</div>';
+  }
+  /* 从一个 15 分钟看板的 overview 里取出「指定 widget 的最新点 + 昨日/7 天前
+     同一时刻」。返回 null = 这个 widget 没有 D0 数据（卡上显示 —）。
+     rows 形状是 [HH:MM, 维度, D0|D1|D7, 值]（见 cn_kpi_15mins_service.py）。 */
+  function kbCnPoint(ov, spec) {
+    var ws = (ov && ov.widgets) || [], w = null, i;
+    for (i = 0; i < ws.length; i++) {
+      if (ws[i] && ws[i].id === spec.widget) { w = ws[i]; break; }
+    }
+    if (!w || !w.rows || !w.rows.length) return null;
+    var rows = w.rows;
+    var dim = (w.dims && w.dims[0]) || '';
+    /* 最新 D0 点：同一时刻只留一个值（分组卡会按维度拆成多行，这里选中的
+       widget 都是单维度卡，dim 过滤只是防御）。 */
+    var t0 = '', v0 = null;
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r || String(r[2]) !== 'D0') continue;
+      if (dim && String(r[1]) !== dim) continue;
+      var v = (r[3] == null || r[3] === '' || isNaN(Number(r[3]))) ? null : Number(r[3]);
+      if (v == null) continue;
+      var tt = String(r[0] || '');
+      if (tt > t0) { t0 = tt; v0 = v; }
+    }
+    if (!t0 || v0 == null) return null;
+    /* 某一天在「不晚于最新点」里最近的一格：数据缺桶时不拿别的时刻硬比，
+       返回实际比到的时刻，tooltip 里照实写出来。 */
+    function at(day) {
+      var bv = null, bt = '';
+      for (var j = 0; j < rows.length; j++) {
+        var x = rows[j];
+        if (!x || String(x[2]) !== day) continue;
+        if (dim && String(x[1]) !== dim) continue;
+        var xt = String(x[0] || '');
+        if (xt > t0) continue;
+        var n = (x[3] == null || x[3] === '' || isNaN(Number(x[3]))) ? null : Number(x[3]);
+        if (n == null) continue;
+        if (xt >= bt) { bt = xt; bv = n; }
+      }
+      return { v: bv, t: bt };
+    }
+    var d1 = at('D1'), d7 = at('D7');
+    return {
+      v: v0, t: t0,
+      d1: d1.v, d1t: d1.t,
+      d7: d7.v, d7t: d7.t,
+      /* 昨日基数为 0 时不显示百分比（比值无意义），与 my_app compareDay0Day1 同一条 */
+      pct: (d1.v == null || d1.v === 0) ? null : (v0 - d1.v) / d1.v * 100
+    };
+  }
+  function kbCnMap(d, board) {
+    var out = {};
+    DATA.KEYBIZ.forEach(function (spec) {
+      if (spec.kind !== 'cn' || spec.board !== board) return;
+      var p = kbCnPoint(d, spec);
+      if (p) out[spec.id] = p;
+    });
+    return out;
+  }
+  function kbCnCard(spec) {
+    var data = state.keybiz[spec.board];
+    var point = data && data[spec.id];
+    var digits = spec.digits || 0;
+    var thrs = '5';
+    if (!point) {
+      if (state.keybiz.cnLoading) return kbSkFrame();
+      return kbFrame(spec, {
+        na: true, value: '—', asof: t('keybiz.noData'),
+        chip: kbChip(t('keybiz.err'), 'is-hot'),
+        foot: kbFootCell(t('keybiz.yday'), '—', '—', 'kb-yday') +
+              kbFootCell(t('keybiz.thr'), tf('keybiz.thrVal', { p: thrs }), t('keybiz.thrNote'), 'kb-thr'),
+        tip: tf('keybiz.cnTip', { b: t(spec.boardName), t: '—', s: thrs })
+      });
+    }
+    var pct = point.pct;
+    var hot = pct != null && Math.abs(pct) > 5;
+    var pctTip = pct == null ? '' : tf('keybiz.chgTip', {
+      t: point.d1t || '—',
+      b: kbNumText(point.d1, digits),
+      v: kbNumText(point.v, digits),
+      s: thrs
+    });
+    var chip = pct == null
+      ? kbChip(t('keybiz.chgNa'), 'neu')
+      : kbChip(tf('keybiz.chg', { p: kbPctText(pct) }), hot ? 'is-hot' : 'neu', pctTip);
+    return kbFrame(spec, {
+      href: spec.page ? '/myapp/?page=' + encodeURIComponent(spec.page) + langQs() : '',
+      value: kbNumText(point.v, digits),
+      asof: tf('keybiz.latest', { t: point.t }),
+      chip: chip,
+      foot: kbFootCell(t('keybiz.yday'), kbNumText(point.d1, digits), point.d1t || '—', 'kb-yday') +
+            kbFootCell(t('keybiz.d7'), kbNumText(point.d7, digits), point.d7t || '—', 'kb-d7') +
+            kbFootCell(t('keybiz.thr'), tf('keybiz.thrVal', { p: thrs }), t('keybiz.thrNote'), 'kb-thr'),
+      tip: tf('keybiz.cnTip', { b: t(spec.boardName), t: point.t, s: thrs }) + '\n' +
+           tf('keybiz.openTip', { b: t(spec.boardName) })
+    });
+  }
+  function kbVipCard(spec) {
+    var v = state.keybiz.vip;
+    if (!v) {
+      if (state.keybiz.vipLoading) return kbSkFrame();
+      return kbFrame(spec, {
+        na: true, value: '—', asof: t('keybiz.noData'),
+        chip: kbChip(t('keybiz.err'), 'is-hot'),
+        foot: kbFootCell(t('keybiz.vipSiteFoot'), '—', t('keybiz.siteUnit'), 'kb-sites') +
+              kbFootCell(t('keybiz.vipScope'), '—', t('keybiz.vipScopeNote'), 'kb-scope'),
+        tip: t('keybiz.vipTip')
+      });
+    }
+    var hot = v.alarms > 0;
+    return kbFrame(spec, {
+      href: spec.page ? '/myapp/?page=' + encodeURIComponent(spec.page) + langQs() : '',
+      crit: hot,
+      value: kbNumText(v.alarms, 0),
+      asof: tf('keybiz.vipAsOf', { t: v.at }),
+      chip: hot
+        ? kbChip(tf('keybiz.vipSites', { n: v.sites }), 'is-hot')
+        : kbChip(t('keybiz.vipClear'), 'is-ok'),
+      foot: kbFootCell(t('keybiz.vipSiteFoot'), kbNumText(v.sites, 0), t('keybiz.siteUnit'), 'kb-sites') +
+            kbFootCell(t('keybiz.vipScope'), t('keybiz.vipScopeVal'), t('keybiz.vipScopeNote'), 'kb-scope') +
+            kbFootCell(t('keybiz.drill'), 'GIS', t('keybiz.map'), 'kb-drill'),
+      tip: t('keybiz.vipTip') + '\n' + tf('keybiz.openTip', { b: t('keybiz.drillGis') })
+    });
+  }
+  function kbPlaceholderCard(spec) {
+    return kbFrame(spec, {
+      static: true, na: true, value: '—',
+      asof: t('keybiz.noDrill'),
+      chip: kbChip(t('keybiz.placeholder'), 'neu'),
+      foot: kbFootCell(t('keybiz.src'), '—', t('keybiz.pending'), 'kb-src') +
+            kbFootCell(t('keybiz.drill'), '—', t('keybiz.noData'), 'kb-drill'),
+      tip: t('keybiz.placeholderTip')
+    });
+  }
+  function kbCardFor(spec) {
+    if (spec.kind === 'placeholder') return kbPlaceholderCard(spec);
+    if (spec.kind === 'vip') return kbVipCard(spec);
+    return kbCnCard(spec);
+  }
+  function renderKeybiz() {
+    var box = $('#keybiz');
+    if (!box) return;
+    /* 登出后不再重画：数据是异步装载的，登出那一刻还在飞的回调会把区块
+       重新解隐/填满 —— 与 #band / #kpi 的 signedOut 钩子同一类漏点。 */
+    if (state.signedOut) { box.hidden = true; return; }
+    if (!kbWantRow()) { box.innerHTML = ''; box.hidden = true; return; }
+    box.hidden = false;
+    /* 取数失败常驻可见（AGENTS.md 第四节第 10 条：说「这次算错了 / 算不全」
+       的是异常，不能收进 tooltip）。卡片上保留的是上一次的值与它的时间戳，
+       这行红字说明「这次没取到」——两者同时存在才不会被误读成数据正常。 */
+    var errMsg = state.keybiz.cnErr || state.keybiz.vipErr;
+    box.innerHTML = '<div class="band-h"><div class="band-txt"><div class="band-k" title="' +
+      esc(t('keybiz.sub')) + '">' + esc(t('keybiz.title')) + '</div>' +
+      (errMsg ? '<p class="band-n" style="color:var(--crit)">' +
+        esc(t('keybiz.err') + ': ' + errMsg) + '</p>' : '') +
+      '</div></div>' +
+      '<div class="qc-grid">' + DATA.KEYBIZ.map(kbCardFor).join('') + '</div>';
   }
 
   /* ==================================================================== v1 ==
@@ -5744,7 +6022,7 @@
        ⚠️ 判据用 state.signedOut，**不能**用 !state.authOk：boot() 里这一次 render()
          是同步跑的，那一刻 probe() 还没回来、authOk 天然是 false —— 用它会把首屏锁死。 */
     if (state.signedOut) { mainLocked(true); return; }
-    renderBand(); renderKpi(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderComplaintSection(); renderAux(); renderArchive(); applyI18n(); }
+    renderBand(); renderKpi(); renderKeybiz(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderComplaintSection(); renderAux(); renderArchive(); applyI18n(); }
 
   /* 目录保存后的重绘：只画「看得懂目录改动」的那几块，且**不重新加载地图**。
      ⚠️ 不能图省事调 render()：MsPortal 当年就是这么把 4 个地图 iframe 全重建了一遍，
@@ -7107,6 +7385,74 @@
        这一行的错误不占用标题行那颗全局错误提示，由卡片自己显示「—」。 */
     loadBenchRow(30, done);
   }
+
+  /* ---- 关键业务行的取数（2026-11-23 加，渲染见 renderKeybiz）----------------
+     两档来源分开取：
+       · loadKeybizVip —— 实时告警，跟 qcLoopAlarm 的 5 分钟档；
+       · loadKeybizCn  —— 15 分钟桶，跟 KEYBIZ_CN_MIN 的 15 分钟档。
+     两路各自 busy 防重入（与 kpiBusy 同款），失败**不清空**上一次的值：
+     接口抖一下不该让卡片从有数字变成「—」，保留旧值 + 旧时间戳才是
+     「数据没有更新」的诚实信号（与 loadKpi 的 olib 路同一条约定）。
+     成功后各自重绘整行（不分别重绘单卡）：行内六张卡的外壳同构，
+     分卡替换会把同排的基线弄歪，整行替换反而更稳。 */
+  var kbVipBusy = false, kbCnBusy = false;
+  function loadKeybizVip() {
+    if (kbVipBusy) return;
+    if (!kbWantRow()) return;
+    kbVipBusy = true;
+    state.keybiz.vipLoading = true;
+    api('/api/gis/realtime/sites').then(function (d) {
+      /* 与 GIS 地图同一份站点集：只保留 vip_site 为真的站点，
+         告警条数按 rt_alarm_count 求和（一个站可能挂多条告警）。 */
+      var sites = (d && d.sites) || [];
+      var vip = sites.filter(function (s) { return s && kbIsVip(s.vip_site); });
+      var alarms = 0;
+      vip.forEach(function (s) { alarms += Number(s.rt_alarm_count) || 0; });
+      state.keybiz.vip = {
+        alarms: alarms,
+        sites: vip.length,
+        /* 接口没有 generated_at：用本次取数时刻作为「实时快照」时间。
+           注意这是**取数时刻**，不是告警发生时刻 —— tooltip 里不冒充后者。 */
+        at: qcClock(new Date().toISOString())
+      };
+      state.keybiz.vipErr = '';
+    }).catch(function (e) {
+      state.keybiz.vipErr = (e && e.message) || String(e);
+    }).then(function () {
+      kbVipBusy = false;
+      state.keybiz.vipLoading = false;
+      renderKeybiz();
+    });
+  }
+  function loadKeybizCn() {
+    if (kbCnBusy) return;
+    if (!kbWantRow()) return;
+    kbCnBusy = true;
+    state.keybiz.cnLoading = true;
+    /* 每次取数先清错，再由失败的那一路写回 —— 不能在成功分支里清：
+       CS 成功、PS 失败时那样会把 PS 的错吞掉。 */
+    state.keybiz.cnErr = '';
+    /* 两路各自成败：PS 看板取不到不该把 VLR / Voice 一起擦成 —。 */
+    var left = 2;
+    function done() {
+      if (--left === 0) {
+        kbCnBusy = false;
+        state.keybiz.cnLoading = false;
+        renderKeybiz();
+      }
+    }
+    function ok(board) {
+      return function (d) {
+        state.keybiz[board] = kbCnMap(d, board);
+      };
+    }
+    function fail(e) {
+      state.keybiz.cnErr = (e && e.message) || String(e);
+    }
+    api('/api/cn-kpi-15mins/cs/overview').then(ok('cs')).catch(fail).then(done);
+    api('/api/cn-kpi-15mins/ps/overview').then(ok('ps')).catch(fail).then(done);
+  }
+  function loadKeybiz() { loadKeybizVip(); loadKeybizCn(); }
 
   /* Benchmark 行的取数：先探两个源的 data_max_date，据此定窗口，再各取一次 overview。
    *
@@ -9145,13 +9491,22 @@
          的时间轴（:06:30），而这一档的刻度是 :00:30。不补的话刚进来时「告警最近」
          可能是一小时前的旧时间，要等下一个 5 分钟刻度才被刷新。 */
       window.setTimeout(loadQcAlarm, 0);
-      window.setTimeout(function () { loadQcAlarm(); loadCxort(); qcLoopAlarm(); },
+      /* 关键业务行的 VIP 告警跟这一档（2026-11-23 加）：它与 QC 的告警
+         同源（同一个 realtime_alarm 快照），5 分钟一刷刚好对齐上游整表替换。 */
+      window.setTimeout(function () { loadQcAlarm(); loadCxort(); loadKeybizVip(); qcLoopAlarm(); },
         qcNextDelay(DATA.QC_ALARM_MIN, DATA.QC_ALARM_OFFSET));
+    })();
+    (function kbLoopCn() {
+      /* 关键业务行的三条 15 分钟指标单独一档（2026-11-23 加）。
+         不搭 5 分钟那档：数据粒度就是 15 分钟，5 分钟去拉只会拿到同一批数、
+         白给上游加压；也不搭每小时那档，否则最新点最多会滞后 45 分钟。 */
+      window.setTimeout(function () { loadKeybizCn(); kbLoopCn(); },
+        qcNextDelay(DATA.KEYBIZ_CN_MIN, DATA.KEYBIZ_CN_OFFSET));
     })();
     /* 切回前台补一发全量：后台标签页的定时器会被降频甚至冻结，不补的话回到页面看到的
        可能是几小时前的数字 —— 比「延迟刷新」更容易被误读成故障。 */
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) { loadQc(); loadQcAlarm(); loadKpi(); loadCxort(); }
+      if (!document.hidden) { loadQc(); loadQcAlarm(); loadKpi(); loadCxort(); loadKeybiz(); }
     });
   }
   function start() {
@@ -9160,6 +9515,9 @@
        两个上游互不相干，串起来只会让下面那三张卡晚一拍上屏。
        它自己跟着全量 QC 那一档（每小时）刷新，见 DATA.QC_FULL_MIN。 */
     loadKpi();
+    /* 关键业务行与 KPI 并行发（2026-11-23 加）：三条数据源互不相干，
+       串在后面只会让 #keybiz 晚一拍上屏；它自己带骨架屏，先到先填。 */
+    loadKeybiz();
     startQcLoops();
     loadCatalog();
     /* 组织名单与 QC/KPI 并行发，不串在后面 —— 互不相干，串起来只会让表格晚一拍上屏。 */
@@ -9202,9 +9560,12 @@
      ⚠️ 2026-11-04 加 loadCxort()：矩阵未就绪时 loadKpi 的第 4 路
        （CXO RealTime Dashboard）被 wantCxortGroup() fail-closed 跳过，
        bo 门户首屏这一路要等矩阵到位才补发；只 render() 不取数的话，
-       卡片会一直是「—」直到下一个 5 分钟刻度。 */
+       卡片会一直是「—」直到下一个 5 分钟刻度。
+     ⚠️ 2026-11-23 加 loadKeybiz()：关键业务行同理 —— loadKeybiz 在
+       kbWantRow() 为假时直接跳过；矩阵到位、kpi 域有勾选后要补发一次，
+       否则整行停在骨架屏直到下一个 15 分钟 / 5 分钟刻度。 */
   if (SCOPE) {
-    document.addEventListener('olbr:scope-ready', function () { render(); loadCxort(); });
+    document.addEventListener('olbr:scope-ready', function () { render(); loadCxort(); loadKeybiz(); });
   }
   function boot() {
     applyI18n();

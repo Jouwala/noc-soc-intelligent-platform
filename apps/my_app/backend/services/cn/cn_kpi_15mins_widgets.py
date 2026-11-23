@@ -40,6 +40,18 @@
     Voice 的 Seized Traffic(Erl) 是话务强度 → AVG，**不跨采样相加**
         （参考页对日表用 SUM 是因为日表一天只有一行，SUM 等于原值）。
 
+⚠ 流量（SUM）桶必须**采满**才输出（2026-11-23，用户报「RG / 4G FDD 最后一个
+    粒度总是掉一大截」后加）：5 分钟档聚到 15 分钟桶时，D0 最新那个桶通常只有
+    2 个采样（上游 + 采集链路约滞后半小时），SUM 出来只有真实值的 2/3，
+    在图上就是一个假下跌 —— 实测 2026-11-23 09:15 桶 RG-6 1.357（满桶约 2.0）、
+    4G FDD 1553（满桶约 2285），都正好是 2/3。所以 5m→15m 的 SUM 卡片
+    （RG-6/11/12/30、4G FDD）在 SQL 里要求桶内的**有效数值采样数**达到应有
+    数量（3；空串 / "-" 不算采样），没采满的桶**整桶不画**，下一轮采满后
+    自然出现；
+    AVG / gauge 卡片（CPU、License、用户数、DNS）的均值对采样个数不敏感，
+    仍按已有采样画到最末，不做同样处理。原生 15 分钟档（3G FDD）一桶一条，
+    也不加这道条件。
+
 =========================== 时间键与窗口 ===========================
 
     · 日切 / 横轴都取 **Begin Time**（统计区间左端点），与 `cn_kpi_split_widgets`
@@ -95,31 +107,64 @@ _AGG = {
 }
 
 
+def _sample_count_col(num_expr: str) -> str:
+    """「桶内有效采样数」列，交给 `_full_bucket_sql` 过滤用。
+
+    只数**数值有效**的采样：与 `_num()` 同一口径（空串 / "-" 不算一个采样）。
+    若只数 `COUNT(DISTINCT "Begin Time")`，一条 `-` 值仍会让 SUM 少 1/3 而躲过
+    过滤 —— 那正是这次要修的那类假下跌。
+    """
+    return (f', COUNT(DISTINCT CASE WHEN {num_expr} IS NOT NULL '
+            f'THEN "Begin Time" END) AS n')
+
+
+def _full_bucket_sql(inner: str, expect_samples: int) -> str:
+    """把「按桶聚合」的内层查询再包一层：桶内采样数不到的整桶丢掉。
+
+    为什么必须在内层算、外层过滤：PG 读通道的方言改写会把 `HAVING` 折叠成
+    外层 `WHERE`（`pg_query._rewrite_having`），所以 `HAVING COUNT(DISTINCT ...)`
+    在 PG 上会变成对聚合列的非法引用、整条 SQL 退回远端 SQLite；写成子查询
+    `n` 别名再 `WHERE n = …`，SQLite 与 PG 两边都能跑（2026-11-23 实测）。
+    """
+    return (f"SELECT t, series, day, v FROM ({inner}) AS _full_bucket "
+            f"WHERE n = {int(expect_samples)}")
+
+
 def _melt(table: str, dims: List[tuple], agg: str = "avg",
-          where: str = "", scale: float = 0, dec: int = 2) -> str:
+          where: str = "", scale: float = 0, dec: int = 2,
+          expect_samples: int = 0) -> str:
     """把同一张表的若干列反透视成 [时刻, 序列, 日, 值] 四列。
 
     dims: [(列名, 序列显示名)]；agg: `_AGG` 的键；scale>0 时在聚合后除以此值
-    （流量字节 → GB 用 1e9）。
+    （流量字节 → GB 用 1e9）；expect_samples>1 时要求桶内有效数值采样达到该
+    数量才输出（用于 5 分钟档的 SUM 卡片，见模块头「流量桶必须采满」）。
     """
     w = f" AND {where}" if where else ""
     branches: List[str] = []
     for col, label in dims:
-        expr = _AGG[agg].format(n=_num(col))
+        num = _num(col)
+        expr = _AGG[agg].format(n=num)
         if scale:
             expr = f"({expr})/{scale}"
-        branches.append(
+        # 采样数列只在需要过滤时加，避免改变 AVG / gauge 卡片的结果形状
+        n_col = _sample_count_col(num) if expect_samples > 1 else ""
+        branch = (
             f"SELECT {_TIME_KEY} AS t, '{label}' AS series, "
-            f"{_DAY_LABEL} AS day, ROUND({expr},{dec}) AS v "
+            f"{_DAY_LABEL} AS day, ROUND({expr},{dec}) AS v{n_col} "
             f'FROM "{table}" WHERE {_WINDOW}{w} GROUP BY t, day'
         )
+        if expect_samples > 1:
+            branch = _full_bucket_sql(branch, expect_samples)
+        branches.append(branch)
     return " UNION ALL ".join(branches) + " ORDER BY t"
 
 
 def _one(table: str, col: str, label: str, agg: str = "avg",
-         where: str = "", scale: float = 0, dec: int = 2) -> str:
+         where: str = "", scale: float = 0, dec: int = 2,
+         expect_samples: int = 0) -> str:
     """单序列组件的薄封装。"""
-    return _melt(table, [(col, label)], agg=agg, where=where, scale=scale, dec=dec)
+    return _melt(table, [(col, label)], agg=agg, where=where, scale=scale, dec=dec,
+                 expect_samples=expect_samples)
 
 
 # ----------------------------------------------------------------------
@@ -153,18 +198,25 @@ _XGW_LICENSE_COLS = [
 _RG_MO = [("6", "RG-6"), ("11", "RG-11"), ("12", "RG-12"), ("30", "RG-30")]
 
 
-def _rg_branches(table: str) -> str:
-    """RG-6/11/12/30 四条线：同一张表按 Measurement Object 拆开。"""
+def _rg_branches(table: str, expect_samples: int = 0) -> str:
+    """RG-6/11/12/30 四条线：同一张表按 Measurement Object 拆开。
+
+    流量是 SUM，桶没采满会显示假下跌 —— expect_samples=3 时丢掉未采满的桶
+    （见模块头「流量桶必须采满」）。
+    """
+    num = _num("Bytes of flows of downlink packets based RG(Byte)")
+    n_col = _sample_count_col(num) if expect_samples > 1 else ""
     branches = []
     for mo, label in _RG_MO:
-        branches.append(
+        branch = (
             f"SELECT {_TIME_KEY} AS t, '{label}' AS series, {_DAY_LABEL} AS day, "
-            'ROUND(SUM('
-            f'{_num("Bytes of flows of downlink packets based RG(Byte)")}'
-            ')/1000000000.0,3) AS v '
+            f'ROUND(SUM({num})/1000000000.0,3) AS v{n_col} '
             f'FROM "{table}" WHERE {_WINDOW} AND "Measurement Object" = \'{mo}\' '
             "GROUP BY t, day"
         )
+        if expect_samples > 1:
+            branch = _full_bucket_sql(branch, expect_samples)
+        branches.append(branch)
     return " UNION ALL ".join(branches) + " ORDER BY t"
 
 
@@ -188,11 +240,14 @@ def _slug(s: str) -> str:
 def _group(base_id: str, title: str, table: str, parts: List[tuple],
            agg: str = "avg", grain: str = "", pct: bool = False,
            unit: str = "", scale: float = 0, dec: int = 2,
-           where: str = "", sql: str = "") -> Dict[str, Any]:
+           where: str = "", sql: str = "",
+           expect_samples: int = 0) -> Dict[str, Any]:
     """一个多维度组件 = 一次查询 + 多个「一指标一卡」的 parts。
 
     parts: [(列名, 序列显示名[, 附加 where])]。sql 为空时用 `_melt` 生成
     UNION ALL；RG 这类每序列有独立过滤条件的组传自定义 sql。
+    expect_samples: 5 分钟档的 SUM 卡片传 3（桶内采样不足则整桶不画，
+    见模块头「流量桶必须采满」）；AVG / gauge / 原生 15 分钟档传 0。
     """
     single = len(parts) == 1
     children = [
@@ -207,7 +262,8 @@ def _group(base_id: str, title: str, table: str, parts: List[tuple],
     ]
     if not sql:
         sql = _melt(table, [(p[0], p[1]) for p in parts], agg=agg,
-                    where=where, scale=scale, dec=dec)
+                    where=where, scale=scale, dec=dec,
+                    expect_samples=expect_samples)
     return {
         "id": base_id, "title": title, "table": table, "grain": grain,
         "pct": pct, "unit": unit, "dims": [p[1] for p in parts],
@@ -273,19 +329,23 @@ _PS_15M: List[Dict[str, Any]] = [
     _group("ps_15m_dns", "DNS Success Ratio(%)", "DNS_SUCCESS_RATIO_OSS_UME",
            [("Ratio of successful DNS query analysis(%)", "DNS")],
            agg="avg", grain="1h", pct=True, unit="%"),
-    # RG 每个组有独立过滤条件，用 _rg_branches 的现成 SQL；parts 只描述拆分
+    # RG 每个组有独立过滤条件，用 _rg_branches 的现成 SQL；parts 只描述拆分。
+    # 流量按桶 SUM，桶没采满会显示假下跌 → 要求 3 个 5 分钟采样齐全。
     _group("ps_15m_rg", "RG Traffic(GB)", _RG_TABLE,
            [("Bytes of flows of downlink packets based RG(Byte)", "RG-6"),
             ("Bytes of flows of downlink packets based RG(Byte)", "RG-11"),
             ("Bytes of flows of downlink packets based RG(Byte)", "RG-12"),
             ("Bytes of flows of downlink packets based RG(Byte)", "RG-30")],
-           grain="5m", unit="GB", sql=_rg_branches(_RG_TABLE)),
+           grain="5m", unit="GB",
+           sql=_rg_branches(_RG_TABLE, expect_samples=3)),
     _group("ps_15m_4g_fdd", "4G FDD Traffic(GB)",
            "5mins_4G_FDD_DATA_TRAFFIC_TEMPLATE_OSS_UME",
            [("Byte of downlink data packets received via SGi interface per APN(Byte)",
              "4G FDD")],
-           agg="sum", grain="5m", unit="GB", scale=1000000000.0, dec=3),
+           agg="sum", grain="5m", unit="GB", scale=1000000000.0, dec=3,
+           expect_samples=3),
     # ⚠ 3G 的列名是 Bytes（复数），4G 是 Byte（单数）；写错时 SQLite 不报错而恒 0
+    # 3G 是原生 15 分钟档（一桶一条），不适用「采满 3 个采样」的判断
     _group("ps_15m_3g_fdd", "3G FDD Traffic(GB)",
            "5mins_3G_FDD_DATA_TRAFFIC_TEMPLATE_OSS_UME",
            [("Bytes of downlink data packets received via Gi interface per APN(Byte)",
