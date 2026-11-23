@@ -735,9 +735,34 @@ regThemes();   /* 注册 amLight / amDark 主题（window.echarts 此时已就�
    真实数据（构建时由 _build 注入；来自 FMS 实时接口快照）
 ================================================================= */
 const FMS_REAL = window.ALARM_MGMT_SNAPSHOT || {
-  /* 快照文件没加载成功时的最小骨架：页面不白屏、数字全 0，顶部横幅会说明快照缺失 */
-  raw024:null, geo:null, pins:[], svg:'', abbrNames:{}, tables:[], charts:[],
-  assign:[], trend:[], top5:{cards:[]}, live:{sources:[]}, kpis:{down:0}, meta:{fetchedAt:''}
+  /* 快照文件没加载成功时的「空形状」骨架（2026-11-23 重写）。
+     目的：boot 期各 render* 拿到的是「有形状、没数据」，能按空数据走完并显示空态，
+     而不是在 map / reduce 上对 undefined 抛 TypeError、把整段脚本打断（后面所有点击都失效）。
+     字段不是照抄，而是按调用点逐个核出来的：
+       renderTables()        → tables.physical / physicalOrder / siteCols / siteRows / siteTotal
+                               / siteGrand / cellCols / cellRows / cellTotal / logicalTotal.{site,cell}
+       renderCharts()        → charts.duration（.map）/ hour.{fields,values} / mainsFail / siteClass / trend
+       updateTrendCharts()   → trend.{snapshot,line,cleared}（三处都有 ||{}，给对象即可）+ probes
+       updateAssignCharts()  → assign.{report,assign}（||{}）+ groups（||[]）
+       告警 Top5             → top5.cards / reasonGroups / siteGroups
+       实时开关默认间隔       → live.refresh（||300）+ live.sources
+       KPI / 地图            → kpis.down、raw024（null 时 if 守卫跳过）、abbrNames、geo、pins */
+  raw024:null, geo:null, pins:[], svg:'', abbrNames:{},
+  tables:{
+    physical:[], physicalOrder:[], siteCols:[], siteRows:{}, siteTotal:[], siteGrand:0,
+    cellCols:[], cellRows:{}, cellTotal:[], cellGrand:0,
+    logicalTotal:{ site:[0,0,0,0], cell:[0,0,0,0,0] },
+  },
+  charts:{
+    duration:[], hour:{ fields:[], values:[] },
+    mainsFail:{ header:[], value:[] }, siteClass:{ header:[], value:[] },
+    trend:{ x:[], physical:[], cells:[] },
+  },
+  assign:{ report:{}, assign:{}, groups:[] },
+  trend:{ snapshot:{}, line:{}, cleared:{}, probes:[] },
+  top5:{ cards:[], reasonGroups:[], siteGroups:[] },
+  live:{ sources:[], refresh:300 },
+  kpis:{ down:0 }, meta:{ fetchedAt:'' },
 };
 const D = JSON.parse(JSON.stringify(FMS_REAL)); JSON.parse(JSON.stringify(FMS_REAL));
 // 当前宕站数 KPI = physical.0-24 实时序列最新点（与 FMS 门户 Physical Site Down 一致），而非各州地图求和
