@@ -571,12 +571,13 @@ Service / Network / Summary / Healthscore 四视图经营看板（`CxoDashboard.
 
 - 壳：`LegacyToolFrame` 载入 `public/cxo_dashboard.html`。
 - **数据三层叠加**（2026-09-02 起）：
-  1. HTML 内嵌快照（构建时冻结，保底渲染）；
+  1. **内置数据集**（2026-11-23 从 HTML 抽出到 `public/cxo-dashboard-data.js`）：GEO 州界底图 + DATA 面板数据；抓取时间无从考证（`window.CXO_DASHBOARD_AS_OF` 为空），所以首屏用内置数据时 `#cacheBanner` 常驻写明「构建时内置的数据集，抓取时间未知，不是实时状态」，缓存或实时数据一到即被替换 / 隐藏；
   2. **last-known-good 缓存**：worker 任务 `cxo_dashboard_cache_sync`（每 10 分钟，v 组）经本机 8790 VMAX 代理拉全量接口、**空值保留旧值**，落盘 `data/cxo_dashboard/last_known_good.json`，页面打开/开启自动刷新后到点时经 `GET /api/cxo-dashboard/cache` 应用；
   3. 实时拉取（经 `/api/realtime-proxy/cxo` 转发 8790 代理）成功则覆盖缓存。
   实时不可用时页面显示最近可用缓存数据（状态行 `offline · cached data`），Health 页 live 为空时回退缓存并在标题标注 `cached <时间>`。
 - 缓存任务详情见 `backend/services/cxo/cxo_dashboard_cache.md`；每次运行还向 `data/cxo_dashboard/history.jsonl` 追加一行 Summary KPI + Health 概要（积累趋势用）。
 - **轮播（大屏值守）**：页头 `Carousel` 按钮（2026-09-02 起）每 15 秒轮换 Service→Network→Summary→Healthscore 四页签并**进入全屏**（同 Alarm Management：再点按钮停止并退全屏；Esc 退出全屏会联动停轮播；手动点页签视为接管、停轮播但保留全屏）。
+- **缓存年龄横幅（2026-11-23）**：`#cacheBanner` 按 `/api/cxo-dashboard/cache` 返回的 `updated_at` 常驻显示「当前显示 last-known-good 缓存（更新于 …，距今 …）」。这是为了治住「空值保留旧值」的副作用 —— 上游长期不出数时，缓存会让页面看起来「数据还在」，实际后台任务已经很久没写入新数据。**超过 3 小时（`CACHE_STALE_H`）转红**并写明「不是当前状态」；实时刷新全成功时自动隐藏（`finishStatus` 的 `fail===0` 分支调 `hideCacheBanner()`）。
 - 图表尺寸自适应：所有图表 setOption 后统一排队一次 rAF `resize()`（`queueResizeAll`）——trend-grid 卡片逐个 append 时列宽多次回流，不补偿会把 1570px 画布塞进 359px 卡片（x 轴标签挤压、线条重叠的根因）；实时刷新按代次（`REFRESH_GEN`）管理，切页/轮播后旧刷新静默作废，不在隐藏视图上重建图表、也不覆盖状态行。
 - 数据源是 VMAX 实时保障看板，凭据在「系统设置 → 凭据 → `vmax_cxo`」。
 - 已知限制：Healthscore 的 VMAX 源头分区 `aggr_ds_cxo_score` 为空时综合分显示 `—`（页面有说明横幅），需数据侧聚合后才能填充，缓存只能保证"有过的数据不再丢"。
@@ -1427,6 +1428,14 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 | 与任务的关系 | 消费 `eflow_active_alarm` 数据 | 被 `site_outage_screenshot`（每天 01:00）截图，截图再由 `whatsapp_send`（03:00）发到 WhatsApp 群 |
 
 `site_outage_screenshot` 的截图对象正是本看板的 **ERA / Regular / ALL 三个视图**（`task_registry.py:95-99`）。**改这个 iframe 页的 DOM 会连带影响自动截图任务**——改前先确认截图选择器还找得到。界面能力以该 HTML 自身为准。
+
+- **数据来源与快照年龄（2026-11-23 重塑）**：本页原来的 2.1MB `const FMS_REAL` 数据**写死在内联脚本里**，是 2026-08-13 11:37:06 从 FMS 实时接口抓取后冻结的一份快照。页面只有一行小字「示例快照 · 未连接」，用户看到的数字与实时数据长得一模一样 —— 实测到 2026-11-23 已经用它顶了 **102 天**。
+  现在拆成三段，各说各的：
+  - `public/alarm-management-snapshot.js` 单独存放快照数据体与 `window.ALARM_MGMT_SNAPSHOT_AS_OF`（HTML 从 2.2MB 降到 147KB，换数据不必再改页面）；
+  - 页头 `#snapBanner` **常驻横幅**按 as_of 算出年龄：≤24h 黄色、>24h 转红并写明「不是当前状态」（这是「数据过期」的异常，按工作区 `AGENTS.md` 四.10 必须常驻可见，不做可关闭）；
+  - 快照文件缺失时渲染最小骨架并直接报错，不再静默半渲染。
+  另：**KPI 卡（宕站数 / 恢复 / MTTR / 可用率）来自 my_app 后端** `/api/alarm-dashboard/alarm-overview`（`backend/routers/alarm_dashboard.py:911`），表格 / 趋势 / 地图 / 域卡片才来自 FMS（经 `/api/realtime-proxy/fms`）。打开实时开关并拿到数据后，横幅降级为「部分面板已接入实时」，**不会**整条消失 —— 因为 KPI 与其余面板来源不同。
+  **六个域卡片（RAN/CN/TRM_MW/VAS/TRM/POWER）没有实时接口**，FMS 侧未提供 URL，每张卡上直接标「无实时接口 · 快照」，不再让卡片看起来像实时结果。
 
 ## 13. 丢包看板（`?page=packet_loss`）
 

@@ -59,7 +59,7 @@
 
 | 组件 | 职责 |
 | --- | --- |
-| `TaskSyncWidget.tsx` | **实时任务调度部件**：每 60s 拉任务状态，接口离线降级为静态快照 |
+| `TaskSyncWidget.tsx` | **实时任务调度部件**：每 60s 拉任务状态；接口离线时不再用兜底数组（旧 `FALLBACK_TASKS` 已于 2026-11-23 删除），只有本次会话拉到过数据才显示，并标「离线 · 最后更新」 |
 | `WhatsAppTasksView.tsx` | WhatsApp 任务视图 |
 
 ### Agent 控制台（`components\agent\`，TASK-08）
