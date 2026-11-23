@@ -94,8 +94,12 @@ def _load_from_file() -> dict:
 def _save_to_file(cfg: dict) -> None:
     _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = str(_CONFIG_FILE) + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    # newline="\n"：仓库按 LF 跟踪这个文件；Windows 文本模式会把 \n 写成 \r\n，
+    # 于是每次在页面上保存都会让 git 看到整文件重写（2026-11-23 实测）。
+    # 末尾补换行，保持普通文本文件的收尾习惯。
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
+        f.write("\n")
     os.replace(tmp, str(_CONFIG_FILE))
 
 
