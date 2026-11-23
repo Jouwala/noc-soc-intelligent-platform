@@ -22,6 +22,7 @@ import { LocationMapView, type RingSite, type TrackCell } from './LocationMapVie
 import SubscriberSearchOverlay from './SubscriberSearchOverlay'
 import CoordinateSearchOverlay from './CoordinateSearchOverlay'
 import type { FiberLink } from './useLocationData'
+import type { VmaxRange } from '../vmaxWindow'
 
 const { Text } = Typography
 
@@ -57,6 +58,8 @@ export default function LocationMapCard({
     missing: number
     hasResult: boolean
     onOpen: () => void
+    range: VmaxRange
+    onRangeChange: (r: VmaxRange) => void
   }
   coord: {
     latText: string
@@ -126,6 +129,8 @@ export default function LocationMapCard({
           missing={sub.missing}
           hasResult={sub.hasResult}
           onOpen={sub.onOpen}
+          range={sub.range}
+          onRangeChange={sub.onRangeChange}
         />
 
         {/* 经纬度搜索窗：右下角。输入后点「定位」即应用；

@@ -500,7 +500,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       usage: [
         '坐标有四个入口：URL 的 lat / lon（问答助手答案里的链接直接可达）、手动输入、浏览器定位（需 https）、以及「问问答助手」——向 /api/portal-qa/ask 提问后从答案文字里解析坐标',
         '底图与 ?page=gis 共用本机自托管的 PMTiles 离线瓦片（/tiles/liberia.pmtiles），不依赖公网；默认关闭地名注记与道路，地图左上角「图层」浮层可分别打开。右下角 © OpenStreetMap 是瓦片数据的署名要求，不是在线请求',
-        '地图上有两个搜索窗：右上角「查询订阅者」输手机号查轨迹，右下角「按经纬度定位」输纬度/经度直接定位；经纬度、半径、站点数、问答助手等完整控制条在**页面最下面**，与地图坐标窗共用同一份经纬度状态；标题与口径说明卡放在整个页面的最下面一行',
+        '地图上有两个搜索窗：右上角「查询订阅者」输手机号查轨迹，右下角「按经纬度定位」输纬度/经度直接定位；经纬度、半径、站点数、问答助手等完整控制条在**页面最下面**，与地图坐标窗共用同一份经纬度状态。手机号搜索默认查**最近 3 小时**，搜索窗下方可改起止时间（最多回看 24 小时），点「查询」生效；标题与口径说明卡放在整个页面的最下面一行',
         '「最近的一圈站点」按所选半径筛站点、按距离升序取前 N 个；半径内不足 3 个时自动扩到第 3 个最近站点，地图虚线圈与列表同步改用扩后半径，并在控制条下方提示',
         '站点颜色与 ?page=gis 完全同一套规则与色值（实时告警 / 历史 / VIP / 普通）；点站点打开的是 GIS 页同一个下钻抽屉（基本信息 + KPI 图表 + 明细页签）',
         'MW 链路取 GIS 页同一份 KML 链路并按点到线段距离排序，最近一条加粗；点链路打开「链路详情」抽屉，字段与 ?page=mwRealTime 点链路一致（容量 / Node IP / 接口 / TX-RX 吞吐与利用率 / 24H 趋势 / 端口明细）',
@@ -1350,7 +1350,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       usage: [
         'Four coordinate entry points: URL lat / lon (a link in a QA answer opens the page directly), manual input, browser geolocation (https only), and Ask the assistant — POST /api/portal-qa/ask and parse the coordinate from the answer text',
         'The basemap is the same self-hosted PMTiles offline archive as ?page=gis (/tiles/liberia.pmtiles), with no public-internet dependency. Place labels and roads are off by default and can be enabled in the Layers panel at the top left. The © OpenStreetMap credit at the bottom right is the required attribution for the tile data, not an online request',
-        'The map has two search windows: Find subscriber (phone number, top right) and Locate by coordinates (latitude/longitude, bottom right). The full control bar — coordinates, radius, site count and the QA assistant — sits at the **bottom of the page**, sharing the same coordinate state as the map window; the title and methodology card is the last row of the page',
+        'The map has two search windows: Find subscriber (phone number, top right) and Locate by coordinates (latitude/longitude, bottom right). The full control bar — coordinates, radius, site count and the QA assistant — sits at the **bottom of the page**, sharing the same coordinate state as the map window. Subscriber searches default to the **last 3 hours**; the start/end time can be changed under the search box (up to 24 hours back) and applies when you click Search; the title and methodology card is the last row of the page',
         'The nearest ring takes the sites inside the chosen radius sorted by distance and keeps the first N. When fewer than three fall inside, the radius is widened to the third nearest site; the dashed circle and the list use the widened radius and a note states it below the controls',
         'Site colours use exactly the same rule and values as ?page=gis (real-time alarm / history / VIP / normal). Clicking a site opens the same drill-down drawer as the GIS page (basic info + KPI charts + detail tabs)',
         'MW links come from the same KML links as the GIS page sorted by point-to-segment distance; the nearest one is thicker. Clicking a link opens the "link details" drawer with the same fields as clicking a link on ?page=mwRealTime (capacity / node IP / interface / TX-RX throughput and utilization / 24H trend / interface details)',

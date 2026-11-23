@@ -382,6 +382,8 @@ export default function LocationMap() {
               missing: track.missing,
               hasResult: !!sub.result,
               onOpen: () => setSubOpen(true),
+              range: sub.range,
+              onRangeChange: sub.setRange,
             }}
             coord={{
               latText,
