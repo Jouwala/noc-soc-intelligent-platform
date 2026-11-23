@@ -18,6 +18,7 @@ import { CardBase } from '../../components/cards'
 import { ExplainIcon } from '../../components/MetricExplain'
 import { UTIL_LEVEL_COLORS, utilLevelOf, type Site, type TopologyLink } from '../gismap/types'
 import { fmtKm } from './geo'
+import { fmtSeen } from './trackTime'
 import type { FiberLink } from './useLocationData'
 import type { RingSite, TrackCell } from './LocationMapView'
 import { siteColor } from './siteColors'
@@ -203,7 +204,7 @@ export function LinksPanel({
 
 export function SubscriberPanel({
   msisdn, searched, loading, diagLoading,
-  trackKm, missing, resultMsisdn, hasResult, onOpen,
+  trackKm, missing, resultMsisdn, hasResult, windowText, onOpen,
 }: {
   /** 当前输入框里的号码（没查过时用于标题标注） */
   msisdn: string
@@ -215,11 +216,14 @@ export function SubscriberPanel({
   resultMsisdn?: string
   /** 本次查询是否拿到了结果（即使没有带坐标的小区，也应能打开完整诊断） */
   hasResult: boolean
+  /** 本次查询的时间窗（诊断窗口优先） */
+  windowText?: string
   onOpen: () => void
 }) {
   const { t } = useI18n()
   const isMobile = useIsMobile()
-  const lastKey = trackKm[trackKm.length - 1]?.cell.key
+  /* CCA usertrack 倒序：第 1 条是最新（用户 2026-11-23 确认） */
+  const latestKey = trackKm[0]?.cell.key
   /** CCA 的 rat 数值 → 制式（1/2/6 是项目里实测到的三档；其它原样显示）。 */
   const ratText = (rat: number | string | undefined): string => {
     const s = String(rat ?? '')
@@ -232,7 +236,7 @@ export function SubscriberPanel({
     {
       key: 'idx', title: '#', width: 44,
       render: (_: unknown, row: { cell: TrackCell }, i: number) => (
-        row.cell.key === lastKey
+        row.cell.key === latestKey
           ? <span title={t('loc.sub.lastHint')}>👤</span>
           : i + 1
       ),
@@ -262,11 +266,24 @@ export function SubscriberPanel({
       ),
     },
     {
+      key: 'seen',
+      title: t('loc.col.lastSeen'), dataIndex: 'cell', width: isMobile ? 96 : 120,
+      render: (c: TrackCell) => (
+        c.lastSeen
+          ? (
+            <span title={`${c.lastSeen}${c.hits ? ` · ${t('loc.sub.hits', { n: c.hits })}` : ''}`}>
+              {fmtSeen(c.lastSeen)}
+            </span>
+          )
+          : <Text type="secondary">—</Text>
+      ),
+    },
+    {
       key: 'km',
       title: t('loc.col.distance'), dataIndex: 'km', width: 90,
       render: (km: number) => fmtKm(km),
     },
-  ].filter((c) => !(isMobile && (c.key === 'coords' || c.key === 'vendor')))
+  ].filter((c) => !(isMobile && (c.key === 'coords' || c.key === 'vendor' || c.key === 'rat')))
 
   return (
     <CardBase
@@ -274,6 +291,11 @@ export function SubscriberPanel({
       extra={(resultMsisdn || msisdn) ? <Tag color="cyan">{resultMsisdn || msisdn}</Tag> : undefined}
       bodyStyle={{ padding: 12 }}
     >
+      {!!windowText && (
+        <div style={{ marginBottom: 6 }}>
+          <Text type="secondary" style={{ fontSize: 11 }}>{t('loc.sub.window', { w: windowText })}</Text>
+        </div>
+      )}
       {!searched && (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -302,6 +324,8 @@ export function SubscriberPanel({
             />
             <div style={{ marginTop: 6 }}>
               <Text type="secondary" style={{ fontSize: 11 }}>{t('loc.sub.personLegend')}</Text>
+              <br />
+              <Text type="secondary" style={{ fontSize: 11 }}>{t('loc.sub.timeNote')}</Text>
             </div>
             <Button size="small" style={{ marginTop: 8 }} onClick={onOpen}>
               {t('loc.sub.openDrawer')}
