@@ -5,6 +5,7 @@ import EmailRecipientsSettings from './EmailRecipientsSettings'
 import RemoteHostSettings from './RemoteHostSettings'
 import AIModelSettings from './AIModelSettings'
 import WhatsAppSettings from './WhatsAppSettings'
+import PhoneQueryAclSettings from './PhoneQueryAclSettings'
 import TaskConfigTab from './datasync/TaskConfigTab'
 
 export default function Settings() {
@@ -37,6 +38,11 @@ export default function Settings() {
           key: 'whatsapp',
           label: t('settings.whatsappTab'),
           children: <WhatsAppSettings />,
+        },
+        {
+          key: 'phoneAcl',
+          label: t('settings.phoneAclTab'),
+          children: <PhoneQueryAclSettings />,
         },
         {
           key: 'taskConfig',

@@ -2724,6 +2724,21 @@ Data Subscribers · 4G —— 后三项要求显示波动百分比、超过 5% �
 `patch_team_portal.py` 的 `scope-refresh` 钩子补调 `loadKeybiz()`、
 `team-layout.js` 的 `BLOCKS` 加 `keybiz` 并为老布局补位（否则会排到页尾）。
 
+**登录闸门漏藏（2026-11-23 同日修复）。** 首版上线后用户报「登录界面也能看到关键业务」。
+两个原因叠加：
+1. `mainLocked()` 的静态清单里没有 `#keybiz`（它列举的是原版区块），登录时根本没被藏；
+2. 即便加进清单也不够 —— `renderKeybiz()` 每次异步渲染都会写 `box.hidden = false`，
+   把 `mainLocked(true)` 刚设上的 hidden 又解掉。
+
+修法：`#keybiz` 进 `mainLocked()` 清单；`mainLocked()` 额外记 `state.mainLocked`
+（让「锁定」成为渲染函数能读到的状态，而不是一次性的 DOM 赋值）；`renderKeybiz()`
+每次按 `state.mainLocked` + `kbWantRow()` 重算 hidden（内容照常生成，解锁时直接是骨架屏）；
+`mainLocked(false)` 末尾补调 `renderKeybiz()`（`closeGate()` 只调解锁、不调 `render()`，
+不补这一下取消登录后要等下一次数据刷新才回来）。`patch_team_portal.py` 的
+`mainlocked-complaint` 钩子同步加 `#keybiz`，团队门户同样不会漏。
+**实测**：未登录（拦截 `/api/auth/me`）/ 已登录主动开门户 / 登出后 `#keybiz` 均 `hidden=true`；
+取消闸门与登录后恢复显示；0 条 JS 报错。
+
 **回归（无头浏览器，真实页面 `https://localhost/v3/olbrportal/`）。**
 
 | 检查 | 结果 |

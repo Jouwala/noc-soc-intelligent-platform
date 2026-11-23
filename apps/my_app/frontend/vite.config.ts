@@ -120,19 +120,48 @@ export default defineConfig({
         // 报 "Uncaught TypeError: t is not a function"（antd-*.js:1:52）→ 整站白屏。
         // strictExecutionOrder 会让 rolldown 把 runtime helper 单独拆成无依赖的
         // rolldown-runtime-*.js 叶子分包，并按 import 顺序注入初始化，分包图无环。
-        // 代价约 +100KB(≈2%) 的初始化包装代码。可用
-        // `node TMP/checkgraph.mjs <dist>` 校验产物分包图无环后再上线。
+        // 代价约 +100KB(≈2%) 的初始化包装代码。改完分包请校验产物分包图无环：
+        // 2026-11-23 实测 130 个 chunk / 932 条静态 import 边 / 0 环（做法：按各
+        // chunk 顶部的 `import ... from './x.js'` 建图跑 Tarjan，脚本一次性用完即删）。
         strictExecutionOrder: true,
         // 按依赖拆分 vendor 分包：浏览器可并行下载 + 长缓存，首屏不必一次性拉全部
-        manualChunks(id: string) {
-          if (!id.includes('node_modules')) return
-          if (id.includes('echarts') || id.includes('zrender')) return 'echarts'
-          if (id.includes('leaflet')) return 'leaflet'
-          if (id.includes('@ant-design/icons')) return 'antd-icons'
-          if (id.includes('/antd/') || id.includes('/rc-')) return 'antd'
-          if (id.includes('react-dom') || id.includes('/react/') || id.includes('react')) return 'react-vendor'
-          if (id.includes('dayjs') || id.includes('moment')) return 'date-lib'
-          return 'vendor'
+        //
+        // 2026-11-23 构建告警治理（原：vendor 1.40MB / antd 1.35MB 双双越过
+        // chunkSizeWarningLimit=1200）：
+        //  ① exceljs（≈930KB）与 xlsx（≈364KB）不再沉底进 vendor —— 它们分别只在
+        //     「点导出」（exceljs 已改动态 import，见 utils/excelReport.ts）与
+        //     「xlsx 上传/导入」页面用到，独开 chunk 后不参与首屏。
+        //  ② antd（≈654KB）与 @rc-component/*（≈450KB）拆成两块。二者单向依赖
+        //     （antd → @rc-component → react），分包图无环；配合 strictExecutionOrder
+        //     不会重演「runtime helper 未初始化 → 整站白屏」。
+        //  ③ 废弃的 manualChunks 无法控制「依赖是否递归并入同一 chunk」——
+        //     @rc-component 会被 antd 组递归吞掉（实测 antd 仍是 1350KB）。
+        //     这里改用 rolldown 的 codeSplitting.groups + priority：高优先级组先认领
+        //     模块，再从其它组里移除，才真正拆得开。新增重库时照此给独立组，
+        //     不要让它回落到 vendor 把体积重新顶起来。
+        // 实测（2026-11-23）：全部 chunk < 1200KB（最大 index ≈1.11MB，其主体是
+        // i18n.tsx 双字典）；首屏 modulepreload 合计 3.99MB→2.77MB 裸 / 1268→897KB gzip。
+        codeSplitting: {
+          groups: [
+            // 重库先认领，priority 越大越优先
+            { name: 'exceljs', test: /node_modules[\\/]exceljs[\\/]/, priority: 30 },
+            { name: 'xlsx', test: /node_modules[\\/]xlsx[\\/]/, priority: 30 },
+            // react / dayjs 被 antd 递归依赖；priority 必须高于 antd 组，
+            // 否则会被 antd 组整包吞掉、独立 chunk 变成 0KB（实测过一次）。
+            { name: 'react-vendor', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, priority: 26 },
+            { name: 'date-lib', test: /node_modules[\\/](dayjs|moment)[\\/]/, priority: 26 },
+            { name: 'antd-icons', test: /node_modules[\\/]@ant-design[\\/]icons[\\/]/, priority: 25 },
+            { name: 'antd-rc', test: /node_modules[\\/]@rc-component[\\/]/, priority: 24 },
+            { name: 'echarts', test: /node_modules[\\/](echarts|zrender)[\\/]/, priority: 20 },
+            { name: 'leaflet', test: /node_modules[\\/](leaflet|protomaps-leaflet|@protomaps)[\\/]/, priority: 20 },
+            {
+              name: 'antd',
+              test: /node_modules[\\/](antd|@ant-design[\\/](cssinjs|cssinjs-utils|fast-color|colors))[\\/]/,
+              priority: 20,
+            },
+            // 兜底：其余 node_modules 全进 vendor
+            { name: 'vendor', test: /node_modules[\\/]/, priority: 1 },
+          ],
         },
       },
     },

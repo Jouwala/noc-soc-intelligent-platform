@@ -829,14 +829,26 @@ H(
 H(
     "mainlocked-complaint",
     """  function mainLocked(on) {
-    ['#band', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux']""",
+    /* 记住锁定态（2026-11-23 加）：光把区块塞进下面这份静态清单不够 ——
+       本页的渲染是异步的（数据回来就重画），任何一次 renderKeybiz / render
+       都会把 hidden 重新写成 false，登录框下面于是又冒出内容。
+       state.mainLocked 让「锁定」成为渲染函数也能读到的状态，而不是一次性的 DOM 操作。 */
+    state.mainLocked = !!on;
+    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux']""",
     """  function mainLocked(on) {
+    /* 记住锁定态（2026-11-23 加）：光把区块塞进下面这份静态清单不够 ——
+       本页的渲染是异步的（数据回来就重画），任何一次 renderKeybiz / render
+       都会把 hidden 重新写成 false，登录框下面于是又冒出内容。
+       state.mainLocked 让「锁定」成为渲染函数也能读到的状态，而不是一次性的 DOM 操作。 */
+    state.mainLocked = !!on;
     /* 团队门户专有补丁（2026-10-30）：清单里补 '#complaintSlot'。
        上游 /v3/olbrportal/ 没有 Customer Complaint 这一整块，基线那行不需要它；
        团队副本里 #complaintSlot 是 #main 的子区块（index.html 的 .complaint-slot），
        不写进这份清单，登出后 renderGate() → mainLocked(true) 就藏不掉它 —— 登录框下面
-       照常挂着「Customer Complaint」。上面那段基线注释记的两次漏藏是同一个坑。 */
-    ['#band', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#complaintSlot', '#aux']""",
+       照常挂着「Customer Complaint」。上面那段基线注释记的两次漏藏是同一个坑。
+       ⚠️ 2026-11-23：上游清单加了 '#keybiz'，这里必须同步 —— 团队门户也有一模一样
+       的「关键业务」行，漏掉它同样会在登录框下面露出来。 */
+    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#complaintSlot', '#aux']""",
 )
 
 # ==========================================================================

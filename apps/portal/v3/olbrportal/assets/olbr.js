@@ -131,6 +131,8 @@
     lang: detectLang(),
     theme: detectTheme(),
     user: null, authOk: false, booted: false, userMenuOpen: false, sysMenuOpen: false,
+    /* 登录闸门 / 登出时主内容是否被锁住（2026-11-23 加，见 mainLocked）。 */
+    mainLocked: false,
     /* 登录闸门的两态（2026-09-25 加）：
        · gateMode —— 'login' 登录 / 'request' 自助注册申请，与 /uniplam/ 的
          LoginView 同一套两态切换；
@@ -2841,11 +2843,15 @@
   function renderKeybiz() {
     var box = $('#keybiz');
     if (!box) return;
-    /* 登出后不再重画：数据是异步装载的，登出那一刻还在飞的回调会把区块
-       重新解隐/填满 —— 与 #band / #kpi 的 signedOut 钩子同一类漏点。 */
-    if (state.signedOut) { box.hidden = true; return; }
-    if (!kbWantRow()) { box.innerHTML = ''; box.hidden = true; return; }
-    box.hidden = false;
+    /* 两块判据缺一不可：
+       · allowed —— 团队矩阵没勾任何 kpi 子项时这一行不显示；上游恒 true。
+       · state.mainLocked —— 登录闸门 / 登出时主内容整块锁住。#keybiz 是异步
+         渲染的，只靠 mainLocked() 里那次 DOM 赋值会被随后的数据回调重新解隐，
+         所以 hidden 必须在**每次**渲染时按锁定态重算（2026-11-23 用户报
+         「登录界面也能看到关键业务」就是漏了这一点）。
+       ⚠️ 内容照常生成、只改 hidden：解锁那一刻应当直接看到骨架屏而不是
+         一块空白面板（首屏 render() 发生在 probe() 之前，那时还没登录）。 */
+    var allowed = kbWantRow() && !state.signedOut;
     /* 取数失败常驻可见（AGENTS.md 第四节第 10 条：说「这次算错了 / 算不全」
        的是异常，不能收进 tooltip）。卡片上保留的是上一次的值与它的时间戳，
        这行红字说明「这次没取到」——两者同时存在才不会被误读成数据正常。 */
@@ -2856,6 +2862,7 @@
         esc(t('keybiz.err') + ': ' + errMsg) + '</p>' : '') +
       '</div></div>' +
       '<div class="qc-grid">' + DATA.KEYBIZ.map(kbCardFor).join('') + '</div>';
+    box.hidden = !!state.mainLocked || !allowed;
   }
 
   /* ==================================================================== v1 ==
@@ -5960,8 +5967,19 @@
        #fbMenuLink 承载；右列上半换成 #cchSlot，清单同步改名。
        以后每新增一块 main 里的区块都要回来看一眼这个数组。 */
   function mainLocked(on) {
-    ['#band', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux']
+    /* 记住锁定态（2026-11-23 加）：光把区块塞进下面这份静态清单不够 ——
+       本页的渲染是异步的（数据回来就重画），任何一次 renderKeybiz / render
+       都会把 hidden 重新写成 false，登录框下面于是又冒出内容。
+       state.mainLocked 让「锁定」成为渲染函数也能读到的状态，而不是一次性的 DOM 操作。 */
+    state.mainLocked = !!on;
+    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux']
       .forEach(function (s) { var e = $(s); if (e) e.hidden = on; });
+    /* 解锁后按「锁定态 + 团队作用域」重算一次 #keybiz 的 hidden：
+       它在上面那份清单里会被**无条件**解隐，而团队门户矩阵没勾任何 kpi 子项时
+       这一行不该露出来。放在这里而不是只交给异步 render()，是因为 closeGate()
+       只调 mainLocked(false)、不调 render() —— 否则取消登录后这一行要等下一次
+       数据刷新（最多 15 分钟）才回来。 */
+    if (!on) renderKeybiz();
   }
   function login(u, p) {
     return fetch('/uniplam/api/auth/login', {

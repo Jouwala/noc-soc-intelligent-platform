@@ -42,17 +42,40 @@
  *   ]
  */
 /**
- * exceljs 仍用静态 import（2026-11-12 首屏瘦身实测结论）：
- * 曾尝试改成动态 import()，但两点原因导致它反而更差，已回退：
- *  ① vite.config.ts 的 manualChunks 把 node_modules 全收进 vendor，
- *     动态 import 拆不出独立 chunk，exceljs 照样在首屏 vendor 里；
- *  ② 动态 import 的 CJS 模块无法 tree-shake，整包 exceljs 被打进来，
- *     实测 vendor 反而 +130KB（裸）/+39KB（gzip）。
- * 要真拆出去，需在 manualChunks 里给动态导入的库开口子（见下），
- * 那是 vite.config.ts 的改动，本轮按任务要求不动它。
- * 调用方（exportReport / exportAoaReport / buildReportWorkbook）用法不变。
+ * exceljs 改为「点导出时才加载」（2026-11-23 构建告警治理）：
+ *
+ * 2026-11-12 曾试过动态 import 又回退，理由是当时 manualChunks 把
+ * node_modules 全收进 vendor、动态 import 拆不出独立 chunk，且 CJS 模块
+ * 无法 tree-shake，反而让 vendor 胖了 130KB。那个前提已经改变：
+ * vite.config.ts 现在用 codeSplitting.groups 给 exceljs 单开一个 chunk
+ * （`name: 'exceljs'` 那组，priority 30），动态 import 落到的就是这个独立 chunk。
+ *
+ * 收益：exceljs 整包 ≈930KB（裸）/≈256KB（gzip）不再跟首屏一起下发 ——
+ * 只有用户真的点「导出」才拉取；`import type` 在编译后完全消失，不产生引用。
+ * 代价：该 chunk 因 CJS 无法 tree-shake，会比静态引入时略大；但它按需加载，
+ * 且命中浏览器长缓存，比放进首屏 vendor 划算。
+ *
+ * 调用方（exportReport / exportAoaReport）用法不变；buildReportWorkbook
+ * 由同步改为 async（本文件外无调用方，仅 exportReport 内部使用）。
  */
-import ExcelJS from 'exceljs'
+import type ExcelJS from 'exceljs'
+
+/** exceljs 运行期只需要 Workbook 构造器；其余全是类型（编译后擦除） */
+type ExcelJSRuntime = { Workbook: new () => ExcelJS.Workbook }
+
+let exceljsLoader: Promise<ExcelJSRuntime> | null = null
+
+/** 懒加载 exceljs（只加载一次，后续导出复用同一个 Promise） */
+function loadExcelJS(): Promise<ExcelJSRuntime> {
+  if (!exceljsLoader) {
+    exceljsLoader = import('exceljs').then((mod) => {
+      // CJS 包经 rolldown 互操作后，构造器可能挂在 default 上，也可能直接是命名空间
+      const m = mod as unknown as ExcelJSRuntime & { default?: ExcelJSRuntime }
+      return m.default ?? m
+    })
+  }
+  return exceljsLoader
+}
 
 /** 便于在构建产物里 grep 的版本标记 */
 export const UNIFIED_EXCEL_VERSION = 'UNIFIED_EXCEL_V1'
@@ -417,9 +440,10 @@ function buildSheet(wb: ExcelJS.Workbook, spec: ReportSheetSpec) {
 // =============================================================================
 // 对外 API
 // =============================================================================
-/** 构建工作簿（不下载），便于单测 / 二次加工 */
-export function buildReportWorkbook(specs: ReportSheetSpec[]): ExcelJS.Workbook {
-  const wb = new ExcelJS.Workbook()
+/** 构建工作簿（不下载），便于单测 / 二次加工。exceljs 按需加载，故为 async。 */
+export async function buildReportWorkbook(specs: ReportSheetSpec[]): Promise<ExcelJS.Workbook> {
+  const { Workbook } = await loadExcelJS()
+  const wb = new Workbook()
   wb.creator = 'NOC Dashboard'
   wb.created = new Date()
   for (const s of specs) buildSheet(wb, s)
@@ -428,7 +452,7 @@ export function buildReportWorkbook(specs: ReportSheetSpec[]): ExcelJS.Workbook 
 
 /** 生成并下载多 sheet 报表（项目统一格式） */
 export async function exportReport(specs: ReportSheetSpec[], filename: string): Promise<void> {
-  const wb = buildReportWorkbook(specs)
+  const wb = await buildReportWorkbook(specs)
   const buf = await wb.xlsx.writeBuffer()
   downloadBlob(buf as ArrayBuffer, safeFileName(filename).endsWith('.xlsx') ? safeFileName(filename) : `${safeFileName(filename)}.xlsx`)
 }

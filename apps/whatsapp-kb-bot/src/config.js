@@ -33,6 +33,29 @@ function readJson(rel) {
 
 const raw = readJson('config.json');
 
+/**
+ * 本地对话模式（2026-11-23）：群机器人对话改走 .27 的 Ollama，**严格本地**。
+ *
+ * 开关只认环境变量 LOCAL_CHAT（写在 .env 里，bot / 网页助手启动时用 --env-file 读入）。
+ * 刻意不放 config.json：scripts/test-*.mjs 不读 .env，这样单测仍按原来的云端假设跑。
+ *
+ * 打开后：
+ *   · 不再用 my_app「AI 模型设置」覆盖模型（那页同时管 my_app 自己的 AI，不能为 bot 改它）；
+ *   · chatProvider 固定 ollama → FALLBACK_CONFIG 也是 ollama → llm.js 的云端兜底自然失效；
+ *   · dataquery.js（NL2SQL）跳过 OWU 通道，只走本地。
+ * 模型与上下文长度在 config.json 的 localChat 里；LOCAL_CHAT_MODEL / LOCAL_NUM_CTX 可临时覆盖。
+ * 网页助手（src/http-server.js）自己 pin 通道，不受此开关影响。
+ */
+export const LOCAL_CHAT = (() => {
+  const lc = raw.localChat && typeof raw.localChat === 'object' ? raw.localChat : {};
+  const env = process.env.LOCAL_CHAT;
+  return {
+    enabled: env === '1' || env === 'true',
+    model: process.env.LOCAL_CHAT_MODEL || lc.model || 'qwen2.5:7b-instruct',
+    numCtx: Number(process.env.LOCAL_NUM_CTX ?? lc.numCtx ?? 4096),
+  };
+})();
+
 /** 把相对路径解析为绝对路径 */
 const abs = (p) => (isAbsolute(p) ? p : resolve(ROOT, p));
 
@@ -84,8 +107,8 @@ applyChatCa();
  * 引用 RUNTIME_CONFIG 而非 CONFIG，确保 API 拉到的值实时生效。
  */
 export const RUNTIME_CONFIG = {
-  chatProvider: (process.env.CHAT_PROVIDER || raw.chatProvider || 'ollama').toLowerCase(),
-  chatModel: process.env.CHAT_MODEL || raw.chatModel,
+  chatProvider: LOCAL_CHAT.enabled ? 'ollama' : (process.env.CHAT_PROVIDER || raw.chatProvider || 'ollama').toLowerCase(),
+  chatModel: LOCAL_CHAT.enabled ? LOCAL_CHAT.model : process.env.CHAT_MODEL || raw.chatModel,
   chatBaseUrl: process.env.CHAT_BASE_URL || raw.chatBaseUrl || '',
   chatApiKeyEnv: raw.chatApiKeyEnv || 'OPENAI_API_KEY',
   chatApiKey: process.env.CHAT_API_KEY || raw.chatApiKey || '',
@@ -164,6 +187,10 @@ function toOpenWebUiApiBase(url) {
  * @returns {Promise<boolean>} 是否成功拉到了 my_app 的配置
  */
 export async function loadRuntimeConfig(apiBase) {
+  if (LOCAL_CHAT.enabled) {
+    console.log(`[config] 本地对话模式（LOCAL_CHAT=1）：不读 my_app AI 设置 → ${RUNTIME_CONFIG.chatModel} @ ${raw.ollamaUrl || process.env.OLLAMA_URL}（严格本地，不回退云端）`);
+    return true;
+  }
   const url = `${apiBase.replace(/\/+$/, '')}/api/ai-model-settings`;
   let controller;
   try {
@@ -281,6 +308,15 @@ export const CONFIG = {
   // —— 本地嵌入（始终走 Ollama）——
   ollamaUrl: process.env.OLLAMA_URL || raw.ollamaUrl,
   embedModel: process.env.EMBED_MODEL || raw.embedModel,
+  // 嵌入模型放哪：0 = 只用 CPU（不占显存，把 4GB 的 A400 留给对话模型）；
+  // 不设 / 负数 = 交给 Ollama 自己决定（会和对话模型抢显存，见 config.json 的 $embedNumGpu）。
+  embedNumGpu: (() => {
+    const v = process.env.EMBED_NUM_GPU ?? raw.embedNumGpu;
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  })(),
+  localChat: LOCAL_CHAT,
 
   knowledgeDirAbs: abs(process.env.KNOWLEDGE_DIR || raw.knowledgeDir),
   indexPathAbs: abs(process.env.INDEX_PATH || raw.indexPath),
@@ -430,7 +466,7 @@ export const CONFIG = {
 export function describeConfig() {
   const chatTarget =
     RUNTIME_CONFIG.chatProvider === 'ollama'
-      ? `${RUNTIME_CONFIG.chatModel} @ ${CONFIG.ollamaUrl}`
+      ? `${RUNTIME_CONFIG.chatModel} @ ${CONFIG.ollamaUrl}${LOCAL_CHAT.enabled ? `（本地模式，num_ctx=${LOCAL_CHAT.numCtx}，不回退云端）` : ''}`
       : `${RUNTIME_CONFIG.chatModel} @ ${RUNTIME_CONFIG.chatBaseUrl}`;
   return {
     对话模型: `[${RUNTIME_CONFIG.chatProvider}] ${chatTarget}`,

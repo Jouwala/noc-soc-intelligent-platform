@@ -28,12 +28,13 @@ import { routeWithTools } from './tools.js';
  * @param {Function} [opts.onLive]   本地库查不到、即将回 eFlow 实时查时的回调（可发垫话）
  * @param {'zh'|'en'} [opts.lang]    回复语言；不传则按提问语言自动判定
  * @param {Array<{q:string,a:string}>} [opts.history] 最近几轮问答，用于解析追问
+ * @param {object} [opts.caller]   提问人身份（号码查询鉴权用，见 src/phoneAcl.js）
  * @returns {Promise<{text:string, answered:boolean, channel:'tt'|'kb', stats?:object}>}
  */
 export async function routeAnswer(
   question,
   index,
-  { onDebug, onRoute, onRetry, onLive, lang, history, webHint } = {}
+  { onDebug, onRoute, onRetry, onLive, lang, history, webHint, caller } = {}
 ) {
   // 回复语言跟着提问语言走（英文提问 → 英文回复）。
   // 两条通道的机制不同，所以处理方式也不同：
@@ -53,6 +54,8 @@ export async function routeAnswer(
     history,
     // 网页挂件传 false：查不到时不要附「去网页版问」的尾巴（见 src/http-server.js）
     webHint,
+    // 提问人身份：必须一路透传到 runTool，号码查询的鉴权靠它（src/phoneAcl.js）
+    caller,
   });
 
   const ms = Date.now() - t0;
