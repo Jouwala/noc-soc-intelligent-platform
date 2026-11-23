@@ -12,22 +12,31 @@
  *     但不要高到盖住抽屉（抽屉是 fixed，层级在 1000+ 且后挂载，仍会正常覆盖）。
  *   · 文案走 i18n；颜色走 WH 令牌，深浅主题自动跟随。
  * ========================================================================== */
-import { Button, Input, Tag, Typography } from 'antd'
+import { Button, DatePicker, Input, Tag, Typography } from 'antd'
 import { MobileOutlined, SearchOutlined } from '@ant-design/icons'
 
 import { useI18n } from '../../i18n'
 import { WH, useIsMobile } from '../../theme'
+import { ExplainIcon } from '../../components/MetricExplain'
+import {
+  clampRange, disabledRangeProps, PAGE_RETENTION_HOURS, type VmaxRange,
+} from '../vmaxWindow'
 
 const { Text } = Typography
+const { RangePicker } = DatePicker
 
 export default function SubscriberSearchOverlay({
   msisdn, onMsisdnChange, onSearch,
   loading, diagLoading, searched, resultMsisdn,
   cellCount, missing, hasResult, onOpen,
+  range, onRangeChange,
 }: {
   msisdn: string
   onMsisdnChange: (v: string) => void
   onSearch: () => void
+  /** 查询时间窗（默认最近 3 小时，最多回看 24 小时） */
+  range: VmaxRange
+  onRangeChange: (r: VmaxRange) => void
   loading: boolean
   diagLoading: boolean
   searched: boolean
@@ -80,6 +89,28 @@ export default function SubscriberSearchOverlay({
         <Button type="primary" loading={busy} onClick={onSearch}>
           {t('loc.search.button')}
         </Button>
+      </div>
+
+      {/* 时间窗（2026-11-23 用户要求可设开始时间）：默认最近 3 小时，
+          最多回看 24 小时（与 VMAX 页同一保留期）；点「查询」才生效。 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        <span style={{ fontSize: 11, color: WH.textMuted, whiteSpace: 'nowrap' }}>
+          {t('loc.search.time')}
+        </span>
+        <RangePicker
+          size="small"
+          value={range}
+          allowClear={false}
+          showTime={{ format: 'HH:mm' }}
+          format="MM-DD HH:mm"
+          minuteStep={5}
+          style={{ flex: 1, minWidth: 0 }}
+          onChange={(v) => {
+            if (v && v[0] && v[1]) onRangeChange(clampRange([v[0], v[1]]))
+          }}
+          {...disabledRangeProps(PAGE_RETENTION_HOURS)}
+        />
+        <ExplainIcon text={t('loc.search.rangeHint')} size="0.8rem" />
       </div>
 
       <div style={{ marginTop: 6, fontSize: 11, color: WH.textMuted, lineHeight: 1.5 }}>
