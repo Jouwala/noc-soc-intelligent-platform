@@ -242,9 +242,13 @@ check(
   !/if\s*\(Test-Deaf\)\s*\{\s*Stop-BotProcess/.test(autoSrc),
   'Test-Deaf 不触发重启（只告警）'
 );
+// 2026-11-23: 仓库要求所有 .ps1 是 UTF-8 + BOM（ops/deploy/check-ps1-bom.mjs），
+// 所以先去掉开头 BOM 再断言正文纯 ASCII —— 原先直接比整串，ad2b6b6 统一补 BOM
+// 后这一项就永远失败了（CI 不跑本套件，所以一直没人发现）。
+const autoBody = autoSrc.replace(/^\uFEFF/, '');
 check(
-  autoSrc === [...autoSrc].filter((c) => c.charCodeAt(0) <= 127).join(''),
-  'autostart.ps1 保持纯 ASCII（PS 5.1 会把无 BOM 的 UTF-8 当 GBK 读）'
+  autoBody === [...autoBody].filter((c) => c.charCodeAt(0) <= 127).join(''),
+  'autostart.ps1 正文保持纯 ASCII（BOM 除外；PS 5.1 会把无 BOM 的 UTF-8 当 ANSI 读）'
 );
 
 /* -------------------------------- 结果 -------------------------------- */

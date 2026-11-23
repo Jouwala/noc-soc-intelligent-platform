@@ -160,17 +160,32 @@ function Start-HttpServer {
 }
 
 # Idempotent: start only if not already healthy; restart if alive-but-not-serving.
+#
+# 2026-11-23: "healthy" is not enough. That day the phone-query access check was
+# added to src/, but :9269 kept answering from an instance started BEFORE the
+# change - healthy by TCP, so this function said "already running" and kept it,
+# and the portal answered TEL queries for everyone. Two fixes:
+#   * an instance older than the newest src/*.js / .env / config.json is
+#     restarted (so the 5-min watchdog also picks up code changes on its own);
+#   * before starting, whatever node still listens on :9269 is stopped first
+#     (Clear-HttpPort). Before this, a leftover instance made every new start
+#     die with EADDRINUSE, silently, every 5 minutes.
 function Ensure-HttpServer {
   $existing = Find-HttpServerProcess
   $healthy  = Test-HttpServerHealthy
   if ($existing -and $healthy) {
-    $existing.ProcessId | Set-Content -Path $httpPidFile
-    if (-not $Watch) {
-      Write-Host "whatsapp-kb http-server already running and healthy (pid $($existing.ProcessId))"
+    $stamp = Get-CodeStamp
+    $stale = $stamp -and $existing.CreationDate -and ($existing.CreationDate -lt $stamp.LastWriteTime)
+    if (-not $stale) {
+      $existing.ProcessId | Set-Content -Path $httpPidFile
+      if (-not $Watch) {
+        Write-Host "whatsapp-kb http-server already running and healthy (pid $($existing.ProcessId))"
+      }
+      return
     }
-    return
-  }
-  if ($existing -and -not $healthy) {
+    Write-Host ("whatsapp-kb http-server pid {0} started {1:yyyy-MM-dd HH:mm:ss} but {2} changed {3:yyyy-MM-dd HH:mm:ss} - restarting to load the new code" -f $existing.ProcessId, $existing.CreationDate, $stamp.Name, $stamp.LastWriteTime)
+    Stop-BotProcess -TargetPid $existing.ProcessId
+  } elseif ($existing -and -not $healthy) {
     $ageSec = if ($existing.CreationDate) { ([datetime]::Now - $existing.CreationDate).TotalSeconds } else { 999 }
     if ($ageSec -lt 30) {
       if (-not $Watch) { Write-Host "whatsapp-kb http-server pid $($existing.ProcessId) still starting (${ageSec}s old) - leaving it alone" }
@@ -180,6 +195,12 @@ function Ensure-HttpServer {
     Stop-BotProcess -TargetPid $existing.ProcessId
   }
   Remove-PidFile -Path $httpPidFile
+  # Anything still on :9269 (an instance we cannot see by command line, e.g. one
+  # started by my_app or by another user) would make the new start fail.
+  if (-not (Clear-HttpPort -Why 'before start')) {
+    Write-Host "whatsapp-kb http-server NOT started: port $httpPort is still in use (see the warning above)"
+    return
+  }
   $p = Start-HttpServer
   # Brief wait for the listener to bind.
   $ok = $false
@@ -189,6 +210,11 @@ function Ensure-HttpServer {
   }
   if ($ok) {
     Write-Host "whatsapp-kb http-server started and listening (pid $($p.Id))"
+  } elseif (-not (Get-Process -Id $p.Id -ErrorAction SilentlyContinue)) {
+    # Died right away (e.g. EADDRINUSE, syntax error). Say why instead of
+    # leaving it in a log nobody opens.
+    Write-Host "whatsapp-kb http-server (pid $($p.Id)) exited right after start. Last lines of the error log ($httpErrLog):"
+    Get-Content -LiteralPath $httpErrLog -Tail 8 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
   } else {
     Write-Host "whatsapp-kb http-server started (pid $($p.Id)) but not listening on :$httpPort within 15s. Check $httpLog"
   }
@@ -303,14 +329,82 @@ if ($Status) { Show-Status; exit 0 }
 # leftover file for a live bot.
 function Stop-BotProcess {
   param([int]$TargetPid)
-  # 2>&1 keeps native stderr from becoming a terminating error under 'Stop'.
-  $null = & taskkill.exe /PID $TargetPid /T /F 2>&1
+  # 2026-11-23 fix: under $ErrorActionPreference='Stop', Windows PowerShell 5.1
+  # turns REDIRECTED native stderr (2>&1) into a terminating NativeCommandError
+  # (the old comment here claimed the opposite). taskkill /T writes to stderr
+  # whenever one CHILD of the tree cannot be killed - typically the hidden
+  # conhost.exe that already exited together with node - and that aborted the
+  # whole script before the new web assistant was started. Run taskkill with
+  # 'Continue' locally; the Get-Process check below decides whether it worked.
+  $prevEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $null = & taskkill.exe /PID $TargetPid /T /F 2>&1
+  } catch {
+  } finally {
+    $ErrorActionPreference = $prevEap
+  }
   Start-Sleep -Seconds 2
   $still = Get-Process -Id $TargetPid -ErrorAction SilentlyContinue
   if ($still) {
     Stop-Process -Id $TargetPid -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 1
   }
+}
+
+# Newest of the files the web assistant loads at start (src/*.js, .env,
+# config.json). Used to tell a healthy-but-outdated instance from a current one.
+# A timestamp in the future is ignored, otherwise every watchdog tick would
+# restart the assistant forever.
+function Get-CodeStamp {
+  $files = @()
+  $files += @(Get-ChildItem -Path (Join-Path $dir 'src') -Filter '*.js' -File -ErrorAction SilentlyContinue)
+  foreach ($name in @('.env', 'config.json')) {
+    $f = Join-Path $dir $name
+    if (Test-Path -LiteralPath $f) { $files += Get-Item -LiteralPath $f -Force }
+  }
+  $now = Get-Date
+  $newest = $files | Where-Object { $_ -and $_.LastWriteTime -le $now } |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  return $newest
+}
+
+# Who is LISTENING on a port: pid + process name (+ command line when readable;
+# for a process started by another user / elevated it is empty).
+function Get-PortOwner {
+  param([int]$Port)
+  try {
+    $c = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+  } catch { $c = $null }
+  if (-not $c) { return $null }
+  $ownerPid = [int]$c.OwningProcess
+  $wp = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerPid" -ErrorAction SilentlyContinue
+  return [pscustomobject]@{
+    Pid         = $ownerPid
+    Name        = $(if ($wp) { [string]$wp.Name } else { '' })
+    CommandLine = $(if ($wp) { [string]$wp.CommandLine } else { '' })
+  }
+}
+
+# Make sure nothing still listens on the web assistant port. Only node.exe is
+# stopped; anything else is reported and left alone. Returns $true when free.
+function Clear-HttpPort {
+  param([string]$Why)
+  $o = Get-PortOwner -Port $httpPort
+  if (-not $o) { return $true }
+  if ($o.Name -and $o.Name -ne 'node.exe') {
+    Write-Host "WARNING: port $httpPort is held by $($o.Name) (pid $($o.Pid)), not by node - leaving it alone."
+    return $false
+  }
+  Write-Host "stopping leftover web assistant on :$httpPort (pid $($o.Pid), $Why) ..."
+  Stop-BotProcess -TargetPid $o.Pid
+  for ($i = 0; $i -lt 5; $i++) {
+    if (-not (Get-PortOwner -Port $httpPort)) { return $true }
+    Start-Sleep -Seconds 1
+  }
+  Write-Host "WARNING: could not stop pid $($o.Pid) on :$httpPort (probably started as administrator or by another user)."
+  Write-Host "         In an ADMIN PowerShell run:  Stop-Process -Id $($o.Pid) -Force"
+  return $false
 }
 
 if ($Stop) {
@@ -328,6 +422,12 @@ if ($Stop) {
     else { Write-Host "whatsapp-kb http-server stopped" }
   } else {
     Write-Host "whatsapp-kb http-server is not running"
+  }
+  # 2026-11-23: also free the port. An instance whose command line we cannot
+  # read (started by my_app / as administrator) is invisible to
+  # Find-HttpServerProcess but keeps answering on :9269 with the OLD code.
+  if (Clear-HttpPort -Why 'stop requested') {
+    Write-Host "port $httpPort is free"
   }
   Remove-PidFile -Path $httpPidFile
 
