@@ -920,7 +920,10 @@ async function refreshInner(){
   // 避免在隐藏视图上重建图表（0 宽）并把状态行覆盖成旧页签的。
   const tab = curTop;
   if(tab==="service"){
-    const d = DATA.service[curBiz]; const vid=d.view_id, prim=d.infoIds[0];
+    const d = DATA.service[curBiz];
+    // 内置数据文件缺失时 DATA.service[curBiz] 为 undefined：走受控空态，别再往下读 view_id（会抛 TypeError）
+    if(!d){ renderService(curBiz); return; }
+    const vid=d.view_id, prim=d.infoIds[0];
     for(const id of d.infoIds){
       const j = await liveFetch("/Service/getIndicatorData", {...base, tabId:0, infoId:id, view_id:vid});
       if(stale()) return;
