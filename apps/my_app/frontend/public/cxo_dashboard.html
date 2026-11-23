@@ -232,7 +232,19 @@ img, svg, canvas, iframe { max-width: 100%; }
 <script src="./cxo-dashboard-data.js"></script>
 <script>
 const GEO = window.CXO_GEO || {type:"FeatureCollection",features:[]};
-const DATA = window.CXO_DATA || {};
+/* 2026-11-23：数据文件缺失时不能只剩一个 `{}`。
+   renderService / renderNetworkTab / renderSummary / applyCache 都会直接索引
+   DATA.service[biz]、DATA.net.tabs[...]、DATA.summary.xxx，缺键就抛
+   "Cannot read properties of undefined"，整页只剩横幅、面板空白、canvas 为 0 尺寸。
+   这里按上述渲染入口实际会访问的键补齐空骨架：取不到数据就各自走受控空态
+   （"no data" / Empty / No KPI data），由顶部红色横幅说明「内置数据文件未加载」。
+   只补结构，不编造任何数字或时间。 */
+const DATA = window.CXO_DATA || {
+  service: {},                  // renderService：DATA.service[biz] 取不到 → "no data"
+  net: { tabs: {}, map: null }, // renderNetworkTab：tabs 为空 → "no data"；map 为空 → Empty
+  summary: {},                  // renderSummary：overview_*/trend_* 缺失 → No KPI/trend data
+  health: {},                   // renderHealth：本就有 (DATA.health||{}) 兜底，这里给空表
+};
 // 同源转发：浏览器打 /api/realtime-proxy/cxo（与 my_app 后端同源），由后端再转发到
 // 服务器本机 127.0.0.1:8790 的 VMAX 代理。这样无论从哪台机器远程打开页面，实时拉取
 // 都能到达服务器上的代理，不再因为写死 127.0.0.1 而指向"访问者自己电脑"的回环口。
