@@ -101,10 +101,14 @@ def qa_ask(body: AskBody, request: Request):
     if ensure.get("status") in ("missing", "error"):
         raise HTTPException(status_code=503, detail=f"问答服务未就绪：{ensure.get('error')}")
 
+    user = portal_auth.current_user(request) or {}
     payload = {
         "question": question,
         "lang": body.lang,
         "clientId": _session_key(request, body.clientId),
+        # 登录用户名：9269 按它判定能不能查电话信息（TEL → VMAX CCA，名单见
+        # routers/phone_query_acl.py）。由后端按会话填，浏览器改不了。
+        "user": str(user.get("username") or "").strip(),
     }
     try:
         resp = _post("/ask", payload, timeout=300.0)

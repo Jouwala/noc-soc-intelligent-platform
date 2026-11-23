@@ -105,6 +105,7 @@ from backend.routers import (
     cm_flows,
     task_configs,
     ai_model_settings,
+    phone_query_acl,
     email_reports,
     mw_ume,
     mw_links,
@@ -308,6 +309,8 @@ app.include_router(cm_flows.router)
 app.include_router(task_configs.router)
 # AI 模型设置（Settings → AI Model 页签）
 app.include_router(ai_model_settings.router)
+# 号码查询权限（Settings → 号码查询权限：谁能在机器人 / 门户助手里查 TEL 电话信息）
+app.include_router(phone_query_acl.router)
 # 邮件报告文件（EmailReports 页面：email 类任务生成的最新报告文件列表/下载）
 app.include_router(email_reports.router)
 app.include_router(mw_ume.router)
