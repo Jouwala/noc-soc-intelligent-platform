@@ -936,7 +936,7 @@ async function refreshInner(){
     }
     const m = await liveFetch("/Service/geMapRender", {...base, infoId:prim, view_id:vid});
     if(stale()) return;
-    if(m){ d.map = {option:m.option, queryData:m.queryData}; }
+    if(m && m.option){ d.map = {option:m.option, queryData:m.queryData}; }
     const dl = await liveFetch("/network/getDelimitPie", {...base, infoId:prim, time:(d.dataTime || cxoNowStr()), gdprFlag:"false"});
     if(stale()) return;
     if(dl){ d.delimit = dl; }
@@ -956,7 +956,7 @@ async function refreshInner(){
       }
       const m = await liveFetch("/Service/geMapRender", {...base, infoId:Number(ids[0]), view_id:2});
       if(stale()) return;
-      if(m){ DATA.net.map = {option:m.option, queryData:m.queryData}; }
+      if(m && m.option){ DATA.net.map = {option:m.option, queryData:m.queryData}; }
     }
     if(curTop==="network"){ renderNetworkTab(curNet); finishStatus("Network/"+curNet); }
   } else if(tab==="summary") {
