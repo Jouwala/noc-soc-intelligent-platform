@@ -834,7 +834,10 @@ H(
        都会把 hidden 重新写成 false，登录框下面于是又冒出内容。
        state.mainLocked 让「锁定」成为渲染函数也能读到的状态，而不是一次性的 DOM 操作。 */
     state.mainLocked = !!on;
-    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux']""",
+    /* ⚠️ 2026-11-23（#237 事后评审 B1）：清单里补 '#arch'。
+       归档区由 renderArchive() 异步渲染，只靠这里的一次性 DOM 赋值藏不住 ——
+       登出后任何一次 render() 都会把它重新解隐（recall 还为真时）。 */
+    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux', '#arch']""",
     """  function mainLocked(on) {
     /* 记住锁定态（2026-11-23 加）：光把区块塞进下面这份静态清单不够 ——
        本页的渲染是异步的（数据回来就重画），任何一次 renderKeybiz / render
@@ -847,8 +850,10 @@ H(
        不写进这份清单，登出后 renderGate() → mainLocked(true) 就藏不掉它 —— 登录框下面
        照常挂着「Customer Complaint」。上面那段基线注释记的两次漏藏是同一个坑。
        ⚠️ 2026-11-23：上游清单加了 '#keybiz'，这里必须同步 —— 团队门户也有一模一样
-       的「关键业务」行，漏掉它同样会在登录框下面露出来。 */
-    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#complaintSlot', '#aux']""",
+       的「关键业务」行，漏掉它同样会在登录框下面露出来。
+       ⚠️ 2026-11-23（#237 事后评审 B1）：上游清单加了 '#arch'，这里同步 —— 团队
+       门户的归档区同样由 renderArchive() 异步渲染，漏掉它登出后照样在登录框下面露出来。 */
+    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#complaintSlot', '#aux', '#arch']""",
 )
 
 # ==========================================================================
