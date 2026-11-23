@@ -869,7 +869,13 @@ document.getElementById('ltTime').textContent = D.meta.fetchedAt ? (T('快照 ',
     return;
   }
   const ageH=(Date.now()-ts.getTime())/3600000;
-  const ageTxt=ageH<24 ? (Math.max(0,Math.round(ageH))+' 小时') : (Math.floor(ageH/24)+' 天');
+  // 年龄单位必须跟语言走：T(zh,en) 只切句子模板，不会翻译已经拼好的字符串，
+  // 否则英文环境会拼出「(102 天 ago)」（2026-11-23，#246）
+  const ageHourly=ageH<24;
+  const ageNum=ageHourly ? Math.max(0,Math.round(ageH)) : Math.floor(ageH/24);
+  const ageTxt=APP_LOCALE==='en'
+    ? ageNum+' '+(ageHourly ? (ageNum===1?'hour':'hours') : (ageNum===1?'day':'days'))
+    : ageNum+' '+(ageHourly ? '小时' : '天');
   const stale=ageH>24;
   el.className='snap-banner'+(stale?' stale':'');
   el.hidden=false;
