@@ -547,11 +547,14 @@ function renderService(biz){
   const d = DATA.service[biz];
   if(!d){ setStatus("no data", false); return; }
   document.getElementById("mapTitle").textContent = (d.infoIds[0] in d.indicators ? d.indicators[d.infoIds[0]].title : "Geographic View");
-  // map
+  // map（#247 方案 A）：地图数据未到时保留已有 canvas，不要 emptyBox 抹掉——
+  // 首屏快照画出后，主题/缓存/实时三轮重渲染中途 d.map.option 可能还不存在，
+  // 一旦清空就要等 geMapRender 回来（约 4s）才回到 4 个 canvas，3.5s 量到 3/4。
+  // 只有从未画出过地图（容器里没有 canvas）时才显示空态占位。
   const mapEl = document.getElementById("map");
   if(d.map && d.map.option){
     try{ setOpt("map", d.map.option, true); }catch(e){ emptyBox(mapEl,"Map render error"); }
-  } else { emptyBox(mapEl); }
+  } else if(!mapEl.querySelector("canvas")){ emptyBox(mapEl); }
   // indicators (center stacked line charts)
   const stack = document.getElementById("indStack");
   stack.innerHTML = "";
