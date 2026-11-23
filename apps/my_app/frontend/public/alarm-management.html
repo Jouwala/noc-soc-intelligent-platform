@@ -735,9 +735,17 @@ regThemes();   /* 注册 amLight / amDark 主题（window.echarts 此时已就�
    真实数据（构建时由 _build 注入；来自 FMS 实时接口快照）
 ================================================================= */
 const FMS_REAL = window.ALARM_MGMT_SNAPSHOT || {
-  /* 快照文件没加载成功时的最小骨架：页面不白屏、数字全 0，顶部横幅会说明快照缺失 */
-  raw024:null, geo:null, pins:[], svg:'', abbrNames:{}, tables:[], charts:[],
-  assign:[], trend:[], top5:{cards:[]}, live:{sources:[]}, kpis:{down:0}, meta:{fetchedAt:''}
+  /* 快照文件没加载成功时的最小骨架：形状要够渲染各面板走完，页面不抛异常、不白屏，
+     顶部横幅会明确说「快照文件缺失」。字段缺一个，boot 期就会在 renderTables 等处崩掉。 */
+  raw024:null, geo:null, pins:[], svg:'', abbrNames:{},
+  tables:{ physical:[], physicalOrder:[], siteCols:[], siteRows:{}, siteTotal:[],
+           cellCols:[], cellRows:{}, cellTotal:[],
+           logicalTotal:{ site:[0,0,0,0], cell:[0,0,0,0,0] } },
+  charts:{ duration:[], hour:{ fields:[], values:[] },
+           mainsFail:{ header:[], value:[] }, siteClass:{ header:[], value:[] },
+           trend:{ x:[], physical:[], cells:[] } },
+  assign:{}, trend:[], top5:{cards:[]}, live:{sources:[]},
+  kpis:{down:0}, meta:{fetchedAt:''}
 };
 const D = JSON.parse(JSON.stringify(FMS_REAL)); JSON.parse(JSON.stringify(FMS_REAL));
 // 当前宕站数 KPI = physical.0-24 实时序列最新点（与 FMS 门户 Physical Site Down 一致），而非各州地图求和
