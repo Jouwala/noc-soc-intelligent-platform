@@ -133,6 +133,10 @@ def _run_eflow_active_alarm():
     from backend.services.eflow.eflow_api_client import fetch_and_save_active_alarm
     res = fetch_and_save_active_alarm()
     rows = res.get("realtime_alarm", []) if isinstance(res, dict) else []
+    if rows:
+        # 采集成功后发布告警看板快照（失败只记日志，不影响本任务成败；ALARM_SNAPSHOT=off 时跳过）
+        from backend.services.alarm import alarm_snapshot
+        alarm_snapshot.safe(alarm_snapshot.after_realtime_sync)
     return {"realtime_alarm_count": len(rows)}
 
 
@@ -141,6 +145,10 @@ def _run_eflow_history_alarm():
     from backend.services.eflow.eflow_api_client import fetch_and_save_history_alarm
     res = fetch_and_save_history_alarm()
     rows = res.get("history_alarm", []) if isinstance(res, dict) else []
+    if rows:
+        # 历史同步后：派单时效 / MTTR 快照 + 历史下钻物化表 _history_alarm_enriched
+        from backend.services.alarm import alarm_snapshot
+        alarm_snapshot.safe(alarm_snapshot.after_history_sync)
     return {"history_alarm_count": len(rows)}
 
 

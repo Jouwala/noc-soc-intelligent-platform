@@ -20,15 +20,18 @@ CCA 网页同样为空。这是采集侧的问题，换查询参数解决不了�
 - GET /api/vmax-flow-xdr?msisdn=&start=&end=
 
 只读透传：不落库、不缓存（信令数据量大且属用户隐私）。
-鉴权走 main.py 的统一门户会话中间件（/api/* 全量要求登录）。
+鉴权：main.py 的统一门户会话中间件（/api/* 全量要求登录）之外，再过号码查询
+名单校验（routers/phone_query_acl.require_phone_query_allowed，Issue #241）——
+与对话面同一份 web_users 名单，不在名单内返回 403 + 名单配置的拒绝文案。
 """
 import logging
 import re
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from backend.routers.phone_query_acl import require_phone_query_allowed
 from backend.routers.vmax_xdr_common import (
     humanize_login as _humanize_login,
     humanize_upstream as _humanize_upstream,
@@ -53,7 +56,7 @@ MAX_WINDOW_HOURS = 72
 DEFAULT_WINDOW_HOURS = 3
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_phone_query_allowed)])
 def query_flow_by_xdr(
     msisdn: str = Query(..., min_length=5, max_length=24),
     start: Optional[str] = Query(None, description="窗口起点 YYYY-MM-DD[ HH:MM]，缺省 3 小时前"),

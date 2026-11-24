@@ -2,7 +2,7 @@
 
 ## A. 后端接口前缀速查
 
-注册在 `backend/main.py`（实测 87 处 `include_router`）。前端 `baseURL` 是 `/api`（`frontend/src/api.ts:4`）。
+注册在 `backend/main.py`（实测 89 处 `include_router`）。前端 `baseURL` 是 `/api`（`frontend/src/api.ts:4`）。
 
 **带 prefix 的 router**
 
@@ -40,6 +40,8 @@
 | `routers/portal_qa.py` | 门户问答挂件：`/api/portal-qa/ask`、`/api/portal-qa/session/clear`、`/api/portal-qa/health`（转发到本机 9269，见 `13-operations.md`） |
 | `routers/cm_flows.py:21-46` | CM 小区配置流程 |
 | `routers/task_configs.py:48-82` | 任务参数配置（系统设置 → 任务配置页签） |
+| `routers/prtg.py:20-57` | PRTG 链路健康度看板：`/api/prtg/overview|links|links/{id}|anomalies|sla|capacity|report|collector/status`（只读，#227/#228/#229/#231/#232） |
+| `routers/network_topology.py` | 门户流量拓扑（#230）：`/api/network-topology/traffic|nodes|links|links/{id}/history|layout|mappings` |
 
 **受 Token 保护的只有 4 个 router**：`tasks`、`upload`、`task_configs`、`cm_flows`（共 18 处装饰器）。原因与风险见 `05-security-and-credentials.md`。
 

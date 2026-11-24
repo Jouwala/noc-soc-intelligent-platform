@@ -36,7 +36,7 @@ import { LayerToggleControl } from './gismap/LayerToggleControl'
 import { MapOverlayToggle } from './gismap/MapOverlayToggle'
 import { PersonnelLayer } from './gismap/PersonnelLayer'
 /* 2026-11-23：?page=gis 的图例新增「站点类别」（整块复用 ?page=person 那张面板） */
-import { SiteClassLegendPanel } from './gismap/SiteClassLegendPanel'
+import { SiteClassLegendSection } from './gismap/SiteClassLegendSection'
 import { SiteClassSitesLayer } from './gismap/SiteClassSitesLayer'
 import { useSiteClasses } from './personmap/useSiteClasses'
 import { exportAoaReport } from '../utils/excelReport'
@@ -575,11 +575,11 @@ export default function GISMap({ mode = 'all' }: { mode?: 'all' | 'realtime' }) 
 
   const { t, locale } = useI18n()
   const { isDark } = useTheme()
-  /* 站点类别图例（2026-11-23 用户要求：把 ?page=person 的「站点类别」面板
-     整块搬进 ?page=gis 的图例）。数据、面板、配色都复用人员页的实现，
-     见 gismap/SiteClassLegendPanel.tsx 头注释。
+  /* 站点类别（2026-11-23 用户要求：把 ?page=person 的「站点类别」内容加进
+     ?page=gis 的图例；2026-11-24 按用户澄清**嵌进图例的 Site Class 组内**）。
+     数据、面板、配色都复用人员页的实现，见 gismap/SiteClassLegendSection.tsx 头注释。
      `enabled` 只在 ?page=gis（mode='all'）为 true：实时告警页
-     （?page=realtime_alarm）用的是同一个 GISMap 组件，那里不显示本面板，
+     （?page=realtime_alarm）用的是同一个 GISMap 组件，那里不显示这块内容，
      没必要多拉一份约 100KB 的站点类别数据。 */
   const siteClasses = useSiteClasses({ enabled: mode === 'all' })
   /* 2026-09-28：原先这里用 useDataTimestamps() 取「同步时间 / 最新数据时间」两个
@@ -1773,10 +1773,19 @@ export default function GISMap({ mode = 'all' }: { mode?: 'all' | 'realtime' }) 
       },
       {
         title: t('gis.legendGroup.site'),
+        /* VIP / 正常 两行是**圆点颜色**图例（点它隐藏该类站点），与下面那块
+           「站点类别」选择器语义不同，刻意并列保留 —— 去掉的话地图上的紫色
+           （VIP）与灰色（正常）圆点就没有解释了。 */
         rows: pick(['vip', 'normal']),
+        /* 2026-11-24 用户要求：「把 Site Classes 放到 Legend 里面的 Site class 里面」。
+           即人员页那张「站点类别」的全部内容（维护分类 / VIP / HUB / 传输类型，
+           取值与计数来自数据库）嵌在**本组内部**，默认一项不选；选中后地图上
+           叠加该类站点的外圈（见 SiteClassSitesLayer）。实现仍复用人员页那份
+           面板（`bare` 模式，不重复一套）。只在 ?page=gis（mode='all'）出现。 */
+        node: mode === 'all' ? <SiteClassLegendSection state={siteClasses} /> : undefined,
       },
     ]
-  }, [siteLegendRows, mode, t])
+  }, [siteLegendRows, mode, t, siteClasses])
 
   /* MW 链路利用率图例：只列**实际出现**的分级（计数 0 的不占位）。
      ⚠️ 这一组的**显示与否**归工具栏的 showUtilLegend 管（默认不显示，2026-10-26），
@@ -2755,14 +2764,6 @@ export default function GISMap({ mode = 'all' }: { mode?: 'all' | 'realtime' }) 
                   : []),
               ]}
             />
-            {/* 站点类别图例（2026-11-23 用户要求）：整块复用 ?page=person 那张面板 ——
-                4 个分组（维护分类 / VIP / HUB / 传输类型）、全部取值与站点数都由后端
-                扫库给出；默认一项都不选，点选后才在地图上叠加显示该类站点。
-                只在 ?page=gis（mode='all'）出现。
-                ⚠️ **必须放在 <MapContainer> 内**：组件内部调 `useMap()` 取地图容器
-                作为挂载点（portal），否则会被门户「只看地图」的注入样式刷成通栏白块
-                （根因见 gismap/SiteClassLegendPanel.tsx 头注释）。 */}
-            {mode === 'all' && <SiteClassLegendPanel state={siteClasses} />}
             <MapController center={center} zoom={zoomLevel}
               shiftWestPx={shiftWestPx} shiftSouthPx={shiftSouthPx} />
             {/* 实测画布尺寸 + 真实 zoom 回报（2026-10-23）：县名标签避让的

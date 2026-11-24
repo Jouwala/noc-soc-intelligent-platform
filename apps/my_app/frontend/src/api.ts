@@ -1352,3 +1352,28 @@ export function getRanInventoryLedger(refresh = false) {
 export function getRanInventoryNe(neId: string) {
   return api.get(`/ran-inventory/ne/${encodeURIComponent(neId)}`)
 }
+
+// ========== PRTG 核心链路健康度看板（?page=prtg_links，Issue #228）==========
+// 后端 routers/prtg.py（只读）。取不到数据时后端返回 null / 空数组，
+// 页面按「—」展示，不补 0。
+export function getPrtgOverview(params?: { window?: string }) {
+  return api.get('/prtg/overview', { params })
+}
+
+export function getPrtgLinks(params?: { window?: string }) {
+  return api.get('/prtg/links', { params })
+}
+
+/** 单链路详情：基础信息 + 映射 + 最近事件 + 通道时序（series.value 为原始 byte/s）。 */
+export function getPrtgLinkDetail(sensorId: number, params?: { window?: string }) {
+  return api.get(`/prtg/links/${sensorId}`, { params })
+}
+
+// ========== PRTG SLA 与容量（?page=prtg_links 的 SLA 页签，Issue #231）==========
+export function getPrtgSla(params?: { month?: string; target?: number }) {
+  return api.get('/prtg/sla', { params })
+}
+
+export function getPrtgCapacity() {
+  return api.get('/prtg/capacity')
+}

@@ -136,7 +136,7 @@ DEFAULT_ICON = "dashboard"
 # 2026-11-10 加 `ipranTopo`：当时的 "IP" 页签。2026-11-16 起该页签的 page 改为
 # `olibTopo`（物理图）。ipranTopo 仍留在白名单里，避免已经存过的旧改名记录
 # 在下次保存目录时被丢掉；新页签改名认 olibTopo。不登记则编辑态改名被静默丢弃。
-TAB_PAGES = {"gis", "mwRealTime", "person", "ipt_power", "ipranTopo", "olibTopo", "realtime_alarm", "packet_loss", "__head"}
+TAB_PAGES = {"gis", "location", "mwRealTime", "person", "ipt_power", "ipranTopo", "olibTopo", "realtime_alarm", "packet_loss", "__head"}
 # 标题/副标题比页签名长（MsPortal 现在是 "Central Liberia Regional Topology" 31 字符），
 # 单独放宽上限；页签名仍用 MAX_TAB_LABEL_LEN（页签栏窄，长了会撑破版式）。
 MAX_HEAD_LABEL_LEN = 64

@@ -118,6 +118,8 @@ from backend.routers import (
     cxo_dashboard,
     vmax_cxo_dashboard,
     vmax_cxo_daily,
+    prtg,
+    network_topology,
     soc_trend,
     vmax_cca_query,
     vmax_xdr_query,
@@ -313,6 +315,10 @@ app.include_router(ai_model_settings.router)
 app.include_router(phone_query_acl.router)
 # 邮件报告文件（EmailReports 页面：email 类任务生成的最新报告文件列表/下载）
 app.include_router(email_reports.router)
+# PRTG 链路健康度看板（#227 采集 / #228 看板）：只读接口，数据由常驻采集线程写入
+app.include_router(prtg.router)
+# 门户流量拓扑（#230）：节点/链路/布局/映射；容量缺失时利用率返回 null
+app.include_router(network_topology.router)
 app.include_router(mw_ume.router)
 app.include_router(mw_links.router)
 # 一键门户登录（用默认浏览器打开 ZTE/CCN/iPRAN UME、eFlow、FW(UMC)、VMAX 并自动登录）
@@ -721,10 +727,12 @@ async def startup_event():
     except Exception as _e:
         print(f"[startup] SP 备件明细看板预热异常（不影响启动）: {_e}")
 
-    # 丢包看板总览预热：daily_trend/top_sites 要扫 7 天+24 小时读数（约 2s）。
+    # 丢包看板总览预热：daily_trend/top_sites 要扫 7 天+24 小时读数（冷算 2.5~4.7s）。
+    # periodic 只给持调度锁的实例开：第二个仅 HTTP 实例也会走到这里，重复起周期线程
+    # 等于把整表扫描翻倍（与下面 pg_mirror_daemon 的 _got_lock 门控同一取舍）。
     try:
         from backend.routers import packet_loss_dashboard as _pl
-        _pl.warmup()
+        _pl.warmup(periodic=_got_lock)
         print("[startup] 丢包看板总览预热已启动（后台）")
     except Exception as _e:
         print(f"[startup] 丢包看板预热异常（不影响启动）: {_e}")
@@ -797,6 +805,23 @@ async def startup_event():
         except Exception as e:
             print(f"[startup] 实时代理自动启动失败（非致命）: {e}")
     threading.Thread(target=_auto_start_proxies, daemon=True).start()
+
+    # PRTG 采集线程（#227）：60 秒轮询 + 目录每小时 + 历史回填限流 + 聚合清理。
+    # 三层闸门：① 生产 .env 显式 PRTG_COLLECTOR_ENABLED=1；② 冒烟/CI
+    # （MY_APP_DISABLE_SCHEDULER=1）不启动；③ 拿不到调度锁（多实例/锁被占）
+    # 不启动，避免两个进程同时轮询 PRTG。配置不全只打日志，不影响服务启动。
+    if DISABLE_SCHEDULER:
+        print("[startup] MY_APP_DISABLE_SCHEDULER=1: skip PRTG collector thread", flush=True)
+    elif not _got_lock:
+        print("[startup] 调度锁不在本进程: skip PRTG collector thread", flush=True)
+    else:
+        try:
+            from backend.services.prtg.runner import start_collector_thread
+            _prtg_thread = start_collector_thread()
+            if _prtg_thread is not None:
+                print(f"[startup] PRTG 采集线程已启动: {_prtg_thread.name}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"[startup] PRTG 采集线程启动失败（非致命）: {e}", flush=True)
 
 
 # 提供前端静态文件（生产环境）

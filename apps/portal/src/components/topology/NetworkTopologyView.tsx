@@ -6,6 +6,7 @@ import CoreMap from './CoreMap';
 import ScatterMap from './ScatterMap';
 import PhysicalMap, { type FocusReq } from './PhysicalMap';
 import ZoomStage from './ZoomStage';
+import TrafficTopologyView from './TrafficTopologyView';
 import physicalImg from '../../assets/topology-physical.jpg';
 import logicalImg from '../../assets/topology-logical.jpg';
 
@@ -15,9 +16,39 @@ import logicalImg from '../../assets/topology-logical.jpg';
 // 站点坐标为原图千分比（0-1000），数据来源与口径见页内说明（默认收起）。
 type Tab = 'physical' | 'logical' | 'core' | 'scatter';
 type Chip = 'all' | '5g' | 'isp' | 'core';
+type View = 'sites' | 'traffic';
+
+// 顶层并列视图切换：站点分布（原有四 tab）/ 流量拓扑（Issue #230）。
+function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const { t } = useI18n();
+  const items: [View, string][] = [
+    ['sites', 'topo.viewSites'],
+    ['traffic', 'topo.viewTraffic'],
+  ];
+  return (
+    <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5 shadow-sm">
+      {items.map(([v, key]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          aria-pressed={view === v}
+          className={`px-3 py-1.5 rounded-lg text-[13px] transition-colors ${
+            view === v
+              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+          }`}
+        >
+          {t(key)}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function NetworkTopologyView() {
   const { t } = useI18n();
+  const [view, setView] = useState<View>('sites');
   const [tab, setTab] = useState<Tab>('physical');
   const [query, setQuery] = useState('');
   const [sector, setSector] = useState('');
@@ -72,8 +103,18 @@ export default function NetworkTopologyView() {
           ? t('topo.hintCore')
           : t('topo.hintScatter');
 
+  if (view === 'traffic') {
+    return (
+      <div className="my-4 sm:my-6 space-y-3">
+        <ViewSwitch view={view} onChange={setView} />
+        <TrafficTopologyView />
+      </div>
+    );
+  }
+
   return (
     <div className="my-4 sm:my-6 space-y-3">
+      <ViewSwitch view={view} onChange={setView} />
       {/* 头部 */}
       <div className="bg-slate-900 text-white rounded-2xl px-4 sm:px-5 py-4 flex flex-wrap items-center gap-3 shadow-sm">
         <span className="bg-[#ff7900] text-white font-extrabold px-2.5 py-1 rounded-md text-[15px]">orange</span>

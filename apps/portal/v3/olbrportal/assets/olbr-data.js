@@ -146,7 +146,7 @@ window.OLBR_DATA = (function () {
          不动键名与 page，历史上存过的 catalog.tabLabels 记录就不会失配。
          map.alarm / map.loss 是**已下线**页签（2026-09-25 删）留下的键，
          保留是为了将来恢复时不用重写文案，与后端 TAB_PAGES 白名单同口径。 */
-      'map.gis': 'Alarm', 'map.mw': 'MW', 'map.alarm': '实时告警', 'map.loss': '传输丢包',
+      'map.gis': 'Alarm', 'map.location': 'Location', 'map.mw': 'MW', 'map.alarm': '实时告警', 'map.loss': '传输丢包',
       /* 2026-10-19 加：内嵌 my_app 的 ?page=person（人员位置地图）。
          用户给的页签名就是英文 "Person"，中英两份**照写同一串**（同 map.gis 的约定）。 */
       'map.person': 'Person',
@@ -984,7 +984,7 @@ window.OLBR_DATA = (function () {
                      + 'latest {f}). Coming back to this tab or clicking Refresh re-pulls the full set immediately.',
       'cxo.title': 'CXO View', 'cxo.sub': 'Executive strategy & operation window',
       'map.title': 'GIS Map', 'map.sub': 'GIS Map',
-      'map.gis': 'Alarm', 'map.mw': 'MW', 'map.alarm': 'Live alarms', 'map.loss': 'Packet loss',
+      'map.gis': 'Alarm', 'map.location': 'Location', 'map.mw': 'MW', 'map.alarm': 'Live alarms', 'map.loss': 'Packet loss',
       /* 2026-10-19 加，与中文那份同值（用户点名的英文串，不翻译）。 */
       'map.person': 'Person',
       /* 2026-11-06 加，与中文那份同值（原 "IPT Power"）。
@@ -1728,6 +1728,10 @@ window.OLBR_DATA = (function () {
         运行时矩阵以 SQLite 为准，新键还要同步写进 team_scope 行（见 docs/architecture.md 九之十七）。 */
    var MAP_TABS = [
     { page: 'gis', key: 'map.gis', icon: 'map' },
+    /* 2026-11-24 用户要求：把位置页作为 GIS Map 的新页签，名字固定 "Location"。
+       qs=maponly=1 → my_app 只渲染 100vh 地图画布（含手机号/经纬度两个搜索窗），
+       不渲染列表、控制条、轨迹表与标题卡。page 值必须与 my_app PageKey 一致。 */
+    { page: 'location', key: 'map.location', icon: 'map', qs: 'maponly=1' },
     { page: 'person', key: 'map.person', icon: 'users' },
     { page: 'mwRealTime', key: 'map.mw', icon: 'broadcast' },
     { page: 'ipt_power', key: 'map.iptPower', icon: 'battery' },

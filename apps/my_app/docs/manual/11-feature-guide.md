@@ -68,6 +68,7 @@
 | 40 | 实时告警地图 | `realtime_alarm` | React（同组件另一模式） |
 | 41 | 人员位置地图 | `person` | React |
 | 42 | 丢包看板 | `packet_loss` | React |
+| 42b | PRTG 核心链路健康度 | `prtg_links` | React |
 | 43 | 电池看板 | `battery` | React |
 | 44 | IP 链路探测 | `ip_trace` | **iframe** |
 | 45 | VMAX 用户查询 | `vmax_user_query` | React |
@@ -867,18 +868,23 @@ v1（8c）的升级版，**v2 不改 v1 的页面骨架**：v2 默认把 OLIB �
 
 
 
-### 10a-5. 站点类别面板（2026-11-23 新增，仅 `?page=gis`）
+### 10a-5. 站点类别嵌进图例的 Site Class 组（2026-11-23 首版 / 2026-11-24 改位置，仅 `?page=gis`）
 
-**需求原话**：「页面 `?page=gis` 的 Legend 里面的 Site Class 也添加 `?page=person` 的 site class 里面的所有内容」；做法选定「整块复用人员页那张『站点类别』面板（默认全不选，选中才在地图上叠加显示）」。
+**需求演进**：2026-11-23 用户原话「页面 `?page=gis` 的 Legend 里面的 Site Class 也添加 `?page=person` 的 site class 里面的所有内容」，首版做成了地图右上角一张独立浮层；**2026-11-24 用户纠正「是把 Site Classes 放到 Legend 里面的 Site class 里面」** → 内容改为嵌在左下角图例的「站点等级 / Site Class」组内（`MapLegendOverlay` 的 `MapLegendGroup.node` 插槽），右上角那块浮层及它的 portal 定位壳一并删除。
 
-- **刻意不复制第二套**：数据 `personmap/useSiteClasses.ts`、面板 `personmap/SiteClassLegend.tsx`、配色 `personmap/siteClassColors.ts` 全部复用人员页那份（见 11 节「站点类别图例」）。GIS 侧只新增两个薄组件：`gismap/SiteClassLegendPanel.tsx`（右上角浮层）与 `gismap/SiteClassSitesLayer.tsx`（选中后的站点圈）。两页的类别名、计数口径（后端 `personnel.py::get_personnel_site_classes` 扫 `master_site_db` 四列）、选中语义（组内并集 / 组间交集）因此不会各自漂移。
+- **组内结构**：`VIP站点 / 正常` 两行（圆点颜色图例，点它隐藏该类站点）下面多一行 **「站点类别 ▸」**；点开展开人员页那套四组取值（维护分类 / VIP / HUB / 传输类型），有选中时该行行尾显示「已显示 N / total」。
+- **默认收起**（2026-11-24 实测后定的）：四组共 11 个取值全部展开会把图例撑到约 600px（地图 654px 高时），直接盖住左上的 LAYERS 与区域排名条；收起时图例高度与改动前一致（约 207px），类别内容点一下就能展开。人员页那张独立卡片仍默认展开。
+- **展开时的布局约束**（缺一不可）：
+  - 图例 `maxHeight` 由 `calc(100% - 1rem)` 改为 **`calc(100% - 12rem)`**（`MapLegendOverlay.tsx` 的 `panelStyle`）：12rem≈192px 是给 LAYERS（实测高约 84px）留的位置，展开后图例最高到相对 y≈158，与 LAYERS 底边仍留 60px 净距；超出的内容在图例内部滚动。
+  - **区域排名条临时收起**：`index.css` 的 `.gis-legend-overlay:has(.gis-siteclass-block button[aria-expanded='true']) ~ .gis-rank-overlay { display: none }`。两块浮层同处左缘，叠在一起会互相透字，且排名条 DOM 靠后会把类别行挡住（Playwright 实测点击被 `.gis-rank-row__name` 拦截）。收起图例后排名条自动恢复。⚠️ 这条选择器依赖「两浮层都是地图卡片 body 的子节点、图例在前」的渲染顺序。
+- **同一组里有两层东西，语义不同，刻意并列**：上面两行 `VIP站点 / 正常` 是**圆点颜色**图例（色值与地图圆点一致）；下面这块是**类别选择器**（点它在地图上圈出该类站点；组内多选取并集、组间取交集）。去掉前两行，地图上的紫色（VIP）/灰色（正常）圆点就没有解释了。
+- **刻意不复制第二套**：数据 `personmap/useSiteClasses.ts`、面板 `personmap/SiteClassLegend.tsx`（2026-11-24 新增 `bare` 嵌入模式：无卡片外观 / 折叠开关集成进图例 / 行无边框、选中用类别色淡底 + 加粗）、配色 `personmap/siteClassColors.ts` 全部复用人员页那份（见 11 节「站点类别图例」）。GIS 侧只新增两个薄组件：`gismap/SiteClassLegendSection.tsx`（把面板以 `bare` 渲染成图例组内容）与 `gismap/SiteClassSitesLayer.tsx`（选中后的站点圈）。两页的类别名、计数口径（后端 `personnel.py::get_personnel_site_classes` 扫 `master_site_db` 四列）、选中语义因此不会各自漂移。
 - **默认一个都不画**：与人员页同一需求 —— `useSiteClasses` 的 `selected` 初值为空对象，`visibleSites` 为空，地图上零个类别圈。
 - **为什么画外圈而不是实心点**：GIS 底图**已经用颜色表示站点告警状态**，实心类别点会把它盖掉、同一批站点在图上变成两种读法。故圈只描边（类别色）+ 填充约 12%，挂 `siteClassPane`（`zIndex 660`）：高于站点圆点（`sitePane` 650）、低于县名标注（`countyLabelPane` 670）。
 - **圈不接收鼠标**：`components/LeafletMap.tsx` 的 `CircleMarker` 新增可选 `interactive`（仅明确传 `false` 时写进 Leaflet options，不传时行为不变）。实测选中 NORMAL 画出 597 个圈时，圈上点的 `elementFromPoint` 仍是 `leaflet-interactive` 的站点圆点，点站点照常打开下钻抽屉。
-- **⚠️ 为什么挂进 `.leaflet-container` 而不是当卡片 body 的子节点**：门户 `MAP_STRIP_CSS`（`apps/portal/` 下 MsPortal / olbrportal / v1~v4 共 7 份副本）在「只看地图」模式下会把 `.ant-card-body` 里所有「不是地图、也不含地图」的直接子元素刷成 `position:absolute;left:0;right:0;bottom:0;background:rgba(255,255,255,.88)!important` 的通栏白块 —— 既有图例靠 `.gis-legend-overlay` 白名单躲过这一条。新面板若也当卡片子节点，就得同步改 7 份门户静态壳；改为 `createPortal` 挂进 Leaflet 容器（与 `LayerToggleControl` 同法）即不在该选择器的目标里。**实测把那条 CSS 注入页面后，面板位置与背景（transparent）都不变。**
-- **只在 `?page=gis`**：`GISMap` 同时服务 `?page=realtime_alarm`（`mode='realtime'`），面板与取数都用 `mode === 'all'` 门控。实测实时页 0 个面板、0 次 `/gis/personnel/site-classes` 请求（不会白拉约 100KB）。
-- **窄屏**：门户内嵌地图实测 570×633 时面板 211×416，完全落在地图内、与左下角站点图例不重叠；标题栏可折叠。
-- **复用处的两处小改动**：`useSiteClasses({ enabled })` —— 不取数时把 `loading` 置 `false`，否则面板永远停在「正在加载站点类别…」；`SiteClassLegend` 新增可选 `maxHeight` —— GIS 传 `'none'` 由外层容器滚动（人员页的 `calc(100vh - 120px)` 在 GIS 卡片里不成立，卡片高度由 flex 分配而不是视口）。
+- **⚠️ 承载体仍然只有 `.gis-legend-overlay` 一个**：内容跟着图例走，而图例本来就是门户 `MAP_STRIP_CSS`（`apps/portal/` 下 7 份副本）的白名单元素，所以门户静态壳**不用改**。首版右上角浮层为绕开「卡片 body 直接子元素被刷成通栏白块」曾用 `createPortal` 挂进 Leaflet 容器；改位置后这套壳已删除（原则 10：删除优于兼容）。
+- **只在 `?page=gis`**：`GISMap` 同时服务 `?page=realtime_alarm`（`mode='realtime'`），这块内容与取数都用 `mode === 'all'` 门控。实测实时页没有类别内容、0 次 `/gis/personnel/site-classes` 请求（不会白拉约 100KB）。
+- **复用处的两处小改动**：`useSiteClasses({ enabled })` —— 不取数时把 `loading` 置 `false`，否则这块内容永远停在「正在加载站点类别…」；`SiteClassLegend` 新增 `bare`，`maxHeight` 仍保留给人员页那张独立卡片。
 
 ### 10b. 边界蒙层：大区（Voronoi）与县界（真实行政边界）
 
@@ -1292,7 +1298,7 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 - **位置必须放右上角**（与 `LayerToggles` 纵向堆叠成一个浮层列，`PersonMapView.tsx` 里统一绝对定位）：首版放左下角，在门户嵌入（`?embed=1&mwembed=1`）下地图容器被撑到 1122px、底部超出视口约 320px，**实测图例按钮中心 y=982 而视口只有 805 —— 整块落在屏幕外，看不见也点不中**。两个浮层组件自身只负责卡片外观，定位交给调用方。
 - 面板可折叠（标题栏点击）；有选中时标题显示 `已显示 N / 824`。实测：VIP=Y → 50 点、再叠 HUB=Y → 28 点（交集，与 SQL 一致）、COOL → 64 点、四组全选 → 824 点（11 次点击累计约 1.4s，单次最慢 32ms，无需像辖区层那样下沉到原生批量建层）。
 - 守卫：`TMP/cdp_person_legend.mjs`（真实鼠标点击 + 点数与 SQL 对拍）、`TMP/cdp_legend_maponly.mjs`（门户 `?maponly=1` 形态）。
-- **2026-11-23 起 GIS 页（`?page=gis`）也复用了这张面板**（见 10a-5）：GIS 侧只加了定位壳与「外圈」图层，数据 / 面板 / 配色仍以本节为唯一实现。
+- **2026-11-24 起 GIS 页（`?page=gis`）也复用了这张面板**（见 10a-5）：GIS 侧把它以 `bare` 模式嵌进图例的「站点等级 / Site Class」组，另加一个「外圈」图层；数据 / 面板 / 配色仍以本节为唯一实现。
 
 **负责站点为 0 的空态说明**（`personmap/NoSitesNote.tsx`，2026-10-21）：有坐标的 24 人里 **6 人 `site_count` 恒为 0**，点他们地图上一片空白，实测就被报成「连线没画出来」。所以选中这样的人时，**地图底部居中**与**抽屉「站点」页签**各给一条同源说明（`pointerEvents:none`，不拦地图点击）。原因分两类，由 `/personnel/stats` 新增的 `supervised_sites` 区分：
 
@@ -6471,3 +6477,49 @@ VMAX 数仓 GBase（10.123.255.12:5258/zxvmax，只读）
 - 台账是**快照**，不落库：历史对比（某台上次换板、某站上季度机龄分布）本页不提供。需要趋势时另立任务按日落 PG，而不是在这里加隐式写入。
 - 只有 `hw/sw/opt` 三类；上游的 `/api/rncmoaction/v1/rnc/<uuid>` 详情接口含 `OMM FTP` 明文口令，**刻意不采集**（见 `RANElementManagement/ran_element_management_service.py` 顶部说明）。
 - 882 个网元的明细一次性下发约 450 KB（含逐网元的型号矩阵），页面一次取回；不按网元分页拉取，是因为台账表本身就要全量排序与筛选。
+
+## 42b. PRTG 核心链路健康度看板（`?page=prtg_links`，2026-11-24 新增）
+
+**一句话**：把 PRTG（GRAPHER-ISP）25 个传感器（24 个 SNMP Traffic 64bit + 1 个 Ping）的链路状态、流量、错误 / 丢弃、可用率与容量利用率放到一张表里，点任意链路看该链路的时序与状态事件。数据只读，KPI 是时点快照，趋势 / 详情时序随上方时间范围变化。
+
+### 42b.1 数据链路
+
+| 环节 | 位置 |
+| --- | --- |
+| 上游 | PRTG API（只读账号；传感器目录 / 通道采样 / 状态事件） |
+| 采集 | `backend/services/prtg/runner.py` + `collector.py`，线程 **60 秒**一轮；原始采样保留 90 天 |
+| 聚合 | `backend/services/prtg/collector.py` 的 `aggregate()`：60 秒 → 5 分钟 → 1 小时，供 24h / 7d / 30d 使用 |
+| 查询 | `backend/services/prtg/dashboard.py` |
+| 路由 | `backend/routers/prtg.py`：`/api/prtg/overview`、`/api/prtg/links`、`/api/prtg/links/{sensor_id}`、`/api/prtg/collector/status` |
+| 前端 | `frontend/src/pages/PrtgLinkHealth.tsx` + `pages/prtg/`（模型 / 图表 / 详情） |
+
+时间范围与底层表：`5m` 读 60 秒原始表（近 5 分钟、1 分钟桶）、`24h` 读 5 分钟聚合、`7d` / `30d` 读小时聚合（聚合同时读实时与回填历史）（`backend/services/prtg/dashboard.py` 的 `WINDOWS`）。
+
+### 42b.2 口径（页面「数据口径说明」逐条对应）
+
+1. **流量**：`Traffic In / Out / Total` 原始单位是 byte/s，后端按 `×8÷1e6` 换算为 Mbps 后下发（`total_mbps` / `in_mbps` / `out_mbps`）；前端只格式化，不重算。字典实测 `Total = In + Out`，但 Total 列直接展示接口值，不由前端相加。
+2. **Errors / Discards / Unicast**：PRTG 给的是**区间速率**（count/s），不是累计计数器，**不做差分**（`docs/workspace/prtg-channel-dictionary.md` 第 3 节）。
+3. **利用率**：只在有 `capacity_mbps` 时计算，按 `max(In / Cin, Out / Cout) × 100`；**不用 Total / 容量**（会翻倍）。容量缺失时接口返回 null，界面显示「—」。
+4. **容量**：PRTG 不提供容量，`network_link_capacity.capacity_source` 只允许 `snmp_ifspeed` / `manual`；缺失时容量列显示「待补全」，且不参与利用率。
+5. **状态**：`Up / Unusual / Down / Unknown` 是 PRTG 的时点快照；Unknown 表示未给出可识别状态，不代表正常。
+6. **可用率**：取传感器详情的累计 `uptime_pct`，不是按所选时间窗重算。
+7. **数据新鲜度**：`data_age_seconds = 当前时间 − collector.last_success_at`；超过 **5 分钟**页面顶部常驻过期告警（这是异常，不是可收起的口径解释）。
+8. **缺失值**：接口返回 null 的字段一律显示「—」，**不补 0** —— 0 表示确实是 0，null 表示取不到。
+9. **时间**：所有时间戳为 **UTC**（接口带 `Z`），页面用 `frontend/src/datetime.ts` 统一格式化。
+
+### 42b.3 页面构成
+
+- **筛选条**：时间范围（5 分钟 / 24 小时 / 7 天 / 30 天）+ 刷新 + 数据新鲜度标签 + 生成时间。
+- **KPI 卡（6 张）**：传感器总数 / Up / Unusual / Down / 平均可用率 / 异常链路数。标题旁 `ExplainIcon` 讲这一张卡，数字本身由 `StatCard.explainText` 挂 `ExplainPopover`。
+- **趋势图**：`overview.trend[].total_mbps` 自绘 SVG 折线（`pages/prtg/PrtgCharts.tsx`），不嵌 `chart.png`、不引入图表依赖；图例中英随 `t()` 切换。
+- **链路表（25 行）**：状态 / 设备·传感器 / 站点 / In / Out / Total (Mbps) / Unicast / Errors / Discards / 可用率 / Last Down / 容量 / 利用率。列头统一 `ExplainIcon`，每个数字 / 时间单元格 `ExplainPopover`，气泡只引用接口字段（采样时间、样本年龄、capacity_source、match_status 等）。
+- **详情弹窗**：点行打开 `DraggableClickModal`，展示传感器基础信息、全部站点映射、最近 20 条状态事件，以及 `series` 的 `-1 / 0 / 1` 三条时序（原始 byte/s 在图上换算为 Mbps，仅单位换算）。
+- **口径说明**：`CalcChainNote`，默认收起（`AGENTS.md` 三.3b）。
+- **按页刷新**：`App.tsx` 的 `AR_PAGE_DEFAULTS` 登记 `prtg_links: 60`，与采集节拍一致。
+
+### 43.4 已知边界
+
+- 只有 25 个传感器；Ping 传感器的通道集与 SNMP Traffic 不同，本页不把它当流量链路解读。
+- `series` 只取 `-1 / 0 / 1` 三条通道画图；Unicast / Errors / Discards 的时序在详情接口里已返回，但本页只做当前值展示（避免图上多量纲混画）。
+- 异常链路数取「未结束的异常事件涉及的去重传感器数」，与「状态为 Down 的传感器数」不是同一口径，两者不必相等。
+- 采集器失败时页面保留上一轮数据并在顶部常驻报错 / 过期提示，不伪造 0 值。
