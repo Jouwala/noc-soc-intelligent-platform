@@ -3568,23 +3568,6 @@ html.dark {
    验收见 ~/workspace/your_files/v4-transformation-prompt.md。
    ========================================================================== */
 
-/* ---- V4 小样说明条（仅小样说明，不属于门户本体） ---- */
-.samplebar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
-  padding: 10px 16px; background: var(--tone-2); border-bottom: 1px solid var(--line-2);
-  font-size: var(--fs-sm); color: var(--t2); }
-.samplebar-txt { font-weight: 600; color: var(--t1); }
-.samplebar-btns { display: inline-flex; gap: 6px; }
-.samplebar-btns button { padding: 4px 12px; border-radius: 999px;
-  border: 1px solid var(--line-2); background: var(--surface); color: var(--t2);
-  font-weight: 600; cursor: pointer; }
-.samplebar-btns button[aria-pressed="true"] { background: #ff9ec4; color: #7c2d52; border-color: transparent; }
-html.dark .samplebar-btns button[aria-pressed="true"] { background: #8a4a6b; color: #ffd7e9; }
-.contrast-demo { display: inline-flex; gap: 8px; flex-wrap: wrap; }
-.contrast-card { padding: 6px 10px; border-radius: 12px; font-size: var(--fs-xs); }
-.contrast-before { background: #02050c; color: #6f8cb4; }
-.contrast-after { background: #221c26; color: #f2eaf2; }
-.contrast-card b { margin-right: 6px; }
-
 /* ---- QC / KPI 卡：六张粉彩轮换 + 26px 圆角 + 悬浮上浮 ---- */
 .qc-grid > .qc-card:nth-child(6n+1) { background: var(--tone-1); }
 .qc-grid > .qc-card:nth-child(6n+2) { background: var(--tone-2); }
