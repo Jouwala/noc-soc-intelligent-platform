@@ -104,6 +104,9 @@ export default function TrafficTopologyView() {
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState<Record<number, { x: number; y: number }>>({});
   const [adminError, setAdminError] = useState('');
+  useEffect(() => {
+    if (usingMock) { setEditMode(false); setDraft({}); }
+  }, [usingMock]);
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ id: number; dx: number; dy: number } | null>(null);
 
@@ -156,6 +159,10 @@ export default function TrafficTopologyView() {
     return matrix ? pt.matrixTransform(matrix.inverse()) : null;
   };
   const saveLayout = async () => {
+    if (usingMock) {
+      setAdminError(t('trafficTopo.admin.mockReadonly'));
+      return;
+    }
     setAdminError('');
     try {
       const nodesPayload = (data?.nodes ?? []).map((n) => {
@@ -293,7 +300,7 @@ export default function TrafficTopologyView() {
               </button>
             ))}
           </div>
-          {isAdmin && (
+          {isAdmin && !usingMock && (
             <div className="inline-flex items-center gap-1.5">
               <button
                 type="button"

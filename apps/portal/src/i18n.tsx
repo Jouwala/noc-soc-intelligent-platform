@@ -249,6 +249,7 @@ const zh: Record<string, string> = {
   'trafficTopo.admin.nameRequired': '节点名不能为空',
   'trafficTopo.admin.selectRequired': '请选择传感器、起点和终点',
   'trafficTopo.admin.deleteNode': '删除节点',
+  'trafficTopo.admin.mockReadonly': 'Mock 演示数据不可写入；请等接口恢复后编辑',
   'trafficTopo.admin.capacityInvalid': '容量必须是数字',
 
   'trafficTopo.canvasTitle': '流量拓扑',
@@ -1068,6 +1069,7 @@ const en: Record<string, string> = {
   'trafficTopo.admin.nameRequired': 'Node name is required',
   'trafficTopo.admin.selectRequired': 'Pick sensor, source and target',
   'trafficTopo.admin.deleteNode': 'Delete node',
+  'trafficTopo.admin.mockReadonly': 'Mock data is read-only; wait for the API to recover',
   'trafficTopo.admin.capacityInvalid': 'Capacity must be a number',
 
   'trafficTopo.canvasTitle': 'Traffic topology',

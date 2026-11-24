@@ -247,3 +247,37 @@ def test_manual_node_and_link_crud(db):
         topology.delete_node(node["id"])
     topology.delete_link(link["id"])
     topology.delete_node(node["id"])
+
+
+def test_create_link_upserts_existing_capacity_row(db):
+    """SLA 已登记容量后再绑定链路：更新容量行，不能 UNIQUE 冲突。"""
+    _seed(db)
+    topology.ensure_topology()
+    with db() as session:
+        session.add(PrtgSensor(objid=3001, sensor_name="(300) to PEER3", device_name="PTP_SW",
+                               sensortype="SNMP Traffic 64bit", status="Up", active=True))
+        session.add(NetworkLinkCapacity(sensor_objid=3001, capacity_mbps=500.0,
+                                        capacity_source="manual", updated_at=datetime.utcnow()))
+        session.commit()
+    node = topology.create_node("PEER3", "peer")
+    link = topology.create_link(3001, 1, node["id"], capacity_ab_mbps=1000)
+    assert link["sensor_id"] == 3001
+    with db() as session:
+        rows = session.execute(
+            select(NetworkLinkCapacity).where(NetworkLinkCapacity.sensor_objid == 3001)
+        ).scalars().all()
+    assert len(rows) == 1 and rows[0].capacity_mbps == 1000.0
+
+
+def test_auto_link_endpoints_follow_sensor_rename(db):
+    _seed(db)
+    topology.ensure_topology()
+    with db() as session:
+        sensor = session.execute(select(PrtgSensor).where(PrtgSensor.objid == 2565)).scalar_one()
+        sensor.sensor_name = "(200) to NEWPEER"
+        session.commit()
+    topology.ensure_topology()
+    data = topology.traffic("24h")
+    link = next(l for l in data["links"] if l["sensor_id"] == 2565)
+    assert link["target"] == "NEWPEER"
+    assert any(n["name"] == "NEWPEER" for n in data["nodes"])

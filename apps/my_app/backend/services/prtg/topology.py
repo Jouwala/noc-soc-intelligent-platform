@@ -168,10 +168,10 @@ def ensure_topology(now: datetime | None = None) -> dict[str, int]:
                 session.add(link)
                 created_links += 1
             else:
-                # 已存在（自动发现或人工绑定）：**不改两端**，只补空缺的容量/置信度，
-                # 避免 ensure_topology 覆盖人工选择的上下游。
-                link.source_node_id = link.source_node_id
-                link.target_node_id = link.target_node_id
+                # 人工绑定（link_key=manual:）冻结两端；自动发现链路继续跟随 PRTG 名称刷新。
+                if not link.link_key.startswith("manual:"):
+                    link.source_node_id = source.id
+                    link.target_node_id = target.id
                 if link.capacity_ab_mbps is None and capacity and capacity.capacity_mbps:
                     link.capacity_ab_mbps = capacity.capacity_mbps
                     link.capacity_ba_mbps = capacity.capacity_mbps
@@ -548,7 +548,7 @@ def create_link(sensor_objid: int, source_node_id: int, target_node_id: int,
             if session.get(NetworkTopologyNode, node_id) is None:
                 raise LookupError(f"节点不存在：{node_id}")
         link = NetworkLink(
-            link_key=f"sensor:{sensor_objid}", sensor_objid=sensor_objid,
+            link_key=f"manual:{sensor_objid}", sensor_objid=sensor_objid,
             source_node_id=source_node_id, target_node_id=target_node_id,
             link_type=link_type, capacity_ab_mbps=ab, capacity_ba_mbps=ba,
             capacity_source=capacity_source if (ab or ba) else None,
@@ -557,8 +557,16 @@ def create_link(sensor_objid: int, source_node_id: int, target_node_id: int,
         session.add(link)
         session.flush()
         if ab is not None:
-            session.add(NetworkLinkCapacity(sensor_objid=sensor_objid, capacity_mbps=ab,
-                                            capacity_source=capacity_source, updated_at=now))
+            capacity_row = session.execute(
+                select(NetworkLinkCapacity).where(NetworkLinkCapacity.sensor_objid == sensor_objid)
+            ).scalar_one_or_none()
+            if capacity_row is None:
+                session.add(NetworkLinkCapacity(sensor_objid=sensor_objid, capacity_mbps=ab,
+                                                capacity_source=capacity_source, updated_at=now))
+            else:
+                capacity_row.capacity_mbps = ab
+                capacity_row.capacity_source = capacity_source
+                capacity_row.updated_at = now
         session.add(NetworkLinkLayout(link_id=link.id, bend_offset=0.0, updated_at=now))
         session.commit()
         session.refresh(link)

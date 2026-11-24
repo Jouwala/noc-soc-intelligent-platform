@@ -89,7 +89,10 @@ export default function TrafficTopologyAdmin({ nodes, links, onReload }: Props) 
   });
 
   const saveCaps = (link: TrafficLink) => run(async () => {
-    const value = caps[link.id];
+    const value = caps[link.id] ?? {
+      ab: link.capacity_ab_mbps == null ? '' : String(link.capacity_ab_mbps),
+      ba: link.capacity_ba_mbps == null ? '' : String(link.capacity_ba_mbps),
+    };
     for (const raw of [value?.ab, value?.ba]) {
       if (raw !== undefined && raw !== '' && !Number.isFinite(Number(raw))) {
         throw new Error(t('trafficTopo.admin.capacityInvalid'));
