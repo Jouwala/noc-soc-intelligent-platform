@@ -116,11 +116,18 @@ def after_history_sync() -> None:
     try:
         rebuilt = rebuild_history_enriched()
     except Exception:  # noqa: BLE001
-        logger.warning("[SNAPSHOT] 物化表重建失败，历史下钻继续走 pandas 兜底", exc_info=True)
+        logger.warning("[SNAPSHOT] 物化表重建失败，历史下钻本次走 pandas 兜底", exc_info=True)
+        # 失败也必须发布门禁，否则门禁停在「上次成功」的年龄上，最长 4 小时内都会
+        # 放行一张与指标卡对不上的旧表（2026-11-24 审核实测 total 30 vs 40）。
+        try:
+            snapshot_store.publish("alarm:history_enriched", lambda: {"ok": False, "rows": 0},
+                                   source_sync_at=iso)
+        except Exception:  # noqa: BLE001
+            logger.warning("[SNAPSHOT] 失败门禁发布也失败了（不影响采集任务）", exc_info=True)
     else:
         # 单独发布一个「物化表已重建」的门禁快照：下钻新鲜度必须以**这张表**为准，
         # 不能拿先发布的 alarm:history_metrics 当门禁（两者之间 rebuild 可能失败）。
-        snapshot_store.publish("alarm:history_enriched", lambda: {"rows": rebuilt},
+        snapshot_store.publish("alarm:history_enriched", lambda: {"ok": True, "rows": rebuilt},
                                source_sync_at=iso)
 
     # 历史指标是总览的一部分：顺带把总览和告警总览重新发布一次
@@ -160,10 +167,10 @@ def rebuild_history_enriched() -> int:
     table["m_overdue"] = out["_m_overdue"].fillna(False).astype(int)
 
     new = f"{ENRICHED}__new"
-    # 纳秒 + 序号：同一秒内连续两次重建（手动重跑 / 两个 Worker 组 / 重试）不会撞索引名。
+    # 纳秒 + pid：同一秒内连续两次重建（手动重跑 / 两个 Worker 组 / 重试）不会撞索引名。
     # 2026-11-24 审核实测：秒级后缀在同秒第二次调用必失败（PG 42P07 / SQLite index exists），
-    # 失败还会留下半截 __new 表。
-    suffix = f"{time.time_ns()}"
+    # 失败还会留下半截 __new 表；带 pid 再兜一层「两个进程同一纳秒」的理论情况。
+    suffix = f"{time.time_ns()}_{os.getpid()}"
     with get_raw_connection() as conn:
         conn.execute(f'DROP TABLE IF EXISTS "{new}"')
         conn.commit()
@@ -203,13 +210,12 @@ def _refresh_network_avail_if_changed() -> None:
     ad._cache.pop("network_availability", None)
     fresh = ad._network_availability()
     rows = (fresh or {}).get("rows") or []
-    prev = snapshot_store.peek_payload("alarm:network_avail")
-    prev_rows = (prev or {}).get("rows") or []
-    if not rows and prev_rows:
+    if not rows:
         # `_network_availability()` 内部吞异常并返回空 rows（例如 xlsx 正被 Excel 占用）。
-        # 这时既不能把它固化进快照，也不能推进 `_last_xlsx_mtime` —— 否则 mtime 不变就
-        # 再也不会重试，网络卡片会空到文件下次被改动（2026-11-24 审核实测的阻塞项）。
-        logger.warning("[SNAPSHOT] network_avail 读数为空但旧快照有数据，保留旧快照并下轮重试")
+        # **无条件**当作读失败：不 publish（首次部署也不写空快照）、不推进
+        # `_last_xlsx_mtime` —— 否则 mtime 不变就再也不会重试，网络卡片会空到文件下次
+        # 被改动（2026-11-24 审核实测：无旧快照的场景原来仍会固化空值并停止重试）。
+        logger.warning("[SNAPSHOT] network_avail 读数为空，按读失败处理：保留旧快照、下轮重试")
         return
     snapshot_store.publish("alarm:network_avail", lambda: fresh)
     _last_xlsx_mtime = mtime
@@ -221,25 +227,21 @@ def _publish_alarm_overview(label: str, iso: str) -> None:
     def _build():
         with get_raw_connection() as conn:
             counts = ad._alarm_category_counts(conn)          # realtime_alarm 只有约百行，GROUP BY 很快
-        rec_snap = snapshot_store.get("alarm:recovery_mttr")
         recovery = snapshot_store.peek_payload("alarm:recovery_mttr")
         if recovery is None:                                 # 首次部署还没有历史快照
             with get_raw_connection() as conn:
                 recovery = ad._recovery_mttr(conn)
-        net_snap = snapshot_store.get("alarm:network_avail")
         network = snapshot_store.peek_payload("alarm:network_avail") or ad._network_availability()
         return {
             "generated_at": label,
             "alarm_counts": counts,
             "recovery_mttr": recovery,
-            # 子快照各自的时间必须透出：顶层 generated_at 是「本次实时同步」，
-            # 而恢复率/MTTR/网络可用率来自历史/文件快照，可能更旧。只给顶层时间
-            # 等于让旧数据冒充实时（2026-11-24 审核指出）。
-            "recovery_generated_at": rec_snap.computed_at if rec_snap else None,
             "network_availability": network["rows"],
             "network_threshold_pct": network["threshold_pct"],
             "network_latest_month": network["latest_month"],
-            "network_generated_at": net_snap.computed_at if net_snap else None,
+            # ⚠ 子快照的「旧」不写进 payload：现算侧没有这些键，写进来会让 shadow 比对
+            # 永久 mismatch、把真 mismatch 淹没（2026-11-24 审核实测）。改由 _serve 在
+            # 响应头里透出 X-Snapshot-Recovery-Age / X-Snapshot-Network-Age。
         }
 
     snapshot_store.publish("alarm:alarm_overview", _build, source_sync_at=iso)

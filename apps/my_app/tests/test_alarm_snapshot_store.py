@@ -234,3 +234,96 @@ def test_env_int_falls_back_on_garbage(monkeypatch):
     assert ad._env_int("ALARM_SNAPSHOT_RT_MAX_AGE", 300) == 300
     monkeypatch.setenv("ALARM_SNAPSHOT_RT_MAX_AGE", "120")
     assert ad._env_int("ALARM_SNAPSHOT_RT_MAX_AGE", 300) == 120
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-24 第二轮审核补的回归项
+# ---------------------------------------------------------------------------
+import types  # noqa: E402
+
+
+def _fake_ad(rows):
+    return types.SimpleNamespace(
+        _cache={},
+        _NETWORK_KPI_XLSX="不存在的文件.xlsx",
+        _network_availability=lambda: {"rows": rows, "threshold_pct": 95, "latest_month": None},
+    )
+
+
+def test_network_avail_empty_read_is_not_published(monkeypatch):
+    """读数为空（xlsx 被占用等）时不能固化进快照、也不能推进 mtime，否则永不重试。"""
+    published = []
+    monkeypatch.setattr(alarm_snapshot, "_ad", lambda: _fake_ad([]))
+    monkeypatch.setattr(alarm_snapshot, "_last_xlsx_mtime", None)
+    monkeypatch.setattr(alarm_snapshot.snapshot_store, "publish",
+                        lambda key, fn, **kw: published.append(key) or 1)
+    monkeypatch.setattr(alarm_snapshot.snapshot_store, "peek_payload", lambda key: None)
+
+    alarm_snapshot._refresh_network_avail_if_changed()
+
+    assert published == [], "空读数被当成正常数据发布了"
+    assert alarm_snapshot._last_xlsx_mtime is None, "空读数推进了 mtime，之后不会再重试"
+
+
+def test_network_avail_success_is_published_and_advances_mtime(monkeypatch):
+    published = []
+    monkeypatch.setattr(alarm_snapshot, "_ad", lambda: _fake_ad([{"cell_group": "A"}]))
+    monkeypatch.setattr(alarm_snapshot, "_last_xlsx_mtime", None)
+    monkeypatch.setattr(alarm_snapshot.snapshot_store, "publish",
+                        lambda key, fn, **kw: published.append(key) or 1)
+    monkeypatch.setattr(alarm_snapshot.snapshot_store, "peek_payload", lambda key: None)
+
+    alarm_snapshot._refresh_network_avail_if_changed()
+
+    assert published == ["alarm:network_avail"]
+    assert alarm_snapshot._last_xlsx_mtime == -1.0   # 文件不存在 → getmtime 失败取 -1
+
+
+def test_history_drilldown_gate_closes_when_rebuild_failed(monkeypatch):
+    """重建失败会把门禁发布成 {"ok": false}，下钻必须退回 pandas。"""
+    class _Snap:
+        version = 1
+        computed_at = "2026-11-24T00:00:00Z"
+        etag = '"x"'
+
+        def age_sec(self):
+            return 1.0
+
+    monkeypatch.setattr(ad.snapshot_store, "get", lambda key: _Snap())
+    monkeypatch.setattr(ad.snapshot_store, "peek_payload",
+                        lambda key: {"ok": False, "rows": 0})
+    assert ad._history_drilldown_sql("all", 10) is None
+
+
+def test_alarm_overview_snapshot_has_same_keys_as_live(monkeypatch):
+    """快照与现算必须同形：payload 里多出字段会让 shadow 永久 mismatch。"""
+    class _Ctx:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(ad, "_alarm_category_counts", lambda conn: {"ALL": 1})
+    monkeypatch.setattr(ad, "_recovery_mttr", lambda conn: [])
+    monkeypatch.setattr(ad, "_network_availability",
+                        lambda: {"rows": [], "threshold_pct": 95, "latest_month": None})
+    monkeypatch.setattr(ad, "_last_alarm_sync_iso", lambda: None)
+    monkeypatch.setattr(ad, "get_raw_connection", lambda *a, **k: _Ctx())
+    monkeypatch.setattr(alarm_snapshot, "get_raw_connection", lambda *a, **k: _Ctx())
+    monkeypatch.setattr(alarm_snapshot.snapshot_store, "peek_payload", lambda key: None)
+
+    published = {}
+
+    def _publish(key, fn, **kwargs):
+        if key == "alarm:alarm_overview":
+            published["payload"] = fn()
+        return 1
+
+    monkeypatch.setattr(alarm_snapshot.snapshot_store, "publish", _publish)
+    alarm_snapshot._publish_alarm_overview("2026-11-24 00:00 UTC", "2026-11-24T00:00:00Z")
+
+    live = ad._compute_alarm_overview_payload()
+    assert set(published["payload"]) == set(live), (
+        f"快照与现算字段不一致: only_snapshot={set(published['payload']) - set(live)}, "
+        f"only_live={set(live) - set(published['payload'])}")

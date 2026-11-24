@@ -588,7 +588,8 @@ def _compute_overview_payload(history_metrics=None):
 @router.get("/overview")
 def alarm_dashboard_overview(request: Request):
     """实时告警综合看板数据（优先读快照，见 _serve）"""
-    return _serve(request, "alarm:overview", REALTIME_MAX_AGE, _compute_overview_payload)
+    return _serve(request, "alarm:overview", REALTIME_MAX_AGE, _compute_overview_payload,
+                  child_keys=(("History", "alarm:history_metrics"),))
 
 
 def _history_drilldown_pandas(metric: str = "all", limit: int = 500):
@@ -973,7 +974,9 @@ def _compute_alarm_overview_payload():
 @router.get("/alarm-overview")
 def alarm_overview(request: Request):
     """告警总览（优先读快照，见 _serve）"""
-    return _serve(request, "alarm:alarm_overview", REALTIME_MAX_AGE, _compute_alarm_overview_payload)
+    return _serve(request, "alarm:alarm_overview", REALTIME_MAX_AGE, _compute_alarm_overview_payload,
+                  child_keys=(("Recovery", "alarm:recovery_mttr"),
+                              ("Network", "alarm:network_avail")))
 
 
 # =====================================================================
@@ -1031,13 +1034,28 @@ def _etag_matches(request: Request, etag: str) -> bool:
     return etag in candidates or "*" in candidates
 
 
-def _respond(request: Request, body: bytes, etag: str, state: str, age_sec: float):
+def _child_snapshot_age(key: str) -> str:
+    """子快照（恢复率/网络可用率/历史指标）的年龄，给响应头用。"""
+    snap = snapshot_store.get(key)
+    if snap is None:
+        return "missing"
+    age = snap.age_sec()
+    return str(int(age)) if age != float("inf") else "-1"
+
+
+def _respond(request: Request, body: bytes, etag: str, state: str, age_sec: float,
+             child_keys=()):
     headers = {
         "ETag": etag,
         "Cache-Control": "no-cache",   # 允许浏览器缓存副本，但每次都要带 If-None-Match 协商
         "X-Snapshot": state,           # hit | stale | stale-error | miss
         "X-Snapshot-Age": str(int(age_sec)) if age_sec != float("inf") else "-1",
     }
+    # 子快照的年龄也透出（不走 payload）：顶层 generated_at 是本次实时同步时间，
+    # 而恢复率/网络可用率/历史指标来自更早的快照。放进 payload 会让 shadow 比对
+    # 永久 mismatch（现算侧没有这两个字段），所以走响应头（2026-11-24 审核）。
+    for name, key in child_keys:
+        headers[f"X-Snapshot-{name}-Age"] = _child_snapshot_age(key)
     if _etag_matches(request, etag):
         # 304 必须直接 return Response（见 routers/tasks.py 的说明）
         return Response(status_code=304, headers=headers)
@@ -1059,7 +1077,7 @@ def _compute_fallback(key: str, compute):
         return body, etag, 0.0
 
 
-def _serve(request: Request, key: str, max_age: int, compute):
+def _serve(request: Request, key: str, max_age: int, compute, child_keys=()):
     if _MODE == "off":
         return compute()
 
@@ -1077,17 +1095,17 @@ def _serve(request: Request, key: str, max_age: int, compute):
 
     snap = snapshot_store.get(key)
     if snap is not None and snap.age_sec() <= max_age:
-        return _respond(request, snap.body, snap.etag, "hit", snap.age_sec())
+        return _respond(request, snap.body, snap.etag, "hit", snap.age_sec(), child_keys)
 
     # 快照缺失或过期：现算兜底；现算失败但有旧快照时继续给旧快照，页面不白屏
     try:
         body, etag, age = _compute_fallback(key, compute)
-        return _respond(request, body, etag, "miss" if snap is None else "stale", age)
+        return _respond(request, body, etag, "miss" if snap is None else "stale", age, child_keys)
     except Exception:  # noqa: BLE001
         if snap is None:
             raise
         logging.getLogger(__name__).warning("[SNAPSHOT] fallback compute failed key=%s, serving old snapshot", key, exc_info=True)
-        return _respond(request, snap.body, snap.etag, "stale-error", snap.age_sec())
+        return _respond(request, snap.body, snap.etag, "stale-error", snap.age_sec(), child_keys)
 
 
 def _load_realtime_rows_snap():

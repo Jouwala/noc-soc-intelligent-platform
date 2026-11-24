@@ -60,7 +60,9 @@ def _ensure_table(conn) -> None:
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # 毫秒精度：`peek_payload` 的反序列化缓存键带 computed_at，秒精度会漏掉
+    # 「同一秒内清表重建」的情况（version 从 1 重来 → 命中上一轮的解析对象）。
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 def _dumps(obj: Any) -> str:
@@ -118,7 +120,10 @@ class Snapshot:
 
     def age_sec(self) -> float:
         try:
-            t = datetime.strptime(self.computed_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            text = str(self.computed_at).replace("Z", "+00:00")
+            t = datetime.fromisoformat(text)          # 兼容旧的「秒精度」行与新的毫秒行
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=timezone.utc)
             return (datetime.now(timezone.utc) - t).total_seconds()
         except Exception:  # noqa: BLE001
             return float("inf")
@@ -178,7 +183,7 @@ def peek_payload(key: str) -> Optional[Any]:
     snap = get(key)
     if snap is None:
         return None
-    # 缓存 token 用 version + computed_at：表被清空重建后 version 会从 1 重来，
+    # 缓存 token 用 version + computed_at（毫秒）：表被清空重建后 version 会从 1 重来，
     # 只按 version 判断会命中上一轮的反序列化对象（2026-11-24 审核指出）。
     token = f"{snap.version}@{snap.computed_at}"
     hit = _parsed.get(key)
