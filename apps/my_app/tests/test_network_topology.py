@@ -210,3 +210,35 @@ def test_invalid_layout_number_is_skipped(db):
     _seed(db)
     topology.ensure_topology()
     assert topology.update_layout([{"id": 1, "x": "abc", "y": 2}])["updated"] == 0
+
+
+def test_manual_node_and_link_crud(db):
+    _seed(db)
+    topology.ensure_topology()
+    # ensure 之后新增的传感器尚未自动建链路，用来测试「人工绑定」
+    with db() as session:
+        session.add(PrtgSensor(objid=3000, sensor_name="(200) to NEWPEER", device_name="PTP_SW",
+                               sensortype="SNMP Traffic 64bit", status="Up", active=True))
+        session.commit()
+    node = topology.create_node("MANUAL-PEER", "peer", 400, 300)
+    assert node["type"] == "peer"
+    link = topology.create_link(3000, 1, node["id"], link_type="test",
+                                capacity_ab_mbps=1000, capacity_ba_mbps=500)
+    assert link["sensor_id"] == 3000
+    # 已绑定传感器不能重复绑定
+    with pytest.raises(ValueError):
+        topology.create_link(3000, 1, node["id"])
+    # 上下游确认：交换两端与分方向容量
+    swapped = topology.swap_direction(link["id"])
+    assert swapped["source_node"] == node["id"]
+    with db() as session:
+        row = session.get(NetworkLink, link["id"])
+        assert row.capacity_ab_mbps == 500 and row.capacity_ba_mbps == 1000
+    # 折线偏移与别名
+    assert topology.set_bend(link["id"], 50)["bend_offset"] == 50.0
+    assert topology.add_alias(node["id"], "MANUAL-PEER-ALIAS")["alias"] == "MANUAL-PEER-ALIAS"
+    # 节点仍被引用时拒绝删除；删链路后可删节点
+    with pytest.raises(ValueError):
+        topology.delete_node(node["id"])
+    topology.delete_link(link["id"])
+    topology.delete_node(node["id"])

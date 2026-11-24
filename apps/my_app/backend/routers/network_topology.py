@@ -49,6 +49,31 @@ class MappingPayload(BaseModel):
     links: list[MappingLink]
 
 
+class NodeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    type: Literal["device", "peer", "customer", "unknown"] = "unknown"
+    x: float | None = Field(default=None, ge=0, le=1000)
+    y: float | None = Field(default=None, ge=0, le=620)
+
+
+class LinkCreate(BaseModel):
+    sensor_objid: int
+    source_node_id: int
+    target_node_id: int
+    link_type: str | None = None
+    capacity_ab_mbps: float | None = Field(default=None, ge=0)
+    capacity_ba_mbps: float | None = Field(default=None, ge=0)
+    capacity_source: str = "manual"
+
+
+class BendPayload(BaseModel):
+    bend_offset: float = Field(ge=-300, le=300)
+
+
+class AliasPayload(BaseModel):
+    alias: str = Field(min_length=1, max_length=120)
+
+
 def _require_admin(request: Request) -> None:
     """布局/映射是管理操作：普通登录用户只读。"""
     user = portal_auth.current_user(request) or {}
@@ -82,6 +107,12 @@ def network_topology_history(
     return data
 
 
+@router.get("/sensors")
+def network_topology_sensors():
+    """Phase 2：可绑定的 Traffic 传感器清单（含是否已绑定）。"""
+    return topology.sensor_options()
+
+
 @router.get("/layout")
 def network_topology_layout():
     return topology.layout()
@@ -103,5 +134,79 @@ def network_topology_update_mappings(payload: MappingPayload, request: Request):
     _require_admin(request)
     try:
         return topology.update_mappings([link.model_dump(exclude_unset=True) for link in payload.links])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/nodes", status_code=201)
+def network_topology_create_node(payload: NodeCreate, request: Request):
+    _require_admin(request)
+    try:
+        return topology.create_node(payload.name, payload.type, payload.x, payload.y)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/nodes/{node_id}")
+def network_topology_delete_node(node_id: int, request: Request):
+    _require_admin(request)
+    try:
+        return topology.delete_node(node_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/links", status_code=201)
+def network_topology_create_link(payload: LinkCreate, request: Request):
+    _require_admin(request)
+    try:
+        return topology.create_link(
+            payload.sensor_objid, payload.source_node_id, payload.target_node_id,
+            payload.link_type, payload.capacity_ab_mbps, payload.capacity_ba_mbps,
+            payload.capacity_source,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/links/{link_id}")
+def network_topology_delete_link(link_id: int, request: Request):
+    _require_admin(request)
+    try:
+        return topology.delete_link(link_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/links/{link_id}/direction")
+def network_topology_swap_direction(link_id: int, request: Request):
+    """确认上下游：交换链路 A/B 两端与分方向容量。"""
+    _require_admin(request)
+    try:
+        return topology.swap_direction(link_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put("/links/{link_id}/bend")
+def network_topology_set_bend(link_id: int, payload: BendPayload, request: Request):
+    _require_admin(request)
+    try:
+        return topology.set_bend(link_id, payload.bend_offset)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/nodes/{node_id}/aliases", status_code=201)
+def network_topology_add_alias(node_id: int, payload: AliasPayload, request: Request):
+    _require_admin(request)
+    try:
+        return topology.add_alias(node_id, payload.alias)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
