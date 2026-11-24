@@ -19,7 +19,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Mapping
+from typing import Any, Callable
 
 import httpx
 
