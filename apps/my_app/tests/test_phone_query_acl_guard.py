@@ -7,8 +7,10 @@
      （fail-closed）；enabled=False 按配置既定语义放行（总开关关掉 = 不限制）。
   2. routers/phone_query_acl.require_phone_query_allowed 守卫：
      远程未授权用户 → 403 + 配置的拒绝文案；本机回环放行（机器间取数）。
-  3. 三个直连接口（vmax-cca-query、vmax-diagnosis、vmax-diagnosis/stream）
-     都先过守卫：守卫拒绝时上游一次都不碰；守卫放行后走原有流程。
+  3. 六个直连接口（vmax-cca-query、vmax-diagnosis、vmax-diagnosis/stream、
+     vmax-flow-xdr、vmax-xdr-query、vmax-xdr-records）都先过守卫：
+     守卫拒绝时上游一次都不碰；守卫放行后走原有流程。
+     （后三条是 Muse 1 对 PR #255 的 changes-requested：同类旁路未堵。）
   4. N1：GET /api/phone-query-acl 已显式要求登录（require_user）。
 """
 import sys
@@ -24,6 +26,9 @@ sys.path.insert(0, str(ROOT))
 from backend.routers import phone_query_acl as acl_router          # noqa: E402
 from backend.routers import vmax_cca_query as cca_router           # noqa: E402
 from backend.routers import vmax_diagnosis as diag_router          # noqa: E402
+from backend.routers import vmax_flow_xdr as flow_router           # noqa: E402
+from backend.routers import vmax_xdr_query as xdr_router           # noqa: E402
+from backend.routers import vmax_xdr_records as records_router     # noqa: E402
 from backend.services import phone_query_acl as acl_service        # noqa: E402
 
 DENY_ZH = "你无权查询该信息，请找admin/zeeshan进行查询"
@@ -116,7 +121,7 @@ def test_guard_allows_loopback_machine_caller(guard_env):
     acl_router.require_phone_query_allowed(_request(LOOPBACK))
 
 
-# ---------- 3. 三个直连接口先过守卫（TestClient 端到端） ----------
+# ---------- 3. 六个直连接口先过守卫（TestClient 端到端） ----------
 
 from fastapi import FastAPI                            # noqa: E402
 from fastapi.testclient import TestClient              # noqa: E402
@@ -130,6 +135,9 @@ def _app() -> FastAPI:
     app = FastAPI()
     app.include_router(cca_router.router)
     app.include_router(diag_router.router)
+    app.include_router(flow_router.router)
+    app.include_router(xdr_router.router)
+    app.include_router(records_router.router)
     app.include_router(acl_router.router)
     return app
 
@@ -159,6 +167,25 @@ def test_diagnosis_stream_403_for_unlisted_user(client_env):
     assert resp.json()["detail"] == DENY_ZH
 
 
+def test_flow_xdr_403_for_unlisted_user(client_env):
+    resp = client_env.get("/api/vmax-flow-xdr", params={"msisdn": "231777123456"})
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == DENY_ZH
+
+
+def test_xdr_query_403_for_unlisted_user(client_env):
+    resp = client_env.get("/api/vmax-xdr-query", params={"msisdn": "231777123456"})
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == DENY_ZH
+
+
+def test_xdr_records_403_for_unlisted_user(client_env):
+    resp = client_env.get("/api/vmax-xdr-records",
+                          params={"msisdn": "231777123456", "table": "UEMR_XDR"})
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == DENY_ZH
+
+
 def test_cca_query_listed_user_reaches_upstream(client_env, guard_env, monkeypatch):
     guard_env["user"] = {"username": "admin", "role": "user"}
 
@@ -184,6 +211,55 @@ def test_diagnosis_listed_user_passes_guard(client_env, guard_env, monkeypatch):
     assert resp.status_code == 503
 
 
+def test_flow_xdr_listed_user_reaches_upstream(client_env, guard_env, monkeypatch):
+    guard_env["user"] = {"username": "admin", "role": "user"}
+
+    class _FakeFlow:
+        def __init__(self, client):
+            pass
+
+        def query(self, msisdn, start, end):
+            return {"total_flux": "0 KB", "apps": [], "categories": [],
+                    "source": "xdr_user_plane", "records": 0}
+
+    monkeypatch.setattr(flow_router, "VmaxFlowFromXdr", _FakeFlow)
+    monkeypatch.setattr(flow_router, "get_xdr_client", lambda: object())
+    resp = client_env.get("/api/vmax-flow-xdr", params={"msisdn": "231777123456"})
+    assert resp.status_code == 200
+    assert resp.json()["found"] is True
+    assert resp.json()["source"] == "xdr_user_plane"
+
+
+def test_xdr_query_listed_user_reaches_upstream(client_env, guard_env, monkeypatch):
+    guard_env["user"] = {"username": "admin", "role": "user"}
+
+    class _FakeClient:
+        def query(self, msisdn, service_type, start, end, page=1, page_size=20):
+            return {"field": [], "rows": [], "records": 0}
+
+    monkeypatch.setattr(xdr_router, "get_xdr_client", lambda: _FakeClient())
+    resp = client_env.get("/api/vmax-xdr-query", params={"msisdn": "231777123456"})
+    assert resp.status_code == 200
+    assert resp.json()["records"] == 0
+
+
+def test_xdr_records_listed_user_reaches_upstream(client_env, guard_env, monkeypatch):
+    guard_env["user"] = {"username": "admin", "role": "user"}
+
+    class _FakeClient:
+        def query_table(self, msisdn, service_type, table, start, end,
+                        page=1, page_size=20):
+            return {"table": table, "rows": [], "records": 0}
+
+    monkeypatch.setattr(records_router, "get_xdr_client", lambda: _FakeClient())
+    # 审计写库与守卫无关（本用例只验证守卫放行），桩掉避免碰真实连接
+    monkeypatch.setattr(records_router, "_write_log", lambda *a, **k: None)
+    resp = client_env.get("/api/vmax-xdr-records",
+                          params={"msisdn": "231777123456", "table": "UEMR_XDR"})
+    assert resp.status_code == 200
+    assert resp.json()["records"] == 0
+
+
 def test_routes_carry_guard_dependency():
     def _guarded(router, path):
         for route in router.routes:
@@ -196,6 +272,9 @@ def test_routes_carry_guard_dependency():
     assert _guarded(cca_router.router, "/api/vmax-cca-query")
     assert _guarded(diag_router.router, "/api/vmax-diagnosis")
     assert _guarded(diag_router.router, "/api/vmax-diagnosis/stream")
+    assert _guarded(flow_router.router, "/api/vmax-flow-xdr")
+    assert _guarded(xdr_router.router, "/api/vmax-xdr-query")
+    assert _guarded(records_router.router, "/api/vmax-xdr-records")
 
 
 # ---------- 4. N1：GET /api/phone-query-acl 显式要求登录 ----------
