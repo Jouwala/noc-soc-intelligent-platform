@@ -89,7 +89,7 @@ footer.colophon { text-align: center; color: var(--muted); font-size: 12px; marg
     <div class="logo">📘</div>
     <h1>my_app 项目手册</h1>
     <div class="sub">网络运维数据平台 · 设计手册 + 使用手册</div>
-    <div class="meta">基准日期 2026-08-27　|　适用版本 main 当前代码　|　HTML 合成生成 2026-11-23<br>含 13 章 · 150 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
+    <div class="meta">基准日期 2026-08-27　|　适用版本 main 当前代码　|　HTML 合成生成 2026-11-24<br>含 13 章 · 150 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
     <ul class="parts"><li><a href="#ch-00">前言 · 关于本手册</a></li><li><a href="#ch-01">设计篇 · 01 项目总览</a></li><li><a href="#ch-02">设计篇 · 02 架构设计</a></li><li><a href="#ch-03">设计篇 · 03 数据层设计</a></li><li><a href="#ch-04">设计篇 · 04 任务与调度系统</a></li><li><a href="#ch-05">设计篇 · 05 访问控制与凭据</a></li><li><a href="#ch-10">使用篇 · 10 快速上手</a></li><li><a href="#ch-11">使用篇 · 11 功能页使用手册</a></li><li><a href="#ch-12">使用篇 · 12 配置项与开关</a></li><li><a href="#ch-13">使用篇 · 13 运维手册</a></li><li><a href="#ch-14">使用篇 · 14 外部系统与数据流</a></li><li><a href="#ch-15">使用篇 · 使用帮助（一站式指南）</a></li><li><a href="#ch-90">附录 · 90 附录</a></li></ul>
   </section>
   <section class="toc-section">
@@ -473,7 +473,7 @@ schemas/   预留，实际为空
 <p><strong>i18n</strong>：<code>i18n.tsx</code> 内 <code>translations</code> 双字典 zh/en；<code>t(key, params)</code> 查当前语言 → 回退中文 → 回退 key 本身，<code>{x}</code> 占位符做字符串替换（<code>i18n.tsx:1783-1789</code>）。语言存 <code>localStorage['app-locale']</code>，缺失时按 <code>navigator.language</code> 判定（<code>i18n.tsx:1750-1755</code>）。切换语言会同步后端（<code>setApiLocale</code>）、设置 <code>&lt;html lang&gt;</code>、并向 iframe <code>postMessage myapp-locale</code>（<code>i18n.tsx:1763-1772</code>）——<strong>新增文案必须 zh/en 两处同名 key 各加一行</strong>，只加一处的结果是英文环境显示中文（该缺陷历史上出现过两次，见 PROJECT_DOCS.md 的 i18n 审计章节）。</p>
 <p><a id="ch-02-s5"></a></p>
 <h3>构建产物</h3>
-<p><code>vite.config.ts</code>：<code>base: '/myapp/'</code>（:6）；dev/preview 同为 <code>0.0.0.0:7090</code> 且带 <code>strictPort</code>，<code>/api</code> 与 <code>/myapp/api</code> 代理到 <code>http://localhost:7038</code>（:9-21,27-41）；<code>chunkSizeWarningLimit:1200</code> + 手工 vendor 分包（:55-68）。</p>
+<p><code>vite.config.ts</code>：<code>base: '/myapp/'</code>（:39）；dev/preview 同为 <code>0.0.0.0:7090</code> 且 preview 带 <code>strictPort</code>，<code>/api</code> 与 <code>/myapp/api</code> 都代理到 <code>http://localhost:7038</code>；<code>chunkSizeWarningLimit:1200</code>（:95）+ rolldown <code>codeSplitting.groups</code> 按依赖分包（:144-165：exceljs / xlsx / react-vendor / date-lib / antd-icons / antd-rc / echarts / leaflet / antd / vendor，按 <code>priority</code> 高者先认领）。<strong>2026-11-23 起 exceljs 改为点导出时动态 import</strong>（<code>src/utils/excelReport.ts:45-77</code>），≈930KB 不再进首屏；实测各 chunk 均 &lt;1200KB（最大 <code>index</code> ≈1.11MB，主体是 <code>i18n.tsx</code> 双字典），首屏 modulepreload 合计 3.99MB→2.77MB 裸 / 1268→897KB gzip。改分包规则时保留 <code>strictExecutionOrder</code>（:126）—— 它防的是分包图成环导致的整站白屏，理由见该处注释。</p>
 <p>脚本只有三条（<code>frontend/package.json:7-9</code>）：<code>dev</code> / <code>build</code>（<code>tsc &amp;&amp; vite build</code>）/ <code>preview</code>，其中 dev 与 preview 走 <code>../scripts/start-app.mjs</code> 包装。</p>
 <blockquote>
 <p>⚠️ <strong>已知约束</strong>：<code>build.outDir</code> 是绝对路径 <code>D:/01_RPA/Task/_fe_dist</code>（<code>vite.config.ts:49</code>），<strong>在 my_app 之外</strong>（:43-48 注释说明原因是 IDE 句柄占用与 <code>emptyOutDir:false</code>）。这与仓库规则「my_app 项目下的引用不要放到外面」冲突：单独把 <code>my_app</code> 目录发给别人，前端产物链是断的。需要移交时应连带 <code>_fe_dist</code>，或把 outDir 改回 <code>frontend/dist</code> 并同步 nginx 指向。历史遗留的 <code>frontend/dist</code>、<code>dist2</code>、<code>dist3</code> 与 <code>_fe_dist</code> 里若干 legacy html（<code>alarm-management.html</code>、<code>cxo_dashboard.html</code>、<code>incident-overview.html</code>、<code>ip-trace.html</code> 等）仍在被 iframe 引用，见 <code>11-feature-guide.md</code> 的&quot;iframe 页&quot;标注。</p>
@@ -6211,7 +6211,7 @@ Network 取 <code>ms_sla_kpi</code> 快照原值不重算；PS_* = 阈值达标�
 <li>壳：<code>LegacyToolFrame</code> 载入 <code>public/cxo_dashboard.html</code>。</li>
 <li><strong>数据三层叠加</strong>（2026-09-02 起）：
 <ol>
-<li>HTML 内嵌快照（构建时冻结，保底渲染）；</li>
+<li><strong>内置数据集</strong>（2026-11-23 从 HTML 抽出到 <code>public/cxo-dashboard-data.js</code>）：GEO 州界底图 + DATA 面板数据；抓取时间无从考证（<code>window.CXO_DASHBOARD_AS_OF</code> 为空），所以首屏用内置数据时 <code>#cacheBanner</code> 常驻写明「构建时内置的数据集，抓取时间未知，不是实时状态」，缓存或实时数据一到即被替换 / 隐藏；</li>
 <li><strong>last-known-good 缓存</strong>：worker 任务 <code>cxo_dashboard_cache_sync</code>（每 10 分钟，v 组）经本机 8790 VMAX 代理拉全量接口、<strong>空值保留旧值</strong>，落盘 <code>data/cxo_dashboard/last_known_good.json</code>，页面打开/开启自动刷新后到点时经 <code>GET /api/cxo-dashboard/cache</code> 应用；</li>
 <li>实时拉取（经 <code>/api/realtime-proxy/cxo</code> 转发 8790 代理）成功则覆盖缓存。
 实时不可用时页面显示最近可用缓存数据（状态行 <code>offline · cached data</code>），Health 页 live 为空时回退缓存并在标题标注 <code>cached &lt;时间&gt;</code>。</li>
@@ -6219,6 +6219,7 @@ Network 取 <code>ms_sla_kpi</code> 快照原值不重算；PS_* = 阈值达标�
 </li>
 <li>缓存任务详情见 <code>backend/services/cxo/cxo_dashboard_cache.md</code>；每次运行还向 <code>data/cxo_dashboard/history.jsonl</code> 追加一行 Summary KPI + Health 概要（积累趋势用）。</li>
 <li><strong>轮播（大屏值守）</strong>：页头 <code>Carousel</code> 按钮（2026-09-02 起）每 15 秒轮换 Service→Network→Summary→Healthscore 四页签并<strong>进入全屏</strong>（同 Alarm Management：再点按钮停止并退全屏；Esc 退出全屏会联动停轮播；手动点页签视为接管、停轮播但保留全屏）。</li>
+<li><strong>缓存年龄横幅（2026-11-23）</strong>：<code>#cacheBanner</code> 按 <code>/api/cxo-dashboard/cache</code> 返回的 <code>updated_at</code> 常驻显示「当前显示 last-known-good 缓存（更新于 …，距今 …）」。这是为了治住「空值保留旧值」的副作用 —— 上游长期不出数时，缓存会让页面看起来「数据还在」，实际后台任务已经很久没写入新数据。<strong>超过 3 小时（<code>CACHE_STALE_H</code>）转红</strong>并写明「不是当前状态」；实时刷新全成功时自动隐藏（<code>finishStatus</code> 的 <code>fail===0</code> 分支调 <code>hideCacheBanner()</code>）。</li>
 <li>图表尺寸自适应：所有图表 setOption 后统一排队一次 rAF <code>resize()</code>（<code>queueResizeAll</code>）——trend-grid 卡片逐个 append 时列宽多次回流，不补偿会把 1570px 画布塞进 359px 卡片（x 轴标签挤压、线条重叠的根因）；实时刷新按代次（<code>REFRESH_GEN</code>）管理，切页/轮播后旧刷新静默作废，不在隐藏视图上重建图表、也不覆盖状态行。</li>
 <li>数据源是 VMAX 实时保障看板，凭据在「系统设置 → 凭据 → <code>vmax_cxo</code>」。</li>
 <li>已知限制：Healthscore 的 VMAX 源头分区 <code>aggr_ds_cxo_score</code> 为空时综合分显示 <code>—</code>（页面有说明横幅），需数据侧聚合后才能填充，缓存只能保证&quot;有过的数据不再丢&quot;。</li>
@@ -6688,17 +6689,25 @@ Network 取 <code>ms_sla_kpi</code> 快照原值不重算；PS_* = 阈值达标�
 <li><strong>可复用探针 <code>TMP/_verify_gis_series.py</code>（勿删）</strong>：<code>python TMP/_verify_gis_series.py</code> 直接调 <code>_load_site_kpi_series()</code>，逐制式打印 <code>matched_by / days / day 是否唯一 / volume 列清单 / 末日各业务量值</code>，不依赖 HTTP 也不依赖前端构建 —— 改了 <code>_RAT_KPI_SPEC</code> 或折叠逻辑就跑一次（2026-11-04 实测 4472 与 3620 两站、7/30 两档全绿）。</li>
 </ul>
 <p><a id="ch-11-s25"></a></p>
-<h4>10a-5. 站点类别面板（2026-11-23 新增，仅 <code>?page=gis</code>）</h4>
-<p><strong>需求原话</strong>：「页面 <code>?page=gis</code> 的 Legend 里面的 Site Class 也添加 <code>?page=person</code> 的 site class 里面的所有内容」；做法选定「整块复用人员页那张『站点类别』面板（默认全不选，选中才在地图上叠加显示）」。</p>
+<h4>10a-5. 站点类别嵌进图例的 Site Class 组（2026-11-23 首版 / 2026-11-24 改位置，仅 <code>?page=gis</code>）</h4>
+<p><strong>需求演进</strong>：2026-11-23 用户原话「页面 <code>?page=gis</code> 的 Legend 里面的 Site Class 也添加 <code>?page=person</code> 的 site class 里面的所有内容」，首版做成了地图右上角一张独立浮层；<strong>2026-11-24 用户纠正「是把 Site Classes 放到 Legend 里面的 Site class 里面」</strong> → 内容改为嵌在左下角图例的「站点等级 / Site Class」组内（<code>MapLegendOverlay</code> 的 <code>MapLegendGroup.node</code> 插槽），右上角那块浮层及它的 portal 定位壳一并删除。</p>
 <ul>
-<li><strong>刻意不复制第二套</strong>：数据 <code>personmap/useSiteClasses.ts</code>、面板 <code>personmap/SiteClassLegend.tsx</code>、配色 <code>personmap/siteClassColors.ts</code> 全部复用人员页那份（见 11 节「站点类别图例」）。GIS 侧只新增两个薄组件：<code>gismap/SiteClassLegendPanel.tsx</code>（右上角浮层）与 <code>gismap/SiteClassSitesLayer.tsx</code>（选中后的站点圈）。两页的类别名、计数口径（后端 <code>personnel.py::get_personnel_site_classes</code> 扫 <code>master_site_db</code> 四列）、选中语义（组内并集 / 组间交集）因此不会各自漂移。</li>
+<li><strong>组内结构</strong>：<code>VIP站点 / 正常</code> 两行（圆点颜色图例，点它隐藏该类站点）下面多一行 <strong>「站点类别 ▸」</strong>；点开展开人员页那套四组取值（维护分类 / VIP / HUB / 传输类型），有选中时该行行尾显示「已显示 N / total」。</li>
+<li><strong>默认收起</strong>（2026-11-24 实测后定的）：四组共 11 个取值全部展开会把图例撑到约 600px（地图 654px 高时），直接盖住左上的 LAYERS 与区域排名条；收起时图例高度与改动前一致（约 207px），类别内容点一下就能展开。人员页那张独立卡片仍默认展开。</li>
+<li><strong>展开时的布局约束</strong>（缺一不可）：
+<ul>
+<li>图例 <code>maxHeight</code> 由 <code>calc(100% - 1rem)</code> 改为 <strong><code>calc(100% - 12rem)</code></strong>（<code>MapLegendOverlay.tsx</code> 的 <code>panelStyle</code>）：12rem≈192px 是给 LAYERS（实测高约 84px）留的位置，展开后图例最高到相对 y≈158，与 LAYERS 底边仍留 60px 净距；超出的内容在图例内部滚动。</li>
+<li><strong>区域排名条临时收起</strong>：<code>index.css</code> 的 <code>.gis-legend-overlay:has(.gis-siteclass-block button[aria-expanded='true']) ~ .gis-rank-overlay { display: none }</code>。两块浮层同处左缘，叠在一起会互相透字，且排名条 DOM 靠后会把类别行挡住（Playwright 实测点击被 <code>.gis-rank-row__name</code> 拦截）。收起图例后排名条自动恢复。⚠️ 这条选择器依赖「两浮层都是地图卡片 body 的子节点、图例在前」的渲染顺序。</li>
+</ul>
+</li>
+<li><strong>同一组里有两层东西，语义不同，刻意并列</strong>：上面两行 <code>VIP站点 / 正常</code> 是<strong>圆点颜色</strong>图例（色值与地图圆点一致）；下面这块是<strong>类别选择器</strong>（点它在地图上圈出该类站点；组内多选取并集、组间取交集）。去掉前两行，地图上的紫色（VIP）/灰色（正常）圆点就没有解释了。</li>
+<li><strong>刻意不复制第二套</strong>：数据 <code>personmap/useSiteClasses.ts</code>、面板 <code>personmap/SiteClassLegend.tsx</code>（2026-11-24 新增 <code>bare</code> 嵌入模式：无卡片外观 / 折叠开关集成进图例 / 行无边框、选中用类别色淡底 + 加粗）、配色 <code>personmap/siteClassColors.ts</code> 全部复用人员页那份（见 11 节「站点类别图例」）。GIS 侧只新增两个薄组件：<code>gismap/SiteClassLegendSection.tsx</code>（把面板以 <code>bare</code> 渲染成图例组内容）与 <code>gismap/SiteClassSitesLayer.tsx</code>（选中后的站点圈）。两页的类别名、计数口径（后端 <code>personnel.py::get_personnel_site_classes</code> 扫 <code>master_site_db</code> 四列）、选中语义因此不会各自漂移。</li>
 <li><strong>默认一个都不画</strong>：与人员页同一需求 —— <code>useSiteClasses</code> 的 <code>selected</code> 初值为空对象，<code>visibleSites</code> 为空，地图上零个类别圈。</li>
 <li><strong>为什么画外圈而不是实心点</strong>：GIS 底图<strong>已经用颜色表示站点告警状态</strong>，实心类别点会把它盖掉、同一批站点在图上变成两种读法。故圈只描边（类别色）+ 填充约 12%，挂 <code>siteClassPane</code>（<code>zIndex 660</code>）：高于站点圆点（<code>sitePane</code> 650）、低于县名标注（<code>countyLabelPane</code> 670）。</li>
 <li><strong>圈不接收鼠标</strong>：<code>components/LeafletMap.tsx</code> 的 <code>CircleMarker</code> 新增可选 <code>interactive</code>（仅明确传 <code>false</code> 时写进 Leaflet options，不传时行为不变）。实测选中 NORMAL 画出 597 个圈时，圈上点的 <code>elementFromPoint</code> 仍是 <code>leaflet-interactive</code> 的站点圆点，点站点照常打开下钻抽屉。</li>
-<li><strong>⚠️ 为什么挂进 <code>.leaflet-container</code> 而不是当卡片 body 的子节点</strong>：门户 <code>MAP_STRIP_CSS</code>（<code>apps/portal/</code> 下 MsPortal / olbrportal / v1~v4 共 7 份副本）在「只看地图」模式下会把 <code>.ant-card-body</code> 里所有「不是地图、也不含地图」的直接子元素刷成 <code>position:absolute;left:0;right:0;bottom:0;background:rgba(255,255,255,.88)!important</code> 的通栏白块 —— 既有图例靠 <code>.gis-legend-overlay</code> 白名单躲过这一条。新面板若也当卡片子节点，就得同步改 7 份门户静态壳；改为 <code>createPortal</code> 挂进 Leaflet 容器（与 <code>LayerToggleControl</code> 同法）即不在该选择器的目标里。<strong>实测把那条 CSS 注入页面后，面板位置与背景（transparent）都不变。</strong></li>
-<li><strong>只在 <code>?page=gis</code></strong>：<code>GISMap</code> 同时服务 <code>?page=realtime_alarm</code>（<code>mode='realtime'</code>），面板与取数都用 <code>mode === 'all'</code> 门控。实测实时页 0 个面板、0 次 <code>/gis/personnel/site-classes</code> 请求（不会白拉约 100KB）。</li>
-<li><strong>窄屏</strong>：门户内嵌地图实测 570×633 时面板 211×416，完全落在地图内、与左下角站点图例不重叠；标题栏可折叠。</li>
-<li><strong>复用处的两处小改动</strong>：<code>useSiteClasses({ enabled })</code> —— 不取数时把 <code>loading</code> 置 <code>false</code>，否则面板永远停在「正在加载站点类别…」；<code>SiteClassLegend</code> 新增可选 <code>maxHeight</code> —— GIS 传 <code>'none'</code> 由外层容器滚动（人员页的 <code>calc(100vh - 120px)</code> 在 GIS 卡片里不成立，卡片高度由 flex 分配而不是视口）。</li>
+<li><strong>⚠️ 承载体仍然只有 <code>.gis-legend-overlay</code> 一个</strong>：内容跟着图例走，而图例本来就是门户 <code>MAP_STRIP_CSS</code>（<code>apps/portal/</code> 下 7 份副本）的白名单元素，所以门户静态壳<strong>不用改</strong>。首版右上角浮层为绕开「卡片 body 直接子元素被刷成通栏白块」曾用 <code>createPortal</code> 挂进 Leaflet 容器；改位置后这套壳已删除（原则 10：删除优于兼容）。</li>
+<li><strong>只在 <code>?page=gis</code></strong>：<code>GISMap</code> 同时服务 <code>?page=realtime_alarm</code>（<code>mode='realtime'</code>），这块内容与取数都用 <code>mode === 'all'</code> 门控。实测实时页没有类别内容、0 次 <code>/gis/personnel/site-classes</code> 请求（不会白拉约 100KB）。</li>
+<li><strong>复用处的两处小改动</strong>：<code>useSiteClasses({ enabled })</code> —— 不取数时把 <code>loading</code> 置 <code>false</code>，否则这块内容永远停在「正在加载站点类别…」；<code>SiteClassLegend</code> 新增 <code>bare</code>，<code>maxHeight</code> 仍保留给人员页那张独立卡片。</li>
 </ul>
 <p><a id="ch-11-s26"></a></p>
 <h4>10b. 边界蒙层：大区（Voronoi）与县界（真实行政边界）</h4>
@@ -7375,7 +7384,7 @@ PMT 取不到时显示 <code>—</code> 而不是 0（AGENTS.md 三.6），所�
 <li><strong>位置必须放右上角</strong>（与 <code>LayerToggles</code> 纵向堆叠成一个浮层列，<code>PersonMapView.tsx</code> 里统一绝对定位）：首版放左下角，在门户嵌入（<code>?embed=1&amp;mwembed=1</code>）下地图容器被撑到 1122px、底部超出视口约 320px，<strong>实测图例按钮中心 y=982 而视口只有 805 —— 整块落在屏幕外，看不见也点不中</strong>。两个浮层组件自身只负责卡片外观，定位交给调用方。</li>
 <li>面板可折叠（标题栏点击）；有选中时标题显示 <code>已显示 N / 824</code>。实测：VIP=Y → 50 点、再叠 HUB=Y → 28 点（交集，与 SQL 一致）、COOL → 64 点、四组全选 → 824 点（11 次点击累计约 1.4s，单次最慢 32ms，无需像辖区层那样下沉到原生批量建层）。</li>
 <li>守卫：<code>TMP/cdp_person_legend.mjs</code>（真实鼠标点击 + 点数与 SQL 对拍）、<code>TMP/cdp_legend_maponly.mjs</code>（门户 <code>?maponly=1</code> 形态）。</li>
-<li><strong>2026-11-23 起 GIS 页（<code>?page=gis</code>）也复用了这张面板</strong>（见 10a-5）：GIS 侧只加了定位壳与「外圈」图层，数据 / 面板 / 配色仍以本节为唯一实现。</li>
+<li><strong>2026-11-24 起 GIS 页（<code>?page=gis</code>）也复用了这张面板</strong>（见 10a-5）：GIS 侧把它以 <code>bare</code> 模式嵌进图例的「站点等级 / Site Class」组，另加一个「外圈」图层；数据 / 面板 / 配色仍以本节为唯一实现。</li>
 </ul>
 <p><strong>负责站点为 0 的空态说明</strong>（<code>personmap/NoSitesNote.tsx</code>，2026-10-21）：有坐标的 24 人里 <strong>6 人 <code>site_count</code> 恒为 0</strong>，点他们地图上一片空白，实测就被报成「连线没画出来」。所以选中这样的人时，<strong>地图底部居中</strong>与<strong>抽屉「站点」页签</strong>各给一条同源说明（<code>pointerEvents:none</code>，不拦地图点击）。原因分两类，由 <code>/personnel/stats</code> 新增的 <code>supervised_sites</code> 区分：</p>
 <table>
@@ -7585,6 +7594,18 @@ KPI 卡讲 <strong>FE 人群</strong> —— 32 名 FE（<code>isfe=Yes</code>�
 </tbody>
 </table>
 <p><code>site_outage_screenshot</code> 的截图对象正是本看板的 <strong>ERA / Regular / ALL 三个视图</strong>（<code>task_registry.py:95-99</code>）。<strong>改这个 iframe 页的 DOM 会连带影响自动截图任务</strong>——改前先确认截图选择器还找得到。界面能力以该 HTML 自身为准。</p>
+<ul>
+<li><strong>数据来源与快照年龄（2026-11-23 重塑）</strong>：本页原来的 2.1MB <code>const FMS_REAL</code> 数据<strong>写死在内联脚本里</strong>，是 2026-08-13 11:37:06 从 FMS 实时接口抓取后冻结的一份快照。页面只有一行小字「示例快照 · 未连接」，用户看到的数字与实时数据长得一模一样 —— 实测到 2026-11-23 已经用它顶了 <strong>102 天</strong>。
+现在拆成三段，各说各的：
+<ul>
+<li><code>public/alarm-management-snapshot.js</code> 单独存放快照数据体与 <code>window.ALARM_MGMT_SNAPSHOT_AS_OF</code>（HTML 从 2.2MB 降到 147KB，换数据不必再改页面）；</li>
+<li>页头 <code>#snapBanner</code> <strong>常驻横幅</strong>按 as_of 算出年龄：≤24h 黄色、&gt;24h 转红并写明「不是当前状态」（这是「数据过期」的异常，按工作区 <code>AGENTS.md</code> 四.10 必须常驻可见，不做可关闭）；</li>
+<li>快照文件缺失时渲染最小骨架并直接报错，不再静默半渲染。
+另：<strong>KPI 卡（宕站数 / 恢复 / MTTR / 可用率）来自 my_app 后端</strong> <code>/api/alarm-dashboard/alarm-overview</code>（<code>backend/routers/alarm_dashboard.py:911</code>），表格 / 趋势 / 地图 / 域卡片才来自 FMS（经 <code>/api/realtime-proxy/fms</code>）。打开实时开关并拿到数据后，横幅降级为「部分面板已接入实时」，<strong>不会</strong>整条消失 —— 因为 KPI 与其余面板来源不同。
+<strong>六个域卡片（RAN/CN/TRM_MW/VAS/TRM/POWER）没有实时接口</strong>，FMS 侧未提供 URL，每张卡上直接标「无实时接口 · 快照」，不再让卡片看起来像实时结果。</li>
+</ul>
+</li>
+</ul>
 <p><a id="ch-11-s36"></a></p>
 <h3>13. 丢包看板（<code>?page=packet_loss</code>）</h3>
 <p>LTE 丢包（RAN UME SDR/IPRAN IPPD），最近 <strong>7 个完整自然日、小时粒度</strong>，当天没过完不展示（<code>PacketLossDashboard.tsx:2-5</code>）。</p>
@@ -18601,7 +18622,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
     <h2>使用帮助（一站式指南）</h2>
   </header>
   <blockquote>
-<p>面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-23。</p>
+<p>面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-24。</p>
 </blockquote>
 <blockquote>
 <p>站内入口：侧边栏「使用帮助」，或直链 <code>http://&lt;host&gt;/myapp/?page=help</code>。</p>
@@ -21793,7 +21814,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <ul>
 <li>区域下拉 + 图层 Tag 开关筛选；图例点击可隐藏该类图层；时间支持分段切换与自定义区间</li>
 <li>地图左上角「Layers」浮层里有地名注记 / 道路 / 人员三个勾选框，<strong>默认全关</strong>：地名（瓦片自带 1.7 万个）会糊住站点；人员是现场登记位置（非实时定位），需要时再勾</li>
-<li>地图右上角「站点类别」面板与人员位置地图是同一张（2026-11-23 新增）：维护分类 / VIP 站点 / HUB 站点 / 传输类型四组的取值和站点数都来自数据库，<strong>默认一项都不选</strong>；点某一类就在地图上把这些站点圈出来（组内并集、组间交集），再点取消，「清除」回到一个都不显示</li>
+<li>左下角图例的「站点等级」组里，VIP站点 / 正常 两行圆点颜色下面有一行「站点类别 ▸」（2026-11-24）：点开就是人员位置地图同一份类别列表（维护分类 / VIP 站点 / HUB 站点 / 传输类型，取值和站点数都来自数据库），<strong>默认一项都不选</strong>；点某一类就在地图上把这些站点圈出来（组内并集、组间交集），再点取消，「清除」回到一个都不显示。默认收起是为了不把图例撑高盖住左上角的图层开关与区域排名（展开期间区域排名暂时收起，收起图例后自动回来）</li>
 <li>类别圈只描外框、填充几乎透明，<strong>不会盖掉站点本身的告警颜色</strong>，也不影响点站点开抽屉（点击穿透到站点圆点）</li>
 <li>「高级筛选」面板第一格是「站点名称」输入框：按名称片段模糊匹配（不区分大小写），其余是区域/等级/站型/FME 等下拉；</li>
 <li>筛选后统计同步变化：站点总数与 ERA/COOL/NORMAL 分档、地图图例、县块颜色与县名标注、右上角「MAINTENANCE ALERTS」区域排名条都按筛选后的站点重新统计，不再显示全量数字；</li>
@@ -22236,7 +22257,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
   </header>
   <p><a id="ch-90-s0"></a></p>
 <h3>A. 后端接口前缀速查</h3>
-<p>注册在 <code>backend/main.py</code>（实测 86 处 <code>include_router</code>）。前端 <code>baseURL</code> 是 <code>/api</code>（<code>frontend/src/api.ts:4</code>）。</p>
+<p>注册在 <code>backend/main.py</code>（实测 87 处 <code>include_router</code>）。前端 <code>baseURL</code> 是 <code>/api</code>（<code>frontend/src/api.ts:4</code>）。</p>
 <p><strong>带 prefix 的 router</strong></p>
 <table>
 <thead>
@@ -22591,7 +22612,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <p><strong>保留在 PROJECT_DOCS.md 不动</strong>（属于历史决策与复盘，不是&quot;现状描述&quot;）：§2 迁移计划、§3 架构评估与 Django 论证、§4 FastAPI 架构优化方案、§5–§6 i18n 审计与复查、§8 IP Trace 集成方案、§10 迁移失败复盘、§11 优化建议。</p>
 
 </section>
-  <footer class="colophon">my_app 项目手册 · 由 frontend/scripts/generate-manual-html.mjs 从 docs/manual/*.md 同源生成于 2026-11-23 · 改 MD 后重跑该脚本并重新构建前端即可更新</footer>
+  <footer class="colophon">my_app 项目手册 · 由 frontend/scripts/generate-manual-html.mjs 从 docs/manual/*.md 同源生成于 2026-11-24 · 改 MD 后重跑该脚本并重新构建前端即可更新</footer>
 </div>
 </body>
 </html>

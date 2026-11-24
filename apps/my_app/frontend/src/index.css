@@ -1299,6 +1299,24 @@ body .leaflet-container,
   background: transparent;
 }
 
+/* 图例里的「站点类别」展开时，暂时收起左上的区域排名条（2026-11-24）
+ *
+ * 图例贴左下、排名条贴左上，两者同处左缘。站点类别展开后图例高度会到
+ * 400px 上下，与排名条（top 由 LAYERS 底边实测、高约 250~290px）重叠。
+ * 两块都是半透明浮层：叠在一起既互相透字，排名条又因 DOM 靠后会把图例
+ * 上半部分的类别行挡住、点不中（2026-11-24 Playwright 实测点击被
+ * `.gis-rank-row__name` 拦截）。
+ *
+ * 取舍：**展开时收起排名条**，而不是给图例抬 z-index —— 后者只是让图例
+ * 盖住排名条，用户仍会看到被压掉一半的排名、且排名行点不中；收起后
+ * 排名条自动回来，语义最干净（类别选完收起图例即恢复）。
+ * 选择器依赖「两块浮层都是地图卡片 body 的子节点，且图例在前」
+ * （GISMap.tsx 的渲染顺序）。⚠️ 若将来调整渲染顺序，这条要同步改。
+ */
+.gis-legend-overlay:has(.gis-siteclass-block button[aria-expanded='true']) ~ .gis-rank-overlay {
+  display: none;
+}
+
 /* 降级段（@supports not backdrop-filter）已于 2026-10-14 第五轮**删除**。
  *
  * 它原本的作用是：不支持 backdrop-filter 的浏览器上，把面板切成近乎实心的
