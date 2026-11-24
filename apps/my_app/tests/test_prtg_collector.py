@@ -175,33 +175,44 @@ def test_sync_catalog_and_details(collector, db_session):
         assert sensor.last_down is not None
 
 
-def test_backfill_respects_token_bucket_and_is_idempotent(collector, db_session):
-    collector.token_bucket._tokens = 5  # 令牌桶初始为 0（严格 ≤5 次/分钟），测试先补满
-    results = []
+def test_backfill_respects_rate_limit_and_is_idempotent(collector, db_session):
+    from backend.services.prtg.collector import TokenBucket
+
+    clock = [0.0]
+    collector.token_bucket = TokenBucket(5, 5 / 60.0, clock=lambda: clock[0])
+    steps = []
     for _ in range(8):
-        results.append(collector.backfill_step())
-    inserted = [r for r in results if r]
-    # 令牌桶容量 5：前 5 次拿到令牌，之后同一时刻不再放行
-    assert len(inserted) == 5
+        clock[0] += 12.0  # 每 12 秒一次，5 次/分钟
+        steps.append(collector.backfill_step())
+    inserted = [r for r in steps if r]
+    assert len(inserted) == 8  # 每步都在新窗口内拿到令牌
     assert all(r["rows"] == 6 for r in inserted)  # CSV 2 行 × 3 通道
+
+    # 同一窗口内额外再试：已用满 5 次/60 秒时拒绝
+    clock[0] += 1.0
+    assert collector.token_bucket.try_acquire() is False
 
     # 重跑同一天：唯一键幂等，不新增行
     with db_session() as session:
         before = len(session.execute(select(collector_mod.store.PrtgHistoricalSample)).scalars().all())
-    collector.token_bucket._tokens = 5  # 补满令牌，重跑
+    clock[0] += 60.0
     collector.backfill_step()
     with db_session() as session:
         after = len(session.execute(select(collector_mod.store.PrtgHistoricalSample)).scalars().all())
-    assert after >= before
+    assert after == before
 
     state = store.get_state("backfill")
     assert state["status"] == "ok" and state["cursor"]
 
 
 def test_backfill_cursor_advances_day_by_day_on_same_sensor(collector, db_session):
-    collector.token_bucket._tokens = 5
+    from backend.services.prtg.collector import TokenBucket
+
+    clock = [0.0]
+    collector.token_bucket = TokenBucket(5, 5 / 60.0, clock=lambda: clock[0])
     seen = []
     for _ in range(5):
+        clock[0] += 12.0
         step = collector.backfill_step()
         if step:
             seen.append((step["sensor_objid"], step["day"]))
@@ -211,19 +222,28 @@ def test_backfill_cursor_advances_day_by_day_on_same_sensor(collector, db_sessio
     assert len({day for _, day in seen}) == 5
 
 
-def test_token_bucket_is_strictly_at_most_five_per_minute():
+def test_rate_limiter_never_exceeds_five_per_any_60_seconds():
     from backend.services.prtg.collector import TokenBucket
 
     now = [0.0]
     bucket = TokenBucket(capacity=5, refill_per_second=5 / 60.0, clock=lambda: now[0])
-    # 第 0 秒：初始 0，不允许突发
-    assert bucket.try_acquire() is False
-    granted = 0
-    for _ in range(120):  # 前 60 秒，每 0.5 秒试一次
-        now[0] += 0.5
-        if bucket.try_acquire():
-            granted += 1
-    assert granted <= 5
+
+    def count_in_next(seconds: float) -> int:
+        granted = 0
+        for _ in range(int(seconds * 2)):  # 每 0.5 秒试一次
+            now[0] += 0.5
+            if bucket.try_acquire():
+                granted += 1
+        return granted
+
+    # 空桶首 60 秒：≤5
+    assert count_in_next(60) <= 5
+    # 空闲 10 分钟后再来 60 秒：仍 ≤5（固定桶会在这里放行 9 次）
+    now[0] += 600
+    assert count_in_next(60) <= 5
+    # 连续滑动：任意 60 秒窗口都不超过 5
+    now[0] += 600
+    assert count_in_next(30) <= 5
 
 
 def test_aggregate_reads_backfilled_history(collector, db_session):

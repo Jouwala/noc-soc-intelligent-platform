@@ -18,6 +18,7 @@ import json
 import logging
 import time
 from datetime import datetime, timedelta
+from collections import deque
 from typing import Any, Callable, Iterable
 
 from backend.services.prtg import store
@@ -46,38 +47,41 @@ LOOP_TICK_SECONDS = 5
 
 
 class TokenBucket:
-    """简单令牌桶（全局共享，PRTG 历史接口限流 ≤N 次/分钟）。"""
+    """回填限流：**60 秒滑动窗口**，任意窗口内最多 capacity 次（默认 5/分钟）。
+
+    2026-11-24 审核实测：固定令牌桶在空闲后会补满到 capacity，恢复后的
+    60 秒内可放行 9 次（突发 5 + 补 5），不满足 #227「不超 5 次/分钟」。
+    改用滑动窗口：只记最近 window 秒内的放行时间戳，窗口内满额就拒绝，
+    空闲再久也不会突破窗口上限。
+    """
 
     def __init__(
         self,
         capacity: int,
         refill_per_second: float,
         clock: Callable[[], float] = time.monotonic,
-        initial_tokens: float = 0.0,
-    ):
+    ) -> None:
         self.capacity = max(1, int(capacity))
-        self.refill_per_second = max(0.001, float(refill_per_second))
+        # 由「每秒补几次」推窗口长度：5 次/分钟 → 60 秒窗口
+        self.window_seconds = self.capacity / max(1e-9, float(refill_per_second))
         self._clock = clock
-        # 初始给 0：若给满桶，第 1 分钟会「突发 5 次 + 补 5 次」= 10 次，
-        # 不满足 #227「不超 5 次/分钟」的字面验收（2026-11-24 审核实测 9 次）。
-        # 从 0 开始、按 5/60 每秒匀速补，任意 60 秒窗口最多 5 次。
-        self._tokens = float(initial_tokens)
-        self._last = clock()
+        self._grants: deque[float] = deque()
+
+    def _prune(self, now: float) -> None:
+        while self._grants and now - self._grants[0] >= self.window_seconds:
+            self._grants.popleft()
 
     def try_acquire(self, amount: float = 1.0) -> bool:
         now = self._clock()
-        self._tokens = min(self.capacity, self._tokens + (now - self._last) * self.refill_per_second)
-        self._last = now
-        if self._tokens >= amount:
-            self._tokens -= amount
+        self._prune(now)
+        if len(self._grants) + amount <= self.capacity:
+            self._grants.append(now)
             return True
         return False
 
     def available(self) -> float:
-        now = self._clock()
-        self._tokens = min(self.capacity, self._tokens + (now - self._last) * self.refill_per_second)
-        self._last = now
-        return self._tokens
+        self._prune(self._clock())
+        return float(self.capacity - len(self._grants))
 
 
 class PrtgCollector:

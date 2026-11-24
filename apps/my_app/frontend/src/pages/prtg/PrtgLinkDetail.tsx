@@ -178,7 +178,9 @@ export default function PrtgLinkDetail({ detail, windowKey, isDark }: Props) {
 
       {/* ④ In / Out / Total 时序（Ping 等非流量传感器不画，避免错误语义） */}
       <div>
-        <Text strong>{t('prtg.detail.series')}</Text>
+        <Text strong>
+          {isTraffic ? t('prtg.detail.series') : t('prtg.detail.seriesPingTitle')}
+        </Text>
         <div style={{ marginTop: 'var(--wh-space-xs)' }}>
           {isTraffic ? (
             <PrtgSeriesChart series={seriesDefs} windowKey={windowKey} isDark={isDark} emptyText={t('prtg.detail.noSeries')} />
