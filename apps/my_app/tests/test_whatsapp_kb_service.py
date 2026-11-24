@@ -138,8 +138,19 @@ def test_grandchild_holding_stdio_does_not_hang(tmp_path, monkeypatch):
         pytest.fail("sync_knowledge_base 仍在等继承管道 EOF —— 疑似回潮成 capture_output 写法")
 
     elapsed = time.time() - started
-    assert elapsed < 10, f"sync 耗时 {elapsed:.1f}s，明显被孙进程拖住了"
     assert box["result"]["success"] is True, box["result"]
+    # 「慢」的判定改测子进程段，而不是线程总墙钟：总墙钟还含两次
+    # _prune_stale_temp 扫 %TEMP% 与线程调度，CI 满载时可达 10s+（2026-11-23
+    # 实测 10.2~13.5s，失败的正是这条总墙钟断言），与不变量无关、纯环境噪声。
+    # 不变量的本体是「subprocess.run 只等直接子进程、不等孙进程持有的管道
+    # EOF」，对应 sync 内部自测的 elapsed_sec（t0 在子进程启动前取、子进程
+    # 一返回就取值）。挂死由上面的 join(15)+is_alive 判定，慢由本段判定；
+    # 失败信息里两段都带上，下次再慢能直接看出慢在哪一段。
+    segment = box["result"].get("elapsed_sec")
+    assert segment is not None and segment < 10, (
+        f"子进程段耗时 {segment}s（线程总墙钟 {elapsed:.1f}s），"
+        f"直接子进程迟迟不退出：{box['result']}"
+    )
     _kill_pid(pid)
 
 
