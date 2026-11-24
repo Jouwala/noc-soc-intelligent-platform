@@ -64,12 +64,13 @@ def _status_of(raw: str | None) -> str:
 
 
 def _worst(statuses: Iterable[str | None]) -> str:
-    worst = "Unmonitored"  # 没有链路 / 全部未知 = 未监控，不是 Up
+    """节点状态取链路里最差的一档；没有任何链路才回退「未监控」。"""
+    worst: str | None = None
     for status in statuses:
         mapped = _status_of(status)
-        if STATUS_RANK.get(mapped, 2) > STATUS_RANK.get(worst, 2):
+        if worst is None or STATUS_RANK.get(mapped, 2) > STATUS_RANK.get(worst, 2):
             worst = mapped
-    return worst
+    return worst or "Unmonitored"
 
 
 def _place_nodes(nodes: list[NetworkTopologyNode]) -> None:
@@ -79,11 +80,12 @@ def _place_nodes(nodes: list[NetworkTopologyNode]) -> None:
         groups.setdefault(node.node_type, groups["unknown"]).append(node)
     # 前端画布 1000×620（ZoomStage baseW/baseH），坐标必须落在视口内；
     # 之前的 500 圆心 + 470 半径会把 y>620 的节点裁掉。
-    radii = {"device": 150, "peer": 270, "customer": 210, "unknown": 290}
+    radii = {"device": 150, "peer": 270, "customer": 210}
+    default_radius = 290
     import math
 
     for node_type, items in groups.items():
-        radius = radii.get(node_type, 470)
+        radius = radii.get(node_type, default_radius)
         for index, node in enumerate(items):
             if node.x is not None and node.y is not None:
                 continue
@@ -187,7 +189,7 @@ def ensure_topology(now: datetime | None = None) -> dict[str, int]:
             if node.id not in used_nodes and node.node_type != "device":
                 session.delete(node)
             elif not node.pinned and (
-                node.x is None or node.y is None or node.x > 1000 or not 0 <= node.y <= 620
+                node.x is None or node.y is None or not 0 <= node.x <= 1000 or not 0 <= node.y <= 620
             ):
                 node.x = None
                 node.y = None
@@ -357,15 +359,14 @@ def update_layout(items: Iterable[dict[str, Any]], now: datetime | None = None) 
         for item in items:
             try:
                 node = nodes.get(int(item.get("id") or 0))
+                x, y = item.get("x"), item.get("y")
+                if node is None or x is None or y is None:
+                    continue
+                x, y = float(x), float(y)
             except (TypeError, ValueError):
                 continue
-            if node is None:
-                continue
-            x, y = item.get("x"), item.get("y")
-            if x is None or y is None:
-                continue
-            node.x = max(0.0, min(1000.0, float(x)))
-            node.y = max(0.0, min(1000.0, float(y)))
+            node.x = max(0.0, min(1000.0, x))
+            node.y = max(0.0, min(620.0, y))
             node.pinned = bool(item.get("pinned", True))
             node.updated_at = now
             updated += 1

@@ -191,3 +191,22 @@ def test_invalid_capacity_does_not_clear_existing_value(db):
             select(NetworkLinkCapacity).where(NetworkLinkCapacity.sensor_objid == 2721)
         ).scalar_one()
     assert capacity.capacity_mbps == 1000.0
+
+
+def test_node_status_keeps_up_and_unusual(db):
+    _seed(db)
+    topology.ensure_topology()
+    data = topology.traffic("24h")
+    nodes = {n["name"]: n["status"] for n in data["nodes"]}
+    assert nodes["PTP_SW"] == "Up"          # Up 链路节点保持 Up，不能变 Unmonitored
+    assert nodes["OLIB-NX"] == "Unusual"    # Unusual 链路节点保持 Unusual
+
+
+def test_backend_app_imports_with_topology_router():
+    import backend.main  # noqa: F401  # 防止路由导入错误导致后端起不来
+
+
+def test_invalid_layout_number_is_skipped(db):
+    _seed(db)
+    topology.ensure_topology()
+    assert topology.update_layout([{"id": 1, "x": "abc", "y": 2}])["updated"] == 0

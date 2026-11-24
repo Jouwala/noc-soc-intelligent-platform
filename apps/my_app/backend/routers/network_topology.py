@@ -19,7 +19,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from backend import portal_auth
+from backend.services.portal import portal_auth
 from backend.services.prtg import topology
 
 router = APIRouter(prefix="/api/network-topology", tags=["network-topology"])
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/network-topology", tags=["network-topology"])
 class LayoutNode(BaseModel):
     id: int
     x: float = Field(ge=0, le=1000)
-    y: float = Field(ge=0, le=1000)
+    y: float = Field(ge=0, le=620)
     pinned: bool = True
 
 

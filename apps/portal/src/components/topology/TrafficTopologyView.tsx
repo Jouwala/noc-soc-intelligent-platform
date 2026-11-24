@@ -11,10 +11,10 @@ import { trafficTopologyMock, type TrafficLink, type TrafficNode, type TrafficNo
 const PERIODS: TrafficPeriod[] = ['live', '1h', '24h', '7d'];
 const PERIOD_KEYS: Record<TrafficPeriod, string> = { live: 'trafficTopo.periodLive', '1h': 'trafficTopo.period1h', '24h': 'trafficTopo.period24h', '7d': 'trafficTopo.period7d' };
 const NODE_TYPE_KEYS: Record<TrafficNodeType, string> = { device: 'trafficTopo.nodeTypeDevice', peer: 'trafficTopo.nodeTypePeer', customer: 'trafficTopo.nodeTypeCustomer', unknown: 'trafficTopo.nodeTypeUnknown' };
-const STATUS_KEYS: Record<string, string> = { up: 'trafficTopo.statusUp', unusual: 'trafficTopo.statusUnusual', down: 'trafficTopo.statusDown', unknown: 'trafficTopo.statusUnknown' };
+const STATUS_KEYS: Record<string, string> = { up: 'trafficTopo.statusUp', unusual: 'trafficTopo.statusUnusual', down: 'trafficTopo.statusDown', unmonitored: 'trafficTopo.statusUnmonitored', unknown: 'trafficTopo.statusUnknown' };
 const CONF_KEYS: Record<string, string> = { verified: 'trafficTopo.confVerified', candidate: 'trafficTopo.confCandidate', discovered: 'trafficTopo.confDiscovered' };
 const NODE_ICONS: Record<TrafficNodeType, LucideIcon> = { device: Server, peer: Share2, customer: Building2, unknown: HelpCircle };
-const STATUS_COLORS: Record<string, string> = { up: '#16a34a', unusual: '#d97706', down: '#dc2626', unknown: '#94a3b8' };
+const STATUS_COLORS: Record<string, string> = { up: '#16a34a', unusual: '#d97706', down: '#dc2626', unmonitored: '#94a3b8', unknown: '#94a3b8' };
 // 8 档利用率配色：紫 → 红；>100% 单独用深红，并配 OVER CAPACITY 文案。
 const BANDS: { limit: number; color: string; key: string }[] = [
   { limit: 1, color: '#7c3aed', key: 'trafficTopo.band0' }, { limit: 10, color: '#8b5cf6', key: 'trafficTopo.band1' },
@@ -26,7 +26,7 @@ const OVER_COLOR = '#991b1b';
 const UNKNOWN_CAPACITY_COLOR = '#94a3b8';
 function normStatus(status: string | null | undefined): string {
   const v = (status ?? '').toLowerCase();
-  return v === 'up' || v === 'unusual' || v === 'down' ? v : 'unknown';
+  return v === 'up' || v === 'unusual' || v === 'down' || v === 'unmonitored' ? v : 'unknown';
 }
 function hasCapacity(link: TrafficLink): boolean {
   // 单一真相源：优先用后端 data_quality.capacity_known；Mock 也填了该字段。
