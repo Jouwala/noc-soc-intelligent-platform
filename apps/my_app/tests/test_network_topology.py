@@ -281,3 +281,14 @@ def test_auto_link_endpoints_follow_sensor_rename(db):
     link = next(l for l in data["links"] if l["sensor_id"] == 2565)
     assert link["target"] == "NEWPEER"
     assert any(n["name"] == "NEWPEER" for n in data["nodes"])
+
+
+def test_swap_on_auto_link_persists_after_refresh(db):
+    _seed(db)
+    topology.ensure_topology()
+    data = topology.traffic("24h")
+    auto = next(l for l in data["links"] if l["sensor_id"] == 2721)
+    before = (auto["source_node"], auto["target_node"])
+    topology.swap_direction(auto["id"])
+    refreshed = next(l for l in topology.traffic("24h")["links"] if l["sensor_id"] == 2721)
+    assert (refreshed["source_node"], refreshed["target_node"]) == (before[1], before[0])

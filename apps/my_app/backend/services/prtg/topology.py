@@ -598,6 +598,9 @@ def swap_direction(link_id: int, now: datetime | None = None) -> dict[str, Any]:
             raise LookupError("链路不存在")
         link.source_node_id, link.target_node_id = link.target_node_id, link.source_node_id
         link.capacity_ab_mbps, link.capacity_ba_mbps = link.capacity_ba_mbps, link.capacity_ab_mbps
+        # 交换即视为人工确认上下游：标记为 manual，ensure_topology 后续冻结两端，
+        # 否则自动链路下次刷新会把方向改回去、容量留在反方向。
+        link.link_key = f"manual:{link.sensor_objid}"
         link.updated_at = now
         capacity = session.execute(
             select(NetworkLinkCapacity).where(NetworkLinkCapacity.sensor_objid == link.sensor_objid)
