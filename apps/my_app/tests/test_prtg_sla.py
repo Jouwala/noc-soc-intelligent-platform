@@ -219,3 +219,34 @@ def test_month_report_counts_down_events_after_snapshot(db):
     report = sla.month_report("2026-11", now=datetime(2026, 11, 24, 23, 0))
     row = report["links"][0]
     assert row["down_count"] == 1
+
+
+def test_mixed_covered_and_unknown_days_do_not_pollute_denominator(db):
+    """混合月：可判定覆盖日的停机才进分母，无覆盖日的停机单列。"""
+    d1 = datetime(2026, 11, 20, 0, 0)
+    d2 = datetime(2026, 11, 21, 0, 0)
+    d3 = datetime(2026, 11, 22, 0, 0)
+    with db() as session:
+        _sensor(session, 2721, downtime_minutes=100.0, updown_total_minutes=1000.0)
+        session.commit()
+    sla.snapshot_day(now=d1)
+    with db() as session:
+        sensor = session.execute(__import__("sqlalchemy").select(PrtgSensor)).scalar_one()
+        sensor.downtime_minutes = 160.0
+        sensor.updown_total_minutes = 2440.0  # 覆盖 +1440
+        session.commit()
+    sla.snapshot_day(now=d2)
+    with db() as session:
+        sensor = session.execute(__import__("sqlalchemy").select(PrtgSensor)).scalar_one()
+        sensor.downtime_minutes = 220.0
+        sensor.updown_total_minutes = 2440.0  # 无覆盖增量（部分 Paused）
+        session.commit()
+    sla.snapshot_day(now=d3)
+
+    report = sla.month_report("2026-11", now=d3 + timedelta(hours=1))
+    link = report["links"][0]
+    assert link["basis"] == "month_delta"
+    assert link["availability_pct"] == pytest.approx(100 - 60 / 1440 * 100, rel=1e-4)
+    assert link["downtime_hours_month"] == pytest.approx(1.0)  # 只含可判定日
+    assert link["downtime_hours_unknown_coverage"] == pytest.approx(1.0)
+    assert link["unknown_coverage_days"] == 1

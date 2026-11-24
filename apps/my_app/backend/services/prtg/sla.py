@@ -280,23 +280,35 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
     links = []
     for sensor in sensors:
         rows = sorted(by_sensor.get(sensor.objid, []), key=lambda r: r.day)
-        deltas = [r.downtime_delta_minutes for r in rows if r.downtime_delta_minutes is not None]
-        coverages = [r.coverage_minutes for r in rows if r.coverage_minutes is not None]
-        month_downtime = sum(deltas) if deltas else None
-        month_coverage = sum(coverages) if coverages else None
-        if month_downtime is not None:
-            if month_coverage:
-                month_availability = round(
-                    max(0.0, 100.0 - month_downtime / month_coverage * 100.0), 4
-                )
-                basis = "month_delta"
-            else:
-                # 有停机增量但覆盖无法判定：宁可显示「—」，也不把累计值冒充当月值
-                month_availability = None
-                basis = "undefined_coverage"
+        # 月可用率只用「停机增量 + 覆盖分钟都可判定」的日子做分母；
+        # 覆盖不可判定的那些天的停机单独列示，不混进分母（否则会把 60 分钟
+        # 除以别的日的 1440 分钟，凭空得到 95.83%）。
+        covered = [
+            (r.downtime_delta_minutes, r.coverage_minutes) for r in rows
+            if r.downtime_delta_minutes is not None and r.coverage_minutes
+        ]
+        unknown_deltas = [
+            r.downtime_delta_minutes for r in rows
+            if r.downtime_delta_minutes is not None and not r.coverage_minutes
+        ]
+        covered_downtime = sum(d for d, _ in covered) if covered else None
+        covered_coverage = sum(c for _, c in covered) if covered else None
+        unknown_downtime = sum(unknown_deltas) if unknown_deltas else None
+        unknown_days = len(unknown_deltas)
+        if covered:
+            month_availability = round(
+                max(0.0, 100.0 - covered_downtime / covered_coverage * 100.0), 4
+            )
+            basis = "month_delta"
+        elif unknown_downtime is not None:
+            # 有停机增量但没有任何可判定覆盖日：宁可显示「—」
+            month_availability = None
+            basis = "undefined_coverage"
         else:
             month_availability = round(sensor.uptime_pct, 4) if sensor.uptime_pct is not None else None
             basis = "all_time_fallback"
+        month_downtime = covered_downtime if covered_downtime is not None else unknown_downtime
+        month_coverage = covered_coverage
         down_count = month_down.get(sensor.objid, 0)
         mapping = mappings.get(sensor.objid)
         links.append({
@@ -310,6 +322,10 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
             "uptime_pct_all_time": round(sensor.uptime_pct, 4) if sensor.uptime_pct is not None else None,
             "downtime_hours_month": round(month_downtime / 60.0, 2) if month_downtime is not None else None,
             "coverage_hours_month": round(month_coverage / 60.0, 1) if month_coverage else None,
+            "downtime_hours_unknown_coverage": (
+                round(unknown_downtime / 60.0, 2) if unknown_downtime is not None else None
+            ),
+            "unknown_coverage_days": unknown_days,
             "down_count": down_count,
             "last_down": sensor.last_down.isoformat() + "Z" if sensor.last_down else None,
             "uptime_days": round(sensor.uptime_minutes / 1440.0, 1) if sensor.uptime_minutes else None,
@@ -348,7 +364,8 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
         "target_pct": target,
         "method": {
             "denominator": "PRTG 监控覆盖时间（updowntotal 的相邻快照增量，天粒度），Paused/维护窗口不计入；覆盖增量无法判定时该日可用率置空（basis=undefined_coverage），不按自然日也不回退累计值",
-            "month_downtime": "相邻日快照累计 downtimetime 的差分求和；首日无基线不猜",
+            "month_downtime": "相邻日快照累计 downtimetime 的差分求和；月可用率只用覆盖可判定的日子，"
+            "覆盖不可判定日的停机单列 downtime_hours_unknown_coverage，不混入分母",
             "fallback": "当月无快照时 availability 回退到 PRTG 累计 uptime_pct（basis=all_time_fallback）",
             "down_count": "月内 Down 次数直接按 prtg_sensor_events 统计，不受日快照时刻截断",
             "capacity": "利用率只在 network_link_capacity.capacity_mbps > 0 时计算；否则 null/待补全",

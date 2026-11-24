@@ -158,8 +158,12 @@ export default function PrtgSlaView() {
       key: 'basis',
       width: 135,
       render: (_: unknown, row: PrtgSlaLink) => (
-        <Tag color={row.basis === 'month_delta' ? 'green' : 'orange'}>
-          {row.basis === 'month_delta' ? t('prtg.sla.basis.month') : t('prtg.sla.basis.allTime')}
+        <Tag color={row.basis === 'month_delta' ? 'green' : row.basis === 'undefined_coverage' ? 'red' : 'orange'}>
+          {row.basis === 'month_delta'
+            ? t('prtg.sla.basis.month')
+            : row.basis === 'undefined_coverage'
+              ? t('prtg.sla.basis.undefined')
+              : t('prtg.sla.basis.allTime')}
         </Tag>
       ),
     },

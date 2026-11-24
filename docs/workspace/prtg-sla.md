@@ -48,6 +48,7 @@ python -m backend.services.prtg.sla --snapshot
 
 - 月故障时长需要至少两天的日快照；上线当天只能给累计可用率回退值（`basis=all_time_fallback`）。
 - **部分 Paused 日不可判定**：`updowntotal` 天粒度导致半天 Paused 与整天 Paused 无法区分；这类日子的可用率留空并标 `undefined_coverage`，月度平均只按可判定的覆盖日计算。这是明确的降级口径，不是实现缺陷。
+- **混合月**：可判定覆盖日与不可判定日同时存在时，月可用率只用可判定日（`coverage_hours_month`）做分母；不可判定日的停机单列在 `downtime_hours_unknown_coverage`，**不混进分母**（否则会把 60 分钟除以别的日的 1440 分钟）。
 - 若某传感器被删除/重建，累计停机计数会回退，`snapshot_day` 检测到负增量会跳过该日（`reset_skipped`），不产生负数故障时长。
 - 区域排名目前 24 条为 `Unknown`（站点映射待人工确认，见 #226）。
 - 容量需人工补；未登记前 SLA 页签的容量表全部显示「待补全」，这是设计行为而非数据缺失报错。
