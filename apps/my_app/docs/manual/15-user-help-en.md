@@ -2425,6 +2425,17 @@ LTE packet loss board (RAN UME SDR / IPRAN IPPD): last 7 complete calendar days 
 - This page used to carry two hand-written popovers (their own copy button, theme colours and emphasis rendering); both were deleted in favour of `components/MetricExplain`. The drill "N rows" bubble now states that it is the count after the search-box filter and that the API truncates at a cap
 - **Site-type filter (2026-11-17)**: the dropdown on the right of the Packet Loss Status bar filters by the master-data site type (ERA / COOL / NORMAL, from `eflow_site.site_type`; what you call `COOLI` is stored as `COOL`) and **every number on the page follows** — total sites, Affected Sites, the six status cards, the pie, region bars, daily trend, Top sites, map dots and legend, and the drill-down detail all switch to the selected grade. **It opens on NORMAL** (the user caliber); pick `All` for the whole network. The two numbers in brackets are "sites covered by packet-loss monitoring / sites in the master data", always the full distribution (unchanged when you switch): ERA `197/216`, NORMAL `520/600`, COOL `0/64` as measured. **COOLI being 0 is not a missing feature**: all 64 COOL sites are in the UME inventory, but packet loss comes only from the `SDR_IPPD` / `ITRAN_IPPD` IP-transport templates and those sites have no reading at all in the source table `packet_loss_data` (0 hits by code and by fuzzy name), so the grade is greyed out. Sites that cannot be matched in eflow_site by code or name fall under "Unmapped site" (4), keeping 197 + 0 + 520 + 4 = 721 consistent with "All"
 
+#### prtg_links（`prtg_links`）
+
+PRTG core link health board: reads the 25 PRTG sensors (24 SNMP Traffic 64bit + 1 Ping) in GRAPHER-ISP and shows link status, traffic, errors / discards, uptime and capacity utilization for the selected window. Click any link for sensor details, site mappings, recent status events and the In/Out/Total series.
+
+- The KPI row is a point-in-time snapshot: total sensors / Up / Unusual / Down, average uptime (arithmetic mean over sensors that have an uptime sample) and links with anomalies. Freshness comes from the last successful collection of the collector; anything older than 5 minutes raises a persistent stale banner
+- Time range: 5 minutes / 24 hours / 7 days / 30 days. 5 minutes reads 60-second raw samples, 24 hours reads 5-minute aggregates, 7 / 30 days read hourly aggregates; the range only affects the trend and detail series — the KPIs do not move with it
+- In / Out / Total are Mbps (converted from raw byte/s by the backend). Errors / Discards / Unicast are PRTG interval rates (#/s), not cumulative counters, so the frontend does not difference them
+- Capacity comes from snmp_ifspeed / manual and shows "To be completed" when missing. Utilization is max(In/Cin, Out/Cout), never Total/capacity, and shows "—" when capacity is missing
+- **Every column header has an ⓘ explaining the column, and hovering a number shows the API fields and sample time of that cell** (2026-11-24). Unavailable values show "—", never 0; all times are UTC
+- The suggested per-page refresh interval is 60 seconds (matching the PRTG collection cadence) and can be turned on or off from the top bar
+
 #### Battery Dashboard（`battery`）
 
 Site battery health / SOC / charge-discharge status and alarm details.
