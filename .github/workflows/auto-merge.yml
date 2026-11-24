@@ -65,6 +65,9 @@
 #     由 review_gate.py 判为 `REVIEW_TIER=waived`，免独立审核；仍必须过
 #     CI 全绿 + smoke-passed 双门禁。免审会在 PR 上留一条绑定 head SHA 的
 #     `<!-- review-waived: ... -->` 审计评论，不是静默放行。
+#     **免审尊重最后一条审核结论**：审核者已改判 changes-requested /
+#     blocked 的 PR 不免审（否则推几行小修复就能绕过复审）。审计评论写入
+#     失败时本轮不合并。
 
 name: auto-merge
 
@@ -257,7 +260,8 @@ jobs:
                     --data-binary "$(jq -n --arg b "$WAIVER_BODY" '{body:$b}')"; then
                   echo "已写入免审审计评论（head $HEAD_SHA）"
                 else
-                  echo "免审审计评论写入失败（只记录，不影响合并判定）"
+                  echo "免审审计评论写入失败，本轮不合并（宁可少合一次，不留无审计记录的合并）"
+                  continue
                 fi
               fi
             fi

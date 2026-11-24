@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from dispatch.run_watchdog import (
     MAX_ATTEMPTS,
+    QUEUED_STUCK_AFTER,
     STUCK_AFTER,
     classify_run,
     run_cycle,
@@ -44,10 +45,33 @@ def test_running_too_long_is_cancelled() -> None:
     assert "卡死" in why
 
 
-def test_queued_too_long_is_cancelled() -> None:
-    minutes = STUCK_AFTER.total_seconds() // 60 + 1
+def test_queued_longer_than_running_threshold_is_not_cancelled() -> None:
+    """排队 40 分钟可能是正常等 runner，不能按 30 分钟的卡死阈值误杀。"""
+    minutes = STUCK_AFTER.total_seconds() // 60 + 10
     action, _ = classify_run(_run("queued", started_minutes_ago=minutes), 0, NOW)
+    assert action == "ok"
+
+
+def test_queued_too_long_is_cancelled() -> None:
+    minutes = QUEUED_STUCK_AFTER.total_seconds() // 60 + 1
+    action, why = classify_run(_run("queued", started_minutes_ago=minutes), 0, NOW)
     assert action == "cancel"
+    assert "卡死" in why
+
+
+def test_unparseable_attempt_does_not_crash() -> None:
+    """run_attempt 缺失/脏数据按第 1 次处理，不抛异常（与 docstring 一致）。"""
+    run = _run("completed", conclusion="failure")
+    run["run_attempt"] = "not-a-number"
+    action, _ = classify_run(run, 0, NOW)
+    assert action == "rerun"
+
+
+def test_missing_attempt_is_treated_as_first() -> None:
+    run = _run("completed", conclusion="failure")
+    run.pop("run_attempt", None)
+    action, _ = classify_run(run, 0, NOW)
+    assert action == "rerun"
 
 
 def test_unparseable_time_never_acts() -> None:

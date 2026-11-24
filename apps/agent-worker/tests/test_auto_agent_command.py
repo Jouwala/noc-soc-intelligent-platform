@@ -64,6 +64,17 @@ def test_eligible_requires_all_opt_in_labels() -> None:
     assert [i.number for i in out] == [1]
 
 
+def test_eligible_skips_risk_high_even_when_opted_in() -> None:
+    """risk:high 无论如何不被常驻 Worker 认领（Muse 1 审核第 3 项阻塞）。"""
+    worker = SimpleNamespace(
+        config=SimpleNamespace(require_labels=("worker:auto",)), log=lambda *_: None
+    )
+    danger = _issue(number=9, labels=("agent:muse-2", "worker:auto", "risk:high"))
+    safe = _issue(number=10, labels=("agent:muse-2", "worker:auto"))
+    out = wk.AgentWorker._eligible(worker, [danger, safe])
+    assert [i.number for i in out] == [10]
+
+
 def test_eligible_without_requirement_keeps_everything() -> None:
     worker = SimpleNamespace(config=SimpleNamespace(require_labels=()))
     issues = [_issue(number=1), _issue(number=2)]

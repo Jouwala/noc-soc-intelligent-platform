@@ -69,6 +69,9 @@ PROTECTED_PREFIXES = (
     "apps/agent-worker/",
     "apps/my_app/alembic/",
     "apps/my_app/monitor_fixes/",
+    # 路由层等于鉴权面：一条 `Depends(...)` 守卫被删就能放行任意调用，
+    # 2026-11-24 Muse 1 审核指出 #237 B2 / #241 同款旁路必须堵死。
+    "apps/my_app/backend/routers/",
 )
 
 #: 受保护的具体文件（相对仓库根，正斜杠）。
@@ -77,6 +80,7 @@ PROTECTED_PATHS = frozenset(
         "AGENTS.md",
         "nginx.conf.template",
         "apps/my_app/backend/main.py",
+        "apps/my_app/backend/database.py",
         "apps/my_app/requirements.txt",
         "docs/workspace/agent-protocol.md",
         "docs/workspace/review-record-protocol.md",
@@ -98,7 +102,8 @@ PROTECTED_FILENAMES = frozenset(
 )
 
 #: 路径里出现这些片段即视为鉴权/凭据相关，要求审核。
-PROTECTED_PATH_FRAGMENTS = ("/auth", "auth_", "_auth", "credential", "secret")
+#: "acl" 覆盖 phone_query_acl 这类访问控制文件（2026-11-24 Muse 1 审核发现）。
+PROTECTED_PATH_FRAGMENTS = ("/auth", "auth_", "_auth", "credential", "secret", "acl")
 
 
 def is_protected_path(path: str) -> bool:
@@ -331,6 +336,28 @@ def main(argv: list[str] | None = None) -> int:
         print("缺少 GH_TOKEN / GITHUB_TOKEN，无法读评论", flush=True)
         return 1
 
+    # 先读评论：即使可免审，也必须尊重「最后一条审核结论」——
+    # 审核者改判 changes-requested / blocked 后，作者推几行小修复
+    # 不能靠免审绕过复审（2026-11-24 Muse 1 审核第 1 项阻塞）。
+    try:
+        bodies = fetch_comment_bodies(args.repo, args.pr, token)
+    except Exception as exc:  # noqa: BLE001 - 门禁读不到证据时宁可不放行
+        print(f"读 PR 评论失败：{exc}，门禁不通过", flush=True)
+        return 1
+
+    marker = latest_review(bodies)
+    if (
+        marker is not None
+        and marker["pr"] == args.pr
+        and marker["verdict"] in ("changes-requested", "blocked")
+    ):
+        print(
+            f"审核门禁：不通过——最后一条审核结论是 {marker['verdict']}"
+            f"（审核者 {marker['reviewer']}），不得免审放行",
+            flush=True,
+        )
+        return 1
+
     if not args.strict:
         risk = fetch_pr_risk(args.repo, args.pr, token)
         if risk is None:
@@ -350,11 +377,6 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             print(f"低风险免审不适用：{why}", flush=True)
 
-    try:
-        bodies = fetch_comment_bodies(args.repo, args.pr, token)
-    except Exception as exc:  # noqa: BLE001 - 门禁读不到证据时宁可不放行
-        print(f"读 PR 评论失败：{exc}，门禁不通过", flush=True)
-        return 1
     passed, reason = review_gate_passes(bodies, args.pr, args.head_sha)
     print(f"审核门禁：{'通过' if passed else '不通过'}——{reason}", flush=True)
     if passed:

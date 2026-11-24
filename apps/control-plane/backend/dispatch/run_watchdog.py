@@ -27,8 +27,14 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-#: 运行超过这个时长仍未结束，视为卡死（quality 单 job 超时 25 分钟）。
+#: 已开跑（in_progress）的运行超过这个时长仍未结束，视为卡死
+#: （quality 单 job 超时 25 分钟）。
 STUCK_AFTER = timedelta(minutes=30)
+
+#: 排队（queued）超过这个时长仍未分到 runner，视为异常。
+#: 排队与卡死分开：等 runner / 等并发组可能是正常的，阈值放宽到 90 分钟，
+#: 避免把「正在排队的 PR」误取消（2026-11-24 Muse 1 审核意见）。
+QUEUED_STUCK_AFTER = timedelta(minutes=90)
 
 #: 零 job 失败最多自动重跑几次（含第一次失败本身）。
 MAX_ATTEMPTS = 2
@@ -59,7 +65,10 @@ def classify_run(
     """
     status = (run.get("status") or "").strip()
     conclusion = (run.get("conclusion") or "").strip()
-    attempt = int(run.get("run_attempt") or 1)
+    try:
+        attempt = int(run.get("run_attempt") or 1)
+    except (TypeError, ValueError):
+        attempt = 1
 
     if status in ("queued", "in_progress"):
         started = _parse_time(run.get("run_started_at")) or _parse_time(
@@ -68,11 +77,13 @@ def classify_run(
         if started is None:
             return "ok", "起止时间不可解析，不动作"
         age = now - started
-        if age <= STUCK_AFTER:
-            return "ok", f"运行中（{int(age.total_seconds() // 60)} 分钟）"
+        limit = QUEUED_STUCK_AFTER if status == "queued" else STUCK_AFTER
+        if age <= limit:
+            label = "排队中" if status == "queued" else "运行中"
+            return "ok", f"{label}（{int(age.total_seconds() // 60)} 分钟）"
         return "cancel", (
             f"卡死：{status} 已 {int(age.total_seconds() // 60)} 分钟"
-            f"（阈值 {int(STUCK_AFTER.total_seconds() // 60)} 分钟）"
+            f"（阈值 {int(limit.total_seconds() // 60)} 分钟）"
         )
 
     if status == "completed" and conclusion == "failure":

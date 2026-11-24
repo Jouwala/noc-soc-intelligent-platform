@@ -284,6 +284,10 @@ def test_waiver_blocks_risk_high() -> None:
         "apps/my_app/alembic/versions/0009_x.py",
         "apps/my_app/backend/main.py",
         "apps/my_app/backend/services/auth_service.py",
+        "apps/my_app/backend/routers/phone_query_acl.py",
+        "apps/my_app/backend/routers/vmax_cca_query.py",
+        "apps/my_app/backend/services/phone_query_acl.py",
+        "apps/my_app/backend/database.py",
         "apps/portal/package-lock.json",
         "apps/my_app/requirements.txt",
         "apps/my_app/frontend/.env.local",
@@ -339,8 +343,12 @@ def test_fetch_pr_risk_returns_none_on_error(monkeypatch) -> None:
     assert review_gate.fetch_pr_risk("Jouwala/repo", 1, "tok") is None
 
 
-def test_cli_waives_low_risk_without_review_marker(monkeypatch, capsys) -> None:
-    """低风险 PR：不读审核评论也放行，并打印 REVIEW_TIER=waived。"""
+def test_cli_waives_low_risk_without_review_history(monkeypatch, capsys) -> None:
+    """低风险 PR 且没有审核历史：免审放行，打印 REVIEW_TIER=waived。
+
+    免审仍会读评论（用于发现已有的 changes-requested / blocked），
+    只是「没有历史」不构成阻断。
+    """
     from dispatch import review_gate
 
     monkeypatch.setenv("GH_TOKEN", "tok")
@@ -354,15 +362,38 @@ def test_cli_waives_low_risk_without_review_marker(monkeypatch, capsys) -> None:
             "labels": [],
         },
     )
-
-    def _must_not_fetch(repo, pr, token):
-        raise AssertionError("低风险免审不应读审核评论")
-
-    monkeypatch.setattr(review_gate, "fetch_comment_bodies", _must_not_fetch)
+    monkeypatch.setattr(review_gate, "fetch_comment_bodies", lambda repo, pr, token: [])
     code = review_gate.main(["--repo", "Jouwala/repo", "--pr", "1", "--head-sha", SHA_A])
     out = capsys.readouterr().out
     assert code == 0
     assert f"REVIEW_TIER=waived sha={SHA_A}" in out
+
+
+@pytest.mark.parametrize("verdict", ["changes-requested", "blocked"])
+def test_cli_waiver_blocked_by_last_negative_verdict(monkeypatch, capsys, verdict: str) -> None:
+    """审核者改判后，低风险免审不得绕过复审（Muse 1 审核第 1 项阻塞）。"""
+    from dispatch import review_gate
+
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setattr(
+        review_gate,
+        "fetch_pr_risk",
+        lambda repo, pr, token: {
+            "paths": ["apps/portal/src/pages/Location.tsx"],
+            "additions": 3,
+            "deletions": 1,
+            "labels": [],
+        },
+    )
+    marker = _marker(pr=1, sha=SHA_A, verdict=verdict)
+    monkeypatch.setattr(
+        review_gate, "fetch_comment_bodies", lambda repo, pr, token: [marker]
+    )
+    code = review_gate.main(["--repo", "Jouwala/repo", "--pr", "1", "--head-sha", SHA_A])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "不得免审放行" in out
+    assert "REVIEW_TIER=waived" not in out
 
 
 def test_cli_strict_still_requires_review(monkeypatch, capsys) -> None:

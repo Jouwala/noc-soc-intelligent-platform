@@ -271,16 +271,27 @@ class AgentWorker:
         """只保留带齐 `require_labels` 的 Issue（空配置 = 不过滤，兼容旧行为）。
 
         2026-11-24 流程提速批：常驻 Worker 只接显式打了 `worker:auto` 的
-        任务，避免把「等人来做」的 Issue 也自动跑掉。
+        任务，避免把「等人来做」的 Issue 也自动跑掉；带 `risk:high` 的
+        一律跳过（生产库/数仓/nginx/发布必须有人确认）。
         """
         required = set(self.config.require_labels)
         if not required:
             return issues
-        return [
-            issue
-            for issue in issues
-            if required.issubset(set(getattr(issue, "labels", ()) or ()))
-        ]
+        out = []
+        for issue in issues:
+            labels = set(getattr(issue, "labels", ()) or ())
+            if not required.issubset(labels):
+                continue
+            # risk:high（生产库/数仓/nginx/发布）绝不允许无人值守自动执行，
+            # 与标签怎么打无关——代码层再兜一道（2026-11-24 Muse 1 审核）。
+            if "risk:high" in labels:
+                self.log(
+                    f"[worker] Issue #{getattr(issue, 'number', '?')} 带 risk:high，"
+                    "常驻 Worker 不认领"
+                )
+                continue
+            out.append(issue)
+        return out
 
     def _auto_agent_command(
         self, active: ActiveTask, issue

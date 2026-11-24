@@ -110,9 +110,15 @@ CI 通过不等于代码没问题。用户指令（2026-11-17）：“审核是�
 
 **受保护路径**（改到即必审）：`.github/`、`.githooks/`、`.claude/`、`ops/`、
 `runtime/`、`nginx-1.28.0/`、`apps/control-plane/`、`apps/agent-worker/`、
-`apps/my_app/alembic/`、`apps/my_app/monitor_fixes/`、`AGENTS.md`、
-`apps/my_app/backend/main.py`、依赖清单/锁文件、鉴权与凭据相关路径，
+`apps/my_app/alembic/`、`apps/my_app/monitor_fixes/`、
+`apps/my_app/backend/routers/`（路由层等于鉴权面）、`AGENTS.md`、
+`apps/my_app/backend/main.py`、`apps/my_app/backend/database.py`、
+依赖清单/锁文件、路径含 `auth` / `acl` / `credential` / `secret` 的文件，
 以及本目录的协议文档（`agent-protocol.md`、`dispatch-rules.md`、本文件）。
+
+- **免审不绕过改判**：只要最后一条审核记录是 `changes-requested` /
+  `blocked`，该 PR 一律不放行，必须先重新审——推几行小修复不能靠免审
+  绕过复审（2026-11-24 Muse 1 审核第 1 项阻塞）。
 
 - **免审不等于降低证据要求**：CI 全绿 + `smoke-passed`（绑定当前 head）
   仍缺一不可，二者才是行为正确性的主要证据；免掉的只是一次跨会话审阅。
