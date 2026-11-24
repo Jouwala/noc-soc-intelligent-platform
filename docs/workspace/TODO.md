@@ -162,6 +162,17 @@
 
 ### P2 —— 体验与工程规范
 
+- [ ] **看板「打开慢」治理（2026-11-24 立；Muse 接手 AWS Quick 会话「本地项目快照方案推广规划」里的「提升网页速度」任务）。**
+      已完成两项（分支 `muse-pl-warmup-qc-singleflight`，依据是 11-19 切生产 ~ 11-23 的 nginx access.log 实测）：
+      ① **丢包总览预热**从「只热 `site_type=""`（ALL）」扩到「页面下拉里每个站点类型 + 每 480s 周期重算」——
+      29 次请求里 28 次带 `site_type=NORMAL`，旧预热等于白热；实测单档冷算 2.5–4.7s、缓存命中 1.5ms；
+      ② **门户 QC `/summary`** 改成「过期先回旧值 + 单飞后台刷新」——p50 只有 17ms，但 p95 1.3s / p99 7.4s、
+      每天约 5,700 次，原因是 60s TTL 一过期，同时到达的请求各自把 6 条全表 COUNT 重跑一遍（旧锁只包缓存读写）。
+      **未做、等前置**：丢包 / 电池 / MS SLA 的「采集后预计算快照」整套方案依赖 PR #221（`snapshot_store`），
+      分支 `feat/alarm-snapshot-20261122` 目前落后 `main` 76 个提交且未合并；方案里写的
+      `backend/services/snapshot_store.py` 在 #221 分支上实际是 `services/dashboard/snapshot_store.py`。
+      另：电池 / MS SLA 经同一份 access.log 实测不慢（p95 1.1s / 基本无访问），方案自己也判定暂缓。
+
 - [ ] **数字悬浮说明铺开（2026-11-03 立，规则见 `apps\my_app\AGENTS.md` 三.3c / `../AGENTS.md` 四.10b）。**
       **实现已全部铺开完毕（2026-11-05，①—⑥d 全批）**：53 个自研页里 51 页有数字级气泡或已判定豁免，
       仅剩并发会话手里的 `email_reports` / `ipt_power` 两页未动。**残留两件**：
