@@ -26,7 +26,9 @@ P0'-1（2026-11-01，单账号约束）：诊断顺手把「业务流量」页�
 前端优先用 `flow` 直接渲染；`/api/vmax-flow-xdr` 仅作回退保留
 （诊断失败、或旧前端直调时才走第二遍取数）。
 
-只读透传：不落库、不缓存。鉴权走 main.py 的统一门户会话中间件。
+只读透传：不落库、不缓存。鉴权走 main.py 的统一门户会话中间件，并过号码查询
+名单校验（routers/phone_query_acl.require_phone_query_allowed，Issue #241，
+与对话面同一份 web_users 名单，不在名单内 403）。
 """
 import json
 import logging
@@ -34,9 +36,10 @@ import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
+from backend.routers.phone_query_acl import require_phone_query_allowed
 from backend.routers.vmax_xdr_common import (
     humanize_login as _humanize_login,
     mask_msisdn as _mask_msisdn,
@@ -150,7 +153,7 @@ def _iter_stream_frames(diag: VmaxDiagnosis, normalized: str,
             yield _sse_frame(DONE_EVENT, meta)
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_phone_query_allowed)])
 def get_diagnosis(
     msisdn: str = Query(..., min_length=5, max_length=24),
     start: Optional[str] = Query(None, description="窗口起点 YYYY-MM-DD[ HH:MM]，缺省 3 小时前"),
@@ -206,7 +209,7 @@ def get_diagnosis(
     return payload
 
 
-@router.get("/stream")
+@router.get("/stream", dependencies=[Depends(require_phone_query_allowed)])
 def stream_diagnosis(
     msisdn: str = Query(..., min_length=5, max_length=24),
     start: Optional[str] = Query(None, description="窗口起点 YYYY-MM-DD[ HH:MM]，缺省 3 小时前"),
@@ -221,7 +224,8 @@ def stream_diagnosis(
     **不改变原有契约**：`GET /api/vmax-diagnosis` 原样保留，前端在流失败
     （非 200 / 无 done 帧 / 网络中断）时回退到它 —— 最坏情况与今天完全一致。
 
-    鉴权走 main.py 的统一门户会话中间件（与其它 /api 一致，需要 Cookie）。
+    鉴权走 main.py 的统一门户会话中间件（与其它 /api 一致，需要 Cookie），
+    并与 `GET ""` 共用号码查询名单校验（Issue #241）。
     `X-Accel-Buffering: no` 让 nginx 不缓冲本响应（本仓库既有 SSE 端点
     `routers/incident_overview.py` 同款），**不需要改 nginx 配置**。
     """
