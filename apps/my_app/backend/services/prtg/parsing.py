@@ -183,3 +183,135 @@ def parse_historic_row_json(text: str) -> dict[str, Any]:
     if isinstance(pairs, dict):
         pairs = list(pairs.items())
     return parse_historic_row_pairs(pairs)
+
+
+# ---------------- 采集服务用（Issue #227） ----------------
+
+# historicdata.csv 的列名后缀：每个通道四列（体积、体积 RAW、速率、速率 RAW）。
+_CSV_SUFFIX_VOLUME = " (volume)"
+_CSV_SUFFIX_VOLUME_RAW = " (volume)(RAW)"
+_CSV_SUFFIX_SPEED = " (speed)"
+_CSV_SUFFIX_SPEED_RAW = " (speed)(RAW)"
+
+
+def _parse_raw_number(text: str) -> float | None:
+    """CSV 的 RAW 列是纯数字（如 "4631565.1667"）；空、"—"、带千分位都兼容。"""
+    if text is None:
+        return None
+    cleaned = str(text).strip().replace(",", "")
+    if cleaned in ("", "-", "—", "n/a"):
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def parse_historic_csv(
+    text: str, channel_order: tuple[int, ...] = HISTORIC_CHANNEL_ORDER
+) -> list[dict[str, Any]]:
+    """解析 historicdata.csv（44/45 列，实测 2026-11-24 为 44 列）。
+
+    列结构：Date Time、Date Time(RAW)，随后每个通道依次
+    `<name> (volume)`、`<name> (volume)(RAW)`、`<name> (speed)`、`<name> (speed)(RAW)`，
+    最后 Coverage、Coverage(RAW)。通道名按 channels.CHANNELS 的 name_en 大小写不敏感匹配。
+
+    返回：[{"datetime": naive UTC datetime, "channels": {cid: {
+        "value_num": 速率原始值, "value_display": 速率显示值,
+        "volume_num": 体积原始值, "volume_display": 体积显示值}}}]
+    """
+    import csv
+    import io
+
+    reader = csv.reader(io.StringIO(text.lstrip("\ufeff")))
+    try:
+        header = next(reader)
+    except StopIteration:
+        return []
+    index = {str(name).strip().lower(): i for i, name in enumerate(header)}
+
+    def col(channel_id: int, suffix: str) -> int | None:
+        name = f"{get_channel(channel_id).name_en}{suffix}".lower()
+        return index.get(name)
+
+    plan: list[tuple[int, int | None, int | None, int | None, int | None]] = []
+    for channel_id in channel_order:
+        plan.append((
+            channel_id,
+            col(channel_id, _CSV_SUFFIX_VOLUME),
+            col(channel_id, _CSV_SUFFIX_VOLUME_RAW),
+            col(channel_id, _CSV_SUFFIX_SPEED),
+            col(channel_id, _CSV_SUFFIX_SPEED_RAW),
+        ))
+
+    dt_raw_idx = index.get("date time(raw)")
+    dt_idx = index.get("date time")
+    rows: list[dict[str, Any]] = []
+    for cells in reader:
+        if not cells:
+            continue
+        sample_time = None
+        if dt_raw_idx is not None and dt_raw_idx < len(cells):
+            serial = _parse_raw_number(cells[dt_raw_idx])
+            if serial is not None:
+                sample_time = excel_serial_to_datetime(serial)
+        if sample_time is None and dt_idx is not None and dt_idx < len(cells) and cells[dt_idx].strip():
+            sample_time = parse_us_datetime(cells[dt_idx])
+        if sample_time is None:
+            continue
+        channels: dict[int, dict[str, Any]] = {}
+        for channel_id, vol_i, vol_raw_i, speed_i, speed_raw_i in plan:
+            if vol_raw_i is None or speed_raw_i is None:
+                continue  # 该通道列不在本次响应里（版本差异），跳过不猜
+            channels[channel_id] = {
+                "value_num": _parse_raw_number(cells[speed_raw_i]) if speed_raw_i < len(cells) else None,
+                "value_display": cells[speed_i].strip() if speed_i is not None and speed_i < len(cells) else None,
+                "volume_num": _parse_raw_number(cells[vol_raw_i]) if vol_raw_i < len(cells) else None,
+                "volume_display": cells[vol_i].strip() if vol_i is not None and vol_i < len(cells) else None,
+            }
+        rows.append({"datetime": sample_time, "channels": channels})
+    return rows
+
+
+def parse_channels_xml(text: str) -> list[dict[str, Any]]:
+    """解析 /api/table.xml?content=channels&id=<sensor> 的通道清单。
+
+    实测（2026-11-24）：每个 `<item>` 内 lastvalue / lastvalue_raw 各重复 3 次
+    （速率、体积、体积），JSON 用普通 dict 解析会丢成 1 个。XML 的
+    子元素顺序天然保留重复项，所以采集端用 XML 取通道值。
+
+    返回：[{"channel_objid", "name", "value_num", "value_display",
+            "volume_num", "volume_display", "unit"}]，无值通道（Downtime）跳过。
+    """
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(text)
+    items = root.findall(".//item")
+    result: list[dict[str, Any]] = []
+    for item in items:
+        objid_text = item.findtext("objid")
+        name = item.findtext("name") or ""
+        if objid_text is None:
+            continue
+        values = [el.text or "" for el in item.findall("lastvalue")]
+        raws = [el.text or "" for el in item.findall("lastvalue_raw")]
+        if not values or not values[0].strip():
+            continue  # Downtime 等无值通道
+        value_display = values[0].strip()
+        value_num = _parse_raw_number(raws[0]) if raws else None
+        volume_display = values[1].strip() if len(values) > 1 else None
+        volume_num = _parse_raw_number(raws[1]) if len(raws) > 1 else None
+        # 单位从显示值末尾切出；切不出就留空（不猜）
+        unit = None
+        if " " in value_display:
+            unit = value_display.split()[-1]
+        result.append({
+            "channel_objid": int(objid_text),
+            "name": name,
+            "value_num": value_num,
+            "value_display": value_display,
+            "volume_num": volume_num,
+            "volume_display": volume_display,
+            "unit": unit,
+        })
+    return result
