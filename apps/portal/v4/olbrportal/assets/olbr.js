@@ -140,6 +140,10 @@
        闸门被藏起来 —— 后果是顶栏「用户管理」按钮不显示，页面上也再没有任何
        入口能登录门户账号，形成一个走不出去的闭环。 */
     gateMode: 'login', gateOpen: false, umAfterLogin: false,
+    /* 登录闸门锁住时主内容是否被锁住（2026-11-23 加，见 mainLocked）：
+       #arch 是异步渲染的，只靠 mainLocked() 里那次 DOM 赋值会被随后的
+       render() 重新解隐，所以锁定态必须留在 state 里供 renderArchive() 读。 */
+    mainLocked: false,
     items: (D.items || []).slice(), groups: (D.groups || []).slice(), order: {},
     qc: { loading: true, err: '', at: 0, m: {} },
     /* 断站告警单独一档（每 5 分钟），其余五项 + 达标率一小时一档：
@@ -5275,7 +5279,11 @@
        ⚠️ 检索轨（含侧栏分组 chips）已于 2026-10-16 整块移除，这条闸门只剩
        renderArchive() 自己在用 —— 保留口径不变：用户当场归档过才露出来。 */
     if (!state.recall) { box.innerHTML = ''; box.hidden = true; return; }
-    box.hidden = false;
+    /* ⚠️ 2026-11-23（#253，#237 事后评审 B1 同款，v4 未覆盖）：登录闸门
+       锁住时只改 hidden、不清内容。否则登出后 render() → renderArchive() 会把
+       mainLocked(true) 藏起来的 #arch 重新解隐（recall 在登出前已被置真）。
+       v3 同款修法见 #240 / PR #243。 */
+    box.hidden = !!state.mainLocked;
     list = list.slice().sort(sorter(DATA.ARCHIVE));
     var open = !!state.auxOpen[DATA.ARCHIVE], cut = list.length > DATA.AUX_ROWS;
     var show = open || !cut ? list : list.slice(0, DATA.AUX_ROWS);
@@ -5682,7 +5690,13 @@
        #fbMenuLink 承载；右列上半换成 #cchSlot，清单同步改名。
        以后每新增一块 main 里的区块都要回来看一眼这个数组。 */
   function mainLocked(on) {
-    ['#band', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux']
+    /* ⚠️ 2026-11-23（#253）：state.mainLocked 让「锁定」成为渲染函数也能读到的
+       状态，而不是一次性的 DOM 操作 —— #arch 由 renderArchive() 异步渲染，
+       只靠下面那次赋值藏不住（见 renderArchive 的守卫注释）。 */
+    state.mainLocked = !!on;
+    /* ⚠️ 2026-11-23（#253，#237 事后评审 B1 同款）：清单里补 '#arch'。
+       v4 没有 #keybiz 这一项，不要照抄 v3 清单。 */
+    ['#band', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux', '#arch']
       .forEach(function (s) { var e = $(s); if (e) e.hidden = on; });
   }
   function login(u, p) {
@@ -5757,6 +5771,13 @@
     }).catch(function () {});
     try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
     state.user = null; state.authOk = false; renderGate(); renderWho();
+    /* ⚠️ 2026-11-23（#253，#237 事后评审 B1 同款）：登出必须收回归档区的
+       「当场归档过」开关，并立刻把 #arch 藏起来。否则 recall 仍为真时，后续
+       render() → renderArchive() 会在登录闸门下面重新露出归档区
+       （renderGate → mainLocked(true) 只藏清单里的区块，renderArchive
+       自己的解隐要靠上面的 state.mainLocked 守卫）。 */
+    state.recall = false;
+    var arch = $('#arch'); if (arch) arch.hidden = true;
   }
 
   /* =============================================================== 用户管理 -- */
