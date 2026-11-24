@@ -28,6 +28,7 @@ from backend.services.prtg.parsing import (
     excel_serial_to_datetime,
     parse_channels_xml,
     parse_historic_csv,
+    parse_prtg_duration_minutes,
 )
 from backend.services.prtg.settings import PrtgSettings
 
@@ -42,6 +43,8 @@ DEVICE_COLUMNS = "objid,group,device,type"
 CATALOG_INTERVAL_SECONDS = 3600
 DETAIL_INTERVAL_SECONDS = 300
 AGGREGATE_INTERVAL_SECONDS = 300
+ANOMALY_INTERVAL_SECONDS = 300
+SLA_INTERVAL_SECONDS = 86400
 PRUNE_INTERVAL_SECONDS = 86400
 LOOP_TICK_SECONDS = 5
 
@@ -416,10 +419,21 @@ def _parse_sensor_details(text: str) -> dict[str, Any]:
         raw = text_of(tag)
         if raw:
             fields[column] = _to_float(raw.replace("%", "").strip())
+    for tag, column in (
+        ("uptimetime", "uptime_minutes"),
+        ("downtimetime", "downtime_minutes"),
+        ("updowntotal", "updown_total_minutes"),
+    ):
+        minutes = parse_prtg_duration_minutes(text_of(tag))
+        if minutes is not None:
+            fields[column] = minutes
     for tag, column in (("lastup", "last_up"), ("lastdown", "last_down"), ("lastcheck", "last_check")):
         value = datetime_of(tag)
         if value is not None:
             fields[column] = value
+    since = datetime_of("updownsince")
+    if since is not None:
+        fields["updown_since"] = since
     statustext = text_of("statustext")
     if statustext:
         fields["status"] = statustext

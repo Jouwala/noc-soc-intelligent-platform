@@ -10,7 +10,7 @@
 
 - [1. 平台简介](#1-平台简介)
 - [2. 通用操作](#2-通用操作)
-- [3. 任务管理详解（87 个任务）](#3-任务管理详解)
+- [3. 任务管理详解（88 个任务）](#3-任务管理详解)
 - [4. 页面指南](#4-页面指南)
 - [5. 运维与排障](#5-运维与排障)
 - [6. 常见问题](#6-常见问题)
@@ -70,7 +70,7 @@
 
 | 组 | 约束原因 |
 | --- | --- |
-| **u** | RAN UME 单账号会话，组内必须串行（并发会被踢会话）；2026-11-07 新增 23:00 的 ran_element_management_sync（RNM 网元管理表格落 PG），与 02:00 的 ran_ume_daily 共用 zte_ume 会话 |
+| **u** | RAN UME 单账号会话，组内必须串行（并发会被踢会话）；2026-11-07 新增 23:00 的 ran_element_management_sync（RNM 网元管理表格落 PG），与 02:00 的 ran_ume_daily 共用 zte_ume 会话；2026-11-24 新增周日 02:00 的 ngi_param_coverage_sync（NGI 工参与覆盖网格落 PG，独立主机 + 独立 ngi 凭据，不占 UME 会话） |
 | **n** | 网管 / eFlow API / 远程系统：彼此独立但保守同组 |
 | **v** | VMAX 门户（本机 8790 单会话代理）：三个任务共用同一会话必须串行；2026-09-18 从 n 组拆出，不再被 1.5~2h 长任务堵住 |
 | **m** | 内务轻任务：EWS 邮件会话 + 截图/WhatsApp 文件依赖 |
@@ -83,7 +83,7 @@
 
 > ⚠️ **新增任务必须同时登记进 `worker_watchdog.py` 的 `GROUP_TASK_MAP`** —— 只写 `TASK_SPECS` 不分组 = 任务入队后永远 pending。这是本项目已发生过四次的事故模式（finebi_report_sync / whatsapp_send_ext / sp_email_details / 2026-09-18 的 olib_soc 与 vmax_multi_data_sync）。
 
-### 3.3 全量任务清单（87 个）
+### 3.3 全量任务清单（88 个）
 
 | 任务 | task_id | 默认 cron | 组 | 工作流脚本 |
 | --- | --- | --- | --- | --- |
@@ -174,6 +174,7 @@
 | IPT 站点电源采集 | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN 网元管理表同步 | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
 | RAN KPI 15分钟同步 | `ran_kpi_15mins_sync` | `6,21,36,51 * * * *` | u | `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync` |
+| NGI 工参与覆盖数据同步 | `ngi_param_coverage_sync` | `0 2 * * sun` | u | `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync` |
 
 每个任务的工作流与维护要点：
 
@@ -1838,6 +1839,30 @@
 - ⚠ 归 u 组：与其它 RAN UME 任务共用同一个 zte_ume 账号与会话，并发登录会互踢；15 分钟节拍，单轮实测约 4.5 分钟（4 个制式，含 5G 24 个指标）
 - ⚠ 导出 0 行视为空态跳过、不计失败（与 cnn_kpi_sync_5mins 同约定）
 - 页面消费方：?page=ran_kpi_15mins（routers/ran_kpi_15mins.py + services/ran_kpi_assurance/ran_kpi_15mins_service.py 读取侧）
+
+#### NGI 工参与覆盖数据同步（`ngi_param_coverage_sync`）
+
+- 默认 cron: `0 2 * * sun`　|　worker 组: **u**
+- 工作流脚本: `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync`
+
+**功能**: 每周日 02:00 从 NGI 规划平台（10.100.29.17:28001）导出两类数据写入 PostgreSQL：LTE/NR 工参（8 227 + 101 个小区）与覆盖评估的 50 m 网格（178 370 个格点）
+
+**工作流与数据流**:
+
+1. 登录 NGI 规划平台：auth_manager.get_auth + credential_store 的 ngi 凭据组（与 RAN UME 的 zte_ume 是两台设备、账号不通用），登录协议同为 uportal/oauth2 的 RSA 口令 + Z-AUTH-CODE
+1. 工参：GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 取 ProjectData.zip；工作簿表头是 3 行（中文说明 / 英文说明 / 字段名），丢弃前两行、第 3 行作表头，数据从第 4 行起
+1. 空 SectorID 补号：同一 eNodeB ID + 同一 Downlink Center Frequency 的小区按 Azimuth 升序依次补 1、2、3、4…；已有值原样保留，sector_source 记 file / derived
+1. 覆盖：GET taskmanager/gettasklogbytaskid?taskid=1647 取最新一次评估任务的 taskLogId → POST commonGis/getLayerFiles 拿图层 hash 与 legend → POST MapServerService/exportMap(CSV) → exportMapChecking 轮询 → downloadExportMapFile 下载 CSV.zip
+1. 落库（显式 BEGIN/COMMIT 事务）：工参按 cell_uid upsert 进 app.ngi_lte_cell_param / app.ngi_nr_cell_param 并清理本轮未出现的旧小区；网格按 kpi 先删后插进 app.ngi_coverage_grid；两阶段各写一条 app.ngi_sync_log
+
+**维护要点**:
+
+- ⚠ 覆盖导出的 exportMap 必须原样回传 getLayerFiles 返回的 legend（name/showtitle/range 七段）。只给 taskID + renderType + layerName + colDes 时服务端照样返回令牌，但作业永远停在 processing（2026-11-24 实测 4 个作业 30 分钟未完成）；带上 legend 后 4 次轮询约 15 秒完成
+- ⚠ 下载走 downloadExportMapFile（表单 {mapType, params: 令牌}），不是 exportMapChecking；文件名固定 CSV.zip，前端 gis3d.js 的 saveFile() 里就是这么调用的
+- ⚠ 行数下限：NGI_MIN_LTE_ROWS=5000 / NGI_MIN_NR_ROWS=50 / NGI_MIN_GRID_ROWS=50000，低于下限直接判失败且不写库，避免上游残片整表覆盖上一周的好数据
+- ⚠ 归 u 组：属 RAN 侧取数域，与 02:00 的 ran_ume_daily 同档排队；本任务用独立主机与独立凭据组，与 UME 会话无交集，不会互踢。新增任务必须同时在 worker_watchdog.py 的 GROUP_TASK_MAP 登记
+- 表结构由服务内 DDL 幂等创建（CREATE TABLE IF NOT EXISTS），无需 Alembic；改 ngi_store.FIELDS 映射时要同步改 DDL 与索引，tests/test_ngi_param.py 会比对两边
+- 排障顺序：先看 app.ngi_sync_log（status / message / detail，覆盖那条还带 task_log_id 与 run_id），再看任务执行日志；会话问题到「设置 → 凭据」测 ngi 分组
 
 ### 3.4 可靠性机制（超时 / 重试 / 自愈）
 

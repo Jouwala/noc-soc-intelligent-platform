@@ -10,6 +10,7 @@ docs/workspace/prtg-channel-dictionary.md）：
   4. table.xml 默认只回 5 列且无 objid，按 id 定位须用 columns 参数。
 """
 import json
+import re
 from datetime import datetime, timedelta
 from html.parser import HTMLParser
 from typing import Any
@@ -33,8 +34,13 @@ def excel_serial_to_datetime(serial: float) -> datetime:
 
 
 def parse_us_datetime(text: str) -> datetime:
-    """解析 PRTG 的美式 datetime 显示串，如 "11/23/2026 9:00:34 AM"。"""
-    return datetime.strptime(text.strip(), US_DATETIME_FORMAT)
+    """解析 PRTG 的美式 datetime 显示串，如 "11/23/2026 9:00:34 AM"。
+
+    avg>0 的历史接口会给区间串 "11/17/2026 12:00:00 AM - 12:05:00 AM"，
+    取区间起点；汇总行（Sums/Averages）不是时间串，由调用方 try/except 跳过。
+    """
+    value = text.strip().split(" - ")[0].strip()
+    return datetime.strptime(value, US_DATETIME_FORMAT)
 
 
 def group_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, list[Any]]:
@@ -314,3 +320,27 @@ def parse_channels_xml(text: str) -> list[dict[str, Any]]:
             "unit": unit,
         })
     return result
+
+
+_PRtgDurationToken = re.compile(r"(\d+)\s*([dhms])", re.IGNORECASE)
+
+
+def parse_prtg_duration_minutes(text: str | None) -> float | None:
+    """解析 PRTG 的时长串为分钟，如 "956 d"、"28 h 9 m"、"45 s"。
+
+    getsensordetails 的 uptimetime / downtimetime / updowntotal 是这种格式
+    （updowntotal 还可能带 " [=100% coverage]" 后缀）。无法解析返回 None。
+    """
+    if not text:
+        return None
+    raw = str(text).split("[")[0].strip()
+    if not raw:
+        return None
+    tokens = _PRtgDurationToken.findall(raw)
+    if not tokens:
+        return None
+    seconds = 0.0
+    for value, unit in tokens:
+        multiplier = {"d": 86400, "h": 3600, "m": 60, "s": 1}[unit.lower()]
+        seconds += int(value) * multiplier
+    return seconds / 60.0

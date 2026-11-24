@@ -32,6 +32,7 @@ import { ExplainIcon, ExplainPopover } from '../components/MetricExplain'
 import DraggableClickModal from '../components/DraggableClickModal'
 import { PrtgTrendChart } from './prtg/PrtgCharts'
 import PrtgLinkDetail from './prtg/PrtgLinkDetail'
+import PrtgSlaView from './prtg/PrtgSlaView'
 import {
   explainCapacity, explainDiscards, explainErrors, explainIn, explainLastDown,
   explainOut, explainSite, explainStatus, explainTotal, explainUnicast,
@@ -49,6 +50,9 @@ const STALE_SECONDS = 300
 export default function PrtgLinkHealth() {
   const { t } = useI18n()
   const { isDark } = useTheme()
+
+  /* ---- 视图切换：链路健康 / SLA 与容量（#231） ---- */
+  const [view, setView] = useState<'health' | 'sla'>('health')
 
   /* ---- 时间范围 ---- */
   const [windowKey, setWindowKey] = useState<PrtgWindow>('24h')
@@ -322,8 +326,37 @@ export default function PrtgLinkHealth() {
       ? `${selectedLink.device_name || NA} · ${selectedLink.sensor_name}`
       : t('prtg.detail.title')
 
+  if (view === 'sla') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)' }}>
+        <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
+          <Segmented
+            value={view}
+            onChange={v => setView(v as 'health' | 'sla')}
+            options={[
+              { value: 'health', label: t('prtg.tab.health') },
+              { value: 'sla', label: t('prtg.tab.sla') },
+            ]}
+          />
+        </CardBase>
+        <PrtgSlaView />
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)' }}>
+
+      <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
+        <Segmented
+          value={view}
+          onChange={v => setView(v as 'health' | 'sla')}
+          options={[
+            { value: 'health', label: t('prtg.tab.health') },
+            { value: 'sla', label: t('prtg.tab.sla') },
+          ]}
+        />
+      </CardBase>
 
       {/* ① 筛选条：时间范围 + 刷新 + 生成时间 */}
       <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>

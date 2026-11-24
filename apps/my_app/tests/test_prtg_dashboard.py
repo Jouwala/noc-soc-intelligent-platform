@@ -90,3 +90,39 @@ def test_trend_series_aggregates_total_channel(db):
     series = dashboard.trend_series("5m")
     assert len(series) == 1
     assert series[0]["total_mbps"] == pytest.approx(16.0)  # 两条各 8 Mbps
+
+
+def test_overview_counts_only_warning_or_critical_composites(db):
+    from backend.models.prtg_collector import NetworkAnomalyEvent
+
+    now = datetime.utcnow().replace(second=0, microsecond=0)
+    with db() as session:
+        _add_sensor(session, 2721, "SNMP Traffic 64bit", "a")
+        session.add(NetworkAnomalyEvent(
+            sensor_objid=2721, rule_code="composite", severity="warning",
+            message="warn", started_at=now, created_at=now,
+        ))
+        session.add(NetworkAnomalyEvent(
+            sensor_objid=2721, rule_code="baseline_low_pending_review", severity="info",
+            message="info", started_at=now, created_at=now,
+        ))
+        session.commit()
+    assert dashboard.overview("24h")["kpi"]["anomaly_links"] == 1
+
+
+def test_anomalies_lists_rule_label_and_open_state(db):
+    from backend.models.prtg_collector import NetworkAnomalyEvent
+
+    now = datetime.utcnow().replace(second=0, microsecond=0)
+    with db() as session:
+        _add_sensor(session, 2721, "SNMP Traffic 64bit", "a")
+        session.add(NetworkAnomalyEvent(
+            sensor_objid=2721, rule_code="zero_traffic", severity="critical",
+            message="zero", evidence_json='{"buckets": 2}', started_at=now, created_at=now,
+        ))
+        session.commit()
+    result = dashboard.anomalies("24h", open_only=True)
+    assert result["count"] == 1
+    item = result["anomalies"][0]
+    assert item["rule_label"] == "流量归零" and item["is_open"] is True
+    assert item["evidence"] == {"buckets": 2}

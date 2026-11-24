@@ -66,6 +66,10 @@ class PrtgSensor(Base):
     last_value_raw = Column(Float)  # 主通道原始值
     uptime_pct = Column(Float)  # 详情页 Uptime %
     downtime_pct = Column(Float)  # 详情页 Downtime %
+    uptime_minutes = Column(Float)  # uptimetime（累计可用分钟）
+    downtime_minutes = Column(Float)  # downtimetime（累计停机分钟，SLA 差分用）
+    updown_total_minutes = Column(Float)  # updowntotal（累计监控分钟）
+    updown_since = Column(DateTime)  # updownsince（起算时间）
     last_up = Column(DateTime)
     last_down = Column(DateTime)
     last_check = Column(DateTime)
@@ -277,3 +281,51 @@ class PrtgSyncState(Base):
     detail = Column(Text)  # 最近一次结果摘要（不含凭证）
     error = Column(Text)
     updated_at = Column(DateTime)
+
+
+class PrtgPingState(Base):
+    """Ping 抖动状态机（#229）：只有状态转换才写 network_anomaly_events。
+
+    状态：UNKNOWN → OK → SUSPECT（连续 2 次失败）→ DOWN（第 3 次失败）→
+    RECOVERING（1 次成功）→ OK（连续 2 次成功）。失败判定 = PRTG 状态非 Up
+    或无有效 RTT；成功 = Up 且有 RTT。
+    """
+
+    __tablename__ = "prtg_ping_state"
+
+    sensor_objid = Column(Integer, primary_key=True)
+    state = Column(Text, nullable=False, default="UNKNOWN")
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    consecutive_successes = Column(Integer, nullable=False, default=0)
+    last_rtt_ms = Column(Float)
+    last_status = Column(Text)
+    last_transition_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+
+class PrtgSlaDaily(Base):
+    """每日 SLA 快照（#231）：用 PRTG 累计 Uptime/Downtime 的日差分算月度可用率。
+
+    PRTG 的 uptime/downtime 是**累计值**（以传感器监控覆盖时间为分母，
+    Paused/维护窗口不计入）。每天快照一次累计停机分钟数，月报用相邻快照
+    差分得到当天停机分钟，避免依赖不存在的逐日状态历史。
+    """
+
+    __tablename__ = "prtg_sla_daily"
+    __table_args__ = (
+        UniqueConstraint("sensor_objid", "day", name="uq_prtg_sla_sensor_day"),
+        Index("ix_prtg_sla_day", "day"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sensor_objid = Column(Integer, nullable=False)
+    day = Column(DateTime, nullable=False)  # UTC 当天 00:00
+    uptime_pct = Column(Float)  # 快照时的累计可用率
+    downtime_pct = Column(Float)
+    downtime_minutes_cum = Column(Float)  # 累计停机分钟（PRTG downtimetime）
+    updown_total_minutes_cum = Column(Float)  # 累计监控覆盖分钟（PRTG updowntotal 差分 = 分母）
+    downtime_delta_minutes = Column(Float)  # 相对上一快照的停机分钟（当月故障时长）
+    down_count = Column(Integer, nullable=False, default=0)  # 当天 down 事件数
+    availability_pct = Column(Float)  # 当天可用率（=100 - delta/覆盖率分钟）
+    coverage_minutes = Column(Float)  # 当天分母（相邻快照间隔，≤1440）
+    created_at = Column(DateTime)
