@@ -277,3 +277,23 @@ class PrtgSyncState(Base):
     detail = Column(Text)  # 最近一次结果摘要（不含凭证）
     error = Column(Text)
     updated_at = Column(DateTime)
+
+
+class PrtgPingState(Base):
+    """Ping 抖动状态机（#229）：只有状态转换才写 network_anomaly_events。
+
+    状态：UNKNOWN → OK → SUSPECT（连续 2 次失败）→ DOWN（第 3 次失败）→
+    RECOVERING（1 次成功）→ OK（连续 2 次成功）。失败判定 = PRTG 状态非 Up
+    或无有效 RTT；成功 = Up 且有 RTT。
+    """
+
+    __tablename__ = "prtg_ping_state"
+
+    sensor_objid = Column(Integer, primary_key=True)
+    state = Column(Text, nullable=False, default="UNKNOWN")
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    consecutive_successes = Column(Integer, nullable=False, default=0)
+    last_rtt_ms = Column(Float)
+    last_status = Column(Text)
+    last_transition_at = Column(DateTime)
+    updated_at = Column(DateTime)

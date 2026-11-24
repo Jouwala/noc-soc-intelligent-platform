@@ -13,7 +13,8 @@ PRTG 14.2（只读账号 control1，Passhash）
   ├─ /api/table.xml?content=channels&id=…  每分钟：每传感器全部通道（XML 保留重复 lastvalue）
   ├─ /api/getsensordetails.xml             每 5 分钟：Uptime/Downtime/Last Down/扫描间隔
   ├─ /api/table.json?content=devices|sensors 每小时：目录
-  └─ /api/historicdata.csv                 回填：全局令牌桶 ≤5 次/分钟，一天一窗
+  ├─ /api/historicdata.csv                 回填：60 秒滑动窗口 ≤5 次/分钟，一天一窗
+  └─ 异常评估（5 分钟）                    规则 5 条 + Ping 状态机 → network_anomaly_events
         ↓
 backend/services/prtg/collector.py（单实例、单线程）
         ↓
@@ -36,10 +37,11 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 | `prtg_sensor_events` | Up/Unusual/Down 变化事件 | 长期 |
 | `prtg_sensor_mapping` / `prtg_blindspot_device` | #226 映射与盲区（人工维护；盲区 owner 先按设备组给暂定责任方，人工可改） | 长期 |
 | `network_link_capacity` | 利用率分母（PRTG 没有；来源只允许 `snmp_ifspeed` / `manual`） | 长期 |
-| `network_anomaly_events` | 门户自建异常事件（#229 起使用） | 长期 |
+| `network_anomaly_events` | 门户自建异常事件（#229）：同一 (传感器, 规则) 只维护一条未结束事件，多规则再合并 `composite` | 长期 |
+| `prtg_ping_state` | Ping 抖动状态机（#229）：OK/SUSPECT/DOWN/RECOVERING + 连续失败/成功计数 | 长期 |
 | `prtg_sync_state` | 每类作业的状态、断点、最近错误、数据新鲜度 | 长期 |
 
-迁移：`0008_prtg_collector`（建表）+ `0009_prtg_source_system`（传感器/采样表补 `source_system`，默认 PRTG），均在 `0007` 之后。
+迁移：`0008_prtg_collector`（建表）+ `0009_prtg_source_system`（采样表补 `source_system`）+ `0010_prtg_ping_state`（Ping 状态机），均在 `0007` 之后。
 
 ## 3. 口径（前端只展示，不重算）
 
@@ -71,7 +73,8 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 | `GET /api/prtg/overview?window=5m\|24h\|7d\|30d` | KPI（25 条 / Up / Unusual / Down / 平均可用率 / 异常链路数）+ 全网速率趋势 + 数据新鲜度 |
 | `GET /api/prtg/links?window=…` | 25 条链路总览（In/Out/Total、Unicast、Errors、Discards、可用率、Last Down、容量/利用率、`data_quality`） |
 | `GET /api/prtg/links/{sensor_id}?window=…` | 单链路详情：通道时序、状态事件、全部站点映射 |
-| `GET /api/prtg/collector/status` | 五类作业的最近运行/成功/错误（排障用，无凭证） |
+| `GET /api/prtg/anomalies?window=…` | 异常事件（#229 规则 + Ping 状态机），默认只看未结束 |
+| `GET /api/prtg/collector/status` | 七类作业（catalog/live/backfill/aggregate/anomaly/history_import/prune）的最近运行/成功/错误（排障用，无凭证） |
 
 窗口 → 数据源：`5m` 用 60 秒原始（**近 5 分钟**，不是近 1 小时）、`24h` 用 5 分钟聚合、`7d`/`30d` 用小时聚合；聚合同时读实时与 `prtg_historical_samples`，回填的历史才会进 7d/30d。
 
@@ -102,3 +105,19 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 - 历史回填从「现在」向前按天推进（同一传感器逐日、走满 90 天换下一个），
   25×90=2250 个窗口、5 次/分钟约 7.5 小时补完，期间不影响实时轮询；断点在
   `prtg_sync_state.backfill.cursor`。每小时聚合会随回填按天补，7d/30d 能看到历史。
+
+## 8. 异常规则与 Ping 状态机（#229）
+
+| 规则 | 触发条件 | 级别 |
+| --- | --- | --- |
+| `below_baseline_30` | 5 分钟流量 < 过去 7 天同一分钟档中位数 30% | Warning |
+| `zero_traffic` | 连续 2 个 5 分钟桶为 0，且基线 > 0、传感器未 Down | Critical |
+| `above_baseline_200` | 5 分钟流量 > 基线 200% | Warning |
+| `errors_discards_growth` | 近 3 个 5 分钟桶 Errors+Discards 合计速率严格上升且末值 > 0 | Warning |
+| `low_traffic_30min` | 近 30 分钟均值 < 基线 30% | Investigate（info） |
+| `baseline_low_pending_review` | 该链路 7 天 p95 < 10 kbit/s（空闲/未使用） | info，**不转高危** |
+
+- 事件适配：同一 (传感器, 规则) 只保留一条未结束事件（重复命中更新证据），多规则命中再合并成一条 `composite`；不写 `realtime_alarm` / `history_alarm`。条件恢复时自动关闭（`ended_at`）。
+- Ping 状态机：UNKNOWN → OK；连续 2 次失败 SUSPECT、第 3 次 DOWN；1 次成功 RECOVERING、连续 2 次成功回 OK。失败 = 状态非 Up 或无 RTT；**只有状态转换写事件**，AML TOKADEH1 不再每跳一条。
+- 历史回测与 Unusual 分类见 `docs/workspace/prtg-anomaly-backtest.md`（2026-11-24：5 条规则均有命中记录；8 个 Unusual 中 2 个空闲、6 个当前高于 7 天中位数 200%，与 Issue 描述的「流量异常偏低」不完全一致，以实测为准）。
+- 5 分钟历史基线用 `python -m backend.services.prtg.history_import --days 7` 补齐（PRTG `avg=300`，25 次请求）；回测/分类用 `python -m backend.services.prtg.anomaly_backtest`。
