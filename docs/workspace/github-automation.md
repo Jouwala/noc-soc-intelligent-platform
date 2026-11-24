@@ -41,8 +41,11 @@ quality 全绿 → D:\02 本机 smoke-watcher 轮询检出 PR head → 跑 ops\s
 Grok 2026-11-14 退役摘除，该工作流待删除，见第二节与第十节）
 ▼
 auto-merge.yml：quality 全绿 + smoke-passed + 无 do-not-merge → 自动合并
-│ 其中 update-branches 作业：main 前进时自动更新
-│ 落后的 agent/* 分支（update-branch），更新后 CI 自动重跑再评估合并
+│ 审核门禁分级（2026-11-24）：低风险 PR（改动小、无受保护路径、无 risk:high）
+│ 免独立审核并在 PR 留 review-waived 审计评论；其余仍须 review-result passed
+│ 其中 update-branches 作业：2026-11-24 起默认不跑，只在人工 dispatch 且
+│ 勾选 update_branches=true 时批量更新落后分支（更新会换 head、CI/冒烟/
+│ 审核记录全部重跑，不再随 main 前进自动触发）
 │ 合并成功后显式 POST workflow dispatch 触发下面两步（2026-11-14 修正）：
 │ GITHUB_TOKEN 合并的事件不会再启动新工作流，pull_request closed
 │ 触发路径被抑制，必须显式 dispatch（见第二节、第三节第 8 条）
@@ -64,7 +67,8 @@ Muse 1 按 dispatch-rules.md 第四节做最终汇总（人工/Agent 环节，�
 | workflow | 触发 | 动作 | 关键安全阀 |
 | --- | --- | --- | --- |
 | `issue-to-pr.yml` | Issue 打 `state:claimed` 标签；或手动 dispatch（填 Issue 号） | 解析分支名 → 建分支（脚手架提交）→ 开草稿 PR（描述自动生成、含 `Closes #N`）→ Issue 留评论 | 只处理 open 且带 `agent:muse-2/3/4/5` 的 Issue；分支名正则校验；全程幂等（完成标记 + 存在性检查） |
-| `auto-merge.yml` 的 `update-branches` 作业 | push 到 main；或手动 dispatch | 对落后的 `agent/*` 分支 PR 调 `PUT /pulls/{n}/update-branch` | 只动 `agent/*` 分支、非草稿、`mergeable_state == behind` 才更新；冲突只记录不处理（开发 Agent 自行 rebase） |
+| `auto-merge.yml` 的 `update-branches` 作业 | **仅手动 dispatch 且勾选 `update_branches=true`**（2026-11-24 起默认不跑） | 对落后的 `agent/*` 分支 PR 调 `PUT /pulls/{n}/update-branch` | 只动 `agent/*` 分支、非草稿、`mergeable_state == behind` 才更新；冲突只记录不处理（开发 Agent 自行 rebase）。**不再随 main 前进自动触发**：每次更新都会换 head，令 CI、冒烟、审核记录全部作废重跑 |
+| `run-watchdog.yml`（2026-11-24 新增） | 每 15 分钟定时；或手动 dispatch（`dry_run`） | 调 `run_watchdog.py`：`queued`/`in_progress` 超 30 分钟的 quality 运行 → cancel；`completed + failure` 且 0 个 job → rerun（最多 2 次尝试） | 只碰 `quality` 工作流；判定是纯函数（有单测）；时间不可解析时不动作（不误杀）；单轮最多 10 个动作 |
 | `ci-failure-notify.yml`（2026-11-18 加收件箱同步，#143） | `quality` 工作流跑完且结论 failure / timed_out | 按 head SHA 定位 open PR，评论通知 builder（失败 job、运行链接、SHA），关联 Issue 同步一份；再调 `alert_inbox.py ci-failure` 同步一份到 Muse 1 告警收件箱 | 同一 run 只通知一次（`ci-failure-notice` 标记去重）；收件箱按 PR 聚合（`muse1-alert: ci-failure:pr-<N>` 就地更新）；只通知不改代码/标签 |
 | `pr-merged-writeback.yml` | PR 关闭且 `merged == true`、base 为 main；或 auto-merge 合并成功后 `workflow_dispatch`（填 PR 号） | 解析关联 Issue → 打 `state:merged`、摘其余 `state:` 标签 → 发 PR_MERGED 评论 → 关闭 Issue | 解析不到关联 Issue 就跳过；已回写过的重复触发跳过；dispatch 路径从 API 取 PR 并校验已合入 main |
 | `auto-merge.yml` 的 `auto-merge` 作业 | 合并成功后（本作业内） | 向 `auto-dispatch.yml` 与 `pr-merged-writeback.yml` 各 POST 一次 `workflow dispatch`（`ref: main`，`inputs: pr_number`） | dispatch 失败只记日志，不让合并作业变红（合并已发生）；下游工作流自身幂等，重复触发不重复评论/分派 |
@@ -79,6 +83,10 @@ Muse 1 按 dispatch-rules.md 第四节做最终汇总（人工/Agent 环节，�
 既有 workflow 不在 TASK-07 改动范围：`quality.yml`（检查本体）；
 `auto-merge.yml` 只加了 `update-branches` 作业与 push / dispatch 触发，
 原合并评估逻辑未动（push 触发时合并评估作业等更新作业跑完再执行）。
+> 2026-11-24 流程提速批修订：`update-branches` 改为仅人工 dispatch 触发；
+> `quality.yml` 的 push 触发收窄到 `main`（agent 分支只由 pull_request
+> 事件跑，不再同 head 跑两套）；每个 job 加 `timeout-minutes: 25`；
+> 新增 `run-watchdog.yml` 兜住卡死运行。
 `agent-orchestrator.yml`、`dispatch-check.yml` 与新增的
 `auto-dispatch.yml` 是 2026-11-14 的后续自动化（见上表），不在 TASK-07
 的原始范围里。

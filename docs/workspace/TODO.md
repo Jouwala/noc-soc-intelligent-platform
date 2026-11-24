@@ -44,6 +44,15 @@
 
 ### P1 —— 数据正确性与稳定性
 
+- [ ] **协作流程提速批（2026-11-24，用户定 B 档）。** 已落地：验收模式分级
+      （`AGENTS.md` 1b 的 A/B/C + 批次预授权）、低风险免审（`review_gate.py`
+      的 `REVIEW_TIER=waived` + 审计评论）、停掉自动 `update-branches`、
+      `quality` 加超时并新增 `run-watchdog`、常驻 worker 安装器
+      （`ops\deploy\install-agent-worker.ps1`，`worker:auto` 显式 opt-in）。
+      **待做**：拿 1 批真实任务跑通「批次 → 一个 PR → CI+冒烟 → 自动合并」，
+      记录实际耗时；观察两周后决定是否收紧或回滚（回滚 = revert 本批提交）。
+      分支：`fastlane-protocol`。
+
 - [x] **iPRAN 账号反复被锁：隔离副本用旧口令撞生产上游（2026-11-21 已止血，留两项收尾）。**
       事故链：11-20 15:00 UME 报 `code=2 密码即将到期` → 17:19 生产改密 → `.smoke` 副本
       `credentials.ipran_ume` 仍是 2026-09-24 的旧口令且 `ipran_kpi_sync` 每小时启用 →

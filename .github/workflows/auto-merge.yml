@@ -52,6 +52,19 @@
 # main（PUT /pulls/{n}/update-branch，协议第六节定的机械动作）；有冲突
 # 的分支不自动处理，由开发 Agent 自己 rebase。auto-merge 作业等它跑完
 # 再评估（push 触发时），其余触发路径行为不变。
+#
+# 2026-11-24 流程提速批（用户定 B 档）：
+#   - **update-branches 改为仅人工显式触发**。实测它把「main 前进」变成每个
+#     在途 PR 的重跑循环：分支一更新就换 head，CI、冒烟、审核记录全部
+#     作废重来（PR #242 三小时里重跑三遍）。分支保护未要求「必须最新」
+#     （required_status_checks.strict=false），落后分支可直接合并；真有
+#     冲突时 GitHub 的 mergeable=false 会拦住，由作者手动 rebase 或
+#     `gh pr update-branch` 更新一次即可。需要批量更新时手动
+#     `workflow_dispatch` 本工作流并勾选 update_branches=true（见下）。
+#   - **审核门禁分级**：低风险 PR（改动小、无受保护路径、无 risk:high）
+#     由 review_gate.py 判为 `REVIEW_TIER=waived`，免独立审核；仍必须过
+#     CI 全绿 + smoke-passed 双门禁。免审会在 PR 上留一条绑定 head SHA 的
+#     `<!-- review-waived: ... -->` 审计评论，不是静默放行。
 
 name: auto-merge
 
@@ -61,18 +74,24 @@ on:
   workflow_run:
     workflows: ["quality"]
     types: [completed]
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      update_branches:
+        description: "是否先更新落后的 agent/* 分支（默认否；会自动让 CI/冒烟/审核重跑）"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
   pull-requests: write
+  issues: write
   actions: write
 
 jobs:
   update-branches:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # 2026-11-24：默认不跑。只有人工 dispatch 并显式勾选 update_branches
+    # 才批量更新落后分支（更新会换 head，CI/冒烟/审核记录随之作废重跑）。
+    if: github.event_name == 'workflow_dispatch' && inputs.update_branches == true
     runs-on: ubuntu-latest
     steps:
       - name: 自动更新落后的 agent 任务分支
@@ -187,13 +206,23 @@ jobs:
             if [ "$SMOKE_SHA" != "$HEAD_SHA" ]; then echo "smoke-passed 绑定的是旧 head $SMOKE_SHA，当前 head $HEAD_SHA，结果已过期，跳过"; continue; fi
             echo "smoke-passed 已绑定当前 head（$SMOKE_SHA），继续评估"
 
-            # 独立审核门禁（Phase 2 P2-1 #131 / P2-3 #132）：取 PR 评论里
-            # 最后一条 review-result 标记判定。无记录、改判、旧 head、pr
-            # 不符一律不通过；读评论失败时脚本 exit 1（fail-closed）。
-            # 脚本取自本作业开头检出的 main 版本（可信代码）。
-            if ! python3 apps/control-plane/backend/dispatch/review_gate.py --repo "$REPO" --pr "$PR" --head-sha "$HEAD_SHA"; then
+            # 独立审核门禁（Phase 2 P2-1 #131 / P2-3 #132；2026-11-24 分级）：
+            # 先取 PR 评论里最后一条 review-result 标记判定；无记录、改判、
+            # 旧 head、pr 不符一律不通过。低风险 PR（改动小、无受保护路径、
+            # 无 risk:high）由门禁脚本直接判 waived 并打印 REVIEW_TIER=waived，
+            # 此时免独立审核，但 CI + 冒烟双门禁仍然生效；免审会落一条绑定
+            # head SHA 的审计评论，不是静默放行。脚本取自 main（可信代码）。
+            if ! GATE_OUT="$(python3 apps/control-plane/backend/dispatch/review_gate.py --repo "$REPO" --pr "$PR" --head-sha "$HEAD_SHA")"; then
+              echo "$GATE_OUT"
               echo "独立审核门禁未通过，跳过"; continue
             fi
+            echo "$GATE_OUT"
+            # 免审标记先记下，审计评论等全部门禁通过、真正要合并时再写，
+            # 避免「写了免审评论但 CI 后来红了」造成误导。
+            WAIVED=0
+            case "$GATE_OUT" in
+              *REVIEW_TIER=waived*) WAIVED=1 ;;
+            esac
 
             if [ "$MERGEABLE" = "false" ]; then echo "有冲突，跳过"; continue; fi
 
@@ -215,6 +244,23 @@ jobs:
             C_BAD="$(echo "$CHECKS" | jq -r '[.check_runs[] | select(.name != "auto-merge") | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')"
             if [ "$C_TOTAL" = "0" ]; then echo "没有任何检查记录，跳过"; continue; fi
             if [ "$C_BAD" != "0" ]; then echo "有检查未通过或未完成，跳过"; continue; fi
+
+            # 低风险免审：合并前落一条绑定 head SHA 的审计评论（幂等）。
+            if [ "$WAIVED" = "1" ]; then
+              WAIVER_MARKER="<!-- review-waived: pr-$PR sha-$HEAD_SHA reason=low-risk -->"
+              if curl -sS "${AUTH[@]}" "$API/issues/$PR/comments?per_page=100" | grep -qF "review-waived: pr-$PR sha-$HEAD_SHA"; then
+                echo "免审审计评论已存在，不重复写"
+              else
+                WAIVER_BODY="$(printf '%s\n%s' "$WAIVER_MARKER" "低风险免审：改动规模在阈值内、未触及受保护路径、无 risk:high 标签，按 2026-11-24 流程提速批免独立审核；仍须 CI 全绿 + smoke-passed 双门禁。")"
+                if curl -sS -o /dev/null -X POST "${AUTH[@]}" "$API/issues/$PR/comments" \
+                    -H 'Content-Type: application/json' \
+                    --data-binary "$(jq -n --arg b "$WAIVER_BODY" '{body:$b}')"; then
+                  echo "已写入免审审计评论（head $HEAD_SHA）"
+                else
+                  echo "免审审计评论写入失败（只记录，不影响合并判定）"
+                fi
+              fi
+            fi
 
             # 合并方式：带 merge-squash 标签用 squash，否则用 merge 提交。
             if has_label 'merge-squash'; then METHOD='squash'; else METHOD='merge'; fi
