@@ -29,7 +29,7 @@ const { Text } = Typography
 export default function LocationMapCard({
   center, radiusKm, ringSites, mwLinks, fiberLinks, nearestMw, nearestFiber,
   trackCells, fitToken, loadingSites, onSite, onMw, onFiber, onTrack,
-  sub, coord,
+  sub, coord, bare = false,
 }: {
   center: { lat: number; lon: number }
   radiusKm: number
@@ -69,9 +69,76 @@ export default function LocationMapCard({
     onApply: () => void
     error: string
   }
+  /** 门户 GIS Map 的 Location 页签（?maponly=1）：只留地图画布，不套卡片与标题 */
+  bare?: boolean
 }) {
   const { t } = useI18n()
   const isMobile = useIsMobile()
+
+  const canvas = (
+    <div style={{ position: 'relative', flex: 1, minHeight: 520 }}>
+      {loadingSites ? (
+        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Spin />
+        </div>
+      ) : (
+        <LocationMapView
+          center={center}
+          radiusKm={radiusKm}
+          ringSites={ringSites}
+          mwLinks={mwLinks}
+          fiberLinks={fiberLinks}
+          nearestMw={nearestMw}
+          nearestFiber={nearestFiber}
+          trackCells={trackCells}
+          fitToken={fitToken}
+          onSite={onSite}
+          onMw={onMw}
+          onFiber={onFiber}
+          onTrack={onTrack}
+        />
+      )}
+
+      {/* 手机号搜索窗：右上角 */}
+      <SubscriberSearchOverlay
+        msisdn={sub.msisdn}
+        onMsisdnChange={sub.onMsisdnChange}
+        onSearch={sub.onSearch}
+        loading={sub.loading}
+        diagLoading={sub.diagLoading}
+        searched={sub.searched}
+        resultMsisdn={sub.resultMsisdn}
+        cellCount={sub.cellCount}
+        missing={sub.missing}
+        hasResult={sub.hasResult}
+        onOpen={sub.onOpen}
+        range={sub.range}
+        onRangeChange={sub.onRangeChange}
+      />
+
+      {/* 经纬度搜索窗：右下角。输入后点「定位」即应用；
+          底部控制条里的「应用坐标」与它共用同一份 state。 */}
+      <CoordinateSearchOverlay
+        latText={coord.latText}
+        lonText={coord.lonText}
+        onLatText={coord.onLatText}
+        onLonText={coord.onLonText}
+        onApply={coord.onApply}
+        error={coord.error}
+      />
+    </div>
+  )
+
+  if (bare) {
+    return (
+      <div style={{
+        width: '100%', height: '100vh', margin: 0, padding: 0,
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        {canvas}
+      </div>
+    )
+  }
 
   return (
     <CardBase
@@ -79,7 +146,6 @@ export default function LocationMapCard({
       extra={
         <Text type="secondary" style={{ fontSize: 12 }}>
           {isMobile
-            /* 窄屏只放短标签，长文本会把「位置地图」标题挤成 0 宽（390px 实测） */
             ? t('loc.map.offlineShort')
             : (
               <>
@@ -93,57 +159,7 @@ export default function LocationMapCard({
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
       bodyStyle={{ padding: 0, flex: '1 1 0%', minHeight: 520, display: 'flex' }}
     >
-      <div style={{ position: 'relative', flex: 1, minHeight: 520 }}>
-        {loadingSites ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Spin />
-          </div>
-        ) : (
-          <LocationMapView
-            center={center}
-            radiusKm={radiusKm}
-            ringSites={ringSites}
-            mwLinks={mwLinks}
-            fiberLinks={fiberLinks}
-            nearestMw={nearestMw}
-            nearestFiber={nearestFiber}
-            trackCells={trackCells}
-            fitToken={fitToken}
-            onSite={onSite}
-            onMw={onMw}
-            onFiber={onFiber}
-            onTrack={onTrack}
-          />
-        )}
-
-        {/* 手机号搜索窗：右上角 */}
-        <SubscriberSearchOverlay
-          msisdn={sub.msisdn}
-          onMsisdnChange={sub.onMsisdnChange}
-          onSearch={sub.onSearch}
-          loading={sub.loading}
-          diagLoading={sub.diagLoading}
-          searched={sub.searched}
-          resultMsisdn={sub.resultMsisdn}
-          cellCount={sub.cellCount}
-          missing={sub.missing}
-          hasResult={sub.hasResult}
-          onOpen={sub.onOpen}
-          range={sub.range}
-          onRangeChange={sub.onRangeChange}
-        />
-
-        {/* 经纬度搜索窗：右下角。输入后点「定位」即应用；
-            底部控制条里的「应用坐标」与它共用同一份 state。 */}
-        <CoordinateSearchOverlay
-          latText={coord.latText}
-          lonText={coord.lonText}
-          onLatText={coord.onLatText}
-          onLonText={coord.onLonText}
-          onApply={coord.onApply}
-          error={coord.error}
-        />
-      </div>
+      {canvas}
     </CardBase>
   )
 }
