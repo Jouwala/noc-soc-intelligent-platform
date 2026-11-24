@@ -33,8 +33,13 @@ def excel_serial_to_datetime(serial: float) -> datetime:
 
 
 def parse_us_datetime(text: str) -> datetime:
-    """解析 PRTG 的美式 datetime 显示串，如 "11/23/2026 9:00:34 AM"。"""
-    return datetime.strptime(text.strip(), US_DATETIME_FORMAT)
+    """解析 PRTG 的美式 datetime 显示串，如 "11/23/2026 9:00:34 AM"。
+
+    avg>0 的历史接口会给区间串 "11/17/2026 12:00:00 AM - 12:05:00 AM"，
+    取区间起点；汇总行（Sums/Averages）不是时间串，由调用方 try/except 跳过。
+    """
+    value = text.strip().split(" - ")[0].strip()
+    return datetime.strptime(value, US_DATETIME_FORMAT)
 
 
 def group_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, list[Any]]:
