@@ -134,12 +134,32 @@ CHANNELS = {
     ),
 }
 
-# table.xml（content=sensors / devices）默认只回 5 列，且不含 objid；
-# 按 id 定位必须用 columns 参数显式指定（2026-11-23 实测）。
+# table.xml（content=sensors / devices）默认只回 5 列，objid、lastvalue
+# 都不在默认列里；按 id 定位或取 lastvalue 必须用 columns 参数显式指定，
+# 否则解析会拿到空（2026-11-23 浏览器侧实测，2026-11-24 MSNOC1 直连复核确认）。
 TABLE_DEFAULT_COLUMNS = ("group", "device", "sensor", "status", "status_raw")
 
 # status_raw 枚举（实测：Up=3；devices 表另见 Paused=7）。
 STATUS_RAW = {3: "Up", 7: "Paused"}
+
+# .xml 接口根元素（2026-11-24 MSNOC1 直连复核）。
+TABLE_XML_ROOT = "sensors"
+SENSORDETAILS_XML_ROOT = "sensordata"
+
+# getsensordetails.xml 的字段与返回顺序（2026-11-24 MSNOC1 直连复核，共 21 个）。
+SENSORDETAILS_FIELDS = (
+    "name", "sensortype", "interval", "probename", "parentgroupname",
+    "parentdevicename", "parentdeviceid", "lastvalue", "lastmessage",
+    "favorite", "statustext", "statusid", "lastup", "lastdown", "lastcheck",
+    "uptime", "uptimetime", "downtime", "downtimetime", "updowntotal",
+    "updownsince",
+)
+
+# 注意：getsensordetails 的 lastup / lastdown / lastcheck 原文不是详情页上
+# 的可读时间串，而是「Excel 序列日 + [x d ago] 后缀」，如 lastdown 原文
+# "46325.1080343287 [25 d ago]"。解析时先取序列日按 Excel 序列日换算
+# （见 parsing.excel_serial_to_datetime），不要按 datetime 显示串解析
+# （2026-11-24 MSNOC1 直连复核）。
 
 
 def get_channel(channel_id: int) -> ChannelInfo:
