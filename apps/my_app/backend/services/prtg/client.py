@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Mapping
@@ -43,9 +44,17 @@ class _SecretRedactFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str):
             record.msg = redact_prtg_secrets(record.msg)
-        if record.args:
+        args = record.args
+        if isinstance(args, Mapping):
+            # %(name)s 风格：必须保持 dict，改成 tuple 会让 logging 格式化直接抛
+            # TypeError("not all arguments converted")（2026-11-24 CI 实测）
+            record.args = {
+                key: redact_prtg_secrets(value) if isinstance(value, str) else value
+                for key, value in args.items()
+            }
+        elif isinstance(args, tuple):
             record.args = tuple(
-                redact_prtg_secrets(a) if isinstance(a, str) else a for a in record.args
+                redact_prtg_secrets(a) if isinstance(a, str) else a for a in args
             )
         return True
 

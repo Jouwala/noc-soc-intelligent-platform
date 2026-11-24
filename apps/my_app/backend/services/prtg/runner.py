@@ -44,7 +44,8 @@ def run_forever(collector: PrtgCollector, stop_event: threading.Event | None = N
                 next_live = tick + collector.settings.poll_seconds
             if tick >= next_catalog:
                 _safe(collector, "catalog", collector.sync_catalog)
-                next_detail = tick + DETAIL_INTERVAL_SECONDS
+                # 目录同步完立即补一次详情（Uptime/Last Down），不必等 5 分钟
+                next_detail = tick
                 next_catalog = tick + CATALOG_INTERVAL_SECONDS
             if tick >= next_detail:
                 _safe(collector, "detail", collector.refresh_details)
