@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, RefreshCw, Trash2, ArrowLeftRight, Save } from 'lucide-react';
 import { useI18n } from '../../i18n';
-import type { TrafficLink, TrafficNode, TrafficPeriod } from './trafficTopology.mock';
+import type { TrafficLink, TrafficNode } from './trafficTopology.mock';
 
 // Phase 2 管理面板（Issue #230）：新增/删除节点与链路、绑定 Traffic 传感器、
 // 分方向容量、上下游确认。所有写接口仅 admin；失败一律显示服务端错误，不静默。
@@ -10,7 +10,6 @@ interface SensorOption { objid: number; name: string; device: string | null; bou
 interface Props {
   nodes: TrafficNode[];
   links: TrafficLink[];
-  period: TrafficPeriod;
   onReload: () => void;
 }
 
@@ -83,15 +82,19 @@ export default function TrafficTopologyAdmin({ nodes, links, onReload }: Props) 
       sensor_objid: Number(sensorId),
       source_node_id: Number(sourceId),
       target_node_id: Number(targetId),
-      capacity_ab_mbps: caps[Number(sensorId)]?.ab ? Number(caps[Number(sensorId)].ab) : null,
-      capacity_ba_mbps: caps[Number(sensorId)]?.ba ? Number(caps[Number(sensorId)].ba) : null,
       capacity_source: 'manual',
     });
     setSensorId('');
+    await loadSensors();
   });
 
   const saveCaps = (link: TrafficLink) => run(async () => {
     const value = caps[link.id];
+    for (const raw of [value?.ab, value?.ba]) {
+      if (raw !== undefined && raw !== '' && !Number.isFinite(Number(raw))) {
+        throw new Error(t('trafficTopo.admin.capacityInvalid'));
+      }
+    }
     await send('/mappings', 'PUT', {
       links: [{
         id: link.id,
@@ -131,6 +134,19 @@ export default function TrafficTopologyAdmin({ nodes, links, onReload }: Props) 
           className="inline-flex items-center gap-1 text-[12px] px-2 py-1 rounded-lg bg-emerald-600 text-white disabled:opacity-50">
           <Plus size={13} /> {t('trafficTopo.admin.addNode')}
         </button>
+      </div>
+
+      {/* 节点列表：删除（仍被链路引用时服务端返回 409） */}
+      <div className="flex flex-wrap gap-1.5 border-t border-slate-100 dark:border-slate-800 pt-2">
+        {nodes.map((n) => (
+          <span key={n.id} className="inline-flex items-center gap-1 text-[11.5px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+            {n.name}
+            <button type="button" disabled={busy} onClick={() => run(() => send(`/nodes/${n.id}`, 'DELETE'))}
+              className="text-red-600 dark:text-red-400" aria-label={t('trafficTopo.admin.deleteNode')}>
+              <Trash2 size={11} />
+            </button>
+          </span>
+        ))}
       </div>
 
       {/* 绑定传感器新增链路 */}

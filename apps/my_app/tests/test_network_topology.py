@@ -225,6 +225,11 @@ def test_manual_node_and_link_crud(db):
     link = topology.create_link(3000, 1, node["id"], link_type="test",
                                 capacity_ab_mbps=1000, capacity_ba_mbps=500)
     assert link["sensor_id"] == 3000
+    # 绑定后 traffic() 不能再因唯一约束 500，且链路存在
+    refreshed = topology.traffic("24h")
+    assert any(l["id"] == link["id"] for l in refreshed["links"])
+    # 人工节点必须扛过 ensure_topology 的清理
+    assert any(n["id"] == node["id"] for n in refreshed["nodes"])
     # 已绑定传感器不能重复绑定
     with pytest.raises(ValueError):
         topology.create_link(3000, 1, node["id"])

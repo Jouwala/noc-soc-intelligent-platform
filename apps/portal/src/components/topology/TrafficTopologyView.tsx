@@ -293,7 +293,26 @@ export default function TrafficTopologyView() {
               </button>
             ))}
           </div>
+          {isAdmin && (
+            <div className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => { setEditMode((v) => !v); setDraft({}); setAdminError(''); }}
+                className="px-2.5 py-1.5 text-[12px] rounded-lg border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300"
+              >
+                {editMode ? t('trafficTopo.admin.cancelEdit') : t('trafficTopo.admin.enterEdit')}
+              </button>
+              {editMode && (
+                <button type="button" onClick={saveLayout}
+                  className="px-2.5 py-1.5 text-[12px] rounded-lg bg-amber-600 text-white">
+                  {t('trafficTopo.admin.saveLayout')}
+                </button>
+              )}
+            </div>
+          )}
         </div>
+        {adminError && <p className="mt-1 text-[11.5px] text-red-600 dark:text-red-400">{adminError}</p>}
+        {editMode && <p className="mt-1 text-[11.5px] text-amber-700 dark:text-amber-300">{t('trafficTopo.admin.dragHint')}</p>}
         <p className="mt-1.5 text-[11.5px] leading-relaxed text-slate-500 dark:text-slate-400">{t('trafficTopo.subtitle')}</p>
         {usingMock && <p className="mt-1 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">{t('trafficTopo.mockHint')}</p>}
       </section>
@@ -310,8 +329,8 @@ export default function TrafficTopologyView() {
         <Kpi label={t('trafficTopo.kpiCapKnown')} value={`${kpi.capKnown}/${kpi.links}`} />
       </div>
 
-      {editMode && isAdmin && (
-        <TrafficTopologyAdmin nodes={displayNodes} links={links} period={period}
+      {editMode && isAdmin && !usingMock && (
+        <TrafficTopologyAdmin nodes={displayNodes} links={links}
           onReload={() => setRefreshToken((v) => v + 1)} />
       )}
 
@@ -429,6 +448,7 @@ export default function TrafficTopologyView() {
                           if (!editMode) return;
                           const p = svgPoint(e);
                           if (!p) return;
+                          e.stopPropagation();
                           dragRef.current = { id: n.id, dx: p.x - n.x, dy: p.y - n.y };
                           setSelectedLinkId(null);
                         }}

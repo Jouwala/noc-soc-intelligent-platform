@@ -248,6 +248,8 @@ const zh: Record<string, string> = {
   'trafficTopo.admin.delete': '删除链路',
   'trafficTopo.admin.nameRequired': '节点名不能为空',
   'trafficTopo.admin.selectRequired': '请选择传感器、起点和终点',
+  'trafficTopo.admin.deleteNode': '删除节点',
+  'trafficTopo.admin.capacityInvalid': '容量必须是数字',
 
   'trafficTopo.canvasTitle': '流量拓扑',
   'trafficTopo.canvasHint': '滚轮缩放 · 拖动平移 · 点击链路查看右侧详情；点击空白处取消选择。',
@@ -1065,6 +1067,8 @@ const en: Record<string, string> = {
   'trafficTopo.admin.delete': 'Delete link',
   'trafficTopo.admin.nameRequired': 'Node name is required',
   'trafficTopo.admin.selectRequired': 'Pick sensor, source and target',
+  'trafficTopo.admin.deleteNode': 'Delete node',
+  'trafficTopo.admin.capacityInvalid': 'Capacity must be a number',
 
   'trafficTopo.canvasTitle': 'Traffic topology',
   'trafficTopo.canvasHint': 'Scroll to zoom · drag to pan · click a link for details; click empty space to clear the selection.',
