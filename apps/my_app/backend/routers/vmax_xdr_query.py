@@ -8,15 +8,19 @@ vmax_xdr_query.py - Talon XDR 信令详单查询 API
 - GET /api/vmax-xdr-query?msisdn=&service_type=1100&start=&end=&page=&page_size=
 
 只读透传：不落库、不缓存（信令数据量大且属用户隐私）。
-鉴权走 main.py 的统一门户会话中间件（/api/* 全量要求登录），无需额外挂载。
+鉴权：main.py 的统一门户会话中间件（/api/* 全量要求登录）之外，再过号码查询
+名单校验（routers/phone_query_acl.require_phone_query_allowed，Issue #241）——
+与对话面同一份 web_users 名单，不在名单内返回 403 + 名单配置的拒绝文案。
+（/api/vmax-xdr-query/services 只返回静态类型清单、不带号码数据，不挂守卫。）
 """
 import logging
 import re
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from backend.routers.phone_query_acl import require_phone_query_allowed
 from backend.routers.vmax_xdr_common import (
     humanize_login as _humanize_login,
     humanize_upstream as _humanize_upstream,
@@ -46,7 +50,7 @@ def list_services():
     return {"services": XDR_SERVICES}
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_phone_query_allowed)])
 def query_xdr(
     msisdn: str = Query(..., min_length=5, max_length=24),
     service_type: str = Query("1100", description="serviceType，见 /api/vmax-xdr-query/services"),

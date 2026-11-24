@@ -8,14 +8,17 @@ vmax_cca_query.py - VMAX CCA 用户信息查询 API
 - GET /api/vmax-cca-query?msisdn=777123456
 
 只读透传查询，不做任何落库；号码在日志中掩码，不打印上游响应原文（含用户数据）。
-鉴权走 main.py 的统一门户会话中间件（/api/* 全量要求登录），无需额外挂 require_protected。
+鉴权：main.py 的统一门户会话中间件（/api/* 全量要求登录）之外，再过号码查询
+名单校验（routers/phone_query_acl.require_phone_query_allowed，Issue #241）——
+与对话面同一份 web_users 名单，不在名单内返回 403 + 名单配置的拒绝文案。
 """
 import logging
 import re
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from backend.routers.phone_query_acl import require_phone_query_allowed
 from backend.services.vmax_cca.vmax_cca_client import (
     VmaxCcaError, VmaxCcaNotConfigured, VmaxCcaUnavailable, get_client,
     normalize_msisdn,
@@ -33,7 +36,7 @@ def _mask_msisdn(msisdn: str) -> str:
     return msisdn[:4] + "*" * (len(msisdn) - 6) + msisdn[-2:]
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_phone_query_allowed)])
 def query_user_info(
     msisdn: str = Query(..., min_length=5, max_length=24),
     start: Optional[str] = Query(
