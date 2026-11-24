@@ -6,6 +6,7 @@
 """
 import time
 import re
+import os
 import sqlite3
 import logging
 import threading
@@ -439,18 +440,89 @@ def pl_overview(site_type: str = Query(
     })
 
 
-def warmup() -> None:
-    """启动期后台预热总览，避免后端重启后第一个用户等约 2 秒。"""
-    def _job() -> None:
+#: 周期预热间隔（秒）。必须**显著小于** `_OVERVIEW_TTL`（600s），否则「缓存刚过期」
+#: 和「下一轮还没预热」会撞在一起，用户仍然撞上冷算。480s = 提前 2 分钟刷。
+#: 成本（2026-11-24 在 MSNOC1 实测线上后端）：单档冷算 2.5–4.7s（COOL 4.7s /
+#: NORMAL 2.5s），页面下拉 4 个档位 → 一轮约 12s，摊到 480s 约 2.5% 的单线程占用；
+#: 换来的是每次打开页面都走 1.5ms 的缓存命中（实测重复请求 1.5ms）。嫌重就调大
+#: `PL_WARMUP_REFRESH_SEC`，或设 0 只保留启动预热。
+_WARMUP_REFRESH_SEC_DEFAULT = 480
+_warmup_lock = threading.Lock()
+_warmup_started = False
+
+
+def _warmup_refresh_sec() -> int:
+    """周期预热间隔：`PL_WARMUP_REFRESH_SEC` 覆盖，0 = 只做一次启动预热、不周期刷新。"""
+    raw = (os.environ.get("PL_WARMUP_REFRESH_SEC") or "").strip()
+    if not raw:
+        return _WARMUP_REFRESH_SEC_DEFAULT
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("[丢包看板] PL_WARMUP_REFRESH_SEC=%r 不是整数，回退默认 %ss",
+                       raw, _WARMUP_REFRESH_SEC_DEFAULT)
+        return _WARMUP_REFRESH_SEC_DEFAULT
+
+
+def _warmup_site_types() -> list:
+    """要预热的档位：ALL + 下拉里实际会出现的每个档位（含「未匹配」档）。
+
+    直接取 `_site_type_counts()` 的键 —— 它就是页面下拉的内容。多热一个不存在的档
+    只会白扫一遍 7 天读数；少热一个，那个档就永远是冷算（本次要修的就是这个）。
+    """
+    types = [""]  # "" = ALL（pl_overview 的默认口径）
+    try:
+        types.extend(k for k in _site_type_counts(_load_summary_rows()) if k)
+    except Exception:  # noqa: BLE001  档位解析失败时退回「只热全部」，不影响其它预热
+        logger.warning("[丢包看板] 预热档位解析失败，本轮只预热「全部」档", exc_info=True)
+    return types
+
+
+def _warm_once() -> None:
+    """把每个档位的 overview 各算一遍（命中缓存时几乎零成本）。"""
+    for st in _warmup_site_types():
+        t0 = time.time()
         try:
-            t0 = time.time()
             # ⚠ 必须显式传参：直接调用时省略参数拿到的是 FastAPI 的 `Query` 默认对象，
             # 会被 `_site_type_want()` 当成一个真实的（不存在的）档位，预热就落到
             # 「0 站点」的缓存键上 —— 白热一遍，用户首屏照样等冷算。
-            pl_overview(site_type="")
-            logger.info("[丢包看板] 启动预热完成 %.0fms", (time.time() - t0) * 1000)
-        except Exception:  # noqa: BLE001  预热失败不能影响启动
-            logger.warning("[丢包看板] 启动预热失败（不影响启动）", exc_info=True)
+            pl_overview(site_type=st)
+        except Exception:  # noqa: BLE001  单个档位失败不能拖垮整轮
+            logger.warning("[丢包看板] 预热 %s 失败（继续下一档）", st or "ALL", exc_info=True)
+            continue
+        logger.info("[丢包看板] 预热 %s 完成 %.0fms", st or "ALL", (time.time() - t0) * 1000)
+
+
+def warmup() -> None:
+    """启动期预热 + 后台周期刷新（2026-11-24 改）。
+
+    旧行为只预热 `site_type=""`（ALL）。但 nginx access.log（11-19 切生产 ~ 11-23）
+    实测 29 次 `/overview` 里 28 次带 `site_type=NORMAL` —— 预热的那个键谁也没命中，
+    用户打开页面仍是 5.9–8.4 秒的冷算，31% 的请求（499）没等到就关了。
+
+    现在：
+      1. 按页面下拉里的**每个档位**预热（`_warmup_site_types()`）；
+      2. 每 `PL_WARMUP_REFRESH_SEC`（默认 480s，小于 600s 的 overview TTL）重算一轮 ——
+         缓存到期前已经算好，用户请求始终命中缓存，不再周期性撞上冷重算。
+
+    预热线程是 daemon，任何失败只记日志，不影响启动与请求。
+    `PL_WARMUP_REFRESH_SEC=0` 关闭周期刷新（只保留一次启动预热）。
+    """
+    global _warmup_started
+    with _warmup_lock:
+        if _warmup_started:  # 真重复调用时不要起第二个线程
+            return
+        _warmup_started = True
+
+    def _job() -> None:
+        _warm_once()
+        interval = _warmup_refresh_sec()
+        if interval <= 0:
+            logger.info("[丢包看板] 周期预热已关闭（PL_WARMUP_REFRESH_SEC<=0）")
+            return
+        while True:
+            time.sleep(interval)
+            _warm_once()
 
     threading.Thread(target=_job, name="pl-warmup", daemon=True).start()
 

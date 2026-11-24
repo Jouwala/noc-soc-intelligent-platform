@@ -91,11 +91,98 @@ METRICS_DRILLABLE = METRICS + ("sla",)
 
 _SUMMARY_TTL_SEC = 60
 _summary_lock = threading.Lock()
-_summary_cache: dict = {"at": 0.0, "payload": None}
+_summary_cache: dict = {"at": 0.0, "payload": None, "refreshing": False, "gen": 0}
 # 告警单项的独立缓存（2026-09-18 加，配合 only=alarm）。必须与全量分开：
 # MsPortal 的 QC 面板对告警做 5 分钟级刷新、其余做每小时刷新，若共用一份缓存，
 # 每 5 分钟一次的告警请求会把全量那份 60s 缓存顶掉 → 「其余每小时」白白多跑 6 条全表 COUNT。
-_alarm_cache: dict = {"at": 0.0, "payload": None}
+_alarm_cache: dict = {"at": 0.0, "payload": None, "refreshing": False, "gen": 0}
+
+
+def _refresh_cached_async(cache: dict, collect, label: str, token: int) -> None:
+    """后台重算一次并写回缓存（2026-11-24，配合 `_serve_cached` 的单飞策略）。
+
+    失败只记 warning：旧值继续服务，下一次过期会再试，不会把面板打成 500。
+    `token` 是派发那一刻的 `gen`：期间若已有一次同步重算写过缓存（用户点了刷新），
+    这里的旧结果直接丢弃，不覆盖更新的数据。
+    """
+    t0 = time.time()
+    try:
+        payload = collect()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[portal-qc] 后台刷新失败（继续用旧值）%s: %s", label, exc, exc_info=True)
+        with _summary_lock:
+            cache["refreshing"] = False
+        return
+    with _summary_lock:
+        if cache["gen"] == token:
+            cache["payload"] = payload
+            cache["at"] = time.time()
+            cache["gen"] += 1
+        cache["refreshing"] = False
+    elapsed_ms = (time.time() - t0) * 1000
+    # 正常一次 0.1–1.3s，每分钟最多一条；慢到 3s 以上才值得留痕（排障用）。
+    if elapsed_ms > 3000:
+        logger.info("[portal-qc] 后台刷新偏慢 %s %.0fms", label, elapsed_ms)
+
+
+def _serve_cached(cache: dict, collect, *, refresh: bool, label: str) -> dict:
+    """取数策略：热值直回 → 过期先回旧值并单飞刷新 → 冷启动同步算（2026-11-24 改）。
+
+    **改的原因（实测，不是推测）**：nginx access.log（11-19 切生产 ~ 11-23）里
+    `/api/portal-qc/summary` 每天约 5,700 次，p50 只有 17ms（缓存生效），但
+    p95 1.3s、p99 7.4s，全天每小时都有 >1s 的请求。慢的不是单次计算，而是
+    60s TTL 一过期，**同时到达**的请求各自把 6 条全表 COUNT 重跑一遍 —— 旧实现
+    的锁只包住「读缓存 / 写缓存」，计算在锁外，锁根本不互斥计算。
+
+    现在的三条路径：
+      1. 未过期 → 直接回缓存（行为不变）；
+      2. 已过期且有旧值 → **立即回旧值**，只让第一个请求去后台重算；重算期间
+         到达的其它请求继续拿旧值（单飞），不再排队等；
+      3. 冷启动（进程刚起来、还没有任何一次统计）→ 同步算。这里刻意不用
+         CN KPI 那种「返回空壳 + computing」的做法：QC 面板七项指标全是空值时
+         前端没有可用的占位形态，用户会以为数据没了；而冷启动只有重启后第一次，
+         等一次 1–2 秒比给一个假空面板更诚实。代价是冷启动那一瞬**同时到达**的
+         请求仍会各算一次（与改造前一致），持续状态下的长尾才是本次要治的问题。
+
+    `refresh=True`（前端手动刷新按钮）永远是同步重算，不拿旧值糊弄用户。
+    返回值在原有 payload 上补 `cached` / `stale` 两个字段：`stale=True` 表示
+    「这是过期值，后台正在刷新」。前端不认识也没关系，向后兼容。
+    """
+    now = time.time()
+    with _summary_lock:
+        payload = cache["payload"]
+        fresh = payload is not None and (now - cache["at"]) < _SUMMARY_TTL_SEC
+        if fresh and not refresh:
+            return {**payload, "cached": True, "stale": False}
+        if payload is not None and cache["refreshing"] and not refresh:
+            # 已经有一个请求在后台算了：本次继续用旧值，不再叠一次全表 COUNT
+            return {**payload, "cached": True, "stale": True}
+        cache["refreshing"] = True
+        background = payload is not None and not refresh
+        stale_payload = payload
+        token = cache["gen"]
+
+    if background:
+        threading.Thread(
+            target=_refresh_cached_async, args=(cache, collect, label, token),
+            name=f"qc-refresh-{label}", daemon=True,
+        ).start()
+        return {**stale_payload, "cached": True, "stale": True}
+
+    try:
+        payload = collect()
+    except BaseException:
+        # 同步路径抛错（含 KeyboardInterrupt）也必须放开 refreshing，否则缓存永久卡在
+        # 「正在刷新」，后续请求只能一直拿旧值、再也不会重算。
+        with _summary_lock:
+            cache["refreshing"] = False
+        raise
+    with _summary_lock:
+        cache["payload"] = payload
+        cache["at"] = time.time()
+        cache["refreshing"] = False
+        cache["gen"] += 1
+    return {**payload, "cached": False, "stale": False}
 
 # ===================== SP 未关闭单（2026-10-18 收敛到 sp_common） =====================
 # 词表与粒度此前在本文件、sp_report_service、sp_details_service 各有一份，
@@ -609,32 +696,14 @@ def portal_qc_summary(refresh: int = 0, only: str = ""):
       （eflow_active_alarm 每 5 分钟同步；tt/wo/cr/pmt/spms/sla 的源 eflow_sync 每小时
       :00 起跑、约 :06 才跑完）。给告警单开一条，避免每 5 分钟把 6 条全表 COUNT 重跑一遍。
       只返回 metrics.alarm，前端只覆盖 alarm 那一格。
+    - 2026-11-24 起：缓存过期时**先返回旧值**（响应里 `stale=true`），只派一个请求去
+      后台重算；`refresh=1` 仍然同步重算。原因见 `_serve_cached` 的注释。
     """
     if only.strip().lower() == "alarm":
-        now = time.time()
-        with _summary_lock:
-            cached = _alarm_cache["payload"]
-            fresh = cached is not None and (now - _alarm_cache["at"]) < _SUMMARY_TTL_SEC
-            if fresh and not refresh:
-                return {**cached, "cached": True}
-        payload = _collect_alarm_only()
-        with _summary_lock:
-            _alarm_cache["payload"] = payload
-            _alarm_cache["at"] = time.time()
-        return {**payload, "cached": False}
-
-    now = time.time()
-    with _summary_lock:
-        cached = _summary_cache["payload"]
-        fresh = cached is not None and (now - _summary_cache["at"]) < _SUMMARY_TTL_SEC
-        if fresh and not refresh:
-            return {**cached, "cached": True}
-
-    payload = _collect_summary()
-    with _summary_lock:
-        _summary_cache["payload"] = payload
-        _summary_cache["at"] = time.time()
-    return {**payload, "cached": False}
+        return _serve_cached(_alarm_cache, _collect_alarm_only,
+                             refresh=bool(refresh), label="alarm")
+    return _serve_cached(_summary_cache, _collect_summary,
+                         refresh=bool(refresh), label="summary")
 
 
 @router.get("/api/portal-qc/history")
