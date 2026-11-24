@@ -122,3 +122,72 @@ def test_history_returns_in_out_series(db):
     assert len(data["series"]["in"]) == 2
     assert len(data["series"]["out"]) == 1
     assert data["series"]["in"][-1]["mbps"] == pytest.approx(200.0)
+
+
+def test_ping_sensor_is_not_a_traffic_link(db):
+    with db() as session:
+        session.add(PrtgSensor(objid=2724, sensor_name="AML _TOKADEH_PING", device_name="AML",
+                               sensortype="Ping", status="Up", active=True))
+        session.commit()
+    topology.ensure_topology()
+    links = topology.mappings()["links"]
+    assert all(link["sensor_id"] != 2724 for link in links)
+    assert len(links) == 0  # 只有 Ping 时没有链路，而不是 0.001 Mbps 假链路
+
+
+def test_asymmetric_capacity_pairs_in_with_ba_and_out_with_ab(db):
+    _seed(db)
+    now = datetime.utcnow().replace(second=0, microsecond=0)
+    with db() as session:
+        link = session.execute(select(NetworkLink).where(NetworkLink.sensor_objid == 2565)).scalar_one_or_none()
+    # 先 ensure 再补容量（避免 fixture 的 1000 对称值）
+    topology.ensure_topology()
+    with db() as session:
+        capacity = NetworkLinkCapacity(sensor_objid=2565, capacity_mbps=2000.0, capacity_source="manual",
+                                       updated_at=now)
+        session.add(capacity)
+        session.commit()
+    with db() as session:
+        l = session.execute(select(NetworkLink).where(NetworkLink.sensor_objid == 2565)).scalar_one()
+        l.capacity_ab_mbps = 2000.0
+        l.capacity_ba_mbps = 1000.0
+        session.commit()
+    _add_sample(db, 2565, 0, now, 1500e6 / 8)  # In = B→A，配 ba=1000 → 150%
+    _add_sample(db, 2565, 1, now, 100e6 / 8)   # Out = A→B，配 ab=2000 → 5%
+    data = topology.traffic("24h")
+    row = next(l for l in data["links"] if l["sensor_id"] == 2565)
+    assert row["utilization_pct"] == pytest.approx(150.0)
+
+
+def test_paused_sensor_is_unmonitored_not_up(db):
+    _seed(db)
+    with db() as session:
+        sensor = session.execute(select(PrtgSensor).where(PrtgSensor.objid == 2565)).scalar_one()
+        sensor.status = "Paused"
+        session.commit()
+    topology.ensure_topology()
+    data = topology.traffic("24h")
+    row = next(l for l in data["links"] if l["sensor_id"] == 2565)
+    assert row["status"] == "Unmonitored"
+    assert data["kpi"]["unknown"] >= 1
+    node = next(n for n in data["nodes"] if n["name"] == "OLIB-NX")
+    assert node["status"] == "Unmonitored"
+
+
+def test_invalid_layout_input_is_skipped(db):
+    _seed(db)
+    topology.ensure_topology()
+    assert topology.update_layout([{"id": "abc"}, {"id": 1, "x": "abc"}])["updated"] == 0
+
+
+def test_invalid_capacity_does_not_clear_existing_value(db):
+    _seed(db)
+    topology.ensure_topology()
+    link = next(l for l in topology.mappings()["links"] if l["sensor_id"] == 2721)
+    with pytest.raises(ValueError):
+        topology.update_mappings([{"id": link["id"], "capacity_ab_mbps": "oops"}])
+    with db() as session:
+        capacity = session.execute(
+            select(NetworkLinkCapacity).where(NetworkLinkCapacity.sensor_objid == 2721)
+        ).scalar_one()
+    assert capacity.capacity_mbps == 1000.0

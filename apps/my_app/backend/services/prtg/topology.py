@@ -16,18 +16,16 @@
 
 自动生成是幂等的：重复调用只补新节点/链路，保留人工坐标、容量与置信度。
 """
-import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from backend.database import SessionLocal
 from backend.models.network_topology import (
     NetworkLink,
     NetworkLinkLayout,
-    NetworkNodeAlias,
     NetworkTopologyNode,
 )
 from backend.models.prtg import PrtgSensorMapping
@@ -37,6 +35,7 @@ from backend.models.prtg_collector import (
     PrtgChannelSample5m,
     PrtgSensor,
 )
+from backend.services.prtg.dashboard import is_traffic_sensor
 from backend.services.prtg.mapping import parse_sensor_name
 
 logger = logging.getLogger(__name__)
@@ -48,7 +47,10 @@ PERIODS = {
     "24h": {"minutes": 1440, "table": "5m"},
     "7d": {"minutes": 10080, "table": "5m"},
 }
-STATUS_RANK = {"Up": 0, "Unusual": 1, "Down": 2}
+# 未监控 ≠ 正常：Paused/Unknown 不预热成 Up，空节点也不默认 Up。
+STATUS_RANK = {"Up": 0, "Unusual": 1, "Unknown": 2, "Unmonitored": 2, "Down": 3}
+STATUS_MAP = {"up": "Up", "unusual": "Unusual", "warning": "Unusual",
+              "down": "Down", "paused": "Unmonitored", "unknown": "Unmonitored"}
 
 
 def _norm(text: str | None) -> str:
@@ -57,11 +59,16 @@ def _norm(text: str | None) -> str:
     return re.sub(r"[^a-z0-9]", "", (text or "").lower())
 
 
+def _status_of(raw: str | None) -> str:
+    return STATUS_MAP.get((raw or "").strip().lower(), "Unmonitored")
+
+
 def _worst(statuses: Iterable[str | None]) -> str:
-    worst = "Up"
+    worst = "Unmonitored"  # 没有链路 / 全部未知 = 未监控，不是 Up
     for status in statuses:
-        if STATUS_RANK.get(status or "", 0) > STATUS_RANK.get(worst, 0):
-            worst = status or worst
+        mapped = _status_of(status)
+        if STATUS_RANK.get(mapped, 2) > STATUS_RANK.get(worst, 2):
+            worst = mapped
     return worst
 
 
@@ -70,7 +77,9 @@ def _place_nodes(nodes: list[NetworkTopologyNode]) -> None:
     groups = {"device": [], "peer": [], "customer": [], "unknown": []}
     for node in nodes:
         groups.setdefault(node.node_type, groups["unknown"]).append(node)
-    radii = {"device": 260, "peer": 420, "customer": 340, "unknown": 470}
+    # 前端画布 1000×620（ZoomStage baseW/baseH），坐标必须落在视口内；
+    # 之前的 500 圆心 + 470 半径会把 y>620 的节点裁掉。
+    radii = {"device": 150, "peer": 270, "customer": 210, "unknown": 290}
     import math
 
     for node_type, items in groups.items():
@@ -81,16 +90,20 @@ def _place_nodes(nodes: list[NetworkTopologyNode]) -> None:
             count = max(1, len(items))
             angle = 2 * math.pi * index / count + (0.2 if node_type == "peer" else 0)
             node.x = round(500 + radius * math.cos(angle), 1)
-            node.y = round(500 + radius * math.sin(angle), 1)
+            node.y = round(310 + radius * math.sin(angle), 1)
 
 
 def ensure_topology(now: datetime | None = None) -> dict[str, int]:
     """从 PRTG 传感器幂等生成节点/链路；保留人工坐标与映射。"""
     now = now or datetime.utcnow()
     with SessionLocal() as session:
-        sensors = list(session.execute(
-            select(PrtgSensor).where(PrtgSensor.active.is_(True)).order_by(PrtgSensor.objid)
-        ).scalars())
+        # Ping 的 channel 0 是 Ping Time（msec），当成 Traffic 会算出 0.001 Mbps 假链路
+        sensors = [
+            s for s in session.execute(
+                select(PrtgSensor).where(PrtgSensor.active.is_(True)).order_by(PrtgSensor.objid)
+            ).scalars()
+            if is_traffic_sensor(s.sensortype)
+        ]
         nodes = {n.node_key: n for n in session.execute(select(NetworkTopologyNode)).scalars()}
         links = {l.link_key: l for l in session.execute(select(NetworkLink)).scalars()}
         capacities = {
@@ -121,7 +134,7 @@ def ensure_topology(now: datetime | None = None) -> dict[str, int]:
         for sensor in sensors:
             device_key = f"dev:{_norm(sensor.device_name)}"
             source = node_for(device_key, sensor.device_name or f"device-{sensor.objid}",
-                              "device")
+                              "device", sensor.device_objid)
             interface_no, peer_name = parse_sensor_name(sensor.sensor_name or "")
             mapping = mappings.get(sensor.objid)
             if peer_name:
@@ -160,9 +173,30 @@ def ensure_topology(now: datetime | None = None) -> dict[str, int]:
                     link.capacity_source = capacity.capacity_source
                 if link.mapping_confidence == "discovered" and confidence != "discovered":
                     link.mapping_confidence = confidence
-        _place_nodes(created_nodes)
+        # 清理历史脏数据：非流量链路（如旧的 Ping 链路）与失去链路的孤儿节点；
+        # 未固定的旧坐标如果落在 1000×620 画布之外，重新自动布局（人工 pinned 不动）。
+        traffic_ids = {s.objid for s in sensors}
+        for stale in list(session.execute(select(NetworkLink)).scalars()):
+            if stale.sensor_objid not in traffic_ids:
+                session.delete(stale)
+        session.flush()
+        used_nodes = set()
+        for link_row in session.execute(select(NetworkLink)).scalars():
+            used_nodes.update((link_row.source_node_id, link_row.target_node_id))
+        for node in list(session.execute(select(NetworkTopologyNode)).scalars()):
+            if node.id not in used_nodes and node.node_type != "device":
+                session.delete(node)
+            elif not node.pinned and (
+                node.x is None or node.y is None or node.x > 1000 or not 0 <= node.y <= 620
+            ):
+                node.x = None
+                node.y = None
+        session.flush()
+        _place_nodes(list(session.execute(select(NetworkTopologyNode)).scalars()))
         session.commit()
-        return {"nodes": len(nodes), "links": len(links) + created_links,
+        total_links = session.execute(select(func.count()).select_from(NetworkLink)).scalar() or 0
+        total_nodes = session.execute(select(func.count()).select_from(NetworkTopologyNode)).scalar() or 0
+        return {"nodes": total_nodes, "links": total_links,
                 "created_nodes": len(created_nodes), "created_links": created_links}
 
 
@@ -197,11 +231,13 @@ def _samples(session, sensor_ids: list[int], period: str) -> dict[tuple[int, int
 
 
 def _utilization(link: NetworkLink, in_mbps: float | None, out_mbps: float | None) -> float | None:
+    # source_node=A（传感器所在设备），target=B。PRTG Traffic In 是进入 A，即 B→A；
+    # Traffic Out 是 A→B。因此 In 配 capacity_ba、Out 配 capacity_ab。
     values = []
-    if link.capacity_ab_mbps and in_mbps is not None:
-        values.append(in_mbps / link.capacity_ab_mbps)
-    if link.capacity_ba_mbps and out_mbps is not None:
-        values.append(out_mbps / link.capacity_ba_mbps)
+    if link.capacity_ba_mbps and in_mbps is not None:
+        values.append(in_mbps / link.capacity_ba_mbps)
+    if link.capacity_ab_mbps and out_mbps is not None:
+        values.append(out_mbps / link.capacity_ab_mbps)
     if not values:
         return None
     return round(max(values) * 100, 2)
@@ -237,7 +273,7 @@ def traffic(period: str = "live") -> dict[str, Any]:
         age = int((now - sample_time).total_seconds()) if sample_time else None
         source = node_by_id.get(link.source_node_id)
         target = node_by_id.get(link.target_node_id)
-        status = (sensor.status if sensor else None) or "Unknown"
+        status = _status_of(sensor.status if sensor else None)
         node_status.setdefault(link.source_node_id, []).append(status)
         node_status.setdefault(link.target_node_id, []).append(status)
         link_payload.append({
@@ -278,9 +314,10 @@ def traffic(period: str = "live") -> dict[str, Any]:
             "status": _worst(node_status.get(node.id, [])),
         })
 
-    up = sum(1 for l in link_payload if l["status"].lower() == "up")
-    unusual = sum(1 for l in link_payload if l["status"].lower() == "unusual")
-    down = sum(1 for l in link_payload if l["status"].lower() == "down")
+    up = sum(1 for l in link_payload if l["status"] == "Up")
+    unusual = sum(1 for l in link_payload if l["status"] == "Unusual")
+    down = sum(1 for l in link_payload if l["status"] == "Down")
+    unknown = sum(1 for l in link_payload if l["status"] in ("Unknown", "Unmonitored"))
     over = sum(1 for l in link_payload if (l["utilization_pct"] or 0) > 100)
     ages = [l["data_quality"]["sample_age_seconds"] for l in link_payload
             if l["data_quality"]["sample_age_seconds"] is not None]
@@ -295,6 +332,7 @@ def traffic(period: str = "live") -> dict[str, Any]:
             "up": up,
             "unusual": unusual,
             "down": down,
+            "unknown": unknown,
             "over_capacity": over,
             "capacity_known": sum(1 for l in link_payload if l["data_quality"]["capacity_known"]),
             "capacity_total": len(link_payload),
@@ -317,7 +355,10 @@ def update_layout(items: Iterable[dict[str, Any]], now: datetime | None = None) 
     with SessionLocal() as session:
         nodes = {n.id: n for n in session.execute(select(NetworkTopologyNode)).scalars()}
         for item in items:
-            node = nodes.get(int(item.get("id") or 0))
+            try:
+                node = nodes.get(int(item.get("id") or 0))
+            except (TypeError, ValueError):
+                continue
             if node is None:
                 continue
             x, y = item.get("x"), item.get("y")
@@ -350,37 +391,76 @@ def mappings() -> dict[str, Any]:
     } for link in links]}
 
 
+def _capacity_value(value: Any) -> float | None:
+    """容量只接受正有限值；0/负数归一为「未登记」；非法值抛 ValueError（不落库）。"""
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"容量不是数字：{value!r}") from exc
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValueError(f"容量不是有限数值：{value!r}")
+    return number if number > 0 else None
+
+
 def update_mappings(items: Iterable[dict[str, Any]], now: datetime | None = None) -> dict[str, int]:
     now = now or datetime.utcnow()
+    # 先全部校验，任何一项非法就抛错，**不写库**（避免把非法容量清成 None 再镜像到 SLA）。
+    validated: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("links 每一项必须是对象")
+        try:
+            link_id = int(item.get("id") or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"link id 非法：{item.get('id')!r}") from exc
+        entry: dict[str, Any] = {"id": link_id}
+        if "capacity_ab_mbps" in item:
+            entry["capacity_ab_mbps"] = _capacity_value(item.get("capacity_ab_mbps"))
+        if "capacity_ba_mbps" in item:
+            entry["capacity_ba_mbps"] = _capacity_value(item.get("capacity_ba_mbps"))
+        if "capacity_source" in item:
+            entry["capacity_source"] = item.get("capacity_source")
+        if "link_type" in item:
+            entry["link_type"] = item.get("link_type")
+        if "mapping_confidence" in item:
+            confidence = item.get("mapping_confidence")
+            if confidence not in ("verified", "candidate", "discovered"):
+                raise ValueError(f"mapping_confidence 非法：{confidence!r}")
+            entry["mapping_confidence"] = confidence
+        validated.append(entry)
+
     updated = 0
     with SessionLocal() as session:
         links = {link.id: link for link in session.execute(select(NetworkLink)).scalars()}
         capacities = {c.sensor_objid: c for c in session.execute(select(NetworkLinkCapacity)).scalars()}
-        for item in items:
-            link = links.get(int(item.get("id") or 0))
+        for entry in validated:
+            link = links.get(entry["id"])
             if link is None:
                 continue
-            if "capacity_ab_mbps" in item:
-                link.capacity_ab_mbps = _float(item.get("capacity_ab_mbps"))
-            if "capacity_ba_mbps" in item:
-                link.capacity_ba_mbps = _float(item.get("capacity_ba_mbps"))
-            if "capacity_source" in item:
-                link.capacity_source = item.get("capacity_source")
-            if "link_type" in item:
-                link.link_type = item.get("link_type")
-            if "mapping_confidence" in item and item.get("mapping_confidence") in (
-                "verified", "candidate", "discovered"
-            ):
-                link.mapping_confidence = item["mapping_confidence"]
+            if "capacity_ab_mbps" in entry:
+                link.capacity_ab_mbps = entry["capacity_ab_mbps"]
+            if "capacity_ba_mbps" in entry:
+                link.capacity_ba_mbps = entry["capacity_ba_mbps"]
+            if "capacity_source" in entry:
+                link.capacity_source = entry["capacity_source"]
+            if "link_type" in entry:
+                link.link_type = entry["link_type"]
+            if "mapping_confidence" in entry:
+                link.mapping_confidence = entry["mapping_confidence"]
             link.updated_at = now
-            capacity = capacities.get(link.sensor_objid)
-            if capacity is None:
-                capacity = NetworkLinkCapacity(sensor_objid=link.sensor_objid)
-                session.add(capacity)
-                capacities[link.sensor_objid] = capacity
-            capacity.capacity_mbps = link.capacity_ab_mbps
-            capacity.capacity_source = link.capacity_source
-            capacity.updated_at = now
+            # SLA 仍是单容量口径（Phase 1），镜像 AB 方向；BA 只存在于拓扑表。
+            if "capacity_ab_mbps" in entry:
+                capacity = capacities.get(link.sensor_objid)
+                if capacity is None:
+                    capacity = NetworkLinkCapacity(sensor_objid=link.sensor_objid)
+                    session.add(capacity)
+                    capacities[link.sensor_objid] = capacity
+                capacity.capacity_mbps = link.capacity_ab_mbps
+                if "capacity_source" in entry:
+                    capacity.capacity_source = link.capacity_source
+                capacity.updated_at = now
             updated += 1
         session.commit()
     return {"updated": updated}
@@ -394,7 +474,7 @@ def history(link_id: int, period: str = "24h") -> dict[str, Any] | None:
             return None
         sensor_id = link.sensor_objid
     if period == "live":
-        since = datetime.utcnow() - timedelta(hours=1)
+        since = datetime.utcnow() - timedelta(minutes=15)
         with SessionLocal() as session:
             rows = session.execute(
                 select(PrtgChannelSample.channel_objid, PrtgChannelSample.sample_time,

@@ -29,15 +29,12 @@ function normStatus(status: string | null | undefined): string {
   return v === 'up' || v === 'unusual' || v === 'down' ? v : 'unknown';
 }
 function hasCapacity(link: TrafficLink): boolean {
-  return (link.capacity_ab_mbps ?? 0) > 0 || (link.capacity_ba_mbps ?? 0) > 0;
+  // 单一真相源：优先用后端 data_quality.capacity_known；Mock 也填了该字段。
+  return link.data_quality?.capacity_known ?? ((link.capacity_ab_mbps ?? 0) > 0 || (link.capacity_ba_mbps ?? 0) > 0);
 }
-// 与后端 topology._utilization 同一口径：只对「有采样且有容量」的方向取比值，再取最大值。
+// 利用率只消费后端算好的 utilization_pct，前端不重算（Issue #230 硬口径）。
 function utilizationOf(link: TrafficLink): number | null {
-  const capAB = link.capacity_ab_mbps ?? 0, capBA = link.capacity_ba_mbps ?? 0;
-  const ratios: number[] = [];
-  if (link.in_mbps != null && capAB > 0) ratios.push((link.in_mbps / capAB) * 100);
-  if (link.out_mbps != null && capBA > 0) ratios.push((link.out_mbps / capBA) * 100);
-  return ratios.length ? Math.max(...ratios) : null;
+  return link.utilization_pct ?? null;
 }
 function bandOf(util: number) {
   return BANDS.find((b) => util <= b.limit) ?? null;
@@ -158,16 +155,18 @@ export default function TrafficTopologyView() {
     let down = 0;
     let over = 0;
     let capKnown = 0;
+    let unknown = 0;
     for (const l of links) {
       const s = normStatus(l.status);
       if (s === 'up') up += 1;
       else if (s === 'unusual') unusual += 1;
       else if (s === 'down') down += 1;
+      else unknown += 1;
       const u = utilizationOf(l);
       if (u != null && u > 100) over += 1;
       if (hasCapacity(l)) capKnown += 1;
     }
-    return { nodes: nodes.length, links: links.length, up, unusual, down, over, capKnown };
+    return { nodes: nodes.length, links: links.length, up, unusual, down, unknown, over, capKnown };
   }, [links, nodes.length]);
 
   const selected = links.find((l) => l.id === selectedLinkId) ?? null;
@@ -257,12 +256,13 @@ export default function TrafficTopologyView() {
       </section>
 
       {/* KPI 条 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
         <Kpi label={t('trafficTopo.kpiNodes')} value={String(kpi.nodes)} />
         <Kpi label={t('trafficTopo.kpiLinks')} value={String(kpi.links)} />
         <Kpi label={t('trafficTopo.kpiUp')} value={String(kpi.up)} tone="text-emerald-600 dark:text-emerald-400" />
         <Kpi label={t('trafficTopo.kpiUnusual')} value={String(kpi.unusual)} tone="text-amber-600 dark:text-amber-400" />
         <Kpi label={t('trafficTopo.kpiDown')} value={String(kpi.down)} tone="text-red-600 dark:text-red-400" />
+        <Kpi label={t('trafficTopo.kpiUnknown')} value={String(kpi.unknown)} tone="text-slate-500 dark:text-slate-400" />
         <Kpi label={t('trafficTopo.kpiOver')} value={String(kpi.over)} tone="text-red-600 dark:text-red-400" />
         <Kpi label={t('trafficTopo.kpiCapKnown')} value={`${kpi.capKnown}/${kpi.links}`} />
       </div>
@@ -417,8 +417,8 @@ export default function TrafficTopologyView() {
                 <InfoRow label={t('trafficTopo.statusLabel')} value={t(STATUS_KEYS[normStatus(selected.status)])} />
                 <InfoRow label={t('trafficTopo.inMbps')} value={withUnit(selected.in_mbps)} />
                 <InfoRow label={t('trafficTopo.outMbps')} value={withUnit(selected.out_mbps)} />
-                <InfoRow label={t('trafficTopo.capacityAB')} value={selected.capacity_ab_mbps == null ? t('trafficTopo.capacityPending') : withUnit(selected.capacity_ab_mbps)} warning={selected.capacity_ab_mbps == null} />
-                <InfoRow label={t('trafficTopo.capacityBA')} value={selected.capacity_ba_mbps == null ? t('trafficTopo.capacityPending') : withUnit(selected.capacity_ba_mbps)} warning={selected.capacity_ba_mbps == null} />
+                <InfoRow label={t('trafficTopo.capacityAB')} value={(selected.capacity_ab_mbps ?? 0) <= 0 ? t('trafficTopo.capacityPending') : withUnit(selected.capacity_ab_mbps)} warning={(selected.capacity_ab_mbps ?? 0) <= 0} />
+                <InfoRow label={t('trafficTopo.capacityBA')} value={(selected.capacity_ba_mbps ?? 0) <= 0 ? t('trafficTopo.capacityPending') : withUnit(selected.capacity_ba_mbps)} warning={(selected.capacity_ba_mbps ?? 0) <= 0} />
                 <InfoRow label={t('trafficTopo.utilization')} value={fmtPct(utilizationOf(selected))} />
                 <InfoRow label={t('trafficTopo.mappingConfidence')} value={t(CONF_KEYS[selected.mapping_confidence] ?? 'trafficTopo.confDiscovered')} />
                 <InfoRow label={t('trafficTopo.linkTypeLabel')} value={selected.link_type || '—'} />
