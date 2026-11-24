@@ -267,5 +267,9 @@ def test_late_background_failure_does_not_mark_newer_cache():
     assert cache["payload"]["generated_at"] == "user"
 
     release.set()
-    assert _wait_until(lambda: not cache["refreshing"])
+    # 必须等后台线程真的抛出后再断言：同步强刷已把 refreshing 置 False，
+    # 用「等 refreshing 变 False」会立即返回、断言早于失败发生（审核实测的空转测试）。
+    for t in threading.enumerate():
+        if t.name == "qc-refresh-test":
+            t.join(5)
     assert cache["failed_at"] is None, "迟到的失败污染了新缓存"

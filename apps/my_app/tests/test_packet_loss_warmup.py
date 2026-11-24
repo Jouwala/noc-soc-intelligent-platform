@@ -150,6 +150,28 @@ def test_warmup_thread_warms_once_before_sleep(monkeypatch, env_value):
     assert len(calls) == 1
 
 
+def test_concurrent_warmup_starts_exactly_one_thread(monkeypatch):
+    """8 个线程同时调 warmup() 只能起 1 个预热线程（占位必须先于起线程）。"""
+    monkeypatch.setattr(pl, "_warmup_started", False)
+    monkeypatch.setattr(pl, "_warm_once", lambda: None)
+    monkeypatch.setattr(pl, "_warmup_refresh_sec", lambda: 999999)
+    barrier = threading.Barrier(8)
+
+    def call():
+        barrier.wait(5)
+        pl.warmup()
+
+    before = {t for t in threading.enumerate() if t.name == "pl-warmup"}
+    callers = [threading.Thread(target=call, name=f"warm-caller-{i}") for i in range(8)]
+    for t in callers:
+        t.start()
+    for t in callers:
+        t.join(5)
+
+    started = {t for t in threading.enumerate() if t.name == "pl-warmup"} - before
+    assert len(started) == 1, f"并发调 warmup 新起了 {len(started)} 个线程: {started}"
+
+
 def test_warmup_retries_after_thread_start_failure(monkeypatch):
     """线程起不来时占位要还回去，下次调用还能再试（并发占位不能变成永久锁死）。"""
     monkeypatch.setattr(pl, "_warmup_started", False)
