@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """PRTG 通道语义字典测试（Issue #225）。
 
-全部断言以 2026-11-23 实测记录为准（传感器 2721，PTP_SW → CSQUARED），
+全部断言以实测记录为准（2026-11-23 浏览器侧，传感器 2721，PTP_SW → CSQUARED；
+XML 根元素与字段清单为 2026-11-24 MSNOC1 直连复核），
 不依赖真实 PRTG，不发网络请求。
 """
 import pytest
@@ -9,8 +10,11 @@ import pytest
 from backend.services.prtg.channels import (
     CHANNELS,
     HISTORIC_CHANNEL_ORDER,
+    SENSORDETAILS_FIELDS,
+    SENSORDETAILS_XML_ROOT,
     STATUS_RAW,
     TABLE_DEFAULT_COLUMNS,
+    TABLE_XML_ROOT,
     get_channel,
     is_interval_channel,
     verify_traffic_total,
@@ -64,6 +68,21 @@ def test_traffic_total_volume_rounding_tolerance():
 def test_table_default_columns_have_no_objid():
     assert TABLE_DEFAULT_COLUMNS == ("group", "device", "sensor", "status", "status_raw")
     assert "objid" not in TABLE_DEFAULT_COLUMNS
+    assert "lastvalue" not in TABLE_DEFAULT_COLUMNS
+
+
+def test_xml_roots_verified_on_msnoc1():
+    # 2026-11-24 MSNOC1 直连复核：table.xml 根 <sensors>，详情根 <sensordata>。
+    assert TABLE_XML_ROOT == "sensors"
+    assert SENSORDETAILS_XML_ROOT == "sensordata"
+
+
+def test_sensordetails_fields_21_in_return_order():
+    # 2026-11-24 MSNOC1 直连复核的字段顺序原文。
+    assert len(SENSORDETAILS_FIELDS) == 21
+    assert SENSORDETAILS_FIELDS[0] == "name"
+    assert SENSORDETAILS_FIELDS[-1] == "updownsince"
+    assert SENSORDETAILS_FIELDS.index("lastdown") < SENSORDETAILS_FIELDS.index("lastcheck")
 
 
 def test_status_raw_up_is_3():
