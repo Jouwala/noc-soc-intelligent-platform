@@ -345,7 +345,9 @@ def _update_ping_state(session, sensor: PrtgSensor, now: datetime) -> dict[str, 
                 "from": previous, "to": new_state, "status": status,
                 "rtt_ms": rtt, "failures": failures, "successes": successes,
             }, ensure_ascii=False),
-            started_at=now, created_at=now,
+            # 转换是**瞬时事实**，立即关闭，避免一次抖动留下 4 条永久未结束事件；
+            # 持续性的 SUSPECT/DOWN 由 composite 事件承载。
+            started_at=now, ended_at=now, created_at=now,
         ))
         logger.info("PRTG Ping %s 状态转换：%s → %s（status=%s）",
                     sensor.objid, previous, new_state, status)
@@ -373,6 +375,7 @@ def evaluate_all(now: datetime | None = None,
             select(PrtgChannelSample5m.sensor_objid, PrtgChannelSample5m.channel_objid,
                    PrtgChannelSample5m.bucket_time, PrtgChannelSample5m.avg_value)
             .where(PrtgChannelSample5m.bucket_time >= since)
+            .where(PrtgChannelSample5m.bucket_time <= now)
         ).all()
 
         by_sensor: dict[int, dict[int, list[tuple[datetime, float]]]] = {}
@@ -388,9 +391,14 @@ def evaluate_all(now: datetime | None = None,
             if _is_traffic(sensor.sensortype):
                 stats["traffic_sensors"] += 1
                 total = channels.get(-1, [])
-                errors: list[tuple[datetime, float]] = []
+                # 同一 5 分钟桶内把 Errors in/out + Discards in/out 求和；
+                # 不能把 4 个通道序列首尾相接 —— 那样「最后 3 个值」是同一桶的
+                # 不同通道，规则会永不命中（2026-11-24 审核实测）。
+                bucket_errors: dict[datetime, float] = {}
                 for channel_id in EVENT_ERRORS:
-                    errors.extend(channels.get(channel_id, []))
+                    for ts, value in channels.get(channel_id, []):
+                        bucket_errors[ts] = bucket_errors.get(ts, 0.0) + value
+                errors: list[tuple[datetime, float]] = sorted(bucket_errors.items())
                 if not errors:
                     errors = [(t, 0.0) for t, _ in total[-ERROR_GROWTH_BUCKETS:]]
                 hits, baseline_state = evaluate_traffic_sensor(
@@ -444,7 +452,13 @@ def _sync_ping_composite(session, sensor_id: int, ping_row: PrtgPingState | None
             started_at=now, created_at=now,
         ))
     elif abnormal and open_row is not None:
-        open_row.message = f"Ping 抖动状态机：{ping_row.state}"
+        open_row.severity = "critical" if ping_row.state == "DOWN" else "warning"
+        open_row.message = f"Ping 抖动状态机：{ping_row.state}（连续失败 {ping_row.consecutive_failures} 次）"
+        open_row.evidence_json = json.dumps({
+            "state": ping_row.state,
+            "failures": ping_row.consecutive_failures,
+            "rtt_ms": ping_row.last_rtt_ms,
+        }, ensure_ascii=False)
     elif not abnormal and open_row is not None:
         open_row.ended_at = now
 

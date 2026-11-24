@@ -251,10 +251,7 @@ def overview(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
             .where(NetworkAnomalyEvent.rule_code == "composite")
             .where(NetworkAnomalyEvent.severity.in_(("warning", "critical")))
         ).scalars().all()
-        anomaly_by_rule = session.execute(
-            select(NetworkAnomalyEvent.rule_code)
-            .where(NetworkAnomalyEvent.ended_at.is_(None))
-        ).scalars().all()
+
     state = _live_state()
     last_success = state["last_success_at"] if state else None
     age_seconds = None
@@ -278,7 +275,6 @@ def overview(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
             "unknown": counts["unknown"],
             "avg_uptime_pct": round(sum(uptimes) / len(uptimes), 4) if uptimes else None,
             "anomaly_links": len({row.sensor_objid for row in open_anomalies}),
-            "anomaly_events": len(anomaly_by_rule),
             "uptime_samples": len(uptimes),
         },
         "trend": trend_series(window),

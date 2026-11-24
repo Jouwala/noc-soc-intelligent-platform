@@ -165,3 +165,63 @@ def test_ping_transition_writes_event_only_on_change(db):
         row = session.execute(select(PrtgPingState)).scalar_one()
     assert len(ping_events) == 1 and row.state == "SUSPECT"
     assert ping_events[0].message.startswith("Ping 状态 OK → SUSPECT")
+    # 转换事件是瞬时事实：立即关闭，不进入「未结束」列表
+    assert ping_events[0].ended_at is not None
+    with db() as session:
+        open_ping = session.execute(
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.rule_code == "ping_state")
+            .where(NetworkAnomalyEvent.ended_at.is_(None))
+        ).scalars().all()
+        composite = session.execute(
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.rule_code == "composite")
+            .where(NetworkAnomalyEvent.ended_at.is_(None))
+        ).scalar_one()
+    assert open_ping == []
+    assert composite.severity == "warning"
+
+    # 第三次失败 → DOWN：composite 必须升级为 critical
+    anomaly.evaluate_all(now=now + timedelta(minutes=15))
+    with db() as session:
+        row = session.execute(select(PrtgPingState)).scalar_one()
+        composite = session.execute(
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.rule_code == "composite")
+            .where(NetworkAnomalyEvent.ended_at.is_(None))
+        ).scalar_one()
+        ping_events = session.execute(
+            select(NetworkAnomalyEvent).where(NetworkAnomalyEvent.rule_code == "ping_state")
+        ).scalars().all()
+    assert row.state == "DOWN"
+    assert composite.severity == "critical"
+    assert all(e.ended_at is not None for e in ping_events)
+
+
+def test_errors_rule_sums_four_channels_per_bucket(db):
+    """生产接线：4 个通道必须先按桶求和，再判 3 桶严格上升（审核阻塞 1）。"""
+    now = datetime(2026, 11, 24, 10, 0)
+    with db() as session:
+        session.add(PrtgSensor(objid=2719, sensor_name="t", sensortype="SNMP Traffic 64bit",
+                               status="Up", active=True))
+        for i in range(3):
+            session.add(PrtgChannelSample5m(
+                sensor_objid=2719, channel_objid=-1,
+                bucket_time=now - timedelta(minutes=5 * (2 - i)),
+                avg_value=100_000.0, samples=1, updated_at=now,
+            ))
+        for channel_id in (10, 11, 12, 13):
+            for i, value in enumerate((1.0, 2.0, 3.0)):
+                session.add(PrtgChannelSample5m(
+                    sensor_objid=2719, channel_objid=channel_id,
+                    bucket_time=now - timedelta(minutes=5 * (2 - i)),
+                    avg_value=value, samples=1, updated_at=now,
+                ))
+        session.commit()
+    anomaly.evaluate_all(now=now)
+    with db() as session:
+        rows = session.execute(
+            select(NetworkAnomalyEvent).where(NetworkAnomalyEvent.rule_code == "errors_discards_growth")
+        ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].evidence_json

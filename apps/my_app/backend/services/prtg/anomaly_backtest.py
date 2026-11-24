@@ -157,7 +157,10 @@ def render_markdown(result: dict[str, Any], unusual: list[dict[str, Any]]) -> st
         f"> 数据：最近 {result['days']} 天 5 分钟聚合（`prtg_channel_samples_5m`），"
         f"共 {result['sensors']} 个传感器；基线 = 过去 7 天同一分钟档中位数（样本 <3 天不下结论）。",
         "> 回测方法：逐 5 分钟桶回放 `anomaly.evaluate_traffic_sensor()`，命中计数；"
-        "空闲链路（p95 < 10 kbit/s）按「基线偏低（待核查）」归类，不参与告警分级。",
+        "空闲链路（p95 < 10 kbit/s）按「基线偏低（待核查）」归类，不参与告警分级。"
+        "Errors/Discards 按 (传感器, 桶) 把 4 个通道求和后再判 3 桶严格上升。",
+        "> 注意：报告是生成时刻的快照——最近几个 5 分钟桶会被采集器按 20 分钟窗口重算，"
+        "晚几分钟重跑数字会小幅变化，不追求逐位复现。",
         "",
         "## 1. 五条规则回测命中",
         "",

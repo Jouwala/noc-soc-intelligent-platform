@@ -5,6 +5,7 @@
   GET /api/prtg/overview?window=5m|24h|7d|30d   KPI + 全网速率趋势
   GET /api/prtg/links?window=...                25 条链路总览
   GET /api/prtg/links/{sensor_id}?window=...    单链路详情（通道时序/事件/映射）
+  GET /api/prtg/anomalies?window=...            异常事件（#229 规则 + Ping 状态机）
   GET /api/prtg/collector/status                采集同步状态（排障用）
 
 全部只读；取不到数据返回 null/空数组，前端显示「—」，不补 0。

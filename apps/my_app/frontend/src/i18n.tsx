@@ -7692,7 +7692,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'prtg.explain.unusual': '接口 kpi.unusual = status 归一为 unusual 的传感器数。Unusual 表示 PRTG 认为指标越界或待观察，通常仍有流量。',
     'prtg.explain.down': '接口 kpi.down = status 归一为 down 的传感器数。',
     'prtg.explain.avgUptime': '接口 kpi.avg_uptime_pct = 对**有可用率样本**的传感器 uptime_pct 取算术平均，样本数 kpi.uptime_samples = {n}。没有可用率的传感器不参与平均，**不按 0 计**。',
-    'prtg.explain.anomaly': '接口 kpi.anomaly_links = 未结束（ended_at 为空）的异常事件涉及的**去重传感器数**，不是事件条数。',
+    'prtg.explain.anomaly': '接口 kpi.anomaly_links = 未结束且级别为 warning/critical 的**综合异常事件（composite）**涉及的**去重传感器数**，不是事件条数；「基线偏低（待核查）」等 info 事件不计数。',
 
     'prtg.freshness.label': '数据新鲜度',
     'prtg.freshness.seconds': '{n} 秒前',
@@ -15364,7 +15364,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'prtg.explain.unusual': 'API kpi.unusual = sensors whose status normalises to unusual. Unusual means PRTG considers the metric out of bounds or worth watching; traffic usually continues.',
     'prtg.explain.down': 'API kpi.down = sensors whose status normalises to down.',
     'prtg.explain.avgUptime': 'API kpi.avg_uptime_pct = arithmetic mean of uptime_pct over sensors **that have an uptime sample**, sample count kpi.uptime_samples = {n}. Sensors without uptime do not participate and are **not counted as 0**.',
-    'prtg.explain.anomaly': 'API kpi.anomaly_links = **distinct sensors** referenced by open anomaly events (ended_at is null), not the number of events.',
+    'prtg.explain.anomaly': 'API kpi.anomaly_links = **distinct sensors** referenced by open **composite** anomaly events at warning/critical level, not the number of events; info events such as low-baseline are excluded.',
 
     'prtg.freshness.label': 'Data freshness',
     'prtg.freshness.seconds': '{n} s ago',

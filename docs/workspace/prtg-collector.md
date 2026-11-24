@@ -41,7 +41,7 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 | `prtg_ping_state` | Ping 抖动状态机（#229）：OK/SUSPECT/DOWN/RECOVERING + 连续失败/成功计数 | 长期 |
 | `prtg_sync_state` | 每类作业的状态、断点、最近错误、数据新鲜度 | 长期 |
 
-迁移：`0008_prtg_collector`（建表）+ `0009_prtg_source_system`（传感器/采样表补 `source_system`，默认 PRTG），均在 `0007` 之后。
+迁移：`0008_prtg_collector`（建表）+ `0009_prtg_source_system`（采样表补 `source_system`）+ `0010_prtg_ping_state`（Ping 状态机），均在 `0007` 之后。
 
 ## 3. 口径（前端只展示，不重算）
 
@@ -74,7 +74,7 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 | `GET /api/prtg/links?window=…` | 25 条链路总览（In/Out/Total、Unicast、Errors、Discards、可用率、Last Down、容量/利用率、`data_quality`） |
 | `GET /api/prtg/links/{sensor_id}?window=…` | 单链路详情：通道时序、状态事件、全部站点映射 |
 | `GET /api/prtg/anomalies?window=…` | 异常事件（#229 规则 + Ping 状态机），默认只看未结束 |
-| `GET /api/prtg/collector/status` | 六类作业的最近运行/成功/错误（排障用，无凭证） |
+| `GET /api/prtg/collector/status` | 七类作业（catalog/live/backfill/aggregate/anomaly/history_import/prune）的最近运行/成功/错误（排障用，无凭证） |
 
 窗口 → 数据源：`5m` 用 60 秒原始（**近 5 分钟**，不是近 1 小时）、`24h` 用 5 分钟聚合、`7d`/`30d` 用小时聚合；聚合同时读实时与 `prtg_historical_samples`，回填的历史才会进 7d/30d。
 
