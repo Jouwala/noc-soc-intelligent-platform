@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Building2, HelpCircle, RefreshCw, Server, Share2, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { useI18n } from '../../i18n';
+import { useAuth } from '../../auth/AuthContext';
+import TrafficTopologyAdmin from './TrafficTopologyAdmin';
 import ZoomStage from './ZoomStage';
 import { trafficTopologyMock, type TrafficLink, type TrafficNode, type TrafficNodeType, type TrafficPeriod, type TrafficTopologyData } from './trafficTopology.mock';
 
@@ -97,6 +99,16 @@ export default function TrafficTopologyView() {
   const [loading, setLoading] = useState(true);
   const [deviceId, setDeviceId] = useState<number | null>(null);
   const [selectedLinkId, setSelectedLinkId] = useState<number | null>(null);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [editMode, setEditMode] = useState(false);
+  const [draft, setDraft] = useState<Record<number, { x: number; y: number }>>({});
+  const [adminError, setAdminError] = useState('');
+  useEffect(() => {
+    if (usingMock) { setEditMode(false); setDraft({}); }
+  }, [usingMock]);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragRef = useRef<{ id: number; dx: number; dy: number } | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -132,6 +144,44 @@ export default function TrafficTopologyView() {
   }, [period, refreshToken]);
 
   const nodeById = useMemo(() => new Map((data?.nodes ?? []).map((n) => [n.id, n])), [data]);
+  const displayNodes = useMemo(
+    () => (data?.nodes ?? []).map((n) => ({ ...n, ...(draft[n.id] ?? { x: n.x, y: n.y }) })),
+    [data, draft],
+  );
+  const displayById = useMemo(() => new Map(displayNodes.map((n) => [n.id, n])), [displayNodes]);
+  const svgPoint = (e: { clientX: number; clientY: number }) => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const matrix = svg.getScreenCTM();
+    return matrix ? pt.matrixTransform(matrix.inverse()) : null;
+  };
+  const saveLayout = async () => {
+    if (usingMock) {
+      setAdminError(t('trafficTopo.admin.mockReadonly'));
+      return;
+    }
+    setAdminError('');
+    try {
+      const nodesPayload = (data?.nodes ?? []).map((n) => {
+        const p = draft[n.id] ?? { x: n.x, y: n.y };
+        return { id: n.id, x: p.x, y: p.y, pinned: true };
+      });
+      const res = await fetch('/api/network-topology/layout', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodes: nodesPayload }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      setDraft({});
+      setEditMode(false);
+      setRefreshToken((v) => v + 1);
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : String(e));
+    }
+  };
   const deviceNodes = useMemo(() => (data?.nodes ?? []).filter((n) => n.type === 'device'), [data]);
   const links = useMemo(() => {
     if (!data) return [];
@@ -170,8 +220,8 @@ export default function TrafficTopologyView() {
   }, [links, nodes.length]);
 
   const selected = links.find((l) => l.id === selectedLinkId) ?? null;
-  const sourceNode = selected ? nodeById.get(selected.source_node) ?? null : null;
-  const targetNode = selected ? nodeById.get(selected.target_node) ?? null : null;
+  const sourceNode = selected ? displayById.get(selected.source_node) ?? null : null;
+  const targetNode = selected ? displayById.get(selected.target_node) ?? null : null;
 
   // 链路绘制口径：有容量 → 8 档利用率色；无容量 → 灰阶 + 绝对流量线宽 + Mbps 标签。
   const paintLink = (link: TrafficLink) => {
@@ -250,7 +300,26 @@ export default function TrafficTopologyView() {
               </button>
             ))}
           </div>
+          {isAdmin && !usingMock && (
+            <div className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => { setEditMode((v) => !v); setDraft({}); setAdminError(''); }}
+                className="px-2.5 py-1.5 text-[12px] rounded-lg border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300"
+              >
+                {editMode ? t('trafficTopo.admin.cancelEdit') : t('trafficTopo.admin.enterEdit')}
+              </button>
+              {editMode && (
+                <button type="button" onClick={saveLayout}
+                  className="px-2.5 py-1.5 text-[12px] rounded-lg bg-amber-600 text-white">
+                  {t('trafficTopo.admin.saveLayout')}
+                </button>
+              )}
+            </div>
+          )}
         </div>
+        {adminError && <p className="mt-1 text-[11.5px] text-red-600 dark:text-red-400">{adminError}</p>}
+        {editMode && <p className="mt-1 text-[11.5px] text-amber-700 dark:text-amber-300">{t('trafficTopo.admin.dragHint')}</p>}
         <p className="mt-1.5 text-[11.5px] leading-relaxed text-slate-500 dark:text-slate-400">{t('trafficTopo.subtitle')}</p>
         {usingMock && <p className="mt-1 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">{t('trafficTopo.mockHint')}</p>}
       </section>
@@ -266,6 +335,11 @@ export default function TrafficTopologyView() {
         <Kpi label={t('trafficTopo.kpiOver')} value={String(kpi.over)} tone="text-red-600 dark:text-red-400" />
         <Kpi label={t('trafficTopo.kpiCapKnown')} value={`${kpi.capKnown}/${kpi.links}`} />
       </div>
+
+      {editMode && isAdmin && !usingMock && (
+        <TrafficTopologyAdmin nodes={displayNodes} links={links}
+          onReload={() => setRefreshToken((v) => v + 1)} />
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(300px,1fr)] gap-3 items-start">
         {/* 主画布约 75% */}
@@ -289,11 +363,27 @@ export default function TrafficTopologyView() {
                 fullLabel={t('topo.zoomFull')}
               >
                 <svg
+                  ref={svgRef}
                   width={1000}
                   height={620}
                   viewBox="0 0 1000 620"
                   className="block bg-white dark:bg-slate-900"
                   onClick={() => setSelectedLinkId(null)}
+                  onPointerMove={(e) => {
+                    const drag = dragRef.current;
+                    if (!drag || !editMode) return;
+                    const p = svgPoint(e);
+                    if (!p) return;
+                    setDraft((prev) => ({
+                      ...prev,
+                      [drag.id]: {
+                        x: Math.max(20, Math.min(980, p.x - drag.dx)),
+                        y: Math.max(20, Math.min(600, p.y - drag.dy)),
+                      },
+                    }));
+                  }}
+                  onPointerUp={() => { dragRef.current = null; }}
+                  onPointerLeave={() => { dragRef.current = null; }}
                   role="img"
                   aria-label={t('trafficTopo.canvasTitle')}
                 >
@@ -301,8 +391,8 @@ export default function TrafficTopologyView() {
                     <text x={500} y={310} textAnchor="middle" fontSize={18} className="fill-slate-400">{t('trafficTopo.emptyFiltered')}</text>
                   )}
                   {links.map((link) => {
-                    const a = nodeById.get(link.source_node);
-                    const b = nodeById.get(link.target_node);
+                    const a = displayById.get(link.source_node);
+                    const b = displayById.get(link.target_node);
                     if (!a || !b) return null;
                     const paint = paintLink(link);
                     const mx = (a.x + b.x) / 2;
@@ -355,11 +445,21 @@ export default function TrafficTopologyView() {
                       </g>
                     );
                   })}
-                  {nodes.map((n: TrafficNode) => {
+                  {displayNodes.map((n: TrafficNode) => {
                     const Icon = NODE_ICONS[n.type] ?? HelpCircle;
                     const status = normStatus(n.status);
                     return (
-                      <g key={n.id} role="img" aria-label={`${t(NODE_TYPE_KEYS[n.type])} ${n.name} ${t(STATUS_KEYS[status])}`}>
+                      <g key={n.id} role="img"
+                        style={editMode ? { cursor: 'grab' } : undefined}
+                        onPointerDown={(e) => {
+                          if (!editMode) return;
+                          const p = svgPoint(e);
+                          if (!p) return;
+                          e.stopPropagation();
+                          dragRef.current = { id: n.id, dx: p.x - n.x, dy: p.y - n.y };
+                          setSelectedLinkId(null);
+                        }}
+                        aria-label={`${t(NODE_TYPE_KEYS[n.type])} ${n.name} ${t(STATUS_KEYS[status])}`}>
                         <title>{`${n.name} · ${t(NODE_TYPE_KEYS[n.type])} · ${t(STATUS_KEYS[status])}`}</title>
                         <circle cx={n.x} cy={n.y} r={22} className="fill-white dark:fill-slate-900" stroke={STATUS_COLORS[status]} strokeWidth={2.5} />
                         <g transform={`translate(${n.x - 9}, ${n.y - 9})`}>

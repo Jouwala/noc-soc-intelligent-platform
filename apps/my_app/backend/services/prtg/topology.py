@@ -26,6 +26,7 @@ from backend.database import SessionLocal
 from backend.models.network_topology import (
     NetworkLink,
     NetworkLinkLayout,
+    NetworkNodeAlias,
     NetworkTopologyNode,
 )
 from backend.models.prtg import PrtgSensorMapping
@@ -108,6 +109,7 @@ def ensure_topology(now: datetime | None = None) -> dict[str, int]:
         ]
         nodes = {n.node_key: n for n in session.execute(select(NetworkTopologyNode)).scalars()}
         links = {l.link_key: l for l in session.execute(select(NetworkLink)).scalars()}
+        links_by_sensor = {l.sensor_objid: l for l in links.values()}
         capacities = {
             c.sensor_objid: c for c in session.execute(select(NetworkLinkCapacity)).scalars()
         }
@@ -149,7 +151,7 @@ def ensure_topology(now: datetime | None = None) -> dict[str, int]:
                                   sensor.sensor_name or f"sensor-{sensor.objid}", "unknown")
 
             link_key = f"sensor:{sensor.objid}"
-            link = links.get(link_key)
+            link = links.get(link_key) or links_by_sensor.get(sensor.objid)
             confidence = "verified" if mapping and mapping.match_status == "verified" else (
                 "candidate" if mapping and mapping.match_status == "auto" else "discovered"
             )
@@ -166,9 +168,10 @@ def ensure_topology(now: datetime | None = None) -> dict[str, int]:
                 session.add(link)
                 created_links += 1
             else:
-                # 只补空缺：人工设置的 link_type/容量/置信度不被覆盖
-                link.source_node_id = source.id
-                link.target_node_id = target.id
+                # 人工绑定（link_key=manual:）冻结两端；自动发现链路继续跟随 PRTG 名称刷新。
+                if not link.link_key.startswith("manual:"):
+                    link.source_node_id = source.id
+                    link.target_node_id = target.id
                 if link.capacity_ab_mbps is None and capacity and capacity.capacity_mbps:
                     link.capacity_ab_mbps = capacity.capacity_mbps
                     link.capacity_ba_mbps = capacity.capacity_mbps
@@ -186,7 +189,7 @@ def ensure_topology(now: datetime | None = None) -> dict[str, int]:
         for link_row in session.execute(select(NetworkLink)).scalars():
             used_nodes.update((link_row.source_node_id, link_row.target_node_id))
         for node in list(session.execute(select(NetworkTopologyNode)).scalars()):
-            if node.id not in used_nodes and node.node_type != "device":
+            if node.id not in used_nodes and node.node_type != "device" and node.meta != "manual":
                 session.delete(node)
             elif not node.pinned and (
                 node.x is None or node.y is None or not 0 <= node.x <= 1000 or not 0 <= node.y <= 620
@@ -465,6 +468,200 @@ def update_mappings(items: Iterable[dict[str, Any]], now: datetime | None = None
             updated += 1
         session.commit()
     return {"updated": updated}
+
+
+def create_node(name: str, node_type: str = "unknown", x: float | None = None,
+                y: float | None = None, now: datetime | None = None) -> dict[str, Any]:
+    """人工新增节点（Phase 2）。节点 key 用 manual:<uuid>，不覆盖自动发现结果。"""
+    import uuid
+
+    if not (name or "").strip():
+        raise ValueError("节点名不能为空")
+    if node_type not in NODE_TYPES:
+        raise ValueError(f"节点类型非法：{node_type!r}")
+    now = now or datetime.utcnow()
+    with SessionLocal() as session:
+        node = NetworkTopologyNode(
+            node_key=f"manual:{uuid.uuid4().hex}", name=name.strip(), node_type=node_type,
+            meta="manual",
+            x=max(0.0, min(1000.0, float(x))) if x is not None else 500.0,
+            y=max(0.0, min(620.0, float(y))) if y is not None else 310.0,
+            pinned=True, updated_at=now,
+        )
+        session.add(node)
+        session.commit()
+        session.refresh(node)
+        return {"id": node.id, "name": node.name, "type": node.node_type,
+                "x": node.x, "y": node.y}
+
+
+def delete_node(node_id: int, now: datetime | None = None) -> dict[str, Any]:
+    """删除人工节点；仍被链路引用的节点拒绝删除（先改链路或删链路）。"""
+    with SessionLocal() as session:
+        node = session.execute(
+            select(NetworkTopologyNode).where(NetworkTopologyNode.id == node_id)
+        ).scalar_one_or_none()
+        if node is None:
+            raise LookupError("节点不存在")
+        used = session.execute(
+            select(NetworkLink.id)
+            .where((NetworkLink.source_node_id == node_id) | (NetworkLink.target_node_id == node_id))
+            .limit(1)
+        ).first()
+        if used:
+            raise ValueError("节点仍被链路引用，先删除或改绑链路")
+        for alias in session.execute(
+            select(NetworkNodeAlias).where(NetworkNodeAlias.node_id == node_id)
+        ).scalars():
+            session.delete(alias)
+        session.delete(node)
+        session.commit()
+    return {"deleted": node_id}
+
+
+def create_link(sensor_objid: int, source_node_id: int, target_node_id: int,
+                link_type: str | None = None, capacity_ab_mbps: Any = None,
+                capacity_ba_mbps: Any = None, capacity_source: str = "manual",
+                now: datetime | None = None) -> dict[str, Any]:
+    """把未绑定的 Traffic 传感器绑成一条链路（Phase 2 的「绑定传感器」）。"""
+    now = now or datetime.utcnow()
+    ab = _capacity_value(capacity_ab_mbps)
+    ba = _capacity_value(capacity_ba_mbps)
+    with SessionLocal() as session:
+        sensor = session.execute(
+            select(PrtgSensor).where(PrtgSensor.objid == sensor_objid)
+        ).scalar_one_or_none()
+        if sensor is None:
+            raise LookupError("传感器不存在")
+        if not is_traffic_sensor(sensor.sensortype):
+            raise ValueError("只能绑定 Traffic 传感器（Ping 等非流量传感器不建链路）")
+        if not sensor.active:
+            raise ValueError("传感器已停用，不能绑定链路")
+        if source_node_id == target_node_id:
+            raise ValueError("起点和终点不能是同一个节点")
+        existing = session.execute(
+            select(NetworkLink).where(NetworkLink.sensor_objid == sensor_objid)
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ValueError("该传感器已绑定链路，请直接编辑现有链路")
+        for node_id in (source_node_id, target_node_id):
+            if session.get(NetworkTopologyNode, node_id) is None:
+                raise LookupError(f"节点不存在：{node_id}")
+        link = NetworkLink(
+            link_key=f"manual:{sensor_objid}", sensor_objid=sensor_objid,
+            source_node_id=source_node_id, target_node_id=target_node_id,
+            link_type=link_type, capacity_ab_mbps=ab, capacity_ba_mbps=ba,
+            capacity_source=capacity_source if (ab or ba) else None,
+            mapping_confidence="candidate", updated_at=now,
+        )
+        session.add(link)
+        session.flush()
+        if ab is not None:
+            capacity_row = session.execute(
+                select(NetworkLinkCapacity).where(NetworkLinkCapacity.sensor_objid == sensor_objid)
+            ).scalar_one_or_none()
+            if capacity_row is None:
+                session.add(NetworkLinkCapacity(sensor_objid=sensor_objid, capacity_mbps=ab,
+                                                capacity_source=capacity_source, updated_at=now))
+            else:
+                capacity_row.capacity_mbps = ab
+                capacity_row.capacity_source = capacity_source
+                capacity_row.updated_at = now
+        session.add(NetworkLinkLayout(link_id=link.id, bend_offset=0.0, updated_at=now))
+        session.commit()
+        session.refresh(link)
+        return {"id": link.id, "sensor_id": sensor_objid,
+                "source_node": source_node_id, "target_node": target_node_id}
+
+
+def delete_link(link_id: int, now: datetime | None = None) -> dict[str, Any]:
+    with SessionLocal() as session:
+        link = session.get(NetworkLink, link_id)
+        if link is None:
+            raise LookupError("链路不存在")
+        layout = session.execute(
+            select(NetworkLinkLayout).where(NetworkLinkLayout.link_id == link_id)
+        ).scalar_one_or_none()
+        if layout is not None:
+            session.delete(layout)
+        session.delete(link)
+        session.commit()
+    return {"deleted": link_id}
+
+
+def swap_direction(link_id: int, now: datetime | None = None) -> dict[str, Any]:
+    """确认上下游：交换 A/B 两端与分方向容量（In/Out 配对语义随之翻转）。"""
+    now = now or datetime.utcnow()
+    with SessionLocal() as session:
+        link = session.get(NetworkLink, link_id)
+        if link is None:
+            raise LookupError("链路不存在")
+        link.source_node_id, link.target_node_id = link.target_node_id, link.source_node_id
+        link.capacity_ab_mbps, link.capacity_ba_mbps = link.capacity_ba_mbps, link.capacity_ab_mbps
+        # 交换即视为人工确认上下游：标记为 manual，ensure_topology 后续冻结两端，
+        # 否则自动链路下次刷新会把方向改回去、容量留在反方向。
+        link.link_key = f"manual:{link.sensor_objid}"
+        link.updated_at = now
+        capacity = session.execute(
+            select(NetworkLinkCapacity).where(NetworkLinkCapacity.sensor_objid == link.sensor_objid)
+        ).scalar_one_or_none()
+        if capacity is not None:
+            capacity.capacity_mbps = link.capacity_ab_mbps
+            capacity.updated_at = now
+        session.commit()
+        return {"id": link_id, "source_node": link.source_node_id,
+                "target_node": link.target_node_id}
+
+
+def set_bend(link_id: int, bend_offset: float, now: datetime | None = None) -> dict[str, Any]:
+    now = now or datetime.utcnow()
+    with SessionLocal() as session:
+        if session.get(NetworkLink, link_id) is None:
+            raise LookupError("链路不存在")
+        layout = session.execute(
+            select(NetworkLinkLayout).where(NetworkLinkLayout.link_id == link_id)
+        ).scalar_one_or_none()
+        if layout is None:
+            layout = NetworkLinkLayout(link_id=link_id)
+            session.add(layout)
+        layout.bend_offset = max(-300.0, min(300.0, float(bend_offset)))
+        layout.updated_at = now
+        session.commit()
+        return {"link_id": link_id, "bend_offset": layout.bend_offset}
+
+
+def add_alias(node_id: int, alias: str, now: datetime | None = None) -> dict[str, Any]:
+    now = now or datetime.utcnow()
+    alias = (alias or "").strip()
+    if not alias:
+        raise ValueError("别名不能为空")
+    with SessionLocal() as session:
+        if session.get(NetworkTopologyNode, node_id) is None:
+            raise LookupError("节点不存在")
+        existing = session.execute(
+            select(NetworkNodeAlias).where(NetworkNodeAlias.alias == alias)
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ValueError("别名已存在")
+        row = NetworkNodeAlias(node_id=node_id, alias=alias, created_at=now)
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return {"id": row.id, "node_id": node_id, "alias": alias}
+
+
+def sensor_options() -> dict[str, Any]:
+    """Phase 2 绑定用：列出 Traffic 传感器及是否已绑定链路。"""
+    with SessionLocal() as session:
+        sensors = [
+            s for s in session.execute(select(PrtgSensor).order_by(PrtgSensor.objid)).scalars()
+            if is_traffic_sensor(s.sensortype) and s.active
+        ]
+        bound = {l.sensor_objid for l in session.execute(select(NetworkLink)).scalars()}
+    return {"sensors": [{
+        "objid": s.objid, "name": s.sensor_name, "device": s.device_name,
+        "bound": s.objid in bound,
+    } for s in sensors]}
 
 
 def history(link_id: int, period: str = "24h") -> dict[str, Any] | None:

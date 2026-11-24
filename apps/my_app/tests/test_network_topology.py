@@ -210,3 +210,85 @@ def test_invalid_layout_number_is_skipped(db):
     _seed(db)
     topology.ensure_topology()
     assert topology.update_layout([{"id": 1, "x": "abc", "y": 2}])["updated"] == 0
+
+
+def test_manual_node_and_link_crud(db):
+    _seed(db)
+    topology.ensure_topology()
+    # ensure 之后新增的传感器尚未自动建链路，用来测试「人工绑定」
+    with db() as session:
+        session.add(PrtgSensor(objid=3000, sensor_name="(200) to NEWPEER", device_name="PTP_SW",
+                               sensortype="SNMP Traffic 64bit", status="Up", active=True))
+        session.commit()
+    node = topology.create_node("MANUAL-PEER", "peer", 400, 300)
+    assert node["type"] == "peer"
+    link = topology.create_link(3000, 1, node["id"], link_type="test",
+                                capacity_ab_mbps=1000, capacity_ba_mbps=500)
+    assert link["sensor_id"] == 3000
+    # 绑定后 traffic() 不能再因唯一约束 500，且链路存在
+    refreshed = topology.traffic("24h")
+    assert any(l["id"] == link["id"] for l in refreshed["links"])
+    # 人工节点必须扛过 ensure_topology 的清理
+    assert any(n["id"] == node["id"] for n in refreshed["nodes"])
+    # 已绑定传感器不能重复绑定
+    with pytest.raises(ValueError):
+        topology.create_link(3000, 1, node["id"])
+    # 上下游确认：交换两端与分方向容量
+    swapped = topology.swap_direction(link["id"])
+    assert swapped["source_node"] == node["id"]
+    with db() as session:
+        row = session.get(NetworkLink, link["id"])
+        assert row.capacity_ab_mbps == 500 and row.capacity_ba_mbps == 1000
+    # 折线偏移与别名
+    assert topology.set_bend(link["id"], 50)["bend_offset"] == 50.0
+    assert topology.add_alias(node["id"], "MANUAL-PEER-ALIAS")["alias"] == "MANUAL-PEER-ALIAS"
+    # 节点仍被引用时拒绝删除；删链路后可删节点
+    with pytest.raises(ValueError):
+        topology.delete_node(node["id"])
+    topology.delete_link(link["id"])
+    topology.delete_node(node["id"])
+
+
+def test_create_link_upserts_existing_capacity_row(db):
+    """SLA 已登记容量后再绑定链路：更新容量行，不能 UNIQUE 冲突。"""
+    _seed(db)
+    topology.ensure_topology()
+    with db() as session:
+        session.add(PrtgSensor(objid=3001, sensor_name="(300) to PEER3", device_name="PTP_SW",
+                               sensortype="SNMP Traffic 64bit", status="Up", active=True))
+        session.add(NetworkLinkCapacity(sensor_objid=3001, capacity_mbps=500.0,
+                                        capacity_source="manual", updated_at=datetime.utcnow()))
+        session.commit()
+    node = topology.create_node("PEER3", "peer")
+    link = topology.create_link(3001, 1, node["id"], capacity_ab_mbps=1000)
+    assert link["sensor_id"] == 3001
+    with db() as session:
+        rows = session.execute(
+            select(NetworkLinkCapacity).where(NetworkLinkCapacity.sensor_objid == 3001)
+        ).scalars().all()
+    assert len(rows) == 1 and rows[0].capacity_mbps == 1000.0
+
+
+def test_auto_link_endpoints_follow_sensor_rename(db):
+    _seed(db)
+    topology.ensure_topology()
+    with db() as session:
+        sensor = session.execute(select(PrtgSensor).where(PrtgSensor.objid == 2565)).scalar_one()
+        sensor.sensor_name = "(200) to NEWPEER"
+        session.commit()
+    topology.ensure_topology()
+    data = topology.traffic("24h")
+    link = next(l for l in data["links"] if l["sensor_id"] == 2565)
+    assert link["target"] == "NEWPEER"
+    assert any(n["name"] == "NEWPEER" for n in data["nodes"])
+
+
+def test_swap_on_auto_link_persists_after_refresh(db):
+    _seed(db)
+    topology.ensure_topology()
+    data = topology.traffic("24h")
+    auto = next(l for l in data["links"] if l["sensor_id"] == 2721)
+    before = (auto["source_node"], auto["target_node"])
+    topology.swap_direction(auto["id"])
+    refreshed = next(l for l in topology.traffic("24h")["links"] if l["sensor_id"] == 2721)
+    assert (refreshed["source_node"], refreshed["target_node"]) == (before[1], before[0])

@@ -10,11 +10,11 @@
   一条链路只画一条边；两端容量分方向存 `capacity_ab_mbps` / `capacity_ba_mbps`。
 - 节点坐标是 **0–1000×620 画布相对坐标**（不是经纬度）；自动布局按类型分圈
   （device 内圈、customer 中圈、peer 中圈、unknown 外圈），保证 y 落在 0–620。
-  `PUT /layout` 支持保存人工坐标（`pinned=true`）；**门户页面当前只读、未接拖动保存**，
-  拖动编辑属于 Issue #230 Phase 2 待办。
+  `PUT /layout` 支持保存人工坐标（`pinned=true`）；**管理员在页面进入编辑模式后可拖动节点并保存布局**，
+  普通用户只读。
 - 映射流程：`discovered`（自动发现）→ `candidate`（自动匹配待确认）→ `verified`（人工确认）。
-  `network_node_aliases` 与 `network_link_layouts` 表已建但**尚无写入路径/API**（别名与折线偏移
-  留待 Phase 2）；当前链路折线由前端按两端坐标绘制。
+  `network_node_aliases`（`POST /nodes/{id}/aliases`）与 `network_link_layouts.bend_offset`
+  （`PUT /links/{id}/bend`）已有写入 API，但门户管理面板暂未提供对应控件。
 
 ## 2. 表（迁移 `0013_network_topology`）
 
@@ -48,8 +48,14 @@
 | `GET /api/network-topology/traffic?period=live\|1h\|24h\|7d` | 节点 + 链路 + KPI + 数据质量 |
 | `GET /api/network-topology/nodes` / `/links` | 节点 / 链路清单 |
 | `GET /api/network-topology/links/{id}/history?period=` | 单链路 In/Out 时序 |
-| `GET/PUT /api/network-topology/layout` | 节点坐标读取 / 保存（PUT 仅 admin；页面暂只读） |
+| `GET/PUT /api/network-topology/layout` | 节点坐标读取 / 保存（PUT 仅 admin；页面编辑模式可拖动保存） |
 | `GET/PUT /api/network-topology/mappings` | 容量、链路类型、映射置信度读取 / 更新（PUT 仅 admin；非法值 4xx 且不落库） |
+| `POST/DELETE /api/network-topology/nodes` | 新增人工节点 / 删除无引用节点（仅 admin） |
+| `POST/DELETE /api/network-topology/links` | 绑定未绑定的 Traffic 传感器 / 删除链路（仅 admin） |
+| `POST /api/network-topology/links/{id}/direction` | 交换上下游与分方向容量（仅 admin） |
+| `POST /api/network-topology/nodes/{id}/aliases` | 节点别名（仅 admin，面板未接） |
+| `PUT /api/network-topology/links/{id}/bend` | 链路折线偏移（仅 admin，面板未接） |
+| `GET /api/network-topology/sensors` | 可绑定的 Traffic 传感器及是否已绑定 |
 
 `PUT /mappings` 同步镜像到 `network_link_capacity`，保证 SLA 月报与拓扑用同一份容量。
 
@@ -67,8 +73,8 @@
   `(369098753) port-channel2` / `======= PEER-LINK =======` 这类接口名只能识别为
   interface/unknown 节点，需要人工用 `network_node_aliases` 与映射管理确认。
 - 容量为 0 时无法演示利用率色阶；Phase 1 的 Mock 数据覆盖了有/无容量两种形态。
-- 页面未实现拖动保存/别名/折线偏移/60 秒自动刷新；`PUT` 接口已具备但仅 admin 可调用。
+- 页面未实现 60 秒自动刷新；别名/折线偏移接口已具备但管理面板未提供控件。
 - `update_mappings` 只把 AB 方向容量镜像到 `network_link_capacity`（#231 SLA 仍是单容量口径），
   BA 方向只存在于拓扑表；非对称容量的 SLA 月报需等 #231 扩展。
-- 拓扑编辑 UI（增删节点/链路、绑定传感器、确认上下游、拖动保存）尚未实现；
-  当前只有接口层 `PUT /mappings`、`PUT /layout`（admin），完整管理面板留待 Issue #230 Phase 2。
+- 拓扑编辑 UI 已提供：管理员进入编辑模式可拖动节点并保存布局；管理面板支持新增节点、删除节点、
+  绑定未绑定 Traffic 传感器新增链路、删除链路、改分方向容量、交换上下游。别名与折线偏移仅 API。
