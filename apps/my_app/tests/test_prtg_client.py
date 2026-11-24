@@ -119,6 +119,7 @@ def test_table_json_passes_columns_and_count():
     assert "columns=objid%2Csensor" in seen["url"]
     assert "count=5" in seen["url"]
 
+
 # ---------------- 凭证不得进日志（#242 独立审核阻塞项） ----------------
 
 def test_repr_and_logs_do_not_leak_passhash(caplog):
@@ -162,6 +163,7 @@ def test_retry_logs_do_not_leak_passhash(caplog):
     assert attempts["n"] == 2
     assert "dummy-passhash" not in caplog.text
     assert "PRTG 请求失败" in caplog.text
+
 
 def test_redact_filter_preserves_dict_style_logging():
     """%(name)s 风格日志不能被 Filter 改成 tuple（2026-11-24 CI 实测 TypeError）。"""

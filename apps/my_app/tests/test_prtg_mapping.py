@@ -186,3 +186,87 @@ def test_models_package_registers_prtg_tables():
         capture_output=True, text=True, timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+# ---------------- 种子灌库（#226 数据部分） ----------------
+
+def test_apply_seed_inserts_mappings_and_blindspots(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    import backend.models  # noqa: F401
+    from backend.database import Base
+    from backend.models.prtg import PrtgBlindspotDevice, PrtgSensorMapping
+    from backend.services.prtg import apply_mapping_seed as loader
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    monkeypatch.setattr(loader, "SessionLocal", Session)
+
+    seed = {
+        "mappings": [{
+            "sensor_id": 2717, "device_name": "PTP_SW", "sensor_name": "(10115) to MATADI-SW",
+            "interface_no": "10115", "peer_name": "MATADI-SW", "site_id": "Matadi",
+            "region": "monrovia", "link_type": None, "capacity_mbps": None,
+            "capacity_source": None, "criticality": None, "enabled": True,
+            "match_status": "auto",
+        }],
+        "blindspots": [
+            {"device_name": "ISP-FIREWALL", "group_name": "Core Firewalls", "region": None,
+             "customer": None, "reason": "PRTG 未配置传感器（0 sensors）", "owner": None,
+             "monitored": False},
+        ],
+    }
+    stats = loader.apply_seed(seed)
+    assert stats["mapping_inserted"] == 1 and stats["blindspot_inserted"] == 1
+
+    # 人工确认后重跑：不得覆盖 verified 行
+    with Session() as session:
+        row = session.execute(select(PrtgSensorMapping)).scalar_one()
+        row.match_status = "verified"
+        session.commit()
+    stats2 = loader.apply_seed(seed)
+    assert stats2["mapping_skipped"] == 1 and stats2["blindspot_skipped"] == 1
+
+
+def test_apply_seed_does_not_add_unknown_when_sensor_already_verified(tmp_path, monkeypatch):
+    """人工把 verified 行改成真实站点后重跑种子：不能再补一条 Unknown 行。"""
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    import backend.models  # noqa: F401
+    from backend.database import Base
+    from backend.models.prtg import PrtgSensorMapping
+    from backend.services.prtg import apply_mapping_seed as loader
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    monkeypatch.setattr(loader, "SessionLocal", Session)
+
+    row = {
+        "sensor_id": 2717, "device_name": "PTP_SW", "sensor_name": "(10115) to MATADI-SW",
+        "interface_no": "10115", "peer_name": "MATADI-SW", "site_id": "Unknown",
+        "region": None, "link_type": None, "capacity_mbps": None,
+        "capacity_source": None, "criticality": None, "enabled": True,
+        "match_status": "unknown",
+    }
+    seed = {"mappings": [row], "blindspots": []}
+    loader.apply_seed(seed)
+
+    # 人工确认：把 site_id 改成真实站点
+    with Session() as session:
+        current = session.execute(select(PrtgSensorMapping)).scalar_one()
+        current.site_id = "Matadi"
+        current.match_status = "verified"
+        session.commit()
+
+    stats = loader.apply_seed(seed)
+    assert stats["mapping_inserted"] == 0
+    assert stats["mapping_skipped"] == 1
+    with Session() as session:
+        rows = session.execute(select(PrtgSensorMapping)).scalars().all()
+    assert len(rows) == 1 and rows[0].site_id == "Matadi"

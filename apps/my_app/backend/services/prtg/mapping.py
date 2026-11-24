@@ -6,9 +6,11 @@
     如 "(10152) to CSQUARED" → ("10152", "CSQUARED")；无编号名（如
     "B2B_CORE-SW G1/0/45"）只尝试提取 Gx/y/z 形态接口号，peer 不猜。
   - peer 与拓扑站点匹配：站名来自 orangeTopologySites.json 的 n 字段，
-    region 取 s 字段。归一化与门户 topologyData.ts 的 norm 一致
-    （小写 + 去空白），另加一档宽松归一（再去 _ 与 -）兜底；
-    两档都未命中 → site_id 显式 "Unknown"，不静默丢弃。
+    region 取 s 字段。归一化去全部非字母数字（括号/空白/下划线/连字符），
+    并对 peer 去掉尾部设备类型后缀（-SW/-RTR/-FW…）再比一次；两轮都
+    未命中 → site_id 显式 "Unknown"，不静默丢弃，也不按相似度猜站点。
+    实测：553 个拓扑站是客户站点分布，PRTG 25 个传感器多为核心/ISP 链路，
+    只有 MATADI-SW → Matadi 这类能自动命中，其余等人工确认。
   - capacity_mbps 不在本模块产生：PRTG 无此数据，来源只允许
     snmp_ifspeed / manual，落定前留空（消费方须显式提示「待补全」）。
   - 盲区设备：分组为 Core Firewalls / VSAT Customers 的设备（PRTG 里
@@ -23,6 +25,13 @@ UNKNOWN_SITE = "Unknown"
 
 BLINDSPOT_GROUPS = ("Core Firewalls", "VSAT Customers")
 BLINDSPOT_DEFAULT_REASON = "PRTG 未配置传感器（0 sensors）"
+
+# 盲区责任方（#226 验收「各有原因与责任方」）：按设备组先落到对口团队，
+# 属**暂定责任方**，人工确认后可在库里改；apply_mapping_seed 不覆盖已有值。
+BLINDSPOT_OWNER = {
+    "Core Firewalls": "传输与 IP 网管部",
+    "VSAT Customers": "MS 项目组",
+}
 
 _PEER_PATTERN = re.compile(r"^\((\d+)\)\s+to\s+(.+)$")
 _INTERFACE_TOKEN = re.compile(r"\b([A-Za-z]+\d+(?:/\d+)+)\b")
@@ -40,14 +49,21 @@ def parse_sensor_name(name: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+_DEVICE_SUFFIX = re.compile(r"[-_ ](sw|rtr|router|switch|fw|firewall|gw|core)$", re.IGNORECASE)
+
+
 def _norm(text: str) -> str:
-    """与门户 topologyData.ts 的 norm 一致：小写 + 去全部空白。"""
-    return re.sub(r"\s+", "", (text or "").lower())
+    """站名/对端名归一：小写 + 去全部非字母数字（括号、空白、下划线、连字符都不参与）。"""
+    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
 
 
-def _norm_loose(text: str) -> str:
-    """宽松归一：在 _norm 基础上再去掉下划线与连字符。"""
-    return re.sub(r"[_\-]+", "", _norm(text))
+def _peer_variants(peer_name: str) -> list[str]:
+    """对端名的候选写法：原名 + 去掉尾部设备类型后缀（如 MATADI-SW → MATADI）。"""
+    variants = [peer_name]
+    stripped = _DEVICE_SUFFIX.sub("", peer_name.strip())
+    if stripped != peer_name:
+        variants.append(stripped)
+    return variants
 
 
 def load_topology_sites(path: str | Path) -> list[dict[str, Any]]:
@@ -61,15 +77,21 @@ def load_topology_sites(path: str | Path) -> list[dict[str, Any]]:
 def match_peer_to_site(
     peer_name: str | None, sites: Iterable[dict[str, Any]]
 ) -> dict[str, Any] | None:
-    """peer 名 → 拓扑站点（先严格归一、后宽松归一）；未命中返回 None。"""
+    """peer 名 → 拓扑站点；未命中返回 None。
+
+    2026-11-24 实测口径修正：拓扑 553 个站是**客户站点分布**，PRTG 25 个传感器
+    多为核心/ISP 链路（CSQUARED、BICS_VOICE、PEER-LINK 等），两边命名体系不同，
+    自动匹配只能命中少量（如 MATADI-SW → Matadi）。命中不了的显式 Unknown，
+    等人工确认；**不得**按相似度猜站点。
+    """
     if not peer_name:
         return None
     site_list = list(sites)
-    for normalize in (_norm, _norm_loose):
-        target = normalize(peer_name)
-        for site in site_list:
-            if normalize(str(site.get("n", ""))) == target:
-                return site
+    site_index = {_norm(str(site.get("n", ""))): site for site in site_list}
+    for candidate in _peer_variants(peer_name):
+        site = site_index.get(_norm(candidate))
+        if site is not None:
+            return site
     return None
 
 
@@ -122,14 +144,17 @@ def build_blindspot_rows(devices: Iterable[dict[str, Any]]) -> list[dict[str, An
         group = str(device.get("group", ""))
         if group not in BLINDSPOT_GROUPS:
             continue
+        device_name = str(device.get("device", ""))
         rows.append(
             {
-                "device_name": str(device.get("device", "")),
+                "device_name": device_name,
                 "group_name": group,
                 "region": None,
-                "customer": None,
+                # VSAT 设备名就是客户名（Supreme / Lee Group / BHP-…），直接落到 customer；
+                # 防火墙组没有客户概念，留空。
+                "customer": device_name if group == "VSAT Customers" else None,
                 "reason": BLINDSPOT_DEFAULT_REASON,
-                "owner": None,
+                "owner": BLINDSPOT_OWNER.get(group),
                 "monitored": False,
             }
         )

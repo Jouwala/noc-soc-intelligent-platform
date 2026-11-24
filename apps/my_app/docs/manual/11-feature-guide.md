@@ -68,6 +68,7 @@
 | 40 | 实时告警地图 | `realtime_alarm` | React（同组件另一模式） |
 | 41 | 人员位置地图 | `person` | React |
 | 42 | 丢包看板 | `packet_loss` | React |
+| 42b | PRTG 核心链路健康度 | `prtg_links` | React |
 | 43 | 电池看板 | `battery` | React |
 | 44 | IP 链路探测 | `ip_trace` | **iframe** |
 | 45 | VMAX 用户查询 | `vmax_user_query` | React |
@@ -6476,3 +6477,49 @@ VMAX 数仓 GBase（10.123.255.12:5258/zxvmax，只读）
 - 台账是**快照**，不落库：历史对比（某台上次换板、某站上季度机龄分布）本页不提供。需要趋势时另立任务按日落 PG，而不是在这里加隐式写入。
 - 只有 `hw/sw/opt` 三类；上游的 `/api/rncmoaction/v1/rnc/<uuid>` 详情接口含 `OMM FTP` 明文口令，**刻意不采集**（见 `RANElementManagement/ran_element_management_service.py` 顶部说明）。
 - 882 个网元的明细一次性下发约 450 KB（含逐网元的型号矩阵），页面一次取回；不按网元分页拉取，是因为台账表本身就要全量排序与筛选。
+
+## 42b. PRTG 核心链路健康度看板（`?page=prtg_links`，2026-11-24 新增）
+
+**一句话**：把 PRTG（GRAPHER-ISP）25 个传感器（24 个 SNMP Traffic 64bit + 1 个 Ping）的链路状态、流量、错误 / 丢弃、可用率与容量利用率放到一张表里，点任意链路看该链路的时序与状态事件。数据只读，KPI 是时点快照，趋势 / 详情时序随上方时间范围变化。
+
+### 42b.1 数据链路
+
+| 环节 | 位置 |
+| --- | --- |
+| 上游 | PRTG API（只读账号；传感器目录 / 通道采样 / 状态事件） |
+| 采集 | `backend/services/prtg/runner.py` + `collector.py`，线程 **60 秒**一轮；原始采样保留 90 天 |
+| 聚合 | `backend/services/prtg/collector.py` 的 `aggregate()`：60 秒 → 5 分钟 → 1 小时，供 24h / 7d / 30d 使用 |
+| 查询 | `backend/services/prtg/dashboard.py` |
+| 路由 | `backend/routers/prtg.py`：`/api/prtg/overview`、`/api/prtg/links`、`/api/prtg/links/{sensor_id}`、`/api/prtg/collector/status` |
+| 前端 | `frontend/src/pages/PrtgLinkHealth.tsx` + `pages/prtg/`（模型 / 图表 / 详情） |
+
+时间范围与底层表：`5m` 读 60 秒原始表（近 5 分钟、1 分钟桶）、`24h` 读 5 分钟聚合、`7d` / `30d` 读小时聚合（聚合同时读实时与回填历史）（`backend/services/prtg/dashboard.py` 的 `WINDOWS`）。
+
+### 42b.2 口径（页面「数据口径说明」逐条对应）
+
+1. **流量**：`Traffic In / Out / Total` 原始单位是 byte/s，后端按 `×8÷1e6` 换算为 Mbps 后下发（`total_mbps` / `in_mbps` / `out_mbps`）；前端只格式化，不重算。字典实测 `Total = In + Out`，但 Total 列直接展示接口值，不由前端相加。
+2. **Errors / Discards / Unicast**：PRTG 给的是**区间速率**（count/s），不是累计计数器，**不做差分**（`docs/workspace/prtg-channel-dictionary.md` 第 3 节）。
+3. **利用率**：只在有 `capacity_mbps` 时计算，按 `max(In / Cin, Out / Cout) × 100`；**不用 Total / 容量**（会翻倍）。容量缺失时接口返回 null，界面显示「—」。
+4. **容量**：PRTG 不提供容量，`network_link_capacity.capacity_source` 只允许 `snmp_ifspeed` / `manual`；缺失时容量列显示「待补全」，且不参与利用率。
+5. **状态**：`Up / Unusual / Down / Unknown` 是 PRTG 的时点快照；Unknown 表示未给出可识别状态，不代表正常。
+6. **可用率**：取传感器详情的累计 `uptime_pct`，不是按所选时间窗重算。
+7. **数据新鲜度**：`data_age_seconds = 当前时间 − collector.last_success_at`；超过 **5 分钟**页面顶部常驻过期告警（这是异常，不是可收起的口径解释）。
+8. **缺失值**：接口返回 null 的字段一律显示「—」，**不补 0** —— 0 表示确实是 0，null 表示取不到。
+9. **时间**：所有时间戳为 **UTC**（接口带 `Z`），页面用 `frontend/src/datetime.ts` 统一格式化。
+
+### 42b.3 页面构成
+
+- **筛选条**：时间范围（5 分钟 / 24 小时 / 7 天 / 30 天）+ 刷新 + 数据新鲜度标签 + 生成时间。
+- **KPI 卡（6 张）**：传感器总数 / Up / Unusual / Down / 平均可用率 / 异常链路数。标题旁 `ExplainIcon` 讲这一张卡，数字本身由 `StatCard.explainText` 挂 `ExplainPopover`。
+- **趋势图**：`overview.trend[].total_mbps` 自绘 SVG 折线（`pages/prtg/PrtgCharts.tsx`），不嵌 `chart.png`、不引入图表依赖；图例中英随 `t()` 切换。
+- **链路表（25 行）**：状态 / 设备·传感器 / 站点 / In / Out / Total (Mbps) / Unicast / Errors / Discards / 可用率 / Last Down / 容量 / 利用率。列头统一 `ExplainIcon`，每个数字 / 时间单元格 `ExplainPopover`，气泡只引用接口字段（采样时间、样本年龄、capacity_source、match_status 等）。
+- **详情弹窗**：点行打开 `DraggableClickModal`，展示传感器基础信息、全部站点映射、最近 20 条状态事件，以及 `series` 的 `-1 / 0 / 1` 三条时序（原始 byte/s 在图上换算为 Mbps，仅单位换算）。
+- **口径说明**：`CalcChainNote`，默认收起（`AGENTS.md` 三.3b）。
+- **按页刷新**：`App.tsx` 的 `AR_PAGE_DEFAULTS` 登记 `prtg_links: 60`，与采集节拍一致。
+
+### 43.4 已知边界
+
+- 只有 25 个传感器；Ping 传感器的通道集与 SNMP Traffic 不同，本页不把它当流量链路解读。
+- `series` 只取 `-1 / 0 / 1` 三条通道画图；Unicast / Errors / Discards 的时序在详情接口里已返回，但本页只做当前值展示（避免图上多量纲混画）。
+- 异常链路数取「未结束的异常事件涉及的去重传感器数」，与「状态为 Down 的传感器数」不是同一口径，两者不必相等。
+- 采集器失败时页面保留上一轮数据并在顶部常驻报错 / 过期提示，不伪造 0 值。
