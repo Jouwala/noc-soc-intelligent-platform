@@ -556,6 +556,25 @@ CREDENTIAL_GROUPS = [
         "env_user": None,
         "env_secret": None,
     },
+    {
+        "key": "prtg",
+        "name": "PRTG 流量 / 传感器采集 (192.168.15.244)",
+        "name_en": "PRTG Traffic / Sensor Collector (192.168.15.244)",
+        "usage": "PRTG 采集任务用此只读账号取 table.xml、getsensordetails.xml、historicdata.csv。口令字段填 PRTG 的 Passhash（Setup → Account Settings），不是登录密码。",
+        "usage_en": "Used by the PRTG collection tasks to fetch table.xml, getsensordetails.xml and historicdata.csv. The secret field takes the PRTG Passhash (Setup → Account Settings), not the login password.",
+        "default_user": "control1",
+        "default_secret": "",
+        "username_label": "用户名",
+        "username_label_en": "Username",
+        "secret_label": "Passhash",
+        "secret_label_en": "Passhash",
+        "has_username": True,
+        "testable": False,
+        "test_host": "192.168.15.244",
+        "test_port": 80,
+        "env_user": "PRTG_USERNAME",
+        "env_secret": "PRTG_PASSHASH",
+    },
 ]
 
 _GROUP_INDEX = {g["key"]: g for g in CREDENTIAL_GROUPS}
@@ -607,6 +626,7 @@ _CONFIG_REF = {
     "mw_ume": {"file": "mw_ume_config.json"},
     "ume_in": {"file": "ume_in_config.json"},
     "cm_data": {"file": "cm_data_config.json"},
+    "prtg": {"file": "prtg_config.json"},
 }
 
 
