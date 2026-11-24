@@ -1,6 +1,6 @@
 # 04 任务与调度系统
 
-my_app 的"心脏"。87 个定时任务负责全部数据采集与报表投递，页面上看到的数据新鲜度、失败告警、补跑行为都在这里定义。
+my_app 的"心脏"。88 个定时任务负责全部数据采集与报表投递，页面上看到的数据新鲜度、失败告警、补跑行为都在这里定义。
 
 > 另有两个**模块级说明文件**更贴近代码：`backend/WORKER.md`（worker 进程架构、容错、启停、环境变量）与 `backend/task_registry.md`（注册表字段与对外接口）。本章是归口叙述，改动这两处代码时请同步更新三份文档。
 
@@ -16,7 +16,7 @@ APScheduler 到点 (backend 进程内)
 
 关键点：
 
-- **注册是代码注册表，不是配置文件**。84 条声明集中在 `backend/task_registry.py:179` 起的 `TASK_SPECS`，启动时 `register_all_tasks()`（:1232）逐条登记，采用懒加载包装——每条二选一给 `func`（需要特殊包装）或 `loader`（`("module.path","func_name")` 元组）。
+- **注册是代码注册表，不是配置文件**。88 条声明集中在 `backend/task_registry.py:179` 起的 `TASK_SPECS`，启动时 `register_all_tasks()`（:1232）逐条登记，采用懒加载包装——每条二选一给 `func`（需要特殊包装）或 `loader`（`("module.path","func_name")` 元组）。
 - **cron 可以被库里覆盖**：默认值写在 `default_cron`，实际排程读 `task_schedule_config` 表（`task_runner.py:232-440`），所以在"任务管理"页改排程会立即生效且重启不丢。
   - ⚠️ **库里有值时它永远优先**（`task_runner.py:521` `current_cron = saved_cron if saved_cron else default_cron`）。因此**只改 `task_registry.py` 的 `default_cron` 对已存在的任务完全无效，且不留痕迹** —— 2026-10-04 改 `sp_online_sync`、2026-10-11 改三个 WhatsApp 发送任务时都踩过（以为改了、实际仍按库里的旧值跑）。要改生效值：用任务管理页、或 `POST /api/tasks/{id}/schedule`、或删掉该任务的 `task_schedule_config` 行让它回落到代码默认。
   - 下表列的是 **`default_cron`（代码默认值）**，**不是**当前生效值。二者可能不同（2026-10-11 巡检：22 个任务存在 code≠库 的覆盖）。核对三方一致性用 `TMP/_check_task_cron_drift.py`。
@@ -30,7 +30,7 @@ APScheduler 到点 (backend 进程内)
 
 | 组 | 任务数 | 约束原因 | 成员 task_id |
 | --- | --- | --- | --- |
-| `u` | 14 | RAN UME 单账号会话，必须串行（并发会被踢会话）。`bp_report_sync` 也读 RAN UME，且必须排在 `main_kpi_sync` 之后（否则读到昨天的 KPI）；2026-11-07 新增 `ran_element_management_sync`（23:00 拉 RNM 网元管理表格落 PG），同走 `zte_ume` 凭据与 `auth_cache` 会话，故必须归本组串行，与 02:00 的 `ran_ume_daily` 错峰；2026-11-22 新增 `ran_kpi_15mins_sync`（每 15 分钟取 2G/3G/4G/5G 15 分钟档 KPI），同样走 `zte_ume` 共享会话 | `ran_ume_daily`, `main_kpi_sync`, `cell_availability_sync`, `network_kpi_sync`, `packet_loss_sync`, `packet_loss_email`, `battery_kpi_sync`, `ipran_kpi_sync`, `cm_data_sync`, `cells_kpi_sync`, `avail_recon_sync`, `bp_report_sync`, `ran_element_management_sync`, `ran_kpi_15mins_sync` |
+| `u` | 15 | RAN UME 单账号会话，必须串行（并发会被踢会话）。`bp_report_sync` 也读 RAN UME，且必须排在 `main_kpi_sync` 之后（否则读到昨天的 KPI）；2026-11-07 新增 `ran_element_management_sync`（23:00 拉 RNM 网元管理表格落 PG），同走 `zte_ume` 凭据与 `auth_cache` 会话，故必须归本组串行，与 02:00 的 `ran_ume_daily` 错峰；2026-11-22 新增 `ran_kpi_15mins_sync`（每 15 分钟取 2G/3G/4G/5G 15 分钟档 KPI），同样走 `zte_ume` 共享会话；2026-11-24 新增 `ngi_param_coverage_sync`（周日 02:00 导 NGI 工参与覆盖网格落 PG），它用**独立主机 10.100.29.17 + 独立凭据组 `ngi`**，与 UME 会话无交集、不会互踢，归本组只因为同属 RAN 侧取数域且 02:00 与 `ran_ume_daily` 同档排队 | `ran_ume_daily`, `main_kpi_sync`, `cell_availability_sync`, `network_kpi_sync`, `packet_loss_sync`, `packet_loss_email`, `battery_kpi_sync`, `ipran_kpi_sync`, `cm_data_sync`, `cells_kpi_sync`, `avail_recon_sync`, `bp_report_sync`, `ran_element_management_sync`, `ran_kpi_15mins_sync`, `ngi_param_coverage_sync` |
 | `n` | 19 | eFlow API / config-center 同源会话（2026-09-27 由 17 项收窄，VMAX→`v`、SFTP→`s`、MW UME→`w`；2026-10-15 实时告警→`x`；2026-10-17 新增 `cnn_kpi_sync_5mins`，与 `cnn_kpi_sync` 共用 CNN UME 会话；2026-10-23 新增 3 个 `whatsapp_kb_sync_*`，跟在对应规则采集之后触发知识库同步；2026-10-29 新增 `eflow_push_rules_check`，与规则采集同会话故同组；2026-11-18 新增 `cn_hourly_kpi_sync`，同登 CNN UME 共享会话故同组） | `eflow_sync`, `eflow_sync_full`, `eflow_history_alarm`, `eflow_tt_rules_check`, `ms_sla_full`, `cnn_kpi_sync`, `cnn_kpi_sync_5mins`, `cn_hourly_kpi_sync`, `fw_kpi_sync`, `sp_online_sync`, `sp_material_sync`, `eflow_alarm_rules_collect`, `eflow_push_rules_collect`, `eflow_push_rules_check`, `whatsapp_kb_sync_alarm_rules`, `whatsapp_kb_sync_push_rules`, `whatsapp_kb_sync_tt_rules`, `ume_in_kpi_sync`, `ume_in_osg_report` |
 | `s` | 1 | SP 备件 SFTP（独立 SFTP 服务器 + UNC 镜像库）。2026-09-27 从 `n` 拆出：它是 `n` 组最大单体负载（实测 347min/天）且是已知挂死源（SFTP channel 读挂死 5.5h 曾拖停整组） | `sp_data_sync` |
 | `w` | 2 | MW UME 微波网管（凭证分组 `mw_ume`），独立会话。2026-09-27 从 `n` 拆出：`mw_ume_kpi_sync_rt` 为 `*/15` 高频任务，此前每次排在 `sp_data_sync` 后，实测队列等待 964s（全场最久） | `mw_ume_kpi_sync`, `mw_ume_kpi_sync_rt` |
@@ -325,6 +325,7 @@ APScheduler 到点 (backend 进程内)
 | `gp_ran_user_sync` | RAN 用户身份清单（VoLTE / N78 去重 **IMSI**，经 control1 两跳 SSH 到 Greenplum，取最近 7 个完整 UTC 日；实测 72.6s / 10.4 亿行扫描） | `20 13 * * *` | g |
 | `soc_trend_sync` | SOC 多维趋势同步（**直连 VMAX 数仓 GBase 只读**，拉流量/TCP/分业务类目的小时与天粒度聚合，落 `data/soc_trend/soc_trend.sqlite3`；**只允许 SELECT/SHOW/DESC，禁止在数仓建对象或回写**） | `40 * * * *` | v |
 | `ran_element_management_sync` | RAN 网元管理表同步（RNM `/api/res/v1/ranmes` 全量 934 行 / 15 字段 → PG `app.ran_element_management` 当前全量 + `app.ran_element_management_daily` 每日快照 + `app.ran_element_management_sync_log`；行数 <100 视为上游残片判失败，不覆盖已有数据） | `0 23 * * *` | u |
+| `ngi_param_coverage_sync` | NGI 工参与覆盖数据同步（NGI 规划平台 `projectParamFiles` 导出 LTE 8 227 / NR 101 小区工参，第 3 行作表头、空 `SectorID` 按站点+频点的方位角顺序补号；取 `taskid=1647` **最新一次**覆盖评估任务导出 50 m 网格 CSV 178 370 格点 → PG `app.ngi_lte_cell_param` / `app.ngi_nr_cell_param` / `app.ngi_coverage_grid` / `app.ngi_sync_log`；LTE <5000 / NR <50 / 网格 <50 000 行判失败） | `0 2 * * sun` | u |
 
 > **`whatsapp_kb_sync_*` 的判据是「导出的知识正文」，不是「源 xlsx 的 mtime」（2026-11-16 改）**
 >
@@ -1115,8 +1116,52 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 | `backend/services/whatsapp/wa_notify_service.py` | **Baileys 发送通道**（投递/回报/心跳/通道预检） |
 | `backend/services/eflow/eflow_data_mapper.py` | 实时查单实现（`fetch_tt_live_batch`，base/list 分页遍历） |
 
-## 任务凭据分组对应表
+### `ngi_param_coverage_sync`：NGI 工参与覆盖数据（2026-11-24 新增）
 
+**每周日 02:00**（`0 2 * * sun`）从 NGI 规划平台（`10.100.29.17:28001`，凭据组 `ngi`）
+导两类数据写 PostgreSQL。代码在 `backend/services/ngi_data/`，抓包记录
+`backend/services/ngi_data/url.txt`（仅本机留存，被 `**/*url*.txt` 忽略）。
+
+| 阶段 | 上游接口 | 落表 |
+| --- | --- | --- |
+| 工参 | `GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0` → `ProjectData.zip` | `app.ngi_lte_cell_param`（8 227 小区）、`app.ngi_nr_cell_param`（101 小区） |
+| 覆盖 | `gettasklogbytaskid?taskid=1647` → `getLayerFiles` → `exportMap(CSV)` → `exportMapChecking` → `downloadExportMapFile` | `app.ngi_coverage_grid`（178 370 个 50 m 格点） |
+| 留痕 | — | `app.ngi_sync_log`（两阶段各一条，含行数 / 耗时 / 任务号 / 原始错误 / `run_id`） |
+
+> ⚠ **cron 的星期必须写字面量 `sun`，不能写 `0`。** APScheduler 的 `day_of_week`
+> 是 **0=周一**（与 crontab 的 0=周日相反）：`0 2 * * 0` 实测排到的是「周一 02:00」。
+> 项目内既有周任务同样用字面量（`kpi_email`: `0 7 * * mon`），照此保持一致。
+
+四条**实测**约束，改这个任务前务必知道：
+
+1. **工参前两行不是数据。** 导出工作簿的表头是 3 行：第 1 行中文填写说明、第 2 行英文填写说明、
+   **第 3 行才是字段名**（`RAT Type` / `Cell ID` / `Azimuth`…），数据从第 4 行起。
+   把第 1 行当表头 → 列名全是"字符串；必填"；把第 3 行当数据 → 字段名被当成一个小区入库。
+   两种都不抛异常。实现见 `ngi_param.HEADER_ROW = 3`。
+2. **空 `SectorID` 的补号按「站点 + 下行中心频点」分组。** 规则：同一 `eNodeB ID`
+   且同一 `Downlink Center Frequency` 的小区，按 `Azimuth` 升序依次补 1、2、3、4…，
+   **只填空值、已有值原样保留**（实测 8 227 行里 7 054 行为空；已有值只取 1~4，
+   且 355/383 个全有值分组与"按方位角升序编号"一致，剩下 28 组是现场自定义起编位置）。
+   分组**必须带站点** —— 只按频点分组时每组有 1 883~2 324 个小区，会编出 1~2324。
+   落库时 `sector_source` 记 `file` / `derived`，撞号数进 `app.ngi_sync_log.detail.sector`。
+3. **覆盖导出的 `exportMap` 必须回传 `legend`。** 只给 `taskID + renderType + layerName + colDes`
+   时服务端照样返回令牌，但作业**永远停在 `processing`**（2026-11-24 实测 4 个作业 30 分钟
+   仍未完成）；把 `getLayerFiles` 返回的 `legend`（`name` / `showtitle` / `range` 7 段）原样带上，
+   4 次轮询（约 15 秒）即完成。下载走 `downloadExportMapFile`，不是 `exportMapChecking`。
+4. **行数下限，宁可失败也不覆盖好数据**：`NGI_MIN_LTE_ROWS`（默认 5 000）、
+   `NGI_MIN_NR_ROWS`（默认 50）、`NGI_MIN_GRID_ROWS`（默认 50 000）。低于下限直接判失败且**不写库** ——
+   上游给空表/半页时，全量替换会整表抹掉上一周的数据（与 `ran_element_management_sync` 同款守卫）。
+
+排障顺序：先看 `SELECT * FROM app.ngi_sync_log ORDER BY id DESC LIMIT 5`（`status` / `message` /
+`detail`），再看任务执行日志；会话问题到「设置 → 凭据」测 `ngi` 分组（`test_kind=zte_oauth2`，
+与 RAN UME 走同一条 RSA 登录链路，但两台设备账号不通用）。
+进程被强杀（重启 / 崩溃）会留下一条 `running` 行，下一轮开头会把**超过 2 小时**的这类行
+自动标成 `failed`（`NGI_STALE_RUNNING_HOURS` 可调），不需要人工清。
+覆盖网格替换是按 `kpi` 的**当前快照**语义（先删该 KPI 再插），需要历史请另建快照表（当前刻意未做）。
+四张表会被每小时 `pg_to_sqlite_sync` 一并快照进 `db/app.db`（约 +186K 行 / +40 MB 量级，
+单轮耗时相应略增），无需额外登记。
+
+## 任务凭据分组对应表
 任务失败若报"鉴权失败 / 登录失败 / 未获取到 Cookie"，先到**「设置 → 凭据管理」**
 核对下表中对应分组的账号密码（改完最迟 30 秒生效，无需重启）。
 
@@ -1125,6 +1170,7 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 | `ran_ume_daily`、`main_kpi_sync`、`network_kpi_sync`、`ms_sla_sync`、`cells_kpi_sync` | `zte_ume` | RAN UME 网管 |
 | `battery_kpi_sync`、`battery_email` | **`battery_ume`** | Battery UME 电池网管 |
 | `cm_data_sync` | **`cm_data`** | RAN UME 网管（CM 取数） |
+| `ngi_param_coverage_sync` | **`ngi`** | NGI 规划平台 `10.100.29.17:28001`（工参与覆盖导出） |
 | `ipran_kpi_sync` | `ipran_ume` | iPRAN UME 网管 |
 | `ccn_kpi`、`ccn_free_rating_chart_email` | `ccn_ume` | CCN UME 网管 |
 | `eflow_sync`、`site_outage_screenshot` 等 eFlow 系 | `eflow` | eFlow 告警系统 |

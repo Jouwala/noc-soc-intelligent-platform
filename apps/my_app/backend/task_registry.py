@@ -1196,6 +1196,31 @@ TASK_SPECS = [
          description="每天 23:00 从 RAN UME(10.100.28.27:28001) 的 RNM 网元管理接口 /api/res/v1/ranmes 拉取全量网元表格（实测 934 行 / 15 字段，ITBBU/SDR/MRNC/MEC），写入 PostgreSQL 的 app.ran_element_management（当前全量，按 ne_id upsert）、app.ran_element_management_daily（每日快照，按 snapshot_date+ne_id 幂等）与 app.ran_element_management_sync_log；低于 100 行视为上游残片直接判失败，不覆盖已有数据",
          description_en="Daily at 23:00, pull the full RAN element table from the RNM /api/res/v1/ranmes endpoint on RAN UME (10.100.28.27:28001) - 934 rows / 15 fields measured, covering ITBBU/SDR/MRNC/MEC - and store it in PostgreSQL: app.ran_element_management (current snapshot, upsert by ne_id), app.ran_element_management_daily (idempotent daily history keyed by snapshot_date+ne_id) and app.ran_element_management_sync_log. Fewer than 100 rows is treated as a partial upstream response and fails the task instead of overwriting good data",
          default_cron="0 23 * * *", category="ran_ume"),
+
+    # 87. NGI 工参与覆盖数据同步（每周日 02:00）2026-11-24 注册
+    #     数据源：NGI 规划平台 10.100.29.17:28001（抓包见 services/ngi_data/url.txt）
+    #       · 工参：GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0
+    #         → ProjectData.zip（LTEProjectParam.xlsx 8 227 小区 + NRProjectParam.xlsx 101 小区）
+    #       · 覆盖：taskmanager/gettasklogbytaskid?taskid=1647 取**最新一次**评估任务
+    #         → commonGis/getLayerFiles（含 legend）→ MapServerService/exportMap(CSV)
+    #         → exportMapChecking 轮询 → downloadExportMapFile
+    #         （实测 ZIP 11.4 MB，解压后 CSV 33 MB / 178 370 格点）
+    #     鉴权不照抄抓包里的会话 Cookie：走 auth_manager.get_auth(probe=...)
+    #     + credential_store 的 ngi 组（与 RAN UME 的 zte_ume 是两台设备、账号不通用）。
+    #     落 PG app schema 四张表：LTE 工参 / NR 工参 / 覆盖网格 / 同步日志。
+    #     ⚠ 归 u 组：属 RAN 侧取数域，与 02:00 的 ran_ume_daily 同档排队；
+    #       本任务用独立主机与独立凭据组，与 UME 会话无交集，不会互踢。
+    dict(task_id="ngi_param_coverage_sync", name="NGI 工参与覆盖数据同步",
+         name_en="NGI Parameter & Coverage Sync",
+         loader=("backend.services.ngi_data.ngi_sync_service",
+                 "run_ngi_param_coverage_sync"),
+         description="每周日 02:00 从 NGI 规划平台(10.100.29.17:28001)导出工参与覆盖数据写入 PostgreSQL：工参取 projectParamFiles?exportType=1,0（ProjectData.zip，LTE 8 227 小区 / 101 列、NR 101 小区 / 61 列，第 3 行作表头，前两行中英文填写说明丢弃），空的 SectorID 按「同一 eNodeB ID + 同一 Downlink Center Frequency」分组后按 Azimuth 升序补 1、2、3、4…；覆盖取 taskmanager/gettasklogbytaskid?taskid=1647 的**最新一次**评估任务，经 getLayerFiles（必须回传 legend，否则作业永远 processing）→ exportMap(CSV) → exportMapChecking 轮询 → downloadExportMapFile 得到 50 m 网格 CSV（实测 178 370 格点 / 13 列）。落 app.ngi_lte_cell_param / app.ngi_nr_cell_param（按 cell_uid upsert 并清理已删小区）、app.ngi_coverage_grid（按 KPI 全量替换）、app.ngi_sync_log（两阶段各一条，含行数/耗时/任务号/原始错误）；LTE <5000 / NR <50 / 网格 <50000 行视为上游残片直接判失败，不覆盖已有数据",
+         description_en="Sundays at 02:00, export engineering parameters and coverage data from the NGI planning platform (10.100.29.17:28001) into PostgreSQL. Parameters come from projectParamFiles?exportType=1,0 (ProjectData.zip: 8,227 LTE cells / 101 columns and 101 NR cells / 61 columns; row 3 is the header, the first two Chinese/English instruction rows are dropped) and blank SectorID values are filled 1,2,3,4... by sorting Azimuth ascending within the same eNodeB ID + Downlink Center Frequency group. Coverage uses the latest run of taskmanager/gettasklogbytaskid?taskid=1647, then getLayerFiles (legend MUST be echoed back or the job stays 'processing' forever) -> exportMap(CSV) -> exportMapChecking polling -> downloadExportMapFile to get the 50 m grid CSV (measured 178,370 cells / 13 columns). Writes app.ngi_lte_cell_param / app.ngi_nr_cell_param (upsert by cell_uid, deleted cells pruned), app.ngi_coverage_grid (full replace per KPI) and app.ngi_sync_log (one row per stage with rows/duration/task id/error); fewer than 5,000 LTE / 50 NR / 50,000 grid rows is treated as a partial upstream response and fails the run without overwriting good data",
+         # ⚠ 必须写 `sun` 而不是 `0`：APScheduler 的 day_of_week 是 **0=周一**，
+         #   `0 2 * * 0` 实测排到的是「周一 02:00」（2026-11-24 验证），
+         #   与 crontab 的 0=周日 相反。项目内既有周任务同样用 `mon` 写法
+         #   （kpi_email: `0 7 * * mon`），照此保持一致。
+         default_cron="0 2 * * sun", category="ngi_data"),
 ]
 
 # ========== 网关分组（按「获取数据的外部系统」归类，与 category 平行） ==========
@@ -1245,6 +1270,8 @@ CATEGORY_GATEWAY: dict[str, str] = {
     "gp_ran": "ran_greenplum",
     # IPT Digital Platform（RMS 能源监控平台，AWS 外网 SaaS）：站点电源/能源数据
     "ipt_power": "ipt_energy",
+    # NGI 规划平台（10.100.29.17:28001）：工参 + 覆盖评估导出
+    "ngi_data": "ngi_data",
 }
 
 # 将 gateway 注入每个 spec，作为一级分组真相源（前端按此动态分组，不再硬编码 ROW_GROUPS）

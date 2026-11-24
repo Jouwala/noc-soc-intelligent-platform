@@ -445,6 +445,35 @@ CREDENTIAL_GROUPS = [
         "env_secret": "CM_PASSWORD",
     },
     {
+        # 2026-11-24 新增：NGI 规划平台（工参 + 覆盖评估导出）。
+        # 与 RAN UME 不是同一台设备、账号不通用（10.100.29.17 vs 10.100.28.27）。
+        # 登录走同一套 uportal/oauth2（RSA 口令 + Z-AUTH-CODE），故 test_kind 仍
+        # 用 zte_oauth2，设置页的「测试」按钮直接复用 auth_manager 的登录链路。
+        "key": "ngi",
+        "name": "NGI 规划平台 (10.100.29.17:28001)",
+        "name_en": "NGI Planning Platform (10.100.29.17:28001)",
+        "usage": "NGI 工参与覆盖数据同步任务（ngi_param_coverage_sync，每周日 02:00）"
+                 "使用此账号登录 NGI 规划平台，导出 ProjectData.zip（LTE/NR 工参）"
+                 "与覆盖评估的 50 m 网格 CSV。与 RAN UME 是两台不同设备，账号不通用。",
+        "usage_en": "Used by the NGI parameter & coverage sync task (ngi_param_coverage_sync, Sundays 02:00) "
+                    "to log into the NGI planning platform and export ProjectData.zip (LTE/NR engineering "
+                    "parameters) plus the 50 m coverage grid CSV. This is a different server from RAN UME; "
+                    "the accounts are not interchangeable.",
+        "default_user": "admin",
+        "default_secret": "",
+        "username_label": "用户名",
+        "username_label_en": "Username",
+        "secret_label": "密码",
+        "secret_label_en": "Password",
+        "has_username": True,
+        "testable": True,
+        "test_kind": "zte_oauth2",
+        "test_host": "10.100.29.17",
+        "test_port": 28001,
+        "env_user": "NGI_USER",
+        "env_secret": "NGI_PASSWORD",
+    },
+    {
         "key": "sftp_sp",
         "name": "SFTP 备件报表服务器 (10.100.20.11)",
         "name_en": "SFTP Spare-parts Report Server (10.100.20.11)",

@@ -32,8 +32,8 @@ export interface TaskDoc {
 
 export const WORKER_GROUP_INFO: Record<string, { zh: string; en: string }> = {
   u: {
-    zh: 'RAN UME 单账号会话，组内必须串行（并发会被踢会话）；2026-11-07 新增 23:00 的 ran_element_management_sync（RNM 网元管理表格落 PG），与 02:00 的 ran_ume_daily 共用 zte_ume 会话',
-    en: 'RAN UME single-account session; tasks run serially (parallel runs kick the session). Added 2026-11-07: ran_element_management_sync at 23:00 (RNM element table into PG), sharing the zte_ume session with ran_ume_daily at 02:00',
+    zh: 'RAN UME 单账号会话，组内必须串行（并发会被踢会话）；2026-11-07 新增 23:00 的 ran_element_management_sync（RNM 网元管理表格落 PG），与 02:00 的 ran_ume_daily 共用 zte_ume 会话；2026-11-24 新增周日 02:00 的 ngi_param_coverage_sync（NGI 工参与覆盖网格落 PG，独立主机 + 独立 ngi 凭据，不占 UME 会话）',
+    en: 'RAN UME single-account session; tasks run serially (parallel runs kick the session). Added 2026-11-07: ran_element_management_sync at 23:00 (RNM element table into PG), sharing the zte_ume session with ran_ume_daily at 02:00. Added 2026-11-24: ngi_param_coverage_sync on Sundays 02:00 (NGI parameters and coverage grid into PG; own host and own ngi credential, no UME session involved)',
   },
   n: {
     zh: '网管 / eFlow API / 远程系统：彼此独立但保守同组',
@@ -1901,6 +1901,48 @@ export const TASK_DOCS: TaskDoc[] = [
         'WARNING: belongs to group u because it shares the same zte_ume account and session with the other RAN UME tasks; concurrent logins kick each other. It runs every 15 minutes and a measured run takes about 4.5 minutes (four techs, including 24 metrics for 5G)',
         'WARNING: an export with 0 rows is treated as an empty state and skipped, not failed (same convention as cnn_kpi_sync_5mins)',
         'The only consumer is ?page=ran_kpi_15mins (routers/ran_kpi_15mins.py + the read side of services/ran_kpi_assurance/ran_kpi_15mins_service.py)',
+      ],
+    },
+  },
+  {
+    id: 'ngi_param_coverage_sync', group: 'u', cron: '0 2 * * sun',
+    script: 'services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync',
+    zh: {
+      name: 'NGI 工参与覆盖数据同步',
+      desc: '每周日 02:00 从 NGI 规划平台（10.100.29.17:28001）导出两类数据写入 PostgreSQL：LTE/NR 工参（8 227 + 101 个小区）与覆盖评估的 50 m 网格（178 370 个格点）',
+      flow: [
+        '登录 NGI 规划平台：auth_manager.get_auth + credential_store 的 ngi 凭据组（与 RAN UME 的 zte_ume 是两台设备、账号不通用），登录协议同为 uportal/oauth2 的 RSA 口令 + Z-AUTH-CODE',
+        '工参：GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 取 ProjectData.zip；工作簿表头是 3 行（中文说明 / 英文说明 / 字段名），丢弃前两行、第 3 行作表头，数据从第 4 行起',
+        '空 SectorID 补号：同一 eNodeB ID + 同一 Downlink Center Frequency 的小区按 Azimuth 升序依次补 1、2、3、4…；已有值原样保留，sector_source 记 file / derived',
+        '覆盖：GET taskmanager/gettasklogbytaskid?taskid=1647 取最新一次评估任务的 taskLogId → POST commonGis/getLayerFiles 拿图层 hash 与 legend → POST MapServerService/exportMap(CSV) → exportMapChecking 轮询 → downloadExportMapFile 下载 CSV.zip',
+        '落库（显式 BEGIN/COMMIT 事务）：工参按 cell_uid upsert 进 app.ngi_lte_cell_param / app.ngi_nr_cell_param 并清理本轮未出现的旧小区；网格按 kpi 先删后插进 app.ngi_coverage_grid；两阶段各写一条 app.ngi_sync_log',
+      ],
+      maintain: [
+        '⚠ 覆盖导出的 exportMap 必须原样回传 getLayerFiles 返回的 legend（name/showtitle/range 七段）。只给 taskID + renderType + layerName + colDes 时服务端照样返回令牌，但作业永远停在 processing（2026-11-24 实测 4 个作业 30 分钟未完成）；带上 legend 后 4 次轮询约 15 秒完成',
+        '⚠ 下载走 downloadExportMapFile（表单 {mapType, params: 令牌}），不是 exportMapChecking；文件名固定 CSV.zip，前端 gis3d.js 的 saveFile() 里就是这么调用的',
+        '⚠ 行数下限：NGI_MIN_LTE_ROWS=5000 / NGI_MIN_NR_ROWS=50 / NGI_MIN_GRID_ROWS=50000，低于下限直接判失败且不写库，避免上游残片整表覆盖上一周的好数据',
+        '⚠ 归 u 组：属 RAN 侧取数域，与 02:00 的 ran_ume_daily 同档排队；本任务用独立主机与独立凭据组，与 UME 会话无交集，不会互踢。新增任务必须同时在 worker_watchdog.py 的 GROUP_TASK_MAP 登记',
+        '表结构由服务内 DDL 幂等创建（CREATE TABLE IF NOT EXISTS），无需 Alembic；改 ngi_store.FIELDS 映射时要同步改 DDL 与索引，tests/test_ngi_param.py 会比对两边',
+        '排障顺序：先看 app.ngi_sync_log（status / message / detail，覆盖那条还带 task_log_id 与 run_id），再看任务执行日志；会话问题到「设置 → 凭据」测 ngi 分组',
+      ],
+    },
+    en: {
+      name: 'NGI Parameter & Coverage Sync',
+      desc: 'Sundays at 02:00, export two datasets from the NGI planning platform (10.100.29.17:28001) into PostgreSQL: LTE/NR engineering parameters (8,227 + 101 cells) and the 50 m coverage grid (178,370 cells)',
+      flow: [
+        'Log into the NGI planning platform: auth_manager.get_auth with the ngi credential group (a different server from RAN UME; accounts are not interchangeable). Login uses the same uportal/oauth2 RSA password + Z-AUTH-CODE flow',
+        'Parameters: GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 returns ProjectData.zip. The workbook has a 3-row header (Chinese notes / English notes / field names): drop the first two rows, use row 3 as the header, data starts at row 4',
+        'Blank SectorID fill: within the same eNodeB ID + Downlink Center Frequency group, sort by Azimuth ascending and number 1, 2, 3, 4...; existing values are preserved and sector_source records file / derived',
+        'Coverage: GET taskmanager/gettasklogbytaskid?taskid=1647 for the latest evaluation taskLogId -> POST commonGis/getLayerFiles for the layer hash and legend -> POST MapServerService/exportMap(CSV) -> poll exportMapChecking -> downloadExportMapFile for CSV.zip',
+        'Persist (explicit BEGIN/COMMIT transactions): upsert parameters by cell_uid into app.ngi_lte_cell_param / app.ngi_nr_cell_param and prune cells missing from this run; delete-then-insert the grid per kpi into app.ngi_coverage_grid; one app.ngi_sync_log row per stage',
+      ],
+      maintain: [
+        'WARNING: exportMap MUST echo back the legend returned by getLayerFiles (name/showtitle/range, seven bands). With only taskID + renderType + layerName + colDes the server still returns a token but the job stays in processing forever (measured 2026-11-24: four jobs still processing after 30 minutes); with the legend it finishes in four polls (~15 s)',
+        'WARNING: download goes through downloadExportMapFile (form {mapType, params: token}), not exportMapChecking; the file name is always CSV.zip, matching saveFile() in the portal gis3d.js',
+        'WARNING: minimum rows: NGI_MIN_LTE_ROWS=5000 / NGI_MIN_NR_ROWS=50 / NGI_MIN_GRID_ROWS=50000. Below that the run fails without writing, so a partial upstream response cannot replace last week good data',
+        'WARNING: belongs to group u (RAN-side data collection), queued with ran_ume_daily at 02:00; it uses its own host and credential group, so it shares no session with UME and cannot kick it. A new task MUST also be registered in GROUP_TASK_MAP (worker_watchdog.py)',
+        'The schema is created idempotently by DDL inside the service (CREATE TABLE IF NOT EXISTS) - no Alembic needed. When changing ngi_store.FIELDS, update the DDL and indexes too; tests/test_ngi_param.py compares both sides',
+        'Troubleshooting order: check app.ngi_sync_log first (status / message / detail; the coverage row also carries task_log_id and run_id), then the task execution log; for session issues test the ngi credential in Settings -> Credentials',
       ],
     },
   },
