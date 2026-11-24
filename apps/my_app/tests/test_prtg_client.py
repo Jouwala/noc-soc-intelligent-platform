@@ -118,3 +118,48 @@ def test_table_json_passes_columns_and_count():
         client.table_json("sensors", columns=["objid", "sensor"], count=5)
     assert "columns=objid%2Csensor" in seen["url"]
     assert "count=5" in seen["url"]
+
+
+# ---------------- 凭证不得进日志（#242 独立审核阻塞项） ----------------
+
+def test_repr_and_logs_do_not_leak_passhash(caplog):
+    """repr 与 httpx 日志都不得出现 Passhash（2026-11-24 审核实测 INFO 会带 URL）。"""
+    import logging
+
+    from backend.services.prtg.client import redact_prtg_secrets
+
+    cfg = _config()
+    assert "dummy-passhash" not in repr(cfg)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="{}")
+
+    caplog.set_level(logging.INFO)  # 应用根 logger 就是 INFO
+    with _client(handler) as client:
+        client.get_text("/api/table.json", {"content": "sensors"})
+    assert "dummy-passhash" not in caplog.text
+    assert "HTTP Request" not in caplog.text  # httpx 请求行默认不再记 INFO
+
+    # Filter 本身可单测：查询串里的凭证值被替换成 ***，其他参数不动
+    redacted = redact_prtg_secrets("/api?username=u&passhash=SECRET&cols=a,b")
+    assert "SECRET" not in redacted
+    assert "passhash=***" in redacted and "cols=a,b" in redacted
+
+
+def test_retry_logs_do_not_leak_passhash(caplog):
+    import logging
+
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if attempts["n"] < 2:
+            raise httpx.ConnectError("boom", request=request)
+        return httpx.Response(200, text="{}")
+
+    caplog.set_level(logging.DEBUG)
+    with _client(handler) as client:
+        client.get_text("/api/table.json")
+    assert attempts["n"] == 2
+    assert "dummy-passhash" not in caplog.text
+    assert "PRTG 请求失败" in caplog.text

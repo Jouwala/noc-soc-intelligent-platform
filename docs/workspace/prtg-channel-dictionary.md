@@ -1,7 +1,7 @@
 # PRTG 通道语义字典（Issue #225）
 
 > 来源：2026-11-23 对 PRTG 14.2.10.2256（Cellcom PRTG / GRAPHER-ISP）只读账号的实测，
-> 浏览器侧逐项验证（见 `~/workspace/prtg-api-test-2026-11-23.md`）；2026-11-24 在 MSNOC1 以
+> 浏览器侧逐项验证（原始截图与记录在 MSNOC1 本机 TMP，未入库）；2026-11-24 在 MSNOC1 以
 > 后端程序直连补齐 .xml 原文与 CSV 表头复核（第 5 节，证据文件在 MSNOC1 本机 TMP，未入库）。
 > **不照搬新版文档**——实测与现代文档有多处差异，写代码时以本表为准。
 > 代码实现：`apps/my_app/backend/services/prtg/channels.py`、`parsing.py`；测试：`apps/my_app/tests/test_prtg_channels.py`、`test_prtg_parsing.py`。
@@ -37,9 +37,9 @@ historicdata 每行 20 组 value/value_raw 的排列顺序即上表顺序（Tota
 
 ## 3. 两大定版结论
 
-1. **Traffic Total = In + Out**（实测成立）：拓扑利用率仍按 ChatGPT 口径用 `max(In/Cin, Out/Cout)`，不要拿 Total/容量。
+1. **Traffic Total = In + Out**（实测成立）：拓扑利用率仍按门户口径用 `max(In/Cin, Out/Cout)`，不要拿 Total/容量。
 2. **Errors/Discards/Unicast 是区间值不是累计计数器**：120 行内 Errors/Discards 全 0、Unicast 计数逐行波动非单调递增。
-   Gemini 的「算 delta/s」对这套数据**不需要再差分**，PRTG 已给区间速率。
+   不要按「累计计数器再差分」处理 —— 这套数据**不需要差分**，PRTG 已给区间速率。
 
 ## 4. 解析层实测坑（与现代文档的差异）
 
