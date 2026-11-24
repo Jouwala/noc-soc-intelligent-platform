@@ -66,6 +66,10 @@ class PrtgSensor(Base):
     last_value_raw = Column(Float)  # 主通道原始值
     uptime_pct = Column(Float)  # 详情页 Uptime %
     downtime_pct = Column(Float)  # 详情页 Downtime %
+    uptime_minutes = Column(Float)  # uptimetime（累计可用分钟）
+    downtime_minutes = Column(Float)  # downtimetime（累计停机分钟，SLA 差分用）
+    updown_total_minutes = Column(Float)  # updowntotal（累计监控分钟）
+    updown_since = Column(DateTime)  # updownsince（起算时间）
     last_up = Column(DateTime)
     last_down = Column(DateTime)
     last_check = Column(DateTime)
@@ -297,3 +301,30 @@ class PrtgPingState(Base):
     last_status = Column(Text)
     last_transition_at = Column(DateTime)
     updated_at = Column(DateTime)
+
+
+class PrtgSlaDaily(Base):
+    """每日 SLA 快照（#231）：用 PRTG 累计 Uptime/Downtime 的日差分算月度可用率。
+
+    PRTG 的 uptime/downtime 是**累计值**（以传感器监控覆盖时间为分母，
+    Paused/维护窗口不计入）。每天快照一次累计停机分钟数，月报用相邻快照
+    差分得到当天停机分钟，避免依赖不存在的逐日状态历史。
+    """
+
+    __tablename__ = "prtg_sla_daily"
+    __table_args__ = (
+        UniqueConstraint("sensor_objid", "day", name="uq_prtg_sla_sensor_day"),
+        Index("ix_prtg_sla_day", "day"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sensor_objid = Column(Integer, nullable=False)
+    day = Column(DateTime, nullable=False)  # UTC 当天 00:00
+    uptime_pct = Column(Float)  # 快照时的累计可用率
+    downtime_pct = Column(Float)
+    downtime_minutes_cum = Column(Float)  # 累计停机分钟（PRTG downtimetime）
+    downtime_delta_minutes = Column(Float)  # 相对上一快照的停机分钟（当月故障时长）
+    down_count = Column(Integer, nullable=False, default=0)  # 当天 down 事件数
+    availability_pct = Column(Float)  # 当天可用率（=100 - delta/覆盖率分钟）
+    coverage_minutes = Column(Float)  # 当天分母（相邻快照间隔，≤1440）
+    created_at = Column(DateTime)

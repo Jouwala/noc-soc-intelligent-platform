@@ -40,7 +40,7 @@
 | `routers/portal_qa.py` | 门户问答挂件：`/api/portal-qa/ask`、`/api/portal-qa/session/clear`、`/api/portal-qa/health`（转发到本机 9269，见 `13-operations.md`） |
 | `routers/cm_flows.py:21-46` | CM 小区配置流程 |
 | `routers/task_configs.py:48-82` | 任务参数配置（系统设置 → 任务配置页签） |
-| `routers/prtg.py:20-57` | PRTG 链路健康度看板：`/api/prtg/overview|links|links/{id}|anomalies|collector/status`（只读，#227/#228/#229） |
+| `routers/prtg.py:20-57` | PRTG 链路健康度看板：`/api/prtg/overview|links|links/{id}|anomalies|sla|capacity|collector/status`（只读，#227/#228/#229/#231） |
 
 **受 Token 保护的只有 4 个 router**：`tasks`、`upload`、`task_configs`、`cm_flows`（共 18 处装饰器）。原因与风险见 `05-security-and-credentials.md`。
 
