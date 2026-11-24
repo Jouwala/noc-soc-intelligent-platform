@@ -148,3 +148,18 @@ def test_warmup_thread_warms_once_before_sleep(monkeypatch, env_value):
     pl.warmup()
     time.sleep(0.05)
     assert len(calls) == 1
+
+
+def test_warmup_retries_after_thread_start_failure(monkeypatch):
+    """线程起不来时占位要还回去，下次调用还能再试（并发占位不能变成永久锁死）。"""
+    monkeypatch.setattr(pl, "_warmup_started", False)
+    monkeypatch.setattr(pl, "_warm_once", lambda: None)
+
+    class _BoomThread:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(pl, "threading",
+                        __import__("types").SimpleNamespace(Thread=_BoomThread, Lock=threading.Lock))
+    pl.warmup()
+    assert pl._warmup_started is False, "线程失败后占位没有复位，后续永远不再预热"

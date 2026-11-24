@@ -507,10 +507,11 @@ def _warmup_site_types() -> list:
 def _warm_once() -> None:
     """把每个档位的 overview 各重算一遍。
 
-    ⚠ **必须先失效缓存**（2026-11-24 审核发现的空转 bug）：`pl_overview` 一进来就查
+    ⚠ **必须绕开缓存**（2026-11-24 审核发现的空转 bug）：`pl_overview` 一进来就查
     `_OVERVIEW_TTL`（600s）缓存，命中即 return —— 预热间隔 480s 时每轮都命中，既不重算
     也不推进缓存时间戳，等于什么都没做；真正的刷新周期被拖到 960s，中间还有约 360s
-    缓存已过期。所以这里按与 `pl_overview` 完全相同的键先 pop 掉，再让它现算并重新落缓存。
+    缓存已过期。所以预热直接调纯计算入口 `_compute_overview()`，算完再**整体替换**缓存：
+    既绕开 TTL 判定，也不会在重算的那几秒把用户的缓存打空（先 pop 再算是惊群做法）。
     """
     for st in _warmup_site_types():
         t0 = time.time()
@@ -544,6 +545,8 @@ def warmup(*, periodic: bool = True) -> None:
     with _warmup_lock:
         if _warmup_started:  # 真重复调用时不要起第二个线程
             return
+        # 先占位再起线程：并发调用（测试/第二个实例）不会各起一个，把整表扫描翻倍。
+        _warmup_started = True
 
     def _job() -> None:
         _warm_once()
@@ -557,12 +560,11 @@ def warmup(*, periodic: bool = True) -> None:
 
     try:
         threading.Thread(target=_job, name="pl-warmup", daemon=True).start()
-    except Exception:  # noqa: BLE001  线程起不来就当场同步热一轮，别让 _warmup_started 卡死
+    except Exception:  # noqa: BLE001  线程起不来就当场同步热一轮，并把占位放回去以便下次重试
         logger.warning("[丢包看板] 预热线程创建失败，改为同步预热一次", exc_info=True)
-        _warm_once()
-    else:
         with _warmup_lock:
-            _warmup_started = True
+            _warmup_started = False
+        _warm_once()
 
 
 @router.get("/map-sites")

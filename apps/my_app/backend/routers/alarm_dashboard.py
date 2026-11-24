@@ -844,6 +844,9 @@ def _recovery_mttr(conn):
     return out
 
 
+_net_missing_warned = False
+
+
 def _network_availability():
     """读取 Daily_Aailability_KPI.xlsx 的 Availability-NW 页，按 Cell Group 统计
     最新一天 Cell Availability 与本月（最新数据所在月）平均值。
@@ -861,10 +864,13 @@ def _network_availability():
         return cached
 
     result = {"rows": [], "threshold_pct": NETWORK_THRESHOLD_PCT, "latest_month": None}
+    global _net_missing_warned
     try:
         if not _NETWORK_KPI_XLSX.is_file():
-            logging.getLogger(__name__).warning(
-                "[alarm-overview] network KPI xlsx 不存在: %s", _NETWORK_KPI_XLSX)
+            # 开发副本/首次部署本来就可能没有这个文件：只警告一次，别每次请求刷日志。
+            log = logging.getLogger(__name__).debug if _net_missing_warned else logging.getLogger(__name__).warning
+            log("[alarm-overview] network KPI xlsx 不存在: %s", _NETWORK_KPI_XLSX)
+            _net_missing_warned = True
             return _cache_set("network_availability", result)
         wb = openpyxl.load_workbook(_NETWORK_KPI_XLSX, read_only=True, data_only=True)
         if "Availability-NW" not in wb.sheetnames:
