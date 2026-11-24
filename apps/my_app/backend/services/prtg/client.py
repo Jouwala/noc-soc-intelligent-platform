@@ -14,14 +14,61 @@ MockTransport 离线测试（tests/test_prtg_client.py）。
 """
 import logging
 import os
+import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Mapping
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# 凭证在 GET 查询串里（PRTG API 既有方式），而 httpx 在 INFO 级会把完整 URL
+# 打进应用日志（main.py 的根 logger 就是 INFO）。2026-11-24 独立审核实测：
+# `HTTP Request: GET ...&passhash=...` 会原样落盘。这里做两道防护：
+#   1) 把 httpx 日志降到 WARNING，不再记录每个请求行；
+#   2) 再加一个遮罩 Filter，WARNING/ERROR 万一带 URL 也把凭证值替换成 ***。
+_REDACT_PATTERN = re.compile(r"(passhash|password|username)=([^&\s\"']+)", re.IGNORECASE)
+
+
+def redact_prtg_secrets(text: str) -> str:
+    """把查询串里的凭证值替换成 ***（给日志 Filter 用，可单测）。"""
+    return _REDACT_PATTERN.sub(lambda m: f"{m.group(1)}=***", text)
+
+
+class _SecretRedactFilter(logging.Filter):
+    """logging Filter：遮住 msg / args 里的凭证。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = redact_prtg_secrets(record.msg)
+        if record.args:
+            record.args = tuple(
+                redact_prtg_secrets(a) if isinstance(a, str) else a for a in record.args
+            )
+        return True
+
+
+def _install_http_log_guard() -> None:
+    """降低 httpx 请求行日志级别，并给已存在的根 handler 挂遮罩 Filter。
+
+    注意：Filter 挂在 logger 上只对「直接打到该 logger」的记录生效，子 logger
+    （httpx._client）不会继承父 logger 的 Filter —— 所以遮罩必须挂到根
+    handler 上，才是「所有输出」都必经的那一层。之后再新增的 handler
+    （如测试的 caplog）由 WARNING 级别兜底：httpx 默认不再发 INFO 请求行。
+    """
+    for name in ("httpx", "httpcore"):
+        log = logging.getLogger(name)
+        if not any(isinstance(f, _SecretRedactFilter) for f in log.filters):
+            log.addFilter(_SecretRedactFilter())
+        log.setLevel(logging.WARNING)
+    for handler in logging.getLogger().handlers:
+        if not any(isinstance(f, _SecretRedactFilter) for f in handler.filters):
+            handler.addFilter(_SecretRedactFilter())
+
+
+_install_http_log_guard()
 
 ENV_BASE_URL = "PRTG_BASE_URL"
 ENV_USERNAME = "PRTG_USERNAME"
@@ -46,7 +93,7 @@ class PrtgConfig:
 
     base_url: str
     username: str
-    passhash: str
+    passhash: str = field(repr=False)  # 防止 repr 把 Passhash 打进日志
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "PrtgConfig":

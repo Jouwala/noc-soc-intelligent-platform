@@ -23,12 +23,6 @@ _EXCEL_EPOCH = datetime(1899, 12, 30)
 # PRTG historicdata 的 datetime 显示格式（美式，服务器本地时间）。
 US_DATETIME_FORMAT = "%m/%d/%Y %I:%M:%S %p"
 
-# sensortree 片段里 <li> 的 data-* 属性名（PRTG 14.x 实测形态以
-# docs/workspace/prtg-channel-dictionary.md 为准；解析器只认下面两类，
-# 缺失时不猜，用 None 占位）。
-SENSORTREE_ROOT_CLASS = "sensortree"
-
-
 def excel_serial_to_datetime(serial: float) -> datetime:
     """Excel 序列日 → datetime（naive，PRTG 服务器本地时间）。
 
