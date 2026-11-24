@@ -47,42 +47,10 @@ interface TaskItem {
   lastElapsed: number | null;
 }
 
-const FALLBACK_TASKS: TaskItem[] = [
-  { id: 'eflow_sync', name: 'eFlow Data Sync', category: 'eflow', cron: '0 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 297.3 },
-  { id: 'eflow_sync_full', name: 'eFlow Daily Full Sync', category: 'eflow', cron: '0 8 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 478.4 },
-  { id: 'eflow_active_alarm', name: 'eFlow Realtime Alarm Sync', category: 'eflow', cron: '*/5 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 30.4 },
-  { id: 'eflow_history_alarm', name: 'eFlow History Alarm Sync', category: 'eflow', cron: '35 3 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 37.0 },
-  { id: 'ran_ume_daily', name: 'RAN UME Daily Report', category: 'ran_ume', cron: '35 4 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 207.3 },
-  { id: 'main_kpi_sync', name: 'RAN Main KPI Sync', category: 'main_kpi', cron: '0 4 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 596.3 },
-  { id: 'network_kpi_sync', name: 'RAN Network KPI Sync', category: 'network_kpi', cron: '35 5 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 390.4 },
-  { id: 'cnn_kpi_sync', name: 'CNN UME KPI Sync', category: 'cnn_kpi', cron: '0 4 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 303.0 },
-  { id: 'ipran_kpi_sync', name: 'iPRAN UME KPI Sync', category: 'ipran_kpi', cron: '0 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 288.3 },
-  { id: 'ms_sla_full', name: 'MS SLA Full Sync', category: 'ms_sla', cron: '30 7 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 587.3 },
-  { id: 'packet_loss_sync', name: 'Packet Loss Sync', category: 'packet_loss', cron: '30 6 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 394.7 },
-  { id: 'packet_loss_email', name: 'Packet Loss Daily Report Email', category: 'packet_loss', cron: '45 6 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 20.0 },
-  { id: 'battery_kpi_sync', name: 'Battery KPI Sync', category: 'battery', cron: '5 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 3.0 },
-  { id: 'battery_email', name: 'Battery KPI Email', category: 'battery', cron: '0 7,19 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 7.5 },
-  { id: 'fw_kpi_sync', name: 'FW Throughput KPI Sync + Chart Email', category: 'fw_kpi', cron: '15 7 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 13.7 },
-  { id: 'sp_data_sync', name: 'SP Spare Data Sync', category: 'sp', cron: '0 7 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 11.3 },
-  { id: 'sp_report_generate', name: 'SP Report Generate', category: 'kpi_email', cron: '15 5 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 37.6 },
-  { id: 'incident_overview_sync', name: 'Incident Overview Data Sync', category: 'incident_overview', cron: '3 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 17.2 },
-  { id: 'site_outage_screenshot', name: 'Site Outage Screenshot', category: 'site_outage', cron: '0 */1 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 30.5 },
-  { id: 'liberia_email_1h', name: 'Liberia Site-Down 1H Report Email', category: 'email', cron: '6 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 4.4 },
-  { id: 'liberia_email_8h', name: 'Liberia Site-Down 8H Report Email', category: 'email', cron: '7 */8 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 3.5 },
-  { id: 'whatsapp_send', name: 'WhatsApp Message Send', category: 'whatsapp', cron: '2 */2 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 74.1 },
-  { id: 'kpi_ms_contract', name: 'MS Contract KPIs Daily Report Email', category: 'kpi_email', cron: '30 5 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 3.7 },
-  { id: 'kpi_ms_wo_sla', name: 'MS WOs SLA Daily Report Email', category: 'kpi_email', cron: '35 5 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 2.6 },
-  { id: 'kpi_ran_availability', name: 'MS Network Availability Daily Report Email', category: 'kpi_email', cron: '20 6 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 7.3 },
-  { id: 'kpi_sp_spareparts', name: 'SpareParts Report Email', category: 'kpi_email', cron: '45 5 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 3.2 },
-  { id: 'kpi_sp_consumables', name: 'Comsumables Report Email', category: 'kpi_email', cron: '40 6 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 3.3 },
-  { id: 'ipran_m6k_chart_email', name: 'IP RAN M6K-FW Chart Email', category: 'email', cron: '15 8 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 5.5 },
-  { id: 'ccn_free_rating_chart_email', name: 'CNN Free Rating Chart Email', category: 'email', cron: '45 7 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 4.5 },
-  { id: 'email_recovery', name: 'Email Recovery after EWS Restored', category: 'email', cron: '*/20 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 2.4 },
-  { id: 'mailbox_cleanup', name: 'Mailbox Storage Guard', category: 'mailbox', cron: '0 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 7.2 },
-  { id: 'cm_data_sync', name: 'RAN CM Cell Data Sync', category: 'cm_data', cron: '30 8 * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 68.9 },
-  { id: 'db_freshness_check', name: 'DB Data Freshness Check', category: 'general', cron: '15 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 77.0 },
-  { id: 'auto_retry_failed', name: 'Failed Task Auto Retry', category: 'general', cron: '*/5 * * * *', enabled: true, running: false, lastSuccess: true, lastElapsed: 0.0 },
-];
+// 2026-11-23：原先这里有一份 35 条的 FALLBACK_TASKS「快照」兜底。
+// 它让接口挂掉时页面仍旧显示「35 个任务 / 35 成功 / 0 失败」和精确到 0.1s 的耗时，
+// 那些数字是某个历史时刻的静态值，不是当前状态 —— 看起来正常，实际在骗人。
+// 现在改为：没有实时数据就显示不可用空态；本次会话拉取过数据后掉线，才显示那份数据并标注离线与时间。
 
 const REFRESH_INTERVAL = 60_000;
 
@@ -103,9 +71,13 @@ function mapApiTask(t: ApiTask): TaskItem {
 export const TaskSyncWidget: React.FC = () => {
   const { t, lang } = useI18n();
   const [isExpanded, setIsExpanded] = useState(false);
-  const [tasks, setTasks] = useState<TaskItem[]>(FALLBACK_TASKS);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [isLive, setIsLive] = useState(false);
+  // 首次请求有结果前不判「不可用」，免得首屏闪一下错误态
+  const [hasAttempted, setHasAttempted] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  // 本次会话真正拿到过接口数据；只有它为真才把 tasks 渲染成统计数字
+  const hasData = tasks.length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -120,13 +92,22 @@ export const TaskSyncWidget: React.FC = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         const list: ApiTask[] = Array.isArray(json?.tasks) ? json.tasks : [];
-        if (!cancelled && list.length > 0) {
-          setTasks(list.map(mapApiTask));
-          setIsLive(true);
-          setUpdatedAt(new Date());
+        if (!cancelled) {
+          setHasAttempted(true);
+          if (list.length > 0) {
+            setTasks(list.map(mapApiTask));
+            setIsLive(true);
+            setUpdatedAt(new Date());
+          } else {
+            // 接口通了但一条任务都没有：同样是「没有可用数据」，不许沿用旧数组
+            setIsLive(false);
+          }
         }
       } catch {
-        if (!cancelled) setIsLive(false);
+        if (!cancelled) {
+          setIsLive(false);
+          setHasAttempted(true);
+        }
       }
     };
 
@@ -188,10 +169,25 @@ export const TaskSyncWidget: React.FC = () => {
                     </span>
                   )}
                 </span>
-              ) : (
+              ) : hasData ? (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300/70 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-400/30 flex items-center gap-1">
                   <WifiOff className="w-2.5 h-2.5" />
                   {t('task.offline')}
+                  {updatedAt && (
+                    <span className="text-amber-700/70 dark:text-amber-300/70 font-mono hidden sm:inline">
+                      {updatedAt.toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour12: false })}
+                    </span>
+                  )}
+                </span>
+              ) : hasAttempted ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300/70 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-400/30 flex items-center gap-1">
+                  <WifiOff className="w-2.5 h-2.5" />
+                  {t('task.unavailable')}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300/70 dark:bg-white/10 dark:text-slate-300 dark:border-white/15 flex items-center gap-1">
+                  <RotateCw className="w-2.5 h-2.5 animate-spin" />
+                  {t('task.loading')}
                 </span>
               )}
             </div>
@@ -203,20 +199,22 @@ export const TaskSyncWidget: React.FC = () => {
 
         {/* Stats Pills + Actions */}
         <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-          <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-900/5 dark:bg-white/5 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-slate-300/60 dark:border-white/10 text-xs flex-wrap whitespace-nowrap">
-            <span className="text-slate-500 dark:text-slate-400">{t('task.total')}</span>
-            <span className="font-mono font-bold text-slate-900 dark:text-white">{stats.total}</span>
-            <span className="text-slate-300 dark:text-slate-600">|</span>
-            <span className="text-teal-600 dark:text-teal-300 flex items-center gap-1">
-              <RotateCw className={`w-3 h-3 ${stats.running > 0 ? 'animate-spin' : ''}`} /> {stats.running} {t('task.running')}
-            </span>
-            <span className="text-slate-300 dark:text-slate-600">|</span>
-            <span className="text-emerald-600 dark:text-emerald-400">{stats.ok} {t('task.ok')}</span>
-            <span className="text-slate-300 dark:text-slate-600">|</span>
-            <span className={stats.failed > 0 ? 'text-rose-500 dark:text-rose-400 font-bold' : 'text-slate-400 dark:text-slate-500'}>
-              {stats.failed} {t('task.failed')}
-            </span>
-          </div>
+          {hasData && (
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-900/5 dark:bg-white/5 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-slate-300/60 dark:border-white/10 text-xs flex-wrap whitespace-nowrap">
+              <span className="text-slate-500 dark:text-slate-400">{t('task.total')}</span>
+              <span className="font-mono font-bold text-slate-900 dark:text-white">{stats.total}</span>
+              <span className="text-slate-300 dark:text-slate-600">|</span>
+              <span className="text-teal-600 dark:text-teal-300 flex items-center gap-1">
+                <RotateCw className={`w-3 h-3 ${stats.running > 0 ? 'animate-spin' : ''}`} /> {stats.running} {t('task.running')}
+              </span>
+              <span className="text-slate-300 dark:text-slate-600">|</span>
+              <span className="text-emerald-600 dark:text-emerald-400">{stats.ok} {t('task.ok')}</span>
+              <span className="text-slate-300 dark:text-slate-600">|</span>
+              <span className={stats.failed > 0 ? 'text-rose-500 dark:text-rose-400 font-bold' : 'text-slate-400 dark:text-slate-500'}>
+                {stats.failed} {t('task.failed')}
+              </span>
+            </div>
+          )}
 
           <div className="hidden xl:flex items-center gap-1.5 pl-1 border-l border-slate-200 dark:border-white/10">
             {/* 2026-10-24：经 .20 的 9443 反代到 .27 的 Open WebUI。
@@ -271,8 +269,8 @@ export const TaskSyncWidget: React.FC = () => {
         </div>
       </div>
 
-      {/* Expandable Task Cards */}
-      {isExpanded && (
+      {/* Expandable Task Cards：没有实时数据时不渲染任何卡片，改为明确的不可用说明 */}
+      {isExpanded && hasData && (
         <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-200 dark:border-white/10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 animate-fadeIn">
           {showcase.map((task) => (
             <div
@@ -319,6 +317,18 @@ export const TaskSyncWidget: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {isExpanded && !hasData && (
+        <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-200 dark:border-white/10">
+          <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-slate-300 bg-white/60 px-4 py-5 text-center dark:border-white/15 dark:bg-white/5">
+            <WifiOff className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+            <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">{t('task.unavailable')}</div>
+            <p className="max-w-md text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+              {hasAttempted ? t('task.unavailableHint') : t('task.loading')}
+            </p>
+          </div>
         </div>
       )}
     </div>

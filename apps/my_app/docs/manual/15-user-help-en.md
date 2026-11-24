@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-23.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-24.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -2557,7 +2557,7 @@ Site map: alarm/ticket distribution, topology lines, region polygons and multi-d
 
 - Region dropdown + layer tags to filter; click a legend item to hide that layer; time supports segments and custom range
 - The top-left "Layers" panel has three checkboxes — Place labels / Roads / Personnel — all **off by default**: place labels (17k names in the tiles) would bury the sites, and personnel are registered positions (not live GPS), so turn them on only when needed
-- The "Site Classes" panel at the top right is the same one as on the Person Location Map (added 2026-11-23): Site Category / VIP Site / Hub Site / TRM Type, with values and site counts read from the database. **Nothing is selected by default**; click a class to ring those sites on the map (union within a group, intersection across groups), click again to unselect, and "Clear" returns to nothing shown
+- In the bottom-left legend's "Site Class" group, under the VIP / Normal dot rows, there is a "Site Classes ▸" row (2026-11-24): expanding it shows the same class list as the Person Location Map (Site Category / VIP Site / Hub Site / TRM Type, values and counts read from the database). **Nothing is selected by default**; click a class to ring those sites on the map (union within a group, intersection across groups), click again to unselect, and "Clear" returns to nothing shown. It starts collapsed so the legend does not cover the top-left Layers panel or the county ranking (while expanded the ranking is hidden and comes back when you collapse the legend)
 - Class rings are outline-only with an almost transparent fill, so they **do not hide the sites' alarm colors**, and they do not block clicking a site to open the drawer (clicks pass through to the site dot)
 - The first cell of the "Advanced Filter" panel is a "Site Name" input: fuzzy match on a name fragment (case-insensitive); the rest are dropdowns for region/grade/form/FME etc.
 - Statistics follow the filter: site total and the ERA/COOL/NORMAL grades, the map legend, the county block colors and county labels, and the "MAINTENANCE ALERTS" county ranking panel are all recomputed from the filtered sites instead of showing the full-set numbers;

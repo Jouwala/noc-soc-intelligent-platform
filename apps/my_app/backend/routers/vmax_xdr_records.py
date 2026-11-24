@@ -18,6 +18,12 @@ RSRP/SINR 等空口测量列，排障时必须看这张表。
 - DELETE /api/vmax-xdr-records/saved/{id}               删除我的存档
 - GET    /api/vmax-xdr-records/history                  我的查询历史（审计）
 
+按号码查记录的入口（本路由 GET ""，以及 vmax_flow_xdr、vmax_xdr_query 的
+GET ""）与 cca/diagnosis 一样先过号码查询名单校验
+（routers/phone_query_acl.require_phone_query_allowed，Issue #241）——
+与对话面同一份 web_users 名单，不在名单内返回 403 + 名单配置的拒绝文案；
+/tables 与 /saved、/history 只返回本人数据或静态清单，不挂名单守卫。
+
 为什么要落库（其余 VMAX 页面都是只读透传）：
 信令记录属于用户隐私数据，按运营商合规要求需要能回答「谁在什么时候查了谁」；
 同时排障时抓到的关键记录要能存下来复核（上游只留 24~72 小时，过期就没了）。
@@ -40,6 +46,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.database import get_raw_connection
+from backend.routers.phone_query_acl import require_phone_query_allowed
 from backend.routers.vmax_xdr_common import (
     humanize_login, humanize_upstream, mask_msisdn, parse_bound,
 )
@@ -193,7 +200,7 @@ def list_tables(service_type: str = Query("32", description="serviceType，见 /
 
 
 # ============================ 记录查询 ============================
-@router.get("")
+@router.get("", dependencies=[Depends(require_phone_query_allowed)])
 def query_records(
     msisdn: str = Query(..., min_length=5, max_length=24),
     service_type: str = Query("32"),

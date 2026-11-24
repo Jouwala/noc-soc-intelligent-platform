@@ -481,7 +481,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       usage: [
         '区域下拉 + 图层 Tag 开关筛选；图例点击可隐藏该类图层；时间支持分段切换与自定义区间',
         '地图左上角「Layers」浮层里有地名注记 / 道路 / 人员三个勾选框，**默认全关**：地名（瓦片自带 1.7 万个）会糊住站点；人员是现场登记位置（非实时定位），需要时再勾',
-        '地图右上角「站点类别」面板与人员位置地图是同一张（2026-11-23 新增）：维护分类 / VIP 站点 / HUB 站点 / 传输类型四组的取值和站点数都来自数据库，**默认一项都不选**；点某一类就在地图上把这些站点圈出来（组内并集、组间交集），再点取消，「清除」回到一个都不显示',
+        '左下角图例的「站点等级」组里，VIP站点 / 正常 两行圆点颜色下面有一行「站点类别 ▸」（2026-11-24）：点开就是人员位置地图同一份类别列表（维护分类 / VIP 站点 / HUB 站点 / 传输类型，取值和站点数都来自数据库），**默认一项都不选**；点某一类就在地图上把这些站点圈出来（组内并集、组间交集），再点取消，「清除」回到一个都不显示。默认收起是为了不把图例撑高盖住左上角的图层开关与区域排名（展开期间区域排名暂时收起，收起图例后自动回来）',
         '类别圈只描外框、填充几乎透明，**不会盖掉站点本身的告警颜色**，也不影响点站点开抽屉（点击穿透到站点圆点）',
         '「高级筛选」面板第一格是「站点名称」输入框：按名称片段模糊匹配（不区分大小写），其余是区域/等级/站型/FME 等下拉；',
         '筛选后统计同步变化：站点总数与 ERA/COOL/NORMAL 分档、地图图例、县块颜色与县名标注、右上角「MAINTENANCE ALERTS」区域排名条都按筛选后的站点重新统计，不再显示全量数字；',
@@ -1331,7 +1331,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       usage: [
         'Region dropdown + layer tags to filter; click a legend item to hide that layer; time supports segments and custom range',
         'The top-left "Layers" panel has three checkboxes — Place labels / Roads / Personnel — all **off by default**: place labels (17k names in the tiles) would bury the sites, and personnel are registered positions (not live GPS), so turn them on only when needed',
-        'The "Site Classes" panel at the top right is the same one as on the Person Location Map (added 2026-11-23): Site Category / VIP Site / Hub Site / TRM Type, with values and site counts read from the database. **Nothing is selected by default**; click a class to ring those sites on the map (union within a group, intersection across groups), click again to unselect, and "Clear" returns to nothing shown',
+        'In the bottom-left legend\'s "Site Class" group, under the VIP / Normal dot rows, there is a "Site Classes ▸" row (2026-11-24): expanding it shows the same class list as the Person Location Map (Site Category / VIP Site / Hub Site / TRM Type, values and counts read from the database). **Nothing is selected by default**; click a class to ring those sites on the map (union within a group, intersection across groups), click again to unselect, and "Clear" returns to nothing shown. It starts collapsed so the legend does not cover the top-left Layers panel or the county ranking (while expanded the ranking is hidden and comes back when you collapse the legend)',
         'Class rings are outline-only with an almost transparent fill, so they **do not hide the sites\' alarm colors**, and they do not block clicking a site to open the drawer (clicks pass through to the site dot)',
         'The first cell of the "Advanced Filter" panel is a "Site Name" input: fuzzy match on a name fragment (case-insensitive); the rest are dropdowns for region/grade/form/FME etc.',
         'Statistics follow the filter: site total and the ERA/COOL/NORMAL grades, the map legend, the county block colors and county labels, and the "MAINTENANCE ALERTS" county ranking panel are all recomputed from the filtered sites instead of showing the full-set numbers;',

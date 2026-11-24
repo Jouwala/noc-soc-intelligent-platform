@@ -571,12 +571,13 @@ Service / Network / Summary / Healthscore 四视图经营看板（`CxoDashboard.
 
 - 壳：`LegacyToolFrame` 载入 `public/cxo_dashboard.html`。
 - **数据三层叠加**（2026-09-02 起）：
-  1. HTML 内嵌快照（构建时冻结，保底渲染）；
+  1. **内置数据集**（2026-11-23 从 HTML 抽出到 `public/cxo-dashboard-data.js`）：GEO 州界底图 + DATA 面板数据；抓取时间无从考证（`window.CXO_DASHBOARD_AS_OF` 为空），所以首屏用内置数据时 `#cacheBanner` 常驻写明「构建时内置的数据集，抓取时间未知，不是实时状态」，缓存或实时数据一到即被替换 / 隐藏；
   2. **last-known-good 缓存**：worker 任务 `cxo_dashboard_cache_sync`（每 10 分钟，v 组）经本机 8790 VMAX 代理拉全量接口、**空值保留旧值**，落盘 `data/cxo_dashboard/last_known_good.json`，页面打开/开启自动刷新后到点时经 `GET /api/cxo-dashboard/cache` 应用；
   3. 实时拉取（经 `/api/realtime-proxy/cxo` 转发 8790 代理）成功则覆盖缓存。
   实时不可用时页面显示最近可用缓存数据（状态行 `offline · cached data`），Health 页 live 为空时回退缓存并在标题标注 `cached <时间>`。
 - 缓存任务详情见 `backend/services/cxo/cxo_dashboard_cache.md`；每次运行还向 `data/cxo_dashboard/history.jsonl` 追加一行 Summary KPI + Health 概要（积累趋势用）。
 - **轮播（大屏值守）**：页头 `Carousel` 按钮（2026-09-02 起）每 15 秒轮换 Service→Network→Summary→Healthscore 四页签并**进入全屏**（同 Alarm Management：再点按钮停止并退全屏；Esc 退出全屏会联动停轮播；手动点页签视为接管、停轮播但保留全屏）。
+- **缓存年龄横幅（2026-11-23）**：`#cacheBanner` 按 `/api/cxo-dashboard/cache` 返回的 `updated_at` 常驻显示「当前显示 last-known-good 缓存（更新于 …，距今 …）」。这是为了治住「空值保留旧值」的副作用 —— 上游长期不出数时，缓存会让页面看起来「数据还在」，实际后台任务已经很久没写入新数据。**超过 3 小时（`CACHE_STALE_H`）转红**并写明「不是当前状态」；实时刷新全成功时自动隐藏（`finishStatus` 的 `fail===0` 分支调 `hideCacheBanner()`）。
 - 图表尺寸自适应：所有图表 setOption 后统一排队一次 rAF `resize()`（`queueResizeAll`）——trend-grid 卡片逐个 append 时列宽多次回流，不补偿会把 1570px 画布塞进 359px 卡片（x 轴标签挤压、线条重叠的根因）；实时刷新按代次（`REFRESH_GEN`）管理，切页/轮播后旧刷新静默作废，不在隐藏视图上重建图表、也不覆盖状态行。
 - 数据源是 VMAX 实时保障看板，凭据在「系统设置 → 凭据 → `vmax_cxo`」。
 - 已知限制：Healthscore 的 VMAX 源头分区 `aggr_ds_cxo_score` 为空时综合分显示 `—`（页面有说明横幅），需数据侧聚合后才能填充，缓存只能保证"有过的数据不再丢"。
@@ -866,18 +867,23 @@ v1（8c）的升级版，**v2 不改 v1 的页面骨架**：v2 默认把 OLIB �
 
 
 
-### 10a-5. 站点类别面板（2026-11-23 新增，仅 `?page=gis`）
+### 10a-5. 站点类别嵌进图例的 Site Class 组（2026-11-23 首版 / 2026-11-24 改位置，仅 `?page=gis`）
 
-**需求原话**：「页面 `?page=gis` 的 Legend 里面的 Site Class 也添加 `?page=person` 的 site class 里面的所有内容」；做法选定「整块复用人员页那张『站点类别』面板（默认全不选，选中才在地图上叠加显示）」。
+**需求演进**：2026-11-23 用户原话「页面 `?page=gis` 的 Legend 里面的 Site Class 也添加 `?page=person` 的 site class 里面的所有内容」，首版做成了地图右上角一张独立浮层；**2026-11-24 用户纠正「是把 Site Classes 放到 Legend 里面的 Site class 里面」** → 内容改为嵌在左下角图例的「站点等级 / Site Class」组内（`MapLegendOverlay` 的 `MapLegendGroup.node` 插槽），右上角那块浮层及它的 portal 定位壳一并删除。
 
-- **刻意不复制第二套**：数据 `personmap/useSiteClasses.ts`、面板 `personmap/SiteClassLegend.tsx`、配色 `personmap/siteClassColors.ts` 全部复用人员页那份（见 11 节「站点类别图例」）。GIS 侧只新增两个薄组件：`gismap/SiteClassLegendPanel.tsx`（右上角浮层）与 `gismap/SiteClassSitesLayer.tsx`（选中后的站点圈）。两页的类别名、计数口径（后端 `personnel.py::get_personnel_site_classes` 扫 `master_site_db` 四列）、选中语义（组内并集 / 组间交集）因此不会各自漂移。
+- **组内结构**：`VIP站点 / 正常` 两行（圆点颜色图例，点它隐藏该类站点）下面多一行 **「站点类别 ▸」**；点开展开人员页那套四组取值（维护分类 / VIP / HUB / 传输类型），有选中时该行行尾显示「已显示 N / total」。
+- **默认收起**（2026-11-24 实测后定的）：四组共 11 个取值全部展开会把图例撑到约 600px（地图 654px 高时），直接盖住左上的 LAYERS 与区域排名条；收起时图例高度与改动前一致（约 207px），类别内容点一下就能展开。人员页那张独立卡片仍默认展开。
+- **展开时的布局约束**（缺一不可）：
+  - 图例 `maxHeight` 由 `calc(100% - 1rem)` 改为 **`calc(100% - 12rem)`**（`MapLegendOverlay.tsx` 的 `panelStyle`）：12rem≈192px 是给 LAYERS（实测高约 84px）留的位置，展开后图例最高到相对 y≈158，与 LAYERS 底边仍留 60px 净距；超出的内容在图例内部滚动。
+  - **区域排名条临时收起**：`index.css` 的 `.gis-legend-overlay:has(.gis-siteclass-block button[aria-expanded='true']) ~ .gis-rank-overlay { display: none }`。两块浮层同处左缘，叠在一起会互相透字，且排名条 DOM 靠后会把类别行挡住（Playwright 实测点击被 `.gis-rank-row__name` 拦截）。收起图例后排名条自动恢复。⚠️ 这条选择器依赖「两浮层都是地图卡片 body 的子节点、图例在前」的渲染顺序。
+- **同一组里有两层东西，语义不同，刻意并列**：上面两行 `VIP站点 / 正常` 是**圆点颜色**图例（色值与地图圆点一致）；下面这块是**类别选择器**（点它在地图上圈出该类站点；组内多选取并集、组间取交集）。去掉前两行，地图上的紫色（VIP）/灰色（正常）圆点就没有解释了。
+- **刻意不复制第二套**：数据 `personmap/useSiteClasses.ts`、面板 `personmap/SiteClassLegend.tsx`（2026-11-24 新增 `bare` 嵌入模式：无卡片外观 / 折叠开关集成进图例 / 行无边框、选中用类别色淡底 + 加粗）、配色 `personmap/siteClassColors.ts` 全部复用人员页那份（见 11 节「站点类别图例」）。GIS 侧只新增两个薄组件：`gismap/SiteClassLegendSection.tsx`（把面板以 `bare` 渲染成图例组内容）与 `gismap/SiteClassSitesLayer.tsx`（选中后的站点圈）。两页的类别名、计数口径（后端 `personnel.py::get_personnel_site_classes` 扫 `master_site_db` 四列）、选中语义因此不会各自漂移。
 - **默认一个都不画**：与人员页同一需求 —— `useSiteClasses` 的 `selected` 初值为空对象，`visibleSites` 为空，地图上零个类别圈。
 - **为什么画外圈而不是实心点**：GIS 底图**已经用颜色表示站点告警状态**，实心类别点会把它盖掉、同一批站点在图上变成两种读法。故圈只描边（类别色）+ 填充约 12%，挂 `siteClassPane`（`zIndex 660`）：高于站点圆点（`sitePane` 650）、低于县名标注（`countyLabelPane` 670）。
 - **圈不接收鼠标**：`components/LeafletMap.tsx` 的 `CircleMarker` 新增可选 `interactive`（仅明确传 `false` 时写进 Leaflet options，不传时行为不变）。实测选中 NORMAL 画出 597 个圈时，圈上点的 `elementFromPoint` 仍是 `leaflet-interactive` 的站点圆点，点站点照常打开下钻抽屉。
-- **⚠️ 为什么挂进 `.leaflet-container` 而不是当卡片 body 的子节点**：门户 `MAP_STRIP_CSS`（`apps/portal/` 下 MsPortal / olbrportal / v1~v4 共 7 份副本）在「只看地图」模式下会把 `.ant-card-body` 里所有「不是地图、也不含地图」的直接子元素刷成 `position:absolute;left:0;right:0;bottom:0;background:rgba(255,255,255,.88)!important` 的通栏白块 —— 既有图例靠 `.gis-legend-overlay` 白名单躲过这一条。新面板若也当卡片子节点，就得同步改 7 份门户静态壳；改为 `createPortal` 挂进 Leaflet 容器（与 `LayerToggleControl` 同法）即不在该选择器的目标里。**实测把那条 CSS 注入页面后，面板位置与背景（transparent）都不变。**
-- **只在 `?page=gis`**：`GISMap` 同时服务 `?page=realtime_alarm`（`mode='realtime'`），面板与取数都用 `mode === 'all'` 门控。实测实时页 0 个面板、0 次 `/gis/personnel/site-classes` 请求（不会白拉约 100KB）。
-- **窄屏**：门户内嵌地图实测 570×633 时面板 211×416，完全落在地图内、与左下角站点图例不重叠；标题栏可折叠。
-- **复用处的两处小改动**：`useSiteClasses({ enabled })` —— 不取数时把 `loading` 置 `false`，否则面板永远停在「正在加载站点类别…」；`SiteClassLegend` 新增可选 `maxHeight` —— GIS 传 `'none'` 由外层容器滚动（人员页的 `calc(100vh - 120px)` 在 GIS 卡片里不成立，卡片高度由 flex 分配而不是视口）。
+- **⚠️ 承载体仍然只有 `.gis-legend-overlay` 一个**：内容跟着图例走，而图例本来就是门户 `MAP_STRIP_CSS`（`apps/portal/` 下 7 份副本）的白名单元素，所以门户静态壳**不用改**。首版右上角浮层为绕开「卡片 body 直接子元素被刷成通栏白块」曾用 `createPortal` 挂进 Leaflet 容器；改位置后这套壳已删除（原则 10：删除优于兼容）。
+- **只在 `?page=gis`**：`GISMap` 同时服务 `?page=realtime_alarm`（`mode='realtime'`），这块内容与取数都用 `mode === 'all'` 门控。实测实时页没有类别内容、0 次 `/gis/personnel/site-classes` 请求（不会白拉约 100KB）。
+- **复用处的两处小改动**：`useSiteClasses({ enabled })` —— 不取数时把 `loading` 置 `false`，否则这块内容永远停在「正在加载站点类别…」；`SiteClassLegend` 新增 `bare`，`maxHeight` 仍保留给人员页那张独立卡片。
 
 ### 10b. 边界蒙层：大区（Voronoi）与县界（真实行政边界）
 
@@ -1291,7 +1297,7 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 - **位置必须放右上角**（与 `LayerToggles` 纵向堆叠成一个浮层列，`PersonMapView.tsx` 里统一绝对定位）：首版放左下角，在门户嵌入（`?embed=1&mwembed=1`）下地图容器被撑到 1122px、底部超出视口约 320px，**实测图例按钮中心 y=982 而视口只有 805 —— 整块落在屏幕外，看不见也点不中**。两个浮层组件自身只负责卡片外观，定位交给调用方。
 - 面板可折叠（标题栏点击）；有选中时标题显示 `已显示 N / 824`。实测：VIP=Y → 50 点、再叠 HUB=Y → 28 点（交集，与 SQL 一致）、COOL → 64 点、四组全选 → 824 点（11 次点击累计约 1.4s，单次最慢 32ms，无需像辖区层那样下沉到原生批量建层）。
 - 守卫：`TMP/cdp_person_legend.mjs`（真实鼠标点击 + 点数与 SQL 对拍）、`TMP/cdp_legend_maponly.mjs`（门户 `?maponly=1` 形态）。
-- **2026-11-23 起 GIS 页（`?page=gis`）也复用了这张面板**（见 10a-5）：GIS 侧只加了定位壳与「外圈」图层，数据 / 面板 / 配色仍以本节为唯一实现。
+- **2026-11-24 起 GIS 页（`?page=gis`）也复用了这张面板**（见 10a-5）：GIS 侧把它以 `bare` 模式嵌进图例的「站点等级 / Site Class」组，另加一个「外圈」图层；数据 / 面板 / 配色仍以本节为唯一实现。
 
 **负责站点为 0 的空态说明**（`personmap/NoSitesNote.tsx`，2026-10-21）：有坐标的 24 人里 **6 人 `site_count` 恒为 0**，点他们地图上一片空白，实测就被报成「连线没画出来」。所以选中这样的人时，**地图底部居中**与**抽屉「站点」页签**各给一条同源说明（`pointerEvents:none`，不拦地图点击）。原因分两类，由 `/personnel/stats` 新增的 `supervised_sites` 区分：
 
@@ -1427,6 +1433,14 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 | 与任务的关系 | 消费 `eflow_active_alarm` 数据 | 被 `site_outage_screenshot`（每天 01:00）截图，截图再由 `whatsapp_send`（03:00）发到 WhatsApp 群 |
 
 `site_outage_screenshot` 的截图对象正是本看板的 **ERA / Regular / ALL 三个视图**（`task_registry.py:95-99`）。**改这个 iframe 页的 DOM 会连带影响自动截图任务**——改前先确认截图选择器还找得到。界面能力以该 HTML 自身为准。
+
+- **数据来源与快照年龄（2026-11-23 重塑）**：本页原来的 2.1MB `const FMS_REAL` 数据**写死在内联脚本里**，是 2026-08-13 11:37:06 从 FMS 实时接口抓取后冻结的一份快照。页面只有一行小字「示例快照 · 未连接」，用户看到的数字与实时数据长得一模一样 —— 实测到 2026-11-23 已经用它顶了 **102 天**。
+  现在拆成三段，各说各的：
+  - `public/alarm-management-snapshot.js` 单独存放快照数据体与 `window.ALARM_MGMT_SNAPSHOT_AS_OF`（HTML 从 2.2MB 降到 147KB，换数据不必再改页面）；
+  - 页头 `#snapBanner` **常驻横幅**按 as_of 算出年龄：≤24h 黄色、>24h 转红并写明「不是当前状态」（这是「数据过期」的异常，按工作区 `AGENTS.md` 四.10 必须常驻可见，不做可关闭）；
+  - 快照文件缺失时渲染最小骨架并直接报错，不再静默半渲染。
+  另：**KPI 卡（宕站数 / 恢复 / MTTR / 可用率）来自 my_app 后端** `/api/alarm-dashboard/alarm-overview`（`backend/routers/alarm_dashboard.py:911`），表格 / 趋势 / 地图 / 域卡片才来自 FMS（经 `/api/realtime-proxy/fms`）。打开实时开关并拿到数据后，横幅降级为「部分面板已接入实时」，**不会**整条消失 —— 因为 KPI 与其余面板来源不同。
+  **六个域卡片（RAN/CN/TRM_MW/VAS/TRM/POWER）没有实时接口**，FMS 侧未提供 URL，每张卡上直接标「无实时接口 · 快照」，不再让卡片看起来像实时结果。
 
 ## 13. 丢包看板（`?page=packet_loss`）
 

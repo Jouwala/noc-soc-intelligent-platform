@@ -1,42 +1,13 @@
 /* ============================================================================
- * LocationMap —— 位置页（?page=location，2026-11-23 新建）
+ * LocationMap —— 位置页（?page=location）
  * ============================================================================
+ * 以经纬度为中心：最近一圈站点、最近 MW/光纤链路、订阅者轨迹与 VMAX 诊断。
+ * 站点配色/抽屉与 ?page=gis 同源，MW 明细与 ?page=mwRealTime 对齐。
+ * 经纬度入口：URL、手动、浏览器定位、问答助手（/api/portal-qa/ask）。
+ * 口径与交互细节见 docs/manual/11-feature-guide.md 的 11b 节。
  *
- * 需求（用户原话）：
- *   「新建一个页面 location，根据当前 /api/portal-qa/ask 获取到的经纬度信息进行
- *    地图位置显示，并显示周围最近的一圈站点和距离该位置最近的 MW 链路、光纤链路
- *    等已有的信息。点击站点效果跟 ?page=gis 一样，站点颜色配置也一样；点击链路
- *    效果跟 ?page=mwRealTime 点击链路一样；并使用点击人员页面右侧弹窗显示
- *    ?page=vmax_user_query 的 Subscriber Info / Terminal Info / User Track Cells /
- *    Evidence timeline / Root cause & recommendations / Fault analysis。」
- *
- * 经纬度的四个入口（任一即可，互相不覆盖）：
- *   · URL `?lat=&lon=`（问答助手答案里的链接/同事分享直接可达）
- *   · 手动输入 + 「应用」
- *   · 浏览器定位（navigator.geolocation，仅 https / localhost 可用）
- *   · 「问问答助手」：POST /api/portal-qa/ask，从答案文字里解析坐标
- *     （答案没有坐标字段；解析不到时用答案里的站号去站点主数据换坐标，
- *      仍取不到就如实提示，不猜点）
- *
- * 复用关系（不复制实现）：
- *   · 站点配色：gismap/types.ts::siteLegendKey + colorFor（与 GIS 同源）
- *   · 站点下钻：gismap/SiteDrilldownDrawer（?page=gis 的同一抽屉、同一接口）
- *   · MW 链路明细：location/MwLinkDrawer（字段与 ?page=mwRealTime 的抽屉对齐）
- *   · 订阅者六段：VmaxCcaCards / VmaxWorkspaceAnalysis / VmaxWorkspaceVerdict，
- *     数据来自 pages/useVmaxDiagnosis（与 ?page=vmax_user_query / vmax_user_cca 同源）
- *
- * 「最近的一圈」口径：
- *   以位置点为圆心、用户选的半径筛站点，按 haversine 距离升序取前 N 个；半径内
- *   不足 3 个时自动扩到第 3 个（并在地图上按扩后的半径画圈、在列表上方提示），
- *   避免用户选了个偏远点却看到空地图。详见 location/geo.ts::ringOf。
- *
- * 文件拆分（AGENTS 三.2 单文件 ≤500 行）：
- *   · location/LocationMapView   地图画布与图层
- *   · location/LocationPanels    右栏三张列表（站点 / 链路 / 订阅者）
- *   · location/SubscriberDrawer  右侧 VMAX 六段
- *   · location/MwLinkDrawer      MW 链路详情
- *   · location/FiberLinkDrawer   光纤链路详情
- *   · location/geo、useLocationData、siteColors  纯计算 / 取数 / 配色
+ * 门户 GIS Map 的 Location 页签用 `?maponly=1`：只渲染地图画布（100vh），
+ * 不渲染列表/控制条/轨迹表/标题卡；见下方 mapOnly 分支。
  * ========================================================================== */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Col, Row } from 'antd'
@@ -83,6 +54,11 @@ export default function LocationMap() {
   const { t, locale } = useI18n()
   const data = useLocationData()
   const sub = useVmaxDiagnosis(LEGACY_NS)
+  /* 门户地图页签：?maponly=1 只留地图画布（与 Person/olibTopo 同一约定） */
+  const [mapOnly] = useState(() => {
+    const v = new URLSearchParams(window.location.search).get('maponly')
+    return v === '1' || v === 'true'
+  })
 
   /* ---------------- 位置与半径 ---------------- */
   const initial = useMemo<LatLon>(() => {
@@ -351,11 +327,11 @@ export default function LocationMap() {
 
   const layerErrors = [data.sitesError, data.mwError, data.fiberError].filter(Boolean)
 
-  return (
-    <div style={pageWrap}>
-      <Row gutter={[12, 12]} align="stretch">
-        <Col xs={24} xl={15}>
-          <LocationMapCard
+  /* 门户 GIS Map 的 Location 页签（?maponly=1）：只渲染地图卡，不渲染
+     站点/链路列表、控制条、轨迹表、标题卡；地图卡内部会切成无卡片壳的 100vh 画布。 */
+  const renderMapCard = (bare: boolean) => (
+    <LocationMapCard
+      bare={bare}
             center={location}
             radiusKm={ring.radiusKm}
             ringSites={ring.items}
@@ -394,6 +370,21 @@ export default function LocationMap() {
               error: locError,
             }}
           />
+  )
+
+  if (mapOnly) {
+    return (
+      <div style={{ width: '100%', height: '100vh', margin: 0, padding: 0, overflow: 'hidden' }}>
+        {renderMapCard(true)}
+      </div>
+    )
+  }
+
+  return (
+    <div style={pageWrap}>
+      <Row gutter={[12, 12]} align="stretch">
+        <Col xs={24} xl={15}>
+          {renderMapCard(false)}
         </Col>
 
         <Col xs={24} xl={9}>
