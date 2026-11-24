@@ -1138,6 +1138,12 @@ def _history_drilldown_sql(metric: str, limit: int):
     hm = snapshot_store.get("alarm:history_enriched")
     if hm is None or hm.age_sec() > HISTORY_MAX_AGE:
         return None
+    gate = snapshot_store.peek_payload("alarm:history_enriched") or {}
+    if not gate.get("ok"):
+        # 上次重建失败：表可能还是更早那一版，与指标卡对不上（2026-11-24 审核实测
+        # metrics.total=40 而表里 30 行）。失败门禁的 computed_at 是新的，光看年龄
+        # 反而会放行更久，所以必须显式校验 ok。
+        return None
     flag = _FLAG_COL.get(metric)
     where = f"WHERE {flag} = 1" if flag else ""
     nulls = " NULLS LAST" if DB_MODE == "pg" else ""     # 与 pandas sort_values（NaN 排最后）一致

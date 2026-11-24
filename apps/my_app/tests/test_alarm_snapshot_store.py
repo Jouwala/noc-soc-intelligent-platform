@@ -279,20 +279,51 @@ def test_network_avail_success_is_published_and_advances_mtime(monkeypatch):
     assert alarm_snapshot._last_xlsx_mtime == -1.0   # 文件不存在 → getmtime 失败取 -1
 
 
+class _GateSnap:
+    version = 1
+    computed_at = "2026-11-24T00:00:00Z"
+    etag = '"x"'
+
+    def age_sec(self):
+        return 1.0
+
+
 def test_history_drilldown_gate_closes_when_rebuild_failed(monkeypatch):
-    """重建失败会把门禁发布成 {"ok": false}，下钻必须退回 pandas。"""
-    class _Snap:
-        version = 1
-        computed_at = "2026-11-24T00:00:00Z"
-        etag = '"x"'
+    """重建失败会把门禁发布成 {"ok": false}，下钻必须退回 pandas、且**不能去连库**。
 
-        def age_sec(self):
-            return 1.0
-
-    monkeypatch.setattr(ad.snapshot_store, "get", lambda key: _Snap())
+    （上一版这条测试是假阳性：它打桩了 peek_payload 但被测函数根本没调用，返回 None
+    只是因为临时库里没有物化表 —— 2026-11-24 审核用真实表复现的。）
+    """
+    monkeypatch.setattr(ad.snapshot_store, "get", lambda key: _GateSnap())
     monkeypatch.setattr(ad.snapshot_store, "peek_payload",
                         lambda key: {"ok": False, "rows": 0})
+
+    def _must_not_connect(*args, **kwargs):
+        raise AssertionError("门禁未生效：ok=false 时不该去连库查物化表")
+
+    monkeypatch.setattr(ad, "get_raw_connection", _must_not_connect)
     assert ad._history_drilldown_sql("all", 10) is None
+
+
+def test_history_drilldown_gate_open_reaches_db(monkeypatch):
+    """ok=true 时门禁放行、确实去查物化表（防止把门禁写成永远关闭）。"""
+    opened = []
+
+    class _Ctx:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(ad.snapshot_store, "get", lambda key: _GateSnap())
+    monkeypatch.setattr(ad.snapshot_store, "peek_payload",
+                        lambda key: {"ok": True, "rows": 10})
+    monkeypatch.setattr(ad, "get_raw_connection",
+                        lambda *a, **k: opened.append(1) or _Ctx())
+    monkeypatch.setattr(ad, "_table_exists", lambda conn, name: False)  # 表不存在 → None
+    assert ad._history_drilldown_sql("all", 10) is None
+    assert opened == [1], "ok=true 时没有去查物化表"
 
 
 def test_alarm_overview_snapshot_has_same_keys_as_live(monkeypatch):

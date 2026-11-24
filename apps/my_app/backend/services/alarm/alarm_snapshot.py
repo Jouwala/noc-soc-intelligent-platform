@@ -203,8 +203,10 @@ def _refresh_network_avail_if_changed() -> None:
     ad = _ad()
     try:
         mtime = os.path.getmtime(ad._NETWORK_KPI_XLSX)
+        exists = True
     except OSError:
         mtime = -1.0
+        exists = False
     if mtime == _last_xlsx_mtime and snapshot_store.get("alarm:network_avail") is not None:
         return
     ad._cache.pop("network_availability", None)
@@ -215,7 +217,10 @@ def _refresh_network_avail_if_changed() -> None:
         # **无条件**当作读失败：不 publish（首次部署也不写空快照）、不推进
         # `_last_xlsx_mtime` —— 否则 mtime 不变就再也不会重试，网络卡片会空到文件下次
         # 被改动（2026-11-24 审核实测：无旧快照的场景原来仍会固化空值并停止重试）。
-        logger.warning("[SNAPSHOT] network_avail 读数为空，按读失败处理：保留旧快照、下轮重试")
+        # 文件根本不存在（PG 开发副本/首次部署）是常态，别每分钟刷两条 warning；
+        # 只有「文件在、但读出来是空」才值得 warning（可能是被 Excel 占用）。
+        log = logger.warning if exists else logger.debug
+        log("[SNAPSHOT] network_avail 读数为空，按读失败处理：保留旧快照、下轮重试")
         return
     snapshot_store.publish("alarm:network_avail", lambda: fresh)
     _last_xlsx_mtime = mtime
