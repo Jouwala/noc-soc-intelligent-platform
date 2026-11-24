@@ -12,8 +12,9 @@
 3. payload 存的是**已经序列化好的 JSON 字符串**，接口直接返回 bytes，
    跳过 FastAPI 对大字典做 jsonable_encoder 的开销。
 4. ETag = key + version。浏览器带 If-None-Match 时内容没变，直接回 304。
-5. 表名以 `_` 开头：通用表浏览器的列表接口会隐藏它（注意 H8：/data 接口
-   目前仍然能读，但这里存的都是聚合结果，不含敏感字段）。
+5. 表名以 `_` 开头：通用表浏览器的列表接口会隐藏它，但 **H8 的 /data 接口仍能读到**
+   这张表。里面除聚合结果外，`alarm:realtime_rows` 存的是 `realtime_alarm` 的原始行
+   （与 /api/tables 可读范围一致，不含凭据类字段）；**发布快照时不要把凭据/Token 写进来**。
 """
 from __future__ import annotations
 
@@ -177,9 +178,12 @@ def peek_payload(key: str) -> Optional[Any]:
     snap = get(key)
     if snap is None:
         return None
+    # 缓存 token 用 version + computed_at：表被清空重建后 version 会从 1 重来，
+    # 只按 version 判断会命中上一轮的反序列化对象（2026-11-24 审核指出）。
+    token = f"{snap.version}@{snap.computed_at}"
     hit = _parsed.get(key)
-    if hit and hit[0] == snap.version:
+    if hit and hit[0] == token:
         return hit[1]
     obj = json.loads(snap.body)
-    _parsed[key] = (snap.version, obj)
+    _parsed[key] = (token, obj)
     return obj

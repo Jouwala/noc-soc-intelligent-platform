@@ -193,17 +193,44 @@ def test_serve_on_missing_snapshot_and_failing_compute_raises(monkeypatch, clean
 # Worker 侧安全包装
 # ---------------------------------------------------------------------------
 def test_safe_skips_when_off(monkeypatch):
+    monkeypatch.setattr(alarm_snapshot, "DB_MODE", "pg")
     monkeypatch.setenv("ALARM_SNAPSHOT", "off")
     called = []
     alarm_snapshot.safe(lambda: called.append(1))
     assert called == []
 
 
-def test_safe_swallows_errors(monkeypatch, caplog):
+def test_safe_skips_on_sqlite(monkeypatch):
+    """SQLite 副本上不发布快照：复用的两条 SQL 是 PG 方言，跑了只会报语法错误。"""
+    monkeypatch.setattr(alarm_snapshot, "DB_MODE", "sqlite")
+    called = []
+    alarm_snapshot.safe(lambda: called.append(1))
+    assert called == []
+
+
+def test_safe_swallows_errors(monkeypatch):
     """快照失败绝不能把采集任务标成失败。"""
+    monkeypatch.setattr(alarm_snapshot, "DB_MODE", "pg")
     monkeypatch.setenv("ALARM_SNAPSHOT", "on")
 
     def boom():
         raise RuntimeError("publish failed")
 
     alarm_snapshot.safe(boom)   # 不应抛出
+
+
+@pytest.mark.parametrize("header", ['W/"k-v1"', '"k-v0", "k-v1"', "*"])
+def test_etag_matches_weak_and_multi_value(header):
+    """nginx gzip 会把强 ETag 改成 W/"..."；多值与 * 也要认。"""
+    assert ad._etag_matches(_req(if_none_match=header), '"k-v1"')
+
+
+def test_etag_does_not_match_other_version():
+    assert not ad._etag_matches(_req(if_none_match='"k-v0"'), '"k-v1"')
+
+
+def test_env_int_falls_back_on_garbage(monkeypatch):
+    monkeypatch.setenv("ALARM_SNAPSHOT_RT_MAX_AGE", "5m")
+    assert ad._env_int("ALARM_SNAPSHOT_RT_MAX_AGE", 300) == 300
+    monkeypatch.setenv("ALARM_SNAPSHOT_RT_MAX_AGE", "120")
+    assert ad._env_int("ALARM_SNAPSHOT_RT_MAX_AGE", 300) == 120

@@ -111,7 +111,17 @@ def after_history_sync() -> None:
 
     snapshot_store.publish("alarm:recovery_mttr", _mttr, source_sync_at=iso)
 
-    rebuild_history_enriched()
+    # 物化表重建失败不能连坐后面的总览发布（2026-11-24 审核：原来一抛异常就跳过下面两步，
+    # 本轮历史同步后 overview / alarm_overview 要等到下一分钟才靠实时任务补上）。
+    try:
+        rebuilt = rebuild_history_enriched()
+    except Exception:  # noqa: BLE001
+        logger.warning("[SNAPSHOT] 物化表重建失败，历史下钻继续走 pandas 兜底", exc_info=True)
+    else:
+        # 单独发布一个「物化表已重建」的门禁快照：下钻新鲜度必须以**这张表**为准，
+        # 不能拿先发布的 alarm:history_metrics 当门禁（两者之间 rebuild 可能失败）。
+        snapshot_store.publish("alarm:history_enriched", lambda: {"rows": rebuilt},
+                               source_sync_at=iso)
 
     # 历史指标是总览的一部分：顺带把总览和告警总览重新发布一次
     after_realtime_sync()
@@ -150,7 +160,10 @@ def rebuild_history_enriched() -> int:
     table["m_overdue"] = out["_m_overdue"].fillna(False).astype(int)
 
     new = f"{ENRICHED}__new"
-    suffix = str(int(time.time()))
+    # 纳秒 + 序号：同一秒内连续两次重建（手动重跑 / 两个 Worker 组 / 重试）不会撞索引名。
+    # 2026-11-24 审核实测：秒级后缀在同秒第二次调用必失败（PG 42P07 / SQLite index exists），
+    # 失败还会留下半截 __new 表。
+    suffix = f"{time.time_ns()}"
     with get_raw_connection() as conn:
         conn.execute(f'DROP TABLE IF EXISTS "{new}"')
         conn.commit()
@@ -188,7 +201,17 @@ def _refresh_network_avail_if_changed() -> None:
     if mtime == _last_xlsx_mtime and snapshot_store.get("alarm:network_avail") is not None:
         return
     ad._cache.pop("network_availability", None)
-    snapshot_store.publish("alarm:network_avail", ad._network_availability)
+    fresh = ad._network_availability()
+    rows = (fresh or {}).get("rows") or []
+    prev = snapshot_store.peek_payload("alarm:network_avail")
+    prev_rows = (prev or {}).get("rows") or []
+    if not rows and prev_rows:
+        # `_network_availability()` 内部吞异常并返回空 rows（例如 xlsx 正被 Excel 占用）。
+        # 这时既不能把它固化进快照，也不能推进 `_last_xlsx_mtime` —— 否则 mtime 不变就
+        # 再也不会重试，网络卡片会空到文件下次被改动（2026-11-24 审核实测的阻塞项）。
+        logger.warning("[SNAPSHOT] network_avail 读数为空但旧快照有数据，保留旧快照并下轮重试")
+        return
+    snapshot_store.publish("alarm:network_avail", lambda: fresh)
     _last_xlsx_mtime = mtime
 
 
@@ -198,18 +221,25 @@ def _publish_alarm_overview(label: str, iso: str) -> None:
     def _build():
         with get_raw_connection() as conn:
             counts = ad._alarm_category_counts(conn)          # realtime_alarm 只有约百行，GROUP BY 很快
+        rec_snap = snapshot_store.get("alarm:recovery_mttr")
         recovery = snapshot_store.peek_payload("alarm:recovery_mttr")
         if recovery is None:                                 # 首次部署还没有历史快照
             with get_raw_connection() as conn:
                 recovery = ad._recovery_mttr(conn)
+        net_snap = snapshot_store.get("alarm:network_avail")
         network = snapshot_store.peek_payload("alarm:network_avail") or ad._network_availability()
         return {
             "generated_at": label,
             "alarm_counts": counts,
             "recovery_mttr": recovery,
+            # 子快照各自的时间必须透出：顶层 generated_at 是「本次实时同步」，
+            # 而恢复率/MTTR/网络可用率来自历史/文件快照，可能更旧。只给顶层时间
+            # 等于让旧数据冒充实时（2026-11-24 审核指出）。
+            "recovery_generated_at": rec_snap.computed_at if rec_snap else None,
             "network_availability": network["rows"],
             "network_threshold_pct": network["threshold_pct"],
             "network_latest_month": network["latest_month"],
+            "network_generated_at": net_snap.computed_at if net_snap else None,
         }
 
     snapshot_store.publish("alarm:alarm_overview", _build, source_sync_at=iso)
@@ -218,8 +248,23 @@ def _publish_alarm_overview(label: str, iso: str) -> None:
 # ---------------------------------------------------------------------------
 # 给采集任务用的安全包装：快照失败只记日志，绝不影响采集任务本身的成功/失败
 # ---------------------------------------------------------------------------
+_non_pg_warned = False
+
+
 def safe(fn) -> None:
+    """采集任务成功后的安全包装：快照失败绝不影响采集任务本身的成败。
+
+    仅 PostgreSQL 生效：快照链路复用的 `_history_metrics_sql` / `_recovery_mttr` 是
+    PG 方言（`~`、`::bigint`，主分支既有实现），SQLite 副本（便携包/冒烟）上会直接
+    语法错误。那里不发布快照，看板照旧现算 —— 与「快照只是加速层」的定位一致。
+    """
+    global _non_pg_warned
     if os.environ.get("ALARM_SNAPSHOT", "on").lower() == "off":
+        return
+    if DB_MODE != "pg":
+        if not _non_pg_warned:
+            _non_pg_warned = True
+            logger.info("[SNAPSHOT] DB_MODE=%s：快照仅 PG 支持，跳过快照发布（看板走现算）", DB_MODE)
         return
     try:
         fn()

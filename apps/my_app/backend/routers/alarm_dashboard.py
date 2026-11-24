@@ -992,8 +992,21 @@ def alarm_overview(request: Request):
 _MODE = os.environ.get("ALARM_SNAPSHOT", "shadow").strip().lower()
 
 # 快照超过这个年龄就认为 Worker 没在更新：实时每分钟同步，给 5 分钟余量；历史每 3 小时同步
-REALTIME_MAX_AGE = int(os.environ.get("ALARM_SNAPSHOT_RT_MAX_AGE", "300"))
-HISTORY_MAX_AGE = int(os.environ.get("ALARM_SNAPSHOT_HIS_MAX_AGE", str(4 * 3600)))
+def _env_int(name: str, default: int) -> int:
+    """环境变量解析兜底：写错（如 `5m`）不能把后端启动搞挂。"""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logging.getLogger(__name__).warning(
+            "[SNAPSHOT] %s=%r 不是整数，回退默认 %s", name, raw, default)
+        return default
+
+
+REALTIME_MAX_AGE = _env_int("ALARM_SNAPSHOT_RT_MAX_AGE", 300)
+HISTORY_MAX_AGE = _env_int("ALARM_SNAPSHOT_HIS_MAX_AGE", 4 * 3600)
 FALLBACK_TTL = 60
 
 _fallback: dict = {}                               # key -> (ts, body_bytes, etag)
@@ -1102,7 +1115,9 @@ def _history_drilldown_sql(metric: str, limit: int):
     口径与 _history_drilldown_pandas 一致：同一套派生字段（由 Worker 复用 _load_history_df
     算出），按 servertime 倒序取前 limit 行。flag 列名来自白名单，不拼接用户输入。
     """
-    hm = snapshot_store.get("alarm:history_metrics")
+    # 新鲜度必须看**物化表本身**的重建时间：alarm:history_metrics 在 rebuild 之前发布，
+    # 拿它当门禁会在「metrics 成功、rebuild 失败」时放行一张 3 小时前的旧表。
+    hm = snapshot_store.get("alarm:history_enriched")
     if hm is None or hm.age_sec() > HISTORY_MAX_AGE:
         return None
     flag = _FLAG_COL.get(metric)
