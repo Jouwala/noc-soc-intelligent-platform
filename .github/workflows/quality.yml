@@ -12,7 +12,10 @@
 name: quality
 
 on:
+  # 2026-11-24 流程提速批：agent/* 推送不再另起一套 quality（同 head 的
+  # pull_request 运行已覆盖它）；main 的 push 仍跑，供合并后兜底。
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -22,6 +25,7 @@ jobs:
   compileall:
     name: compileall（apps + ops/deploy）
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: .
@@ -37,6 +41,7 @@ jobs:
   ruff:
     name: ruff E9,F821（my_app）
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/my_app
@@ -54,6 +59,7 @@ jobs:
   portal:
     name: 门户 lint / test / 文档守卫
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/portal
@@ -77,6 +83,7 @@ jobs:
   my-app-docs:
     name: my_app 文档一致性守卫
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/my_app
@@ -92,6 +99,7 @@ jobs:
   pytest:
     name: pytest 离线集（-m "not live"）
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/my_app
@@ -112,6 +120,7 @@ jobs:
   agent-tests:
     name: agent-worker + control-plane 调度/分派测试
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: .
@@ -133,6 +142,7 @@ jobs:
   agent-linux-process-tests:
     name: agent-worker Linux 进程/信号测试
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: .
@@ -156,6 +166,7 @@ jobs:
   ps-syntax:
     name: PowerShell 语法检查（ops/*.ps1）
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: .
@@ -186,6 +197,7 @@ jobs:
   deploy-mjs-load:
     name: ops/deploy .mjs 加载检查
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: .
@@ -213,6 +225,7 @@ jobs:
   deploy-mjs-load-windows:
     name: ops/deploy .mjs 加载检查（Windows）
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: .
