@@ -1368,3 +1368,12 @@ export function getPrtgLinks(params?: { window?: string }) {
 export function getPrtgLinkDetail(sensorId: number, params?: { window?: string }) {
   return api.get(`/prtg/links/${sensorId}`, { params })
 }
+
+// ========== PRTG SLA 与容量（?page=prtg_links 的 SLA 页签，Issue #231）==========
+export function getPrtgSla(params?: { month?: string; target?: number }) {
+  return api.get('/prtg/sla', { params })
+}
+
+export function getPrtgCapacity() {
+  return api.get('/prtg/capacity')
+}
