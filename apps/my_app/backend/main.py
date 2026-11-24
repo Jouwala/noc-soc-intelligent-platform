@@ -721,10 +721,12 @@ async def startup_event():
     except Exception as _e:
         print(f"[startup] SP 备件明细看板预热异常（不影响启动）: {_e}")
 
-    # 丢包看板总览预热：daily_trend/top_sites 要扫 7 天+24 小时读数（约 2s）。
+    # 丢包看板总览预热：daily_trend/top_sites 要扫 7 天+24 小时读数（冷算 2.5~4.7s）。
+    # periodic 只给持调度锁的实例开：第二个仅 HTTP 实例也会走到这里，重复起周期线程
+    # 等于把整表扫描翻倍（与下面 pg_mirror_daemon 的 _got_lock 门控同一取舍）。
     try:
         from backend.routers import packet_loss_dashboard as _pl
-        _pl.warmup()
+        _pl.warmup(periodic=_got_lock)
         print("[startup] 丢包看板总览预热已启动（后台）")
     except Exception as _e:
         print(f"[startup] 丢包看板预热异常（不影响启动）: {_e}")

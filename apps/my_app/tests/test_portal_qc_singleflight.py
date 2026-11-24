@@ -12,10 +12,13 @@
 2. 重算期间到达的请求继续拿旧值，不触发第二次重算（单飞）；
 3. 冷启动（没有旧值）仍同步算一次，不返回空壳；
 4. `refresh=1` 同步重算，不受旧值影响；
-5. 后台刷新失败只保留旧值，且 `refreshing` 必须复位 —— 否则缓存永久卡死。
+5. 后台刷新失败要打 `failed_at`：下一次请求改走同步路径把错误暴露出去（门户红点靠它），
+   同时 `refreshing` 必须复位；旧值超过 `_MAX_STALE_SEC` 也不再兜底。
 """
 import threading
 import time
+
+import pytest
 
 from backend.routers import portal_qc
 
@@ -70,7 +73,7 @@ def test_expired_returns_old_value_immediately_and_refreshes_once():
     """核心用例：过期后第一个请求立刻拿到旧值，后台只算一次。"""
     cache = _new_cache()
     cache["payload"] = _payload("old")
-    cache["at"] = time.time() - 3600
+    cache["at"] = time.time() - 120   # 过期（60s TTL）但未超过 _MAX_STALE_SEC
 
     started = threading.Event()
     release = threading.Event()
@@ -108,7 +111,7 @@ def test_expired_returns_old_value_immediately_and_refreshes_once():
 def test_force_refresh_is_synchronous_even_with_old_value():
     cache = _new_cache()
     cache["payload"] = _payload("old")
-    cache["at"] = time.time() - 3600
+    cache["at"] = time.time() - 120   # 过期（60s TTL）但未超过 _MAX_STALE_SEC
 
     res = portal_qc._serve_cached(
         cache, lambda: _payload("forced"), refresh=True, label="test")
@@ -119,7 +122,7 @@ def test_force_refresh_is_synchronous_even_with_old_value():
 def test_background_failure_keeps_old_value_and_resets_flag():
     cache = _new_cache()
     cache["payload"] = _payload("old")
-    cache["at"] = time.time() - 3600
+    cache["at"] = time.time() - 120   # 过期（60s TTL）但未超过 _MAX_STALE_SEC
 
     def boom():
         raise RuntimeError("db down")
@@ -162,7 +165,7 @@ def test_background_result_not_written_over_newer_sync_refresh():
     """后台算完时若用户已点过刷新（gen 变了），旧结果不能覆盖新数据。"""
     cache = _new_cache()
     cache["payload"] = _payload("old")
-    cache["at"] = time.time() - 3600
+    cache["at"] = time.time() - 120   # 过期（60s TTL）但未超过 _MAX_STALE_SEC
 
     release = threading.Event()
 
@@ -180,3 +183,65 @@ def test_background_result_not_written_over_newer_sync_refresh():
     release.set()
     assert _wait_until(lambda: not cache["refreshing"])
     assert cache["payload"]["generated_at"] == "user-refresh", "后台旧结果覆盖了更新的数据"
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-24 独立审核补的回归项：失败可见性 / 线程起不来 / 过老的旧值
+# ---------------------------------------------------------------------------
+def test_background_failure_marks_failed_and_next_request_surfaces_error():
+    """后台刷新失败后，下一次请求必须走同步路径把错误抛出去（门户红点靠它）。"""
+    cache = _new_cache()
+    cache["payload"] = _payload("old")
+    cache["at"] = time.time() - 120
+
+    def boom():
+        raise RuntimeError("db down")
+
+    first = portal_qc._serve_cached(cache, boom, refresh=False, label="test")
+    assert first["stale"] is True                    # 这一次仍给旧值，不砸面板
+    assert _wait_until(lambda: not cache["refreshing"])
+    assert cache["failed_at"] is not None
+
+    with pytest.raises(RuntimeError):
+        portal_qc._serve_cached(cache, boom, refresh=False, label="test")
+
+
+def test_background_success_clears_failed_flag():
+    cache = _new_cache()
+    cache["payload"] = _payload("old")
+    cache["at"] = time.time() - 120
+    cache["failed_at"] = time.time()                 # 上一次失败过
+
+    res = portal_qc._serve_cached(cache, lambda: _payload("new"), refresh=False, label="test")
+    assert res["generated_at"] == "new" and res["stale"] is False
+    assert cache["failed_at"] is None
+
+
+def test_stale_beyond_max_age_forces_sync():
+    """旧值超过 _MAX_STALE_SEC 就不再兜底 —— 宁可慢一次，也不拿几分钟前的数冒充实时。"""
+    cache = _new_cache()
+    cache["payload"] = _payload("old")
+    cache["at"] = time.time() - (portal_qc._MAX_STALE_SEC + 10)
+
+    res = portal_qc._serve_cached(cache, lambda: _payload("new"), refresh=False, label="test")
+    assert res["generated_at"] == "new"
+    assert res["stale"] is False
+
+
+def test_thread_start_failure_falls_back_to_sync(monkeypatch):
+    """线程起不来时不能把 refreshing 永久卡住（审核发现的冻结隐患）。"""
+    import types
+
+    cache = _new_cache()
+    cache["payload"] = _payload("old")
+    cache["at"] = time.time() - 120
+
+    class _BoomThread:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(portal_qc, "threading",
+                        types.SimpleNamespace(Thread=_BoomThread, Lock=portal_qc.threading.Lock))
+    res = portal_qc._serve_cached(cache, lambda: _payload("new"), refresh=False, label="test")
+    assert res["generated_at"] == "new"              # 退回同步算
+    assert cache["refreshing"] is False

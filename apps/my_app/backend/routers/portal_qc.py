@@ -90,18 +90,30 @@ METRICS = ("alarm", "tt", "wo", "cr", "pmt", "spms", PMT_WAIT_METRIC)
 METRICS_DRILLABLE = METRICS + ("sla",)
 
 _SUMMARY_TTL_SEC = 60
+#: 旧值最多还能顶多久（3×TTL）。超过这个年龄就不再拿旧值糊弄，改为**同步重算**。
+#: 两个理由：
+#: 1. `/api/portal-qc/summary` 同时是门户顶栏「环境异常」红点的**唯一探活出口**
+#:    （见 apps/portal/v3/olbrportal/assets/olbr.js 里 setEnvDown 的注释，MsPortal 同）。
+#:    旧实现数据库连不上时直接 500 → 红点亮；若 stale 200 一直兜着，红点永远不亮、
+#:    面板上的旧数字还会冒充实时（2026-11-24 独立审核指出的阻塞项）。
+#: 2. 请求稀疏时（夜间/没人看板），5 分钟才来一次，没必要把半小时前的数当实时给出去 ——
+#:    这种情况同步算一次（约 1.3s）反而更诚实。繁忙时段请求密集，缓存总被刷新，
+#:    age 很少超过 60s，走的仍是「先回旧值」的快路径。
+_MAX_STALE_SEC = 180
 _summary_lock = threading.Lock()
-_summary_cache: dict = {"at": 0.0, "payload": None, "refreshing": False, "gen": 0}
+_summary_cache: dict = {"at": 0.0, "payload": None, "refreshing": False, "gen": 0, "failed_at": None}
 # 告警单项的独立缓存（2026-09-18 加，配合 only=alarm）。必须与全量分开：
 # MsPortal 的 QC 面板对告警做 5 分钟级刷新、其余做每小时刷新，若共用一份缓存，
 # 每 5 分钟一次的告警请求会把全量那份 60s 缓存顶掉 → 「其余每小时」白白多跑 6 条全表 COUNT。
-_alarm_cache: dict = {"at": 0.0, "payload": None, "refreshing": False, "gen": 0}
+_alarm_cache: dict = {"at": 0.0, "payload": None, "refreshing": False, "gen": 0, "failed_at": None}
 
 
 def _refresh_cached_async(cache: dict, collect, label: str, token: int) -> None:
     """后台重算一次并写回缓存（2026-11-24，配合 `_serve_cached` 的单飞策略）。
 
-    失败只记 warning：旧值继续服务，下一次过期会再试，不会把面板打成 500。
+    失败时除了记 warning，还打上 `failed_at`：下一次请求会改走同步路径，
+    把错误原样抛给调用方（探活要能看见），旧值也同时停止兜底。
+
     `token` 是派发那一刻的 `gen`：期间若已有一次同步重算写过缓存（用户点了刷新），
     这里的旧结果直接丢弃，不覆盖更新的数据。
     """
@@ -109,9 +121,10 @@ def _refresh_cached_async(cache: dict, collect, label: str, token: int) -> None:
     try:
         payload = collect()
     except Exception as exc:  # noqa: BLE001
-        logger.warning("[portal-qc] 后台刷新失败（继续用旧值）%s: %s", label, exc, exc_info=True)
+        logger.warning("[portal-qc] 后台刷新失败（旧值停止兜底）%s: %s", label, exc, exc_info=True)
         with _summary_lock:
             cache["refreshing"] = False
+            cache["failed_at"] = time.time()
         return
     with _summary_lock:
         if cache["gen"] == token:
@@ -119,6 +132,7 @@ def _refresh_cached_async(cache: dict, collect, label: str, token: int) -> None:
             cache["at"] = time.time()
             cache["gen"] += 1
         cache["refreshing"] = False
+        cache["failed_at"] = None
     elapsed_ms = (time.time() - t0) * 1000
     # 正常一次 0.1–1.3s，每分钟最多一条；慢到 3s 以上才值得留痕（排障用）。
     if elapsed_ms > 3000:
@@ -126,7 +140,7 @@ def _refresh_cached_async(cache: dict, collect, label: str, token: int) -> None:
 
 
 def _serve_cached(cache: dict, collect, *, refresh: bool, label: str) -> dict:
-    """取数策略：热值直回 → 过期先回旧值并单飞刷新 → 冷启动同步算（2026-11-24 改）。
+    """取数策略：热值直回 → 过期先回旧值并单飞刷新 → 冷启动/失败/过老时同步算（2026-11-24 改）。
 
     **改的原因（实测，不是推测）**：nginx access.log（11-19 切生产 ~ 11-23）里
     `/api/portal-qc/summary` 每天约 5,700 次，p50 只有 17ms（缓存生效），但
@@ -136,13 +150,12 @@ def _serve_cached(cache: dict, collect, *, refresh: bool, label: str) -> dict:
 
     现在的三条路径：
       1. 未过期 → 直接回缓存（行为不变）；
-      2. 已过期且有旧值 → **立即回旧值**，只让第一个请求去后台重算；重算期间
-         到达的其它请求继续拿旧值（单飞），不再排队等；
-      3. 冷启动（进程刚起来、还没有任何一次统计）→ 同步算。这里刻意不用
-         CN KPI 那种「返回空壳 + computing」的做法：QC 面板七项指标全是空值时
-         前端没有可用的占位形态，用户会以为数据没了；而冷启动只有重启后第一次，
-         等一次 1–2 秒比给一个假空面板更诚实。代价是冷启动那一瞬**同时到达**的
-         请求仍会各算一次（与改造前一致），持续状态下的长尾才是本次要治的问题。
+      2. 已过期、旧值还年轻（≤ `_MAX_STALE_SEC`）、没失败过 → **立即回旧值**，只让
+         第一个请求去后台重算；重算期间到达的其它请求继续拿旧值（单飞），不再排队；
+      3. 冷启动 / 强刷 / 上次后台刷新失败过 / 旧值超过 `_MAX_STALE_SEC` → 同步算。
+         第 3 条是**故意**把错误暴露出去的：这个接口同时是门户环境红点的唯一探活，
+         永远拿旧值糊弄会让故障不可见（2026-11-24 审核阻塞项）；冷启动则是因为 QC
+         面板七项全空时前端没有可用占位形态，等一次 1–2 秒比给假空面板更诚实。
 
     `refresh=True`（前端手动刷新按钮）永远是同步重算，不拿旧值糊弄用户。
     返回值在原有 payload 上补 `cached` / `stale` 两个字段：`stale=True` 表示
@@ -151,36 +164,53 @@ def _serve_cached(cache: dict, collect, *, refresh: bool, label: str) -> dict:
     now = time.time()
     with _summary_lock:
         payload = cache["payload"]
-        fresh = payload is not None and (now - cache["at"]) < _SUMMARY_TTL_SEC
+        age = now - cache["at"]
+        fresh = payload is not None and age < _SUMMARY_TTL_SEC
         if fresh and not refresh:
             return {**payload, "cached": True, "stale": False}
-        if payload is not None and cache["refreshing"] and not refresh:
+        # 旧值还能不能顶：只有「不太老、没失败、不是强刷」时才允许拿它垫背
+        reusable = (
+            payload is not None
+            and not refresh
+            and cache.get("failed_at") is None
+            and age <= _MAX_STALE_SEC
+        )
+        if reusable and cache["refreshing"]:
             # 已经有一个请求在后台算了：本次继续用旧值，不再叠一次全表 COUNT
             return {**payload, "cached": True, "stale": True}
         cache["refreshing"] = True
-        background = payload is not None and not refresh
+        background = reusable
         stale_payload = payload
         token = cache["gen"]
 
     if background:
-        threading.Thread(
-            target=_refresh_cached_async, args=(cache, collect, label, token),
-            name=f"qc-refresh-{label}", daemon=True,
-        ).start()
-        return {**stale_payload, "cached": True, "stale": True}
+        try:
+            threading.Thread(
+                target=_refresh_cached_async, args=(cache, collect, label, token),
+                name=f"qc-refresh-{label}", daemon=True,
+            ).start()
+        except Exception:  # noqa: BLE001  线程起不来就当场同步算，别把 refreshing 永久卡住
+            logger.warning("[portal-qc] 后台刷新线程创建失败 %s，改为同步重算", label, exc_info=True)
+            with _summary_lock:
+                cache["refreshing"] = False
+        else:
+            return {**stale_payload, "cached": True, "stale": True}
 
     try:
         payload = collect()
     except BaseException:
         # 同步路径抛错（含 KeyboardInterrupt）也必须放开 refreshing，否则缓存永久卡在
-        # 「正在刷新」，后续请求只能一直拿旧值、再也不会重算。
+        # 「正在刷新」，后续请求只能一直拿旧值、再也不会重算。同时标记 failed_at，
+        # 让后续请求继续走同步路径（错误对探活可见）。
         with _summary_lock:
             cache["refreshing"] = False
+            cache["failed_at"] = time.time()
         raise
     with _summary_lock:
         cache["payload"] = payload
         cache["at"] = time.time()
         cache["refreshing"] = False
+        cache["failed_at"] = None
         cache["gen"] += 1
     return {**payload, "cached": False, "stale": False}
 
