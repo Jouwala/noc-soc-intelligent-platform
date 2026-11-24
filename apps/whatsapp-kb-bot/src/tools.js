@@ -40,6 +40,7 @@ import { queryDataDomain, renderDataDomain, fetchDatasets } from './datadomains.
 import { queryData, renderDataQuery, NL2SQL_HINT } from './dataquery.js';
 import { isKnownSite } from './sitelist.js';
 import { parseVmaxCcaIntent, runVmaxCca } from './vmaxcca.js';
+import { checkPhoneQuery, phoneDenyText, describeCaller } from './phoneAcl.js';
 import { parseWarehouseIntent, runWarehouseQuery, isWarehouseKnowledgeQuestion } from './warehousetool.js';
 import {
   queryTickets,
@@ -1535,7 +1536,7 @@ function normalizeArgs(args, now = new Date(), question = '') {
  * @param {{tool:string,args:object}} call
  * @param {object} index      知识库索引（search_knowledge 用）
  * @param {'zh'|'en'} lang
- * @param {object} [opts]     { onDebug, onRetry, onLive, now }
+ * @param {object} [opts]     { onDebug, onRetry, onLive, now, caller }（caller 供号码查询鉴权，见 src/phoneAcl.js）
  * @returns {Promise<{text:string, answered:boolean, channel:string, stats?:object}>}
  */
 export async function runTool(call, index, lang, opts = {}) {
@@ -1765,6 +1766,21 @@ export async function runTool(call, index, lang, opts = {}) {
   }
 
   if (call.tool === 'query_vmax_cca') {
+    // 2026-11-23 号码查询权限：只有名单里的人能查电话信息（见 src/phoneAcl.js）。
+    // 规则层与模型层都汇到这里，拦一处即可。被拒时 answered=false：不进会话历史。
+    const gate = await checkPhoneQuery(opts.caller);
+    if (!gate.allowed) {
+      console.log(`[号码查询] 拒绝 ${describeCaller(opts.caller)}（${gate.reason}）`);
+      return {
+        text: phoneDenyText(gate.acl, lang),
+        answered: false,
+        denied: true,
+        channel: 'vmaxcca',
+        stats: { totalMs: Date.now() - t0, denied: true },
+        routeArgs: { denied: true, reason: gate.reason },
+      };
+    }
+    if (opts.caller) console.log(`[号码查询] 放行 ${describeCaller(opts.caller)}（${gate.reason}）`);
     // 号码/时间的最终解析在 vmaxcca.js 里做（优先级：规则层解析 > 模型参数 > 当前时刻），
     // 与统计通道 normalizeArgs 同一纪律 —— 模型不知道现在几点。
     const r = await runVmaxCca(call.args || {}, {

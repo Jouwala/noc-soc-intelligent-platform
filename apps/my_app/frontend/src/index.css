@@ -1087,6 +1087,26 @@ body .leaflet-container,
   transform-origin: 50% 100%;
   filter: brightness(1.12) saturate(1.25);
 }
+/* 姓名/电话徽标**默认隐藏、悬停才显示**（2026-11-23 用户要求「人员的标签默认不显示，
+   当鼠标悬浮的时候显示」）。此前是全国视角下 30 个两行徽标常驻，互相叠字、
+   把地图压得看不清站点。
+   ⚠ 只作用于 ?page=person（`.person-map-canvas` 前缀）：GIS 页的人员图层
+   （gismap/PersonnelLayer）把同一份 `.gis-person-badge` 当**常驻**单行徽标用，
+   不加前缀会连带改掉那一页。
+   用 opacity + visibility 而非 display:none：不参与布局、不改变 marker 的
+   DOM 尺寸（`Marker` 的 iconSize 与 html 都不动），因此不会触发 Leaflet 重建图层
+   —— 正是 personPinHtml.ts 文件头警告的那个坑。徽标自身 pointer-events:none，
+   鼠标进出只以针身为准，悬停显示/隐藏不会抖动。 */
+.person-map-canvas .gis-person-badge {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+}
+.person-map-canvas .gis-person-marker:hover .gis-person-badge,
+.person-map-canvas .gis-person-marker:focus-within .gis-person-badge {
+  opacity: 1;
+  visibility: visible;
+}
 /* 悬停姓名/电话气泡（2026-10-16 用户要求「悬浮时显示人员的名字和电话」）。
    显示在针尖上方（针高 = size*1.5，故 bottom 用 100% 抬到图标顶），水平居中。 */
 .gis-person-tip {
@@ -1277,6 +1297,24 @@ body .leaflet-container,
 }
 :root[data-theme='light'] .gis-legend-overlay {
   background: transparent;
+}
+
+/* 图例里的「站点类别」展开时，暂时收起左上的区域排名条（2026-11-24）
+ *
+ * 图例贴左下、排名条贴左上，两者同处左缘。站点类别展开后图例高度会到
+ * 400px 上下，与排名条（top 由 LAYERS 底边实测、高约 250~290px）重叠。
+ * 两块都是半透明浮层：叠在一起既互相透字，排名条又因 DOM 靠后会把图例
+ * 上半部分的类别行挡住、点不中（2026-11-24 Playwright 实测点击被
+ * `.gis-rank-row__name` 拦截）。
+ *
+ * 取舍：**展开时收起排名条**，而不是给图例抬 z-index —— 后者只是让图例
+ * 盖住排名条，用户仍会看到被压掉一半的排名、且排名行点不中；收起后
+ * 排名条自动回来，语义最干净（类别选完收起图例即恢复）。
+ * 选择器依赖「两块浮层都是地图卡片 body 的子节点，且图例在前」
+ * （GISMap.tsx 的渲染顺序）。⚠️ 若将来调整渲染顺序，这条要同步改。
+ */
+.gis-legend-overlay:has(.gis-siteclass-block button[aria-expanded='true']) ~ .gis-rank-overlay {
+  display: none;
 }
 
 /* 降级段（@supports not backdrop-filter）已于 2026-10-14 第五轮**删除**。

@@ -68,7 +68,7 @@ const zh: Record<string, string> = {
 
   'task.title': 'Data Insight 自动化任务调度中心 (Task Manager)',
   'task.live': '实时数据',
-  'task.offline': '在线',
+  'task.offline': '离线',
   'task.desc': 'my_app 后端 /api/tasks 实时同步：ZTE eFlow 工单、FM 告警、RAN/iPRAN/CNN KPI、电池丢包与邮件日报',
   'task.total': '全部:',
   'task.running': '运行中',
@@ -87,6 +87,9 @@ const zh: Record<string, string> = {
   'task.ready': '就绪',
   'task.cron': 'Cron 调度:',
   'task.elapsed': '上次耗时:',
+  'task.loading': '连接中…',
+  'task.unavailable': '任务状态暂不可用',
+  'task.unavailableHint': '未连上 my_app 后端 /api/tasks。本部件不显示任何缓存或示例数字，连上后自动恢复。',
 
   'filter.searchPh': '搜索看板名称、功能描述、URL、部门或标签...',
   'filter.all': '全部',
@@ -787,7 +790,7 @@ const en: Record<string, string> = {
 
   'task.title': 'Data Insight Automated Task Scheduling Center (Task Manager)',
   'task.live': 'Live Data',
-  'task.offline': 'Online',
+  'task.offline': 'Offline',
   'task.desc':
     'Real-time sync from my_app backend /api/tasks: ZTE eFlow TT, FM alarms, RAN/iPRAN/CNN KPI, battery/packet-loss & email daily reports',
   'task.total': 'Total:',
@@ -807,6 +810,10 @@ const en: Record<string, string> = {
   'task.ready': 'Ready',
   'task.cron': 'Cron:',
   'task.elapsed': 'Last elapsed:',
+  'task.loading': 'Connecting…',
+  'task.unavailable': 'Task status unavailable',
+  'task.unavailableHint':
+    'Cannot reach the my_app backend /api/tasks. No cached or sample numbers are shown; it recovers automatically when the connection returns.',
 
   'filter.searchPh': 'Search name, description, URL, department or tags...',
   'filter.all': 'All',

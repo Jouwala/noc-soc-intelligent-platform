@@ -42,7 +42,7 @@
  *    `t()` 好再传进来。这样 `check:i18n` 的漏键守卫仍能在 GISMap.tsx 里看见字面量键；
  *    若在这里写 `t('gis.legend.' + key)` 这类拼接，守卫看不见、拼错时只会界面显示键名。
  */
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { WH } from '../../theme'
 import { ExplainIcon } from '../../components/MetricExplain'
 import { stripBold } from '../../utils/richText'
@@ -87,6 +87,15 @@ export interface MapLegendGroup {
   /** 组标题；为空时不渲染标题行 */
   title?: string
   rows: MapLegendRow[]
+  /** 组内自定义内容（2026-11-24 新增），渲染在本组各行**之后**。
+   *
+   *  用途：GIS 页「站点类别」要在同一组里放一组**可点选**的类别（维护分类 /
+   *  VIP / HUB / 传输类型），语义是「点它在地图上圈出该类站点」，与上面
+   *  `MapLegendRow` 的「点它隐藏该色」不同 —— 硬塞进 row 会让「隐藏 = 删除线」
+   *  与「选中 = 高亮」两种状态互相打架。故给一个插槽，交互与外观由调用方给，
+   *  本组件只负责把它排在同一个组标题下。
+   *  ⚠️ 传了 node 但没有 rows 时，组标题照样渲染（见下方判据）。 */
+  node?: ReactNode
 }
 
 interface Props {
@@ -136,7 +145,14 @@ const panelStyle: CSSProperties = {
   zIndex: 1000,
   // 上限 13rem：再宽就会压掉地图上的站点；58vw 是窄屏（门户内嵌）时的兜底
   width: 'min(58vw, 13rem)',
-  maxHeight: 'calc(100% - 1rem)',
+  /* 高度上限由「占满 body」改为「留出左上 LAYERS 的位置」（2026-11-24）：
+     图例里新增了可展开的「站点类别」（4 组 / 11 行），展开后原本会一路长到
+     左上的 LAYERS 面板底下并把它盖住。12rem（192px）≈ LAYERS 实际高度（约 84px）
+     + 上下留白，展开时图例最高到 y≈158（相对地图），与 LAYERS 底边(≈94) 仍留
+     60px 净距；超出部分在图例内部滚动（overflowY: auto 保持）。
+     同处左缘的区域排名条由 index.css 的 `.gis-legend-overlay:has(...)` 在展开时收起，
+     避免两块半透明浮层叠字、互相挡点击。 */
+  maxHeight: 'calc(100% - 12rem)',
   overflowY: 'auto',
   padding: 'var(--wh-space-sm) var(--wh-space-md)',
   borderRadius: 'var(--wh-radius-lg)',
@@ -264,11 +280,13 @@ export default function MapLegendOverlay({ title, groups, rows, utilTitle, utilR
       </div>
       {effectiveGroups.map((g, gi) => (
         <div key={g.title || `g${gi}`} style={{ marginTop: gi === 0 ? 0 : 'var(--wh-space-sm)' }}>
-          {/* 组标题只在该组非空且有名字时渲染 —— 空组不该留下一条孤零零的标题 */}
-          {g.title && g.rows.length > 0 && (
+          {/* 组标题只在该组非空（有行或自定义内容）且有名字时渲染 ——
+              空组不该留下一条孤零零的标题 */}
+          {g.title && (g.rows.length > 0 || g.node) && (
             <div style={subGroupTitleStyle}>{g.title}</div>
           )}
           {g.rows.map(r => <Row key={r.id} row={r} />)}
+          {g.node}
         </div>
       ))}
       {hasUtil && (

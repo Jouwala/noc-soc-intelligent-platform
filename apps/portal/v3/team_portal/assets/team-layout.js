@@ -39,8 +39,11 @@
   var LS_KEY = 'olbr_team_layout_' + TEAM;
   var EDIT_ATTR = 'data-team-layout';
 
-  /* 区块清单：与 index.html #main 下容器一一对应（complaintSlot 已下线，不纳入）。 */
-  var BLOCKS = ['band', 'kpi', 'views6', 'maprow', 'qarow', 'esc', 'aux', 'arch'];
+  /* 区块清单：与 index.html #main 下容器一一对应（complaintSlot 已下线，不纳入）。
+     2026-11-23 加 keybiz：上游在 Network Status 之上新增了「关键业务」行，
+     团队门户 index.html 同步有同名容器。它必须登记在这里，否则编辑态拿不到
+     拖动手柄，保存布局时也不会被记住。 */
+  var BLOCKS = ['band', 'keybiz', 'kpi', 'views6', 'maprow', 'qarow', 'esc', 'aux', 'arch'];
 
   function mainEl() { return document.getElementById('main'); }
 
@@ -134,13 +137,24 @@
        观察器回调又调 applyLayout → 死循环式重排；
        拖拽期间更致命：节点被移走 → 浏览器取消拖拽（用户报「拖动也无效」）。 */
     if (Array.isArray(d.order) && d.order.length) {
+      /* 老布局里没有 keybiz（2026-11-23 新增区块）：不补进本次 order 的话，
+         下面 placeChildren 会把它当成「不在 order 里的剩余节点」排到页尾，
+         与上游「在 Network Status 之上」的位置相反。
+         ⚠️ 只在本次应用时补，**不写回 d.order** —— 那是用户私有布局数据，
+            下一次拖动时由 persistOrder() 自然落盘；在读取时就改会让
+            「用户没动过」的布局被静默改写。 */
+      var order = d.order.slice();
+      if (order.indexOf('keybiz') === -1) {
+        var at = order.indexOf('band');
+        order.splice(at === -1 ? 0 : at + 1, 0, 'keybiz');
+      }
       var kids = Array.prototype.slice.call(main.children);
       var byId = {}, out = [], used = {};
       kids.forEach(function (c) {
         var id = c.getAttribute && c.getAttribute('data-tl');
         if (id && BLOCKS.indexOf(id) !== -1 && !byId[id]) byId[id] = c;
       });
-      d.order.forEach(function (id) {
+      order.forEach(function (id) {
         if (byId[id] && !used[id]) { used[id] = 1; out.push(byId[id]); }
       });
       kids.forEach(function (c) { if (out.indexOf(c) === -1) out.push(c); });

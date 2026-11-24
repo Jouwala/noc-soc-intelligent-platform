@@ -26,7 +26,7 @@ import type { Site, DrilldownData, DrilldownAnalytics, TopologyLink, LegendKey, 
 // KML_LINK_COLORS 已不在本模块使用：利用率叠加恒开（showUtil 恒真），
 // 于是「按 kml_mw_links 原色分组」的那份图例成了不可达分支，2026-09-28 随图例迁移一并删除。
 // 该常量仍留在 gismap/types.ts（链路数据自带 color，那里的注释是它的说明处）。
-import { SITE_COLORS, LEGEND_COLORS, colorFor, UTIL_LEVEL_COLORS, UTIL_LEVEL_ORDER, utilLevelOf } from './gismap/types'
+import { SITE_COLORS, LEGEND_COLORS, colorFor, siteLegendKey, UTIL_LEVEL_COLORS, UTIL_LEVEL_ORDER, utilLevelOf } from './gismap/types'
 import { BASEMAP_PMTILES_URL, BASEMAP_ATTRIBUTION, BASEMAP_MAX_ZOOM } from './gismap/basemap'
 import { PmtilesLayer } from './gismap/PmtilesLayer'
 // MW 链路批量图层（2026-10-19）：844 条线改用 Leaflet 原生批量建层，
@@ -35,6 +35,10 @@ import { TopologyLayer } from './gismap/TopologyLayer'
 import { LayerToggleControl } from './gismap/LayerToggleControl'
 import { MapOverlayToggle } from './gismap/MapOverlayToggle'
 import { PersonnelLayer } from './gismap/PersonnelLayer'
+/* 2026-11-23：?page=gis 的图例新增「站点类别」（整块复用 ?page=person 那张面板） */
+import { SiteClassLegendSection } from './gismap/SiteClassLegendSection'
+import { SiteClassSitesLayer } from './gismap/SiteClassSitesLayer'
+import { useSiteClasses } from './personmap/useSiteClasses'
 import { exportAoaReport } from '../utils/excelReport'
 import { stripBold } from '../utils/richText'
 import DraggableClickModal from '../components/DraggableClickModal'
@@ -571,6 +575,13 @@ export default function GISMap({ mode = 'all' }: { mode?: 'all' | 'realtime' }) 
 
   const { t, locale } = useI18n()
   const { isDark } = useTheme()
+  /* 站点类别（2026-11-23 用户要求：把 ?page=person 的「站点类别」内容加进
+     ?page=gis 的图例；2026-11-24 按用户澄清**嵌进图例的 Site Class 组内**）。
+     数据、面板、配色都复用人员页的实现，见 gismap/SiteClassLegendSection.tsx 头注释。
+     `enabled` 只在 ?page=gis（mode='all'）为 true：实时告警页
+     （?page=realtime_alarm）用的是同一个 GISMap 组件，那里不显示这块内容，
+     没必要多拉一份约 100KB 的站点类别数据。 */
+  const siteClasses = useSiteClasses({ enabled: mode === 'all' })
   /* 2026-09-28：原先这里用 useDataTimestamps() 取「同步时间 / 最新数据时间」两个
      Tag 显示在工具栏，按用户要求已移除（属数据源健康信息，与地图判读无关）。
      整条 hook 去掉了 —— 留着不消费会让页面每次都多跑一遍时间戳计算。 */
@@ -851,32 +862,16 @@ export default function GISMap({ mode = 'all' }: { mode?: 'all' | 'realtime' }) 
         不会被涂成超时色（见下方 activeLayers.has('rt_alarm') 守卫）。
      ⚠️ 图例数字由本函数分桶得出（见 categoryCounts），所以改这里的顺序
         图例会自动跟着变，不会再出现「图例与地图各说各话」。 */
-  const getSiteCategory = (site: Site): LegendKey => {
-    if (mode === 'realtime') {
-      // ① 超时告警（SLA 已破）—— 最高优先级，必须一眼可见
-      if (activeLayers.has('rt_alarm') && (site.rt_alarm_overdue || 0) > 0) return 'rt_alarm_overdue'
-      // ② 关联工单：WO 比 TT 更「下游」，先画 WO
-      if (activeLayers.has('wo') && (site.rt_wo_count || 0) > 0) return 'wo'
-      if (activeLayers.has('tt') && (site.rt_tt_count || 0) > 0) return 'tt'
-      // ③ 未超时告警
-      if (activeLayers.has('rt_alarm') && site.rt_alarm_count > 0) return 'rt_alarm_ontime'
-      if (site.vip_site === 'Y' || site.vip_site === 'Yes') return 'vip'
-      return 'normal'
-    }
-    if (activeLayers.has('rt_alarm') && site.rt_alarm_count > 0) return 'rt_alarm'
-    if (activeLayers.has('his_alarm') && hisAnyHit(site)) return 'his_alarm'
-    if (site.vip_site === 'Y' || site.vip_site === 'Yes') return 'vip'
-    return 'normal'
-  }
+  const getSiteCategory = (site: Site): LegendKey => siteLegendKey(site, mode, activeLayers)
 
   /* 「His」档命中判定：历史告警 / TT工单 / WO工单 **任一**有数据即算命中。
      2026-09-28 用户要求把原先独立的 His Alarm / TT / WO 三个图层合并成一个 His：
      运维视角下这三者都属「非实时、需要回顾的历史记录」，分成三档反而要在图例里
      来回对照。合并后站点配色语义简化为「现在有告警(RT) / 历史上出过事(His)」。
-     ⚠️ 必须用 `||` 汇总三类：只要任何一类有数据，该站点就属于 His 档、
-     在 His 图层开启时被画出来；漏掉任一类会让「有工单但无告警」的站点整片消失。 */
-  const hisAnyHit = (site: Site): boolean =>
-    site.his_alarm_count > 0 || site.open_tt > 0 || site.wo_count > 0
+
+     2026-11-23：判定与 getSiteCategory 一起搬进 gismap/types.ts 的
+     siteLegendKey()，供位置页（?page=location）复用同一套站点配色。
+     此处不再保留第二份实现。 */
 
   /* ===== MW 链路渲染样式（利用率叠加）=====
      两条铁律：
@@ -1778,10 +1773,19 @@ export default function GISMap({ mode = 'all' }: { mode?: 'all' | 'realtime' }) 
       },
       {
         title: t('gis.legendGroup.site'),
+        /* VIP / 正常 两行是**圆点颜色**图例（点它隐藏该类站点），与下面那块
+           「站点类别」选择器语义不同，刻意并列保留 —— 去掉的话地图上的紫色
+           （VIP）与灰色（正常）圆点就没有解释了。 */
         rows: pick(['vip', 'normal']),
+        /* 2026-11-24 用户要求：「把 Site Classes 放到 Legend 里面的 Site class 里面」。
+           即人员页那张「站点类别」的全部内容（维护分类 / VIP / HUB / 传输类型，
+           取值与计数来自数据库）嵌在**本组内部**，默认一项不选；选中后地图上
+           叠加该类站点的外圈（见 SiteClassSitesLayer）。实现仍复用人员页那份
+           面板（`bare` 模式，不重复一套）。只在 ?page=gis（mode='all'）出现。 */
+        node: mode === 'all' ? <SiteClassLegendSection state={siteClasses} /> : undefined,
       },
     ]
-  }, [siteLegendRows, mode, t])
+  }, [siteLegendRows, mode, t, siteClasses])
 
   /* MW 链路利用率图例：只列**实际出现**的分级（计数 0 的不占位）。
      ⚠️ 这一组的**显示与否**归工具栏的 showUtilLegend 管（默认不显示，2026-10-26），
@@ -2859,6 +2863,22 @@ export default function GISMap({ mode = 'all' }: { mode?: 'all' | 'realtime' }) 
                 enabled={showPersonnel}
                 timeRange={timeRange}
                 visibleNames={visiblePersonNames}
+              />
+            )}
+            {/* 站点类别圈专用 pane（2026-11-23）：**高于站点圆点**（sitePane 650），
+                否则圈会被圆点盖住；**低于县名标注**（countyLabelPane 670）——
+                圈只是「这批站点属于所选类别」的标注，不该压住县名与弹窗。
+                必须有 <Pane> 写在图层之前：CircleMarker 的 pane 只在挂载时取一次，
+                先建 pane 才能带上这道 z-index（兜底补建的 pane 没有样式）。 */}
+            <Pane name="siteClassPane" style={{ zIndex: 660 }} />
+            {/* 图例选中「站点类别」后叠加的站点圈（仅 ?page=gis）。
+                默认一项都不选 = 不画任何圈（人员页同一需求）。
+                为什么画半透明外圈而不是实心点：底图圆点已经用颜色表示告警状态，
+                实心点会把它盖掉 —— 见该组件头注释。 */}
+            {mode === 'all' && (
+              <SiteClassSitesLayer
+                sites={siteClasses.visibleSites}
+                colorOf={siteClasses.colorOf}
               />
             )}
             {boundaryMode === 'region' && regionBoundaries.map((rb, idx) => (

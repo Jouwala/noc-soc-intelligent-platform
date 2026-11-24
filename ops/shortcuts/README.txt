@@ -41,7 +41,7 @@ ops\deploy\portal-ctl.ps1 与 ops\deploy\olbr-*.bat。改行为请改那里，
                                不再从 .env 取 8443）
 7-open-logs.bat                打开 <根>\TMP 与 <根>\nginx-1.28.0\logs
 8-install-desktop-shortcuts.bat 调 desktop_shortcuts\make_desktop_shortcuts.ps1
-                               -WriteDesktop，重建桌面 olbr_app 里的 9 个快捷方式
+                               -WriteDesktop，重建桌面 olbr_app 里的 13 个快捷方式
 
 已删除：3-start-dryrun.bat / 4-stop-dryrun.bat —— 那是隔离副本的干跑
 （start_all.ps1 -DryRun 会拿 .env 的 8080/8443 排计划，stop_all.ps1

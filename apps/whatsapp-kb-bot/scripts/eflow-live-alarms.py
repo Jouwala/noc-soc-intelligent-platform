@@ -80,6 +80,19 @@ try:
     from backend.services.eflow.eflow_alarm_service import _fetch_alarm_pipeline
 except Exception as e:
     print("IMPORT_FAIL: %s" % e, file=sys.stderr); sys.exit(3)
+
+# 站点 Basic Info（GIS 下钻口径）：与告警同一进程顺带查，零额外进程开销。
+# 放在独立模块、失败只标 site_info.error，绝不影响告警退出码 —— 站点信息是附加信息。
+def _site_info(site):
+    try:
+        scripts_dir = os.environ.get("ALARMS_SCRIPTS_DIR", "")
+        if scripts_dir and scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import site_basic_info
+        return site_basic_info.fetch(site)
+    except Exception as e:
+        return {"query": site, "found": False, "records": [], "candidates": [],
+                "source": "none", "error": "%s: %s" % (type(e).__name__, e)}
 try:
     _, rows = _fetch_alarm_pipeline()
 except Exception as e:
@@ -146,7 +159,8 @@ def _raised_key(a):
 
 alarms = sorted((pick(r) for r in hits), key=_raised_key)
 out = {"site_query": site, "total_active": len(rows),
-       "matched": len(hits), "alarms": alarms}
+       "matched": len(hits), "alarms": alarms,
+       "site_info": _site_info(site)}
 sys.stdout.write(json.dumps(out, ensure_ascii=False, default=str))
 """
 
@@ -186,7 +200,8 @@ def main() -> int:
     code = _FETCH
     try:
         child_env = {**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8',
-                     'ALARMS_APP_DIR': MY_APP_DIR, 'ALARMS_SITE': args.site.strip()}
+                     'ALARMS_APP_DIR': MY_APP_DIR, 'ALARMS_SITE': args.site.strip(),
+                     'ALARMS_SCRIPTS_DIR': os.path.dirname(os.path.abspath(__file__))}
         p = subprocess.run([exe, '-c', code], capture_output=True, timeout=180,
                            cwd=MY_APP_DIR if os.path.isdir(MY_APP_DIR) else None,
                            env=child_env)

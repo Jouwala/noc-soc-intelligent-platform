@@ -209,7 +209,7 @@ describe('crossCheckSheets · KPI 对照块', () => {
 describe('crossCheckSheets · Excel 往返', () => {
   it('buildReportWorkbook → writeBuffer → load 回读，中文表名与数字单元格不丢', async () => {
     const sheet = crossCheckSheets(matchCrossCheck(), t, '2026-11-07 08:00 ~ 09:00')[0]
-    const wb = buildReportWorkbook([sheet])
+    const wb = await buildReportWorkbook([sheet])
     const ws = wb.getWorksheet(sheet.name)
     expect(ws).toBeTruthy()
 

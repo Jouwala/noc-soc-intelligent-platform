@@ -78,7 +78,9 @@ function channels() {
     }
   })();
 
-  const owuBase = CONFIG.chatBaseUrl || '';
+  // 本地对话模式（LOCAL_CHAT=1）严格不出内网：不试 OWU，只走 Ollama。
+  const localOnly = CONFIG.chatProvider === 'ollama';
+  const owuBase = localOnly ? '' : CONFIG.chatBaseUrl || '';
   if (owuBase) {
     list.push({
       name: 'OWU',
@@ -96,7 +98,8 @@ function channels() {
       provider: 'openai',
       // Ollama 不校验 key，但 my_app 侧要求 api_key 非空，否则直接抛错。
       api_key: 'ollama-local',
-      model: FALLBACK_MODEL,
+      // 本地模式下与群聊用同一个模型（省一次换载）；NL2SQL_FALLBACK_MODEL 仍可单独指定。
+      model: process.env.NL2SQL_FALLBACK_MODEL || (localOnly ? CONFIG.chatModel : FALLBACK_MODEL),
       base_url: chatUrl(ollamaBase, '/v1/chat/completions'),
     });
   }

@@ -122,9 +122,12 @@ H(
      ⚠️ 2026-11-04 加 loadCxort()：矩阵未就绪时 loadKpi 的第 4 路
        （CXO RealTime Dashboard）被 wantCxortGroup() fail-closed 跳过，
        bo 门户首屏这一路要等矩阵到位才补发；只 render() 不取数的话，
-       卡片会一直是「—」直到下一个 5 分钟刻度。 */
+       卡片会一直是「—」直到下一个 5 分钟刻度。
+     ⚠️ 2026-11-23 加 loadKeybiz()：关键业务行同理 —— loadKeybiz 在
+       kbWantRow() 为假时直接跳过；矩阵到位、kpi 域有勾选后要补发一次，
+       否则整行停在骨架屏直到下一个 15 分钟 / 5 分钟刻度。 */
   if (SCOPE) {
-    document.addEventListener('olbr:scope-ready', function () { render(); loadCxort(); });
+    document.addEventListener('olbr:scope-ready', function () { render(); loadCxort(); loadKeybiz(); });
   }
   function boot() {
     applyI18n();""",
@@ -759,7 +762,7 @@ H(
 
 H(
     "render-complaint",
-    """  function render() { renderBand(); renderKpi(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderAux(); renderArchive(); applyI18n(); }""",
+    """  function render() { renderBand(); renderKpi(); renderKeybiz(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderAux(); renderArchive(); applyI18n(); }""",
     """  /* ⚠️ renderComplaintSection() 是**团队门户专有**的（上游页面没有 #complaintSlot，
      那个函数找不到节点就直接返回）。放在 renderAux 之前，与 DOM 顺序一致。 */
   function render() {
@@ -770,7 +773,7 @@ H(
        ⚠️ 判据用 state.signedOut，**不能**用 !state.authOk：boot() 里这一次 render()
          是同步跑的，那一刻 probe() 还没回来、authOk 天然是 false —— 用它会把首屏锁死。 */
     if (state.signedOut) { mainLocked(true); return; }
-    renderBand(); renderKpi(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderComplaintSection(); renderAux(); renderArchive(); applyI18n(); }""",
+    renderBand(); renderKpi(); renderKeybiz(); renderViews6(); renderL0(); renderEsc(); renderEmailSection(); renderQaSection(); renderOssSection(); renderCchSection(); renderComplaintSection(); renderAux(); renderArchive(); applyI18n(); }""",
 )
 
 
@@ -826,14 +829,31 @@ H(
 H(
     "mainlocked-complaint",
     """  function mainLocked(on) {
-    ['#band', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux']""",
+    /* 记住锁定态（2026-11-23 加）：光把区块塞进下面这份静态清单不够 ——
+       本页的渲染是异步的（数据回来就重画），任何一次 renderKeybiz / render
+       都会把 hidden 重新写成 false，登录框下面于是又冒出内容。
+       state.mainLocked 让「锁定」成为渲染函数也能读到的状态，而不是一次性的 DOM 操作。 */
+    state.mainLocked = !!on;
+    /* ⚠️ 2026-11-23（#237 事后评审 B1）：清单里补 '#arch'。
+       归档区由 renderArchive() 异步渲染，只靠这里的一次性 DOM 赋值藏不住 ——
+       登出后任何一次 render() 都会把它重新解隐（recall 还为真时）。 */
+    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#aux', '#arch']""",
     """  function mainLocked(on) {
+    /* 记住锁定态（2026-11-23 加）：光把区块塞进下面这份静态清单不够 ——
+       本页的渲染是异步的（数据回来就重画），任何一次 renderKeybiz / render
+       都会把 hidden 重新写成 false，登录框下面于是又冒出内容。
+       state.mainLocked 让「锁定」成为渲染函数也能读到的状态，而不是一次性的 DOM 操作。 */
+    state.mainLocked = !!on;
     /* 团队门户专有补丁（2026-10-30）：清单里补 '#complaintSlot'。
        上游 /v3/olbrportal/ 没有 Customer Complaint 这一整块，基线那行不需要它；
        团队副本里 #complaintSlot 是 #main 的子区块（index.html 的 .complaint-slot），
        不写进这份清单，登出后 renderGate() → mainLocked(true) 就藏不掉它 —— 登录框下面
-       照常挂着「Customer Complaint」。上面那段基线注释记的两次漏藏是同一个坑。 */
-    ['#band', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#complaintSlot', '#aux']""",
+       照常挂着「Customer Complaint」。上面那段基线注释记的两次漏藏是同一个坑。
+       ⚠️ 2026-11-23：上游清单加了 '#keybiz'，这里必须同步 —— 团队门户也有一模一样
+       的「关键业务」行，漏掉它同样会在登录框下面露出来。
+       ⚠️ 2026-11-23（#237 事后评审 B1）：上游清单加了 '#arch'，这里同步 —— 团队
+       门户的归档区同样由 renderArchive() 异步渲染，漏掉它登出后照样在登录框下面露出来。 */
+    ['#band', '#keybiz', '#kpi', '#views6', '#l0Map', '#emailSlot', '#qaSlot', '#cchSlot', '#ossSlot', '#esc', '#complaintSlot', '#aux', '#arch']""",
 )
 
 # ==========================================================================

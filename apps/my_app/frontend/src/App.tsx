@@ -61,6 +61,7 @@ import {
   RadarChartOutlined,
   BranchesOutlined,
   CloudUploadOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons'
 import type { Locale as AntdLocale } from 'antd/es/locale'
 
@@ -91,6 +92,7 @@ const TableBrowser = lazy(() => import('./pages/TableBrowser'))
 const DataUpload = lazy(() => import('./pages/DataUpload'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const GISMap = lazy(() => import('./pages/GISMap'))
+const LocationMap = lazy(() => import('./pages/LocationMap'))
 const ArchiveList = lazy(() => import('./pages/ArchiveList'))
 const DataSync = lazy(() => import('./pages/DataSync'))
 const WarehouseDashboard = lazy(() => import('./pages/WarehouseDashboard'))
@@ -229,9 +231,9 @@ const FINEBI_PAGE_TO_SLUG: Record<string, string> = Object.fromEntries(
   FINEBI_BOARDS.map((b) => [`finebi_${b.slug}`, b.slug]),
 )
 
-type PageKey = 'overview' | 'tables' | 'upload' | 'dashboard' | 'alarm' | 'ttwo' | 'v1_ttwo' | 'tt' | 'wo' | 'tt_state' | 'gis' | 'realtime_alarm' | 'packet_loss' | 'archive' | 'sync' | 'warehouse' | 'sp_material' | 'sp_details' | 'sp_report' | 'com_report' | 'warehouse_summary' | 'ms_wo_sla' | 'ms_contract_kpi' | 'battery' | 'person' | 'settings' | 'ip_trace' | 'incident_overview' | 'nur' | 'ms_sla' | 'ms_nur_only' | 'ms_sla_only' | 'alarmManagement' | 'cxoDashboard' | 'vmaxCxoDashboard' | 'vmaxCxoDashboard_Daily' | 'vmaxCxoDashboard_90Days' | 'socTrendDashboard' | 'imonitor' | 'email_reports' | 'mwUmeTopology' | 'ipranTopo' | 'olibTopo' | 'olibTopo_v2' | 'nocTopology' | 'mwRealTime' | 'portalLogin' | 'eflow_qa' | 'eflow_flow' | 'site_avail' | 'avail_ms' | 'avail_flm' | 'avail_county' | 'fme_ranking' | 'noc_analyst' | 'repeat_site_down' | 'cr_analysis' | 'pm_analysis' | 'ran_cells_kpi' | 'ran_inventory' | 'bm_speedtest' | 'bm_meta' | 'bp_report' | 'cn_kpi' | 'cn_kpi_5mins' | 'cn_hourly_kpi' | 'cs_cn_kpi' | 'ps_cn_kpi' | 'cs_cn_kpi_15mins' | 'ps_cn_kpi_15mins' | 'ran_kpi_15mins' | 'ume_in_kpi' | 'vmax_user_query' | 'vmax_user_cca' | 'ipt_power' | 'feedback' | 'ap_center' | 'site_sync_ops' | 'help' | `finebi_${string}`
+type PageKey = 'overview' | 'tables' | 'upload' | 'dashboard' | 'alarm' | 'ttwo' | 'v1_ttwo' | 'tt' | 'wo' | 'tt_state' | 'gis' | 'location' | 'realtime_alarm' | 'packet_loss' | 'archive' | 'sync' | 'warehouse' | 'sp_material' | 'sp_details' | 'sp_report' | 'com_report' | 'warehouse_summary' | 'ms_wo_sla' | 'ms_contract_kpi' | 'battery' | 'person' | 'settings' | 'ip_trace' | 'incident_overview' | 'nur' | 'ms_sla' | 'ms_nur_only' | 'ms_sla_only' | 'alarmManagement' | 'cxoDashboard' | 'vmaxCxoDashboard' | 'vmaxCxoDashboard_Daily' | 'vmaxCxoDashboard_90Days' | 'socTrendDashboard' | 'imonitor' | 'email_reports' | 'mwUmeTopology' | 'ipranTopo' | 'olibTopo' | 'olibTopo_v2' | 'nocTopology' | 'mwRealTime' | 'portalLogin' | 'eflow_qa' | 'eflow_flow' | 'site_avail' | 'avail_ms' | 'avail_flm' | 'avail_county' | 'fme_ranking' | 'noc_analyst' | 'repeat_site_down' | 'cr_analysis' | 'pm_analysis' | 'ran_cells_kpi' | 'ran_inventory' | 'bm_speedtest' | 'bm_meta' | 'bp_report' | 'cn_kpi' | 'cn_kpi_5mins' | 'cn_hourly_kpi' | 'cs_cn_kpi' | 'ps_cn_kpi' | 'cs_cn_kpi_15mins' | 'ps_cn_kpi_15mins' | 'ran_kpi_15mins' | 'ume_in_kpi' | 'vmax_user_query' | 'vmax_user_cca' | 'ipt_power' | 'feedback' | 'ap_center' | 'site_sync_ops' | 'help' | `finebi_${string}`
 
-const VALID_PAGES: PageKey[] = ['overview', 'tables', 'upload', 'dashboard', 'alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'tt_state', 'gis', 'realtime_alarm', 'packet_loss', 'archive', 'sync', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary', 'ms_wo_sla', 'ms_contract_kpi', 'battery', 'person', 'settings', 'ip_trace', 'incident_overview', 'nur', 'ms_sla','ms_nur_only', 'ms_sla_only', 'alarmManagement', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'email_reports', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'portalLogin', 'eflow_qa', 'eflow_flow', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'ran_inventory', 'bm_speedtest', 'bm_meta', 'bp_report', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'cs_cn_kpi_15mins', 'ps_cn_kpi_15mins', 'ran_kpi_15mins', 'ume_in_kpi', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'feedback', 'ap_center', 'site_sync_ops', 'help', ...FINEBI_BOARDS.map((b) => `finebi_${b.slug}` as PageKey)]
+const VALID_PAGES: PageKey[] = ['overview', 'tables', 'upload', 'dashboard', 'alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'tt_state', 'gis', 'location', 'realtime_alarm', 'packet_loss', 'archive', 'sync', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary', 'ms_wo_sla', 'ms_contract_kpi', 'battery', 'person', 'settings', 'ip_trace', 'incident_overview', 'nur', 'ms_sla','ms_nur_only', 'ms_sla_only', 'alarmManagement', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'email_reports', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'portalLogin', 'eflow_qa', 'eflow_flow', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'ran_inventory', 'bm_speedtest', 'bm_meta', 'bp_report', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'cs_cn_kpi_15mins', 'ps_cn_kpi_15mins', 'ran_kpi_15mins', 'ume_in_kpi', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'feedback', 'ap_center', 'site_sync_ops', 'help', ...FINEBI_BOARDS.map((b) => `finebi_${b.slug}` as PageKey)]
 
 /* ==================== 自动刷新（大屏 / NOC 值班场景） ====================
  * 背景：各页面此前只在挂载时拉取一次数据（legacy iframe 页面同样只在 onload
@@ -312,7 +314,7 @@ const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {
   cs_cn_kpi_15mins: 300, ps_cn_kpi_15mins: 300, ran_kpi_15mins: 300, ume_in_kpi: 300,
   cxoDashboard: 300, vmaxCxoDashboard: 300, vmaxCxoDashboard_Daily: 300,
   imonitor: 300, incident_overview: 300,
-  gis: 300, person: 300, battery: 300,
+  gis: 300, location: 300, person: 300, battery: 300,
   // IP RAN 拓扑：后端聚合结果缓存 120s，上游告警随 eFlow/UME 分钟级变化，300 足够
   ipranTopo: 300,
   // NOC 拓扑中心：三个来源里最快的是 IPRAN（后端缓存 120s），MW 15 分钟采集、
@@ -357,7 +359,7 @@ const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {
  *  cn_kpi_5mins（2026-11-10）：重挂载会把 data 清掉，`loading && !data` 期间
  *  11 张图全部变成转圈空白；远端取数往往比刷新间隔还慢，下一轮重挂载还会
  *  丢掉还没落地的响应。该页监听 myapp-refresh 静默重取，失败保留上一帧。 */
-const AR_INPLACE_REFRESH_PAGES: PageKey[] = ['person', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'cs_cn_kpi_15mins', 'ps_cn_kpi_15mins', 'ran_kpi_15mins', 'nocTopology']
+const AR_INPLACE_REFRESH_PAGES: PageKey[] = ['person', 'location', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'cs_cn_kpi_15mins', 'ps_cn_kpi_15mins', 'ran_kpi_15mins', 'nocTopology']
 // 支持软刷新协议（postMessage myapp-refresh 原地重拉数据）的 legacy 页面 / React 内嵌页。
 // imonitor：跨端口 iframe 无法由外壳重挂载来刷新（会整页闪白），改由页面自己
 // 监听 myapp-refresh 后在 iframe 内原地重载（见 ImonitorScreen.tsx）。
@@ -606,6 +608,8 @@ const PAGE_META: Record<PageKey, { icon: ReactNode; labelKey: string }> = {
   nocTopology: { icon: <BranchesOutlined />, labelKey: 'nav.nocTopology' },
   mwRealTime: { icon: <FieldTimeOutlined />, labelKey: 'nav.mwRealTime' },
   gis: { icon: <GlobalOutlined />, labelKey: 'nav.gis' },
+  // 位置页：以经纬度为中心看「周围最近的一圈站点 + 最近的 MW/光纤链路 + 订阅者轨迹」
+  location: { icon: <EnvironmentOutlined />, labelKey: 'nav.location' },
   realtime_alarm: { icon: <AlertOutlined />, labelKey: 'nav.realtimeAlarm' },
   person: { icon: <TeamOutlined />, labelKey: 'nav.person' },
   packet_loss: { icon: <DisconnectOutlined />, labelKey: 'nav.packetLoss' },
@@ -647,7 +651,7 @@ const DEFAULT_GROUPS: { key: string; labelKey: string; items: PageKey[] }[] = [
   {
     key: 'grp_network',
     labelKey: 'nav.grp.network',
-    items: ['nocTopology', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'gis', 'realtime_alarm', 'person', 'packet_loss', 'battery', 'ip_trace', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'bm_speedtest', 'bm_meta', 'ran_inventory'],
+    items: ['nocTopology', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'gis', 'location', 'realtime_alarm', 'person', 'packet_loss', 'battery', 'ip_trace', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'bm_speedtest', 'bm_meta', 'ran_inventory'],
   },
   {
     key: 'grp_analysis',
@@ -1041,12 +1045,11 @@ function AppContent() {
    * antd chunk（实测 zhCN 的 '请选择时间' 在 antd chunk 内）。现在按
    * i18n 的语言检测结果（useI18n 的 locale）动态 import()，另一个语言包
    * 只在用户切换语言时才加载。ConfigProvider 行为不变：locale 切换仍生效。
-   * 实测说明：当前 vite.config.ts 的 manualChunks 会把 antd/locale 的
-   * 动态 import 也收进预加载的 antd chunk，所以本轮改动后 antd chunk
-   * 体积不变（字节级一致），语言包仍随首屏下发；要真拆出去，需在
-   * manualChunks 里给动态导入的库开口子，那是 vite.config.ts 的改动，
-   * 本轮按任务要求不动它。这里先把调用形态改成动态 import，到时
-   * 配置一松即自动拆分。首帧 antdLocale 为 undefined 时 ConfigProvider
+   * 实测说明：vite.config.ts 用 rolldown 的 codeSplitting.groups 分包，antd/locale
+   * 仍落在预加载的 antd 组里（体积仅几 KB，且语言切换要秒生效），所以语言包
+   * 依旧随首屏下发；真要拆，需要给它单开一个更高 priority 的组。
+   * 这里先把调用形态改成动态 import，配置一松即自动拆分。首帧 antdLocale
+   * 为 undefined 时 ConfigProvider
    * 用 antd 默认（英文）语言包，但语言包所在 chunk 已预加载，import
    * 在挂载时即从缓存解析，不会闪烁。
    */
@@ -1768,6 +1771,8 @@ function AppContent() {
         return <SiteSyncOps />
       case 'gis':
         return <GISMap />
+      case 'location':
+        return <LocationMap />
       case 'realtime_alarm':
         return <GISMap mode="realtime" />
       case 'person':

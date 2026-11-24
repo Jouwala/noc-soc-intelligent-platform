@@ -2680,6 +2680,82 @@ backbone 这个页签」（my_app 侧，见 `apps/my_app/docs/manual/11-feature-
 | `?page=olibTopo` 直链 | 视图页签只剩「原图 · 物理拓扑 / 原图 · 逻辑拓扑」两个，backbone 已下线 |
 
 
+## 九之二十四、2026-11-23 `/v3/olbrportal/` 新增「关键业务」行（#keybiz）
+
+**需求原话。**「V3 门户新建一行，位置在 Network Status 的上面，标题是『关键业务』」，
+六项：VIP 站点的告警（点击进 `?page=gis`）/ VIP 链路的容量利用率（占位）/
+VIP FTTH 的状态（占位）/ VLR Subscribers / Voice Traffic(Erl) /
+Data Subscribers · 4G —— 后三项要求显示波动百分比、超过 5% 标红。
+
+**落点。** 在 `#band` 与 `#kpi` 之间新增 `<section class="band" id="keybiz">`，
+渲染入口 `renderKeybiz()`，与 `renderKpi()` 平级、互不重写对方的 innerHTML。
+没有塞进 `#kpi`：两行的数据源、刷新节奏、团队可见性都不同，塞在一起会让
+`renderKpi` 每次重画都连带重画关键业务行。
+
+**数据口径（唯一真相源在 `olbr-data.js` 的 `KEYBIZ` 与 `olbr.js` 的 kbCnPoint）。**
+
+| 卡片 | 来源 | 口径 |
+| --- | --- | --- |
+| VIP 站点的告警 | `/api/gis/realtime/sites`（与 GIS 地图同一份实时告警站点） | 只取 `vip_site` 为真（Y/YES/1/TRUE 归一）的站点，`rt_alarm_count` 求和；>0 时大数字与徽章标红 |
+| VIP 链路的容量利用率 | —（占位） | 大数字 `—`、徽章「占位」、不可点（`.is-static`） |
+| VIP FTTH 的状态 | —（占位） | 同上 |
+| VLR Subscribers | `/api/cn-kpi-15mins/cs/overview` 的 `cs_15m_vlr` | 最新 **D0** 点为最新值；波动 =（D0 最新 − D1 同一 HH:MM）/ D1 × 100 |
+| Voice Traffic(Erl) | 同上的 `cs_15m_voice` | 同上，2 位小数 |
+| Data Subscribers · 4G | `/api/cn-kpi-15mins/ps/overview` 的 `ps_15m_data_subs_4g` | 同上，0 位小数 |
+
+- **为什么锚「昨日同一时刻」**：15 分钟点在一天内有 96 个，相邻两点的抖动主要是
+  采样噪声；同钟点对比才回答「今天这个时段比昨天这个时段如何」，也与 my_app
+  `?page=cs_cn_kpi_15mins` / `?page=ps_cn_kpi_15mins` 把 D0/D1/D7 叠在同一根
+  时刻轴上的读法一致。D1 缺那一格时退到该时刻之前最近的一格，实际对比时刻
+  写在卡片 tooltip 里。
+- **±5% 只染百分比**，不染大数字：大数字是量级，本次要判断的对象是波动。
+- **VIP 告警为什么取全量再前端归一**：`?vip_site=Y` 比的是 `master_site_db` 的
+  原始值（当前 Y/N），值域一旦变成 Yes/1 会静默回 0，卡片就成了「永远没有
+  VIP 告警」；前端归一后判真与 GIS 地图的站点集合同源。
+
+**刷新节奏。** VIP 告警跟 QC 告警那一档（5 分钟）；三条 15 分钟指标单独
+15 分钟一档（`KEYBIZ_CN_MIN`，偏移 `KEYBIZ_CN_OFFSET=120s` 留落库时间），
+不搭 5 分钟档以免白拉同一批数据。
+
+**团队门户。** `#keybiz` 同时写进 `v3/team_portal/index.html`，可见性按 **kpi 域整体**
+（`window.OLBR_SCOPE.ok('kpi')`，与 `wantCxortGroup` 同一写法，不引用 patch 注入的
+`SCOPE` 变量）；矩阵里没有任何 kpi 子项时整行不显示。相关配套：
+`block-manifest.json` 登记 `keybiz`（dom=kpi，probe `s.ok('kpi')`）、
+`patch_team_portal.py` 的 `scope-refresh` 钩子补调 `loadKeybiz()`、
+`team-layout.js` 的 `BLOCKS` 加 `keybiz` 并为老布局补位（否则会排到页尾）。
+
+**登录闸门漏藏（2026-11-23 同日修复）。** 首版上线后用户报「登录界面也能看到关键业务」。
+两个原因叠加：
+1. `mainLocked()` 的静态清单里没有 `#keybiz`（它列举的是原版区块），登录时根本没被藏；
+2. 即便加进清单也不够 —— `renderKeybiz()` 每次异步渲染都会写 `box.hidden = false`，
+   把 `mainLocked(true)` 刚设上的 hidden 又解掉。
+
+修法：`#keybiz` 进 `mainLocked()` 清单；`mainLocked()` 额外记 `state.mainLocked`
+（让「锁定」成为渲染函数能读到的状态，而不是一次性的 DOM 赋值）；`renderKeybiz()`
+每次按 `state.mainLocked` + `kbWantRow()` 重算 hidden（内容照常生成，解锁时直接是骨架屏）；
+`mainLocked(false)` 末尾补调 `renderKeybiz()`（`closeGate()` 只调解锁、不调 `render()`，
+不补这一下取消登录后要等下一次数据刷新才回来）。`patch_team_portal.py` 的
+`mainlocked-complaint` 钩子同步加 `#keybiz`，团队门户同样不会漏。
+**实测**：未登录（拦截 `/api/auth/me`）/ 已登录主动开门户 / 登出后 `#keybiz` 均 `hidden=true`；
+取消闸门与登录后恢复显示；0 条 JS 报错。
+
+**回归（无头浏览器，真实页面 `https://localhost/v3/olbrportal/`）。**
+
+| 检查 | 结果 |
+| --- | --- |
+| 区块位置 | `#keybiz` 在 `#kpi` 之上（`aboveNetwork=true`） |
+| 卡片数 / 列数 | 6 张；1680/1200/390 三档分别 6 / 3 / 2 列 |
+| 数据卡 | VLR / Voice / Data 均显示最新值与波动；Voice +31.8%（>5%）徽章为 `is-hot` 红 |
+| 占位卡 | VIP 链路 / VIP FTTH 大数字 `—`、徽章「占位」、`cursor:default` |
+| 文本截断 | 三档尺寸 + 英文界面下卡名 / 数值 / 口径行 / 页脚均无省略号；页面无横向溢出 |
+| JS 报错 / 控制台错误 | 0 条 |
+| 守卫 | `npm run check:team-scope`（4 项）、`npm run check:i18n`、`npm run check:docs`、`npm run lint` 全通过 |
+
+**改动文件。** `v3/olbrportal/{index.html,assets/olbr.js,assets/olbr-data.js,assets/olbr.css}`；
+`v3/team_portal/{index.html,assets/olbr.js,assets/olbr-data.js,assets/olbr.css,assets/team-layout.js,block-manifest.json}`；
+`scripts/patch_team_portal.py`（钩子同步）。占位两卡的后续数据源接入时，只改
+`KEYBIZ` 的 kind 与取数函数即可，卡片外壳与布局无需改动。
+
 ## 十、相关文档
 
 | 内容 | 去哪里 |

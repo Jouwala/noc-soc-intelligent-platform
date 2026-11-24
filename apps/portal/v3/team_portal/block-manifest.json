@@ -33,6 +33,15 @@
       "note": "与 Network Status 同处 #kpi，但按 BF_GROUPS 的 id（speed / meta）单独过滤。"
     },
     {
+      "id": "keybiz",
+      "selector": "#keybiz",
+      "dom": "kpi",
+      "sub": null,
+      "probe": "s.ok('kpi')",
+      "title": "关键业务行（VIP 告警 / VIP 链路与 FTTH / VLR / Voice / Data Subscribers）",
+      "note": "2026-11-23 加，位于 Network Status 之上。可见性跟 kpi 域整体（不是某个子项）：这一行是 Network Status 的前置摘要，矩阵里没有任何 kpi 子项时整行不显示。⚠️ 判据写成 s.ok('kpi') 而不是 SCOPE.ok('kpi', …)：上游 olbr.js 不引用 patch 注入的 SCOPE 变量，走 window.OLBR_SCOPE（与 wantCxortGroup 同一写法），团队生成物里这段原文就是 s.ok('kpi')。"
+    },
+    {
       "id": "views6",
       "selector": "#views6",
       "dom": "view",

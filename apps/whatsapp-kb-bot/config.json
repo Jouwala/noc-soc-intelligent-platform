@@ -1,6 +1,18 @@
 {
   "$comment": "本文件是机器人的唯一配置源。改完保存后重启进程生效（索引相关改动需重跑 npm run ingest）。",
   "$providers": "嵌入走 Ollama（本机没有，见下方 $ollamaUrl 指向 .27）；对话可走本地或任意 OpenAI 兼容的云端接口。chatProvider: ollama | openai。**注意**：下面 chatModel/chatBaseUrl 只是兜底默认 —— 若 my_app 后端在跑，bot 启动时会调 GET {myAppApiBase}/api/ai-model-settings，用「Settings → AI 模型设置」页的值覆盖它们（见 src/config.js 的 loadRuntimeConfig）。当该页 provider=openwebui 时，bot 会把页面存的 UI 地址（如 https://192.168.100.27:8443）自动规范化为 /api/v1（OpenAI 兼容端点），并从环境变量 OPENWEBUI_API_KEY 读鉴权 key —— 静态 key 只在 /api/v1 放行，打 /api 会得到 403、打无前缀路径会得到 405。",
+  "$phoneQueryAcl": "2026-11-23：号码查询（TEL/MSISDN → VMAX CCA）只对名单里的人放行，其余问题照常答。真正的名单在 my_app「系统设置 → 号码查询权限」页（存 my_app 的 backend/services/phone_query_acl.json，bot 每 60 秒读一次）；这里只是 my_app 读不到时的兜底默认值。web_users = my_app 登录用户名；whatsapp_numbers = 手机号（含国家码，+ 和空格可写可不写）。",
+  "phoneQueryAcl": {
+    "enabled": true,
+    "web_users": ["admin"],
+    "whatsapp_numbers": ["+8615638281623"],
+    "deny_text_zh": "你无权查询该信息，请找admin/zeeshan进行查询",
+    "deny_text_en": "You are not authorized to query this information. Please contact admin/zeeshan."
+  },
+  "$localChat": "2026-11-23：群机器人对话改走 .27 的 Ollama 本地模型，严格本地、不回退云端。总开关是 .env 里的 LOCAL_CHAT=1（不放这里，免得影响单测）；打开后忽略 my_app「AI 模型设置」与下面的 chatProvider/chatModel/chatBaseUrl。model 换模型、numCtx 是上下文长度（.27 的 RTX A400 只有 4GB 显存：太大放不下，太小会截断资料）。改回云端：.env 设 LOCAL_CHAT=0 并重启 bot。",
+  "localChat": { "model": "qwen2.5:7b-instruct", "numCtx": 4096 },
+  "$embedNumGpu": "2026-11-23：0 = 嵌入模型 bge-m3 只用 CPU，不占显存。实测不设时 bge-m3 进显存会把对话模型挤掉、每问重载（+4~28 秒）；设 0 后两者同时常驻（load=0）。删掉此项 = 交给 Ollama 自己决定。",
+  "embedNumGpu": 0,
   "chatProvider": "openai",
   "chatModel": "mimo-v2.6-flash",
   "chatBaseUrl": "https://192.168.100.27:8443/api/v1",
