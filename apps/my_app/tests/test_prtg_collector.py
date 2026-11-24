@@ -176,6 +176,7 @@ def test_sync_catalog_and_details(collector, db_session):
 
 
 def test_backfill_respects_token_bucket_and_is_idempotent(collector, db_session):
+    collector.token_bucket._tokens = 5  # 令牌桶初始为 0（严格 ≤5 次/分钟），测试先补满
     results = []
     for _ in range(8):
         results.append(collector.backfill_step())
@@ -195,6 +196,53 @@ def test_backfill_respects_token_bucket_and_is_idempotent(collector, db_session)
 
     state = store.get_state("backfill")
     assert state["status"] == "ok" and state["cursor"]
+
+
+def test_backfill_cursor_advances_day_by_day_on_same_sensor(collector, db_session):
+    collector.token_bucket._tokens = 5
+    seen = []
+    for _ in range(5):
+        step = collector.backfill_step()
+        if step:
+            seen.append((step["sensor_objid"], step["day"]))
+    assert len(seen) == 5
+    # 同一传感器逐日往回走，而不是每步换传感器
+    assert {sensor for sensor, _ in seen} == {2721}
+    assert len({day for _, day in seen}) == 5
+
+
+def test_token_bucket_is_strictly_at_most_five_per_minute():
+    from backend.services.prtg.collector import TokenBucket
+
+    now = [0.0]
+    bucket = TokenBucket(capacity=5, refill_per_second=5 / 60.0, clock=lambda: now[0])
+    # 第 0 秒：初始 0，不允许突发
+    assert bucket.try_acquire() is False
+    granted = 0
+    for _ in range(120):  # 前 60 秒，每 0.5 秒试一次
+        now[0] += 0.5
+        if bucket.try_acquire():
+            granted += 1
+    assert granted <= 5
+
+
+def test_aggregate_reads_backfilled_history(collector, db_session):
+    from backend.models.prtg_collector import PrtgHistoricalSample
+
+    fixed = datetime(2026, 11, 24, 10, 0, 0)
+    with db_session() as session:
+        session.add(PrtgHistoricalSample(
+            sensor_objid=2721, channel_objid=-1, sample_time=fixed,
+            value_num=1_000_000.0, collected_at=fixed,
+        ))
+        session.commit()
+    collector._now = lambda: fixed + timedelta(minutes=30)
+    collector._aggregate_range(fixed - timedelta(hours=1), fixed + timedelta(hours=1),
+                               minutes=60, model_name="1h")
+    from backend.models.prtg_collector import PrtgChannelSample1h
+    with db_session() as session:
+        rows = session.execute(select(PrtgChannelSample1h)).scalars().all()
+    assert rows and rows[0].samples == 1 and rows[0].avg_value == pytest.approx(1_000_000.0)
 
 
 def test_aggregate_writes_5m_bucket(collector, db_session):
@@ -269,3 +317,10 @@ def test_resolve_base_url_priority():
     assert resolve_base_url({"base_url": "http://1.2.3.4/"}, {}) == "http://1.2.3.4"
     assert resolve_base_url({"host": "5.6.7.8", "port": 8080}, {}) == "http://5.6.7.8:8080"
     assert resolve_base_url({"base_url": "http://1.2.3.4"}, {"PRTG_BASE_URL": "http://9.9.9.9/"}) == "http://9.9.9.9"
+
+
+def test_parse_historic_csv_skips_summary_rows():
+    """historicdata.csv 末尾的 Sums/Averages 汇总行不能被当成采样点。"""
+    text = CSV_TEXT + "Sums (of 1440 values),,123,,456,,789,,0,,0,,0,,0,,0,,0,,0,,0\n"
+    rows = parse_historic_csv(text)
+    assert len(rows) == 2  # 汇总行被跳过

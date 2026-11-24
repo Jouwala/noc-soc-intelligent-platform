@@ -6478,11 +6478,11 @@ VMAX 数仓 GBase（10.123.255.12:5258/zxvmax，只读）
 - 只有 `hw/sw/opt` 三类；上游的 `/api/rncmoaction/v1/rnc/<uuid>` 详情接口含 `OMM FTP` 明文口令，**刻意不采集**（见 `RANElementManagement/ran_element_management_service.py` 顶部说明）。
 - 882 个网元的明细一次性下发约 450 KB（含逐网元的型号矩阵），页面一次取回；不按网元分页拉取，是因为台账表本身就要全量排序与筛选。
 
-## 43. PRTG 核心链路健康度看板（`?page=prtg_links`，2026-11-24 新增）
+## 42b. PRTG 核心链路健康度看板（`?page=prtg_links`，2026-11-24 新增）
 
 **一句话**：把 PRTG（GRAPHER-ISP）25 个传感器（24 个 SNMP Traffic 64bit + 1 个 Ping）的链路状态、流量、错误 / 丢弃、可用率与容量利用率放到一张表里，点任意链路看该链路的时序与状态事件。数据只读，KPI 是时点快照，趋势 / 详情时序随上方时间范围变化。
 
-### 43.1 数据链路
+### 42b.1 数据链路
 
 | 环节 | 位置 |
 | --- | --- |
@@ -6493,9 +6493,9 @@ VMAX 数仓 GBase（10.123.255.12:5258/zxvmax，只读）
 | 路由 | `backend/routers/prtg.py`：`/api/prtg/overview`、`/api/prtg/links`、`/api/prtg/links/{sensor_id}`、`/api/prtg/collector/status` |
 | 前端 | `frontend/src/pages/PrtgLinkHealth.tsx` + `pages/prtg/`（模型 / 图表 / 详情） |
 
-时间范围与底层表：`5m` 读 60 秒原始表（1 分钟桶）、`24h` 读 5 分钟聚合、`7d` / `30d` 读小时聚合（`backend/services/prtg/dashboard.py` 的 `WINDOWS`）。
+时间范围与底层表：`5m` 读 60 秒原始表（近 5 分钟、1 分钟桶）、`24h` 读 5 分钟聚合、`7d` / `30d` 读小时聚合（聚合同时读实时与回填历史）（`backend/services/prtg/dashboard.py` 的 `WINDOWS`）。
 
-### 43.2 口径（页面「数据口径说明」逐条对应）
+### 42b.2 口径（页面「数据口径说明」逐条对应）
 
 1. **流量**：`Traffic In / Out / Total` 原始单位是 byte/s，后端按 `×8÷1e6` 换算为 Mbps 后下发（`total_mbps` / `in_mbps` / `out_mbps`）；前端只格式化，不重算。字典实测 `Total = In + Out`，但 Total 列直接展示接口值，不由前端相加。
 2. **Errors / Discards / Unicast**：PRTG 给的是**区间速率**（count/s），不是累计计数器，**不做差分**（`docs/workspace/prtg-channel-dictionary.md` 第 3 节）。
@@ -6507,7 +6507,7 @@ VMAX 数仓 GBase（10.123.255.12:5258/zxvmax，只读）
 8. **缺失值**：接口返回 null 的字段一律显示「—」，**不补 0** —— 0 表示确实是 0，null 表示取不到。
 9. **时间**：所有时间戳为 **UTC**（接口带 `Z`），页面用 `frontend/src/datetime.ts` 统一格式化。
 
-### 43.3 页面构成
+### 42b.3 页面构成
 
 - **筛选条**：时间范围（5 分钟 / 24 小时 / 7 天 / 30 天）+ 刷新 + 数据新鲜度标签 + 生成时间。
 - **KPI 卡（6 张）**：传感器总数 / Up / Unusual / Down / 平均可用率 / 异常链路数。标题旁 `ExplainIcon` 讲这一张卡，数字本身由 `StatCard.explainText` 挂 `ExplainPopover`。

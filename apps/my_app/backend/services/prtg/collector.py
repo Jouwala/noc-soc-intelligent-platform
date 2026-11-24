@@ -48,11 +48,20 @@ LOOP_TICK_SECONDS = 5
 class TokenBucket:
     """简单令牌桶（全局共享，PRTG 历史接口限流 ≤N 次/分钟）。"""
 
-    def __init__(self, capacity: int, refill_per_second: float, clock: Callable[[], float] = time.monotonic):
+    def __init__(
+        self,
+        capacity: int,
+        refill_per_second: float,
+        clock: Callable[[], float] = time.monotonic,
+        initial_tokens: float = 0.0,
+    ):
         self.capacity = max(1, int(capacity))
         self.refill_per_second = max(0.001, float(refill_per_second))
         self._clock = clock
-        self._tokens = float(self.capacity)
+        # 初始给 0：若给满桶，第 1 分钟会「突发 5 次 + 补 5 次」= 10 次，
+        # 不满足 #227「不超 5 次/分钟」的字面验收（2026-11-24 审核实测 9 次）。
+        # 从 0 开始、按 5/60 每秒匀速补，任意 60 秒窗口最多 5 次。
+        self._tokens = float(initial_tokens)
         self._last = clock()
 
     def try_acquire(self, amount: float = 1.0) -> bool:
@@ -124,7 +133,7 @@ class PrtgCollector:
         self._sensor_ids = [int(s["objid"]) for s in sensors]
         store.set_state(
             "catalog", status="ok", last_run_at=now, last_success_at=now,
-            detail=f"devices={len(devices)} sensors={len(sensors)} channels={channel_count}",
+            error="", detail=f"devices={len(devices)} sensors={len(sensors)} channels={channel_count}",
         )
         return {"devices": len(devices), "sensors": len(sensors), "channels": channel_count}
 
@@ -200,7 +209,7 @@ class PrtgCollector:
         }
         store.set_state(
             "live", status="ok", last_run_at=collected_at, last_success_at=collected_at,
-            detail=f"sensors={len(sensors)} samples={samples} changes={events}",
+            error="", detail=f"sensors={len(sensors)} samples={samples} changes={events}",
         )
         return summary
 
@@ -232,8 +241,8 @@ class PrtgCollector:
         sensors = self._sensor_ids or sorted(store.sensor_objids())
         if not sensors:
             return None
+        index = int(cursor["sensor_index"]) % len(sensors)
         end_day = cursor["end_day"] or now.date().isoformat()
-        index = cursor["sensor_index"]
         day_end = datetime.fromisoformat(end_day)
         day_start = day_end - timedelta(days=1)
 
@@ -257,23 +266,26 @@ class PrtgCollector:
                     "source": "historic",
                 })
         inserted = store.insert_historical(rows, now)
+        # 回填的历史行要能进 7d/30d 视图：把这一天按小时聚一次（幂等 upsert），
+        # 否则 prtg_channel_samples_1h 只覆盖实时那 3 小时，回填数据无人读取。
+        self._aggregate_range(day_start, day_end, minutes=60, model_name="1h")
 
-        # 推进游标：一次一步；走完最早一天后退回下一传感器
-        next_index = index + 1
+        # 推进游标（2026-11-24 审核修复）：同一传感器**逐日**往回走，
+        # 走满 raw_retention_days 天才换下一个传感器；旧实现同时推进
+        # sensor_index 与 end_day，1000 步只覆盖 450 个「传感器×天」。
+        next_index = index
         next_end = day_start
-        oldest = now - timedelta(days=self.settings.raw_retention_days)
-        if next_end <= oldest:
-            next_index = index + 1
-            next_end = now
-        if next_index >= len(sensors):
-            next_index = 0
+        oldest_date = (now - timedelta(days=self.settings.raw_retention_days)).date()
+        if next_end.date() <= oldest_date:
+            next_index = (index + 1) % len(sensors)
+            next_end = now.replace(hour=0, minute=0, second=0, microsecond=0)
         cursor_out = json.dumps({
             "sensor_index": next_index,
             "end_day": next_end.date().isoformat(),
         })
         store.set_state(
             "backfill", status="ok", last_run_at=now, last_success_at=now,
-            cursor=cursor_out,
+            error="", cursor=cursor_out,
             detail=f"sensor={sensor_id} day={day_start.date()} rows={inserted}",
         )
         return {"sensor_objid": sensor_id, "day": day_start.date().isoformat(), "rows": inserted}
@@ -286,15 +298,20 @@ class PrtgCollector:
         hourly = self._aggregate_window(minutes=60, model_name="1h", since_minutes=180)
         store.set_state(
             "aggregate", status="ok", last_run_at=now, last_success_at=now,
-            detail=f"5m={five_min} 1h={hourly}",
+            error="", detail=f"5m={five_min} 1h={hourly}",
         )
         return {"5m": five_min, "1h": hourly}
 
     def _aggregate_window(self, *, minutes: int, model_name: str, since_minutes: int) -> int:
         now = self._now()
-        since = now - timedelta(minutes=since_minutes)
+        return self._aggregate_range(now - timedelta(minutes=since_minutes), now,
+                                     minutes=minutes, model_name=model_name)
+
+    def _aggregate_range(self, since: datetime, until: datetime, *,
+                         minutes: int, model_name: str) -> int:
+        now = self._now()
         model = _aggregate_model(model_name)
-        raw = store.fetch_raw_samples(since, now)
+        raw = store.fetch_raw_samples(since, until)
         buckets: dict[tuple[int, int, datetime], dict[str, Any]] = {}
         for sensor_objid, channel_objid, sample_time, value_num, volume_num in raw:
             bucket = _floor_time(sample_time, minutes)
@@ -335,7 +352,7 @@ class PrtgCollector:
         }
         store.set_state(
             "prune", status="ok", last_run_at=now, last_success_at=now,
-            detail=json.dumps(result, ensure_ascii=False),
+            error="", detail=json.dumps(result, ensure_ascii=False),
         )
         return result
 

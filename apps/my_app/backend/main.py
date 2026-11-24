@@ -802,15 +802,21 @@ async def startup_event():
     threading.Thread(target=_auto_start_proxies, daemon=True).start()
 
     # PRTG 采集线程（#227）：60 秒轮询 + 目录每小时 + 历史回填限流 + 聚合清理。
-    # 默认关闭（CI / 冒烟 / 单测环境不去连 PRTG 内网）；生产在 backend/.env 设
-    # PRTG_COLLECTOR_ENABLED=1 才启动。配置不全时只打日志，不影响服务启动。
-    try:
-        from backend.services.prtg.runner import start_collector_thread
-        _prtg_thread = start_collector_thread()
-        if _prtg_thread is not None:
-            print(f"[startup] PRTG 采集线程已启动: {_prtg_thread.name}", flush=True)
-    except Exception as e:  # noqa: BLE001
-        print(f"[startup] PRTG 采集线程启动失败（非致命）: {e}", flush=True)
+    # 三层闸门：① 生产 .env 显式 PRTG_COLLECTOR_ENABLED=1；② 冒烟/CI
+    # （MY_APP_DISABLE_SCHEDULER=1）不启动；③ 拿不到调度锁（多实例/锁被占）
+    # 不启动，避免两个进程同时轮询 PRTG。配置不全只打日志，不影响服务启动。
+    if DISABLE_SCHEDULER:
+        print("[startup] MY_APP_DISABLE_SCHEDULER=1: skip PRTG collector thread", flush=True)
+    elif not _got_lock:
+        print("[startup] 调度锁不在本进程: skip PRTG collector thread", flush=True)
+    else:
+        try:
+            from backend.services.prtg.runner import start_collector_thread
+            _prtg_thread = start_collector_thread()
+            if _prtg_thread is not None:
+                print(f"[startup] PRTG 采集线程已启动: {_prtg_thread.name}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"[startup] PRTG 采集线程启动失败（非致命）: {e}", flush=True)
 
 
 # 提供前端静态文件（生产环境）

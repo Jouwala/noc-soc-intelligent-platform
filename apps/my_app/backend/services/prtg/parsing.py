@@ -250,7 +250,12 @@ def parse_historic_csv(
             if serial is not None:
                 sample_time = excel_serial_to_datetime(serial)
         if sample_time is None and dt_idx is not None and dt_idx < len(cells) and cells[dt_idx].strip():
-            sample_time = parse_us_datetime(cells[dt_idx])
+            try:
+                sample_time = parse_us_datetime(cells[dt_idx])
+            except ValueError:
+                # historicdata.csv 末尾有 "Sums (of 1440 values)" / "Averages" 汇总行，
+                # 日期列不是时间串；跳过，不当成采样点（2026-11-24 实机回填实测）。
+                continue
         if sample_time is None:
             continue
         channels: dict[int, dict[str, Any]] = {}

@@ -57,6 +57,7 @@ class PrtgSensor(Base):
     device_name = Column(Text)
     sensor_name = Column(Text, nullable=False)
     sensortype = Column(Text)  # 如 "SNMP Traffic 64bit" / "Ping"
+    source_system = Column(Text, nullable=False, default="PRTG")  # 跨系统汇总时按列筛来源
     interval_seconds = Column(Integer)  # 扫描间隔（实测 60）
     status = Column(Text)  # Up / Unusual / Down / Unknown
     status_raw = Column(Integer)  # PRTG status_raw（Up=3 实测）
@@ -125,6 +126,7 @@ class PrtgChannelSample(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     sensor_objid = Column(Integer, nullable=False)
     channel_objid = Column(Integer, nullable=False)
+    source_system = Column(Text, nullable=False, default="PRTG")
     sample_time = Column(DateTime, nullable=False)  # naive UTC，分钟对齐
     value_num = Column(Float)  # 速率原始值（流量=byte/s，计数=count/s）
     value_display = Column(Text)  # 速率显示值原文（kbit/s、#/s）
@@ -149,6 +151,7 @@ class PrtgHistoricalSample(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     sensor_objid = Column(Integer, nullable=False)
     channel_objid = Column(Integer, nullable=False)
+    source_system = Column(Text, nullable=False, default="PRTG")
     sample_time = Column(DateTime, nullable=False)
     value_num = Column(Float)  # 速率原始值（byte/s、count/s）
     value_display = Column(Text)

@@ -28,7 +28,8 @@ from backend.models.prtg_collector import (
 )
 
 WINDOWS = {
-    "5m": {"seconds": 3600, "table": "raw", "bucket_minutes": 1},
+    # #228 的「5 分钟」是**近 5 分钟**（不是近 1 小时）：60 秒原始 + 5 个点。
+    "5m": {"seconds": 300, "table": "raw", "bucket_minutes": 1},
     "24h": {"seconds": 86400, "table": "5m", "bucket_minutes": 5},
     "7d": {"seconds": 7 * 86400, "table": "1h", "bucket_minutes": 60},
     "30d": {"seconds": 30 * 86400, "table": "1h", "bucket_minutes": 60},
@@ -37,6 +38,15 @@ DEFAULT_WINDOW = "24h"
 WINDOW_LABELS = {"5m": "近 5 分钟", "24h": "近 24 小时", "7d": "近 7 天", "30d": "近 30 天"}
 
 CH_TOTAL, CH_IN, CH_OUT = -1, 0, 1
+
+
+def is_traffic_sensor(sensor_type: str | None) -> bool:
+    """Ping 等非 Traffic 传感器不能用 Traffic In/Out 通道语义解释。
+
+    2026-11-24 审核实测：Ping 传感器的 channel 0 是 "Ping Time"（msec），
+    当成 Traffic In 会被换算成 0.001 Mbps 显示 0.00，违反「取不到显示 —」。
+    """
+    return "traffic" in (sensor_type or "").lower()
 CH_UNICAST_IN, CH_UNICAST_OUT = 2, 3
 CH_ERRORS_IN, CH_ERRORS_OUT = 10, 11
 CH_DISCARDS_IN, CH_DISCARDS_OUT = 12, 13
@@ -281,12 +291,16 @@ def links(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
         def sample(channel_id: int) -> dict[str, Any] | None:
             return latest.get((sensor.objid, channel_id))
 
-        in_mbps = byte_per_second_to_mbps(_value(sample(CH_IN)))
-        out_mbps = byte_per_second_to_mbps(_value(sample(CH_OUT)))
-        total_mbps = byte_per_second_to_mbps(_value(sample(CH_TOTAL)))
+        traffic = is_traffic_sensor(sensor.sensortype)
+        in_mbps = byte_per_second_to_mbps(_value(sample(CH_IN))) if traffic else None
+        out_mbps = byte_per_second_to_mbps(_value(sample(CH_OUT))) if traffic else None
+        total_mbps = byte_per_second_to_mbps(_value(sample(CH_TOTAL))) if traffic else None
         capacity_mbps = capacity.capacity_mbps if capacity else None
         utilization = None
-        if capacity_mbps and capacity_mbps > 0 and (in_mbps is not None or out_mbps is not None):
+        if (
+            traffic and capacity_mbps and capacity_mbps > 0
+            and (in_mbps is not None or out_mbps is not None)
+        ):
             utilization = round(max((in_mbps or 0) / capacity_mbps, (out_mbps or 0) / capacity_mbps) * 100, 2)
         sample_time = None
         if sample(CH_TOTAL):
@@ -305,18 +319,19 @@ def links(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
             "in_mbps": in_mbps,
             "out_mbps": out_mbps,
             "total_mbps": total_mbps,
-            "unicast_in": _value(sample(CH_UNICAST_IN)),
-            "unicast_out": _value(sample(CH_UNICAST_OUT)),
-            "errors_in": _value(sample(CH_ERRORS_IN)),
-            "errors_out": _value(sample(CH_ERRORS_OUT)),
-            "discards_in": _value(sample(CH_DISCARDS_IN)),
-            "discards_out": _value(sample(CH_DISCARDS_OUT)),
+            "unicast_in": _value(sample(CH_UNICAST_IN)) if traffic else None,
+            "unicast_out": _value(sample(CH_UNICAST_OUT)) if traffic else None,
+            "errors_in": _value(sample(CH_ERRORS_IN)) if traffic else None,
+            "errors_out": _value(sample(CH_ERRORS_OUT)) if traffic else None,
+            "discards_in": _value(sample(CH_DISCARDS_IN)) if traffic else None,
+            "discards_out": _value(sample(CH_DISCARDS_OUT)) if traffic else None,
             "uptime_pct": sensor.uptime_pct,
             "downtime_pct": sensor.downtime_pct,
             "last_down": _iso(sensor.last_down),
             "capacity_mbps": capacity_mbps,
             "capacity_source": capacity.capacity_source if capacity else None,
             "utilization_pct": utilization,
+            "is_traffic": traffic,
             "sample_time": _iso(sample_time),
             "data_quality": {
                 "traffic_available": total_mbps is not None,
@@ -367,6 +382,7 @@ def link_detail(sensor_objid: int, window: str = DEFAULT_WINDOW) -> dict[str, An
         "last_up": _iso(sensor.last_up),
         "last_down": _iso(sensor.last_down),
         "last_check": _iso(sensor.last_check),
+        "is_traffic": is_traffic_sensor(sensor.sensortype),
         "capacity_mbps": capacity.capacity_mbps if capacity else None,
         "capacity_source": capacity.capacity_source if capacity else None,
         "mappings": [
@@ -383,10 +399,13 @@ def link_detail(sensor_objid: int, window: str = DEFAULT_WINDOW) -> dict[str, An
             }
             for row in events
         ],
-        "series": link_series(sensor_objid, window, (
-            CH_TOTAL, CH_IN, CH_OUT, CH_UNICAST_IN, CH_UNICAST_OUT,
-            CH_ERRORS_IN, CH_ERRORS_OUT, CH_DISCARDS_IN, CH_DISCARDS_OUT,
-        )),
+        "series": link_series(
+            sensor_objid,
+            window,
+            (CH_TOTAL, CH_IN, CH_OUT, CH_UNICAST_IN, CH_UNICAST_OUT,
+             CH_ERRORS_IN, CH_ERRORS_OUT, CH_DISCARDS_IN, CH_DISCARDS_OUT)
+            if is_traffic_sensor(sensor.sensortype) else (0,),
+        ),
         "window": window,
         "window_label": WINDOW_LABELS[window],
     }

@@ -34,12 +34,12 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 | `prtg_historical_samples` | historicdata 回填原始行 | 90 天 |
 | `prtg_channel_samples_5m` / `_1h` | 5 分钟 / 小时聚合（avg + max + 样本数） | 1 年 / 1000 天 |
 | `prtg_sensor_events` | Up/Unusual/Down 变化事件 | 长期 |
-| `prtg_sensor_mapping` / `prtg_blindspot_device` | #226 映射与盲区（人工维护） | 长期 |
+| `prtg_sensor_mapping` / `prtg_blindspot_device` | #226 映射与盲区（人工维护；盲区 owner 先按设备组给暂定责任方，人工可改） | 长期 |
 | `network_link_capacity` | 利用率分母（PRTG 没有；来源只允许 `snmp_ifspeed` / `manual`） | 长期 |
 | `network_anomaly_events` | 门户自建异常事件（#229 起使用） | 长期 |
 | `prtg_sync_state` | 每类作业的状态、断点、最近错误、数据新鲜度 | 长期 |
 
-迁移：`apps/my_app/alembic/versions/0008_prtg_collector.py`（`0007` 之后）。
+迁移：`0008_prtg_collector`（建表）+ `0009_prtg_source_system`（传感器/采样表补 `source_system`，默认 PRTG），均在 `0007` 之后。
 
 ## 3. 口径（前端只展示，不重算）
 
@@ -73,7 +73,7 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 | `GET /api/prtg/links/{sensor_id}?window=…` | 单链路详情：通道时序、状态事件、全部站点映射 |
 | `GET /api/prtg/collector/status` | 五类作业的最近运行/成功/错误（排障用，无凭证） |
 
-窗口 → 数据源：`5m` 用 60 秒原始（近 1 小时）、`24h` 用 5 分钟聚合、`7d`/`30d` 用小时聚合。
+窗口 → 数据源：`5m` 用 60 秒原始（**近 5 分钟**，不是近 1 小时）、`24h` 用 5 分钟聚合、`7d`/`30d` 用小时聚合；聚合同时读实时与 `prtg_historical_samples`，回填的历史才会进 7d/30d。
 
 ## 6. 排障
 
@@ -91,8 +91,14 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 ## 7. 已知限制
 
 - **Ping 传感器通道未入字典**：`AML _TOKADEH_PING` 只有 `Ping Time`（msec）+ Downtime，
-  不在 `channels.py` 的 11 个流量通道里；采集端按原始通道名入库，语义等 #229 再做。
+  不在 `channels.py` 的 11 个流量通道里。采集端按原始通道名入库；接口按 `sensor_type`
+  判定 `is_traffic=false`，In/Out/Total/Errors/Discards 一律返回 null（页面显示「—」），
+  详情不画流量时序，语义与状态机等 #229 再做。
+- **游标与回填速度**：同一传感器逐日往回走、走满 `PRTG_RAW_RETENTION_DAYS`（默认 90 天）
+  再换下一个；25×90=2250 个「传感器×天」，5 次/分钟约 7.5 小时补完。断点在
+  `prtg_sync_state.backfill.cursor`。
 - **2026-11-24 实测**：25 个传感器中 24 个 SNMP Traffic 64bit + 1 个 Ping；
   状态 17 Up / 8 Unusual / 0 Down（时点快照，引用要注明时间）；全网总速率约 18–19 Gbps。
-- 历史回填从「现在」向前按天推进，90 天全部补完约需 7–8 小时（5 次/分钟 × 25 传感器），
-  期间不影响实时轮询；断点存在 `prtg_sync_state.backfill.cursor`。
+- 历史回填从「现在」向前按天推进（同一传感器逐日、走满 90 天换下一个），
+  25×90=2250 个窗口、5 次/分钟约 7.5 小时补完，期间不影响实时轮询；断点在
+  `prtg_sync_state.backfill.cursor`。每小时聚合会随回填按天补，7d/30d 能看到历史。

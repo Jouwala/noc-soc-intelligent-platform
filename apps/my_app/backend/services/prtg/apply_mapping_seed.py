@@ -48,14 +48,18 @@ def apply_seed(seed: dict[str, Any], *, dry_run: bool = False) -> dict[str, int]
         return stats
 
     with SessionLocal() as session:
-        existing = {
-            (row.sensor_id, row.site_id): row
-            for row in session.execute(select(PrtgSensorMapping)).scalars().all()
-        }
+        existing_rows = session.execute(select(PrtgSensorMapping)).scalars().all()
+        existing = {(row.sensor_id, row.site_id): row for row in existing_rows}
+        # 人工已确认的传感器：即使 site_id 被改成真实站点，也不能再补一条
+        # Unknown 行（2026-11-24 审核：按 (sensor_id, site_id) 判重会造重复）。
+        verified_sensors = {row.sensor_id for row in existing_rows if row.match_status == "verified"}
         for row in mappings:
             key = (int(row["sensor_id"]), str(row["site_id"]))
             current = existing.get(key)
-            if current is None:
+            if current is None and key[0] in verified_sensors:
+                # 该传感器已有 verified 行（人工可能换了 site_id），不再追加自动行
+                stats["mapping_skipped"] += 1
+            elif current is None:
                 session.add(PrtgSensorMapping(
                     sensor_id=key[0],
                     device_name=row["device_name"],
@@ -84,12 +88,20 @@ def apply_seed(seed: dict[str, Any], *, dry_run: bool = False) -> dict[str, int]
                 stats["mapping_updated"] += 1
 
         existing_blind = {
-            (row.device_name, row.group_name)
+            (row.device_name, row.group_name): row
             for row in session.execute(select(PrtgBlindspotDevice)).scalars().all()
         }
         for row in blindspots:
             key = (str(row["device_name"]), str(row["group_name"]))
-            if key in existing_blind:
+            current = existing_blind.get(key)
+            if current is not None:
+                # 只补空字段（owner/customer/region），不覆盖人工填写
+                if current.customer is None and row.get("customer"):
+                    current.customer = row["customer"]
+                if current.owner is None and row.get("owner"):
+                    current.owner = row["owner"]
+                if current.region is None and row.get("region"):
+                    current.region = row["region"]
                 stats["blindspot_skipped"] += 1
                 continue
             session.add(PrtgBlindspotDevice(

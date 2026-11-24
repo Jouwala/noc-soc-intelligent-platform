@@ -331,21 +331,45 @@ def update_sensor_details(sensor_objid: int, fields: dict[str, Any]) -> None:
 
 
 def fetch_raw_samples(since: datetime, until: datetime):
-    """取时间窗内的 60 秒原始采样（聚合用），按时间升序。"""
+    """取时间窗内的 60 秒原始采样（实时 + 历史回填，按 (sensor, channel, time) 去重）。
+
+    2026-11-24 审核修复：只读 prtg_channel_samples 会让回填的 90 天数据永远
+    进不了 5m/1h 聚合，7d/30d 视图看不到历史。这里 UNION 上
+    prtg_historical_samples，同一时间点两边都有时只保留一条，避免聚合时
+    样本数翻倍。
+    """
+    live = (
+        select(
+            PrtgChannelSample.sensor_objid,
+            PrtgChannelSample.channel_objid,
+            PrtgChannelSample.sample_time,
+            PrtgChannelSample.value_num,
+            PrtgChannelSample.volume_num,
+        )
+        .where(PrtgChannelSample.sample_time >= since)
+        .where(PrtgChannelSample.sample_time < until)
+    )
+    hist = (
+        select(
+            PrtgHistoricalSample.sensor_objid,
+            PrtgHistoricalSample.channel_objid,
+            PrtgHistoricalSample.sample_time,
+            PrtgHistoricalSample.value_num,
+            PrtgHistoricalSample.volume_num,
+        )
+        .where(PrtgHistoricalSample.sample_time >= since)
+        .where(PrtgHistoricalSample.sample_time < until)
+    )
+    deduped: dict[tuple[int, int, datetime], tuple[float | None, float | None]] = {}
     with SessionLocal() as session:
-        rows = session.execute(
-            select(
-                PrtgChannelSample.sensor_objid,
-                PrtgChannelSample.channel_objid,
-                PrtgChannelSample.sample_time,
-                PrtgChannelSample.value_num,
-                PrtgChannelSample.volume_num,
-            )
-            .where(PrtgChannelSample.sample_time >= since)
-            .where(PrtgChannelSample.sample_time < until)
-            .order_by(PrtgChannelSample.sample_time)
-        ).all()
-    return rows
+        for sensor_objid, channel_objid, sample_time, value_num, volume_num in session.execute(
+            live.union_all(hist)
+        ).all():
+            deduped[(int(sensor_objid), int(channel_objid), sample_time)] = (value_num, volume_num)
+    return [
+        (sensor_objid, channel_objid, sample_time, values[0], values[1])
+        for (sensor_objid, channel_objid, sample_time), values in deduped.items()
+    ]
 
 
 # ---------------- 清理 ----------------

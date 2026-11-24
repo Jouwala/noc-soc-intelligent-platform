@@ -120,6 +120,8 @@ export interface PrtgSeriesPoint {
 
 /** 详情接口：基础信息 + 映射 + 事件 + 通道时序（series 的 value 是原始 byte/s） */
 export interface PrtgLinkDetailData {
+  /** 是否 SNMP Traffic 传感器；Ping 等非流量传感器的通道语义不同（#229 再补） */
+  is_traffic?: boolean
   sensor_id: number
   sensor_name: string
   device_name?: string | null

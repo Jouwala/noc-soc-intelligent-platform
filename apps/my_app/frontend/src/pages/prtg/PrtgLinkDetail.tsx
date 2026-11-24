@@ -42,6 +42,9 @@ export default function PrtgLinkDetail({ detail, windowKey, isDark }: Props) {
   const mappings = detail.mappings || []
   const events = detail.events || []
   const series = detail.series || {}
+  // Ping 等非 Traffic 传感器：channel 0 是 Ping Time（msec），不能套 In/Out/Total
+  // 语义与 byte/s→Mbps 换算（2026-11-24 审核实测），详情里只给一句说明。
+  const isTraffic = detail.is_traffic !== false
 
   const mappingColumns: ColumnsType<PrtgMapping> = [
     {
@@ -91,14 +94,16 @@ export default function PrtgLinkDetail({ detail, windowKey, isDark }: Props) {
     },
   ]
 
-  const seriesDefs: SeriesDef[] = [
-    { key: '-1', label: t('prtg.detail.seriesTotal'), color: isDark ? '#00d9ff' : '#0d9488' },
-    { key: '0', label: t('prtg.detail.seriesIn'), color: isDark ? '#74c0fc' : '#1971c2' },
-    { key: '1', label: t('prtg.detail.seriesOut'), color: isDark ? '#ffa94d' : '#e8590c' },
-  ].map(s => ({
-    ...s,
-    points: (series[s.key] || []).map(p => ({ t: p.t, value: toMbps(p.value) })),
-  }))
+  const seriesDefs: SeriesDef[] = isTraffic
+    ? [
+        { key: '-1', label: t('prtg.detail.seriesTotal'), color: isDark ? '#00d9ff' : '#0d9488' },
+        { key: '0', label: t('prtg.detail.seriesIn'), color: isDark ? '#74c0fc' : '#1971c2' },
+        { key: '1', label: t('prtg.detail.seriesOut'), color: isDark ? '#ffa94d' : '#e8590c' },
+      ].map(s => ({
+        ...s,
+        points: (series[s.key] || []).map(p => ({ t: p.t, value: toMbps(p.value) })),
+      }))
+    : []
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)' }}>
@@ -171,11 +176,15 @@ export default function PrtgLinkDetail({ detail, windowKey, isDark }: Props) {
         />
       </div>
 
-      {/* ④ In / Out / Total 时序 */}
+      {/* ④ In / Out / Total 时序（Ping 等非流量传感器不画，避免错误语义） */}
       <div>
         <Text strong>{t('prtg.detail.series')}</Text>
         <div style={{ marginTop: 'var(--wh-space-xs)' }}>
-          <PrtgSeriesChart series={seriesDefs} windowKey={windowKey} isDark={isDark} emptyText={t('prtg.detail.noSeries')} />
+          {isTraffic ? (
+            <PrtgSeriesChart series={seriesDefs} windowKey={windowKey} isDark={isDark} emptyText={t('prtg.detail.noSeries')} />
+          ) : (
+            <Text type="secondary">{t('prtg.detail.pingNote')}</Text>
+          )}
         </div>
         <div style={{ fontSize: 11, color: WH.textDim, marginTop: 4 }}>
           {t('prtg.detail.seriesNote')}

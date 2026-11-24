@@ -26,6 +26,13 @@ UNKNOWN_SITE = "Unknown"
 BLINDSPOT_GROUPS = ("Core Firewalls", "VSAT Customers")
 BLINDSPOT_DEFAULT_REASON = "PRTG 未配置传感器（0 sensors）"
 
+# 盲区责任方（#226 验收「各有原因与责任方」）：按设备组先落到对口团队，
+# 属**暂定责任方**，人工确认后可在库里改；apply_mapping_seed 不覆盖已有值。
+BLINDSPOT_OWNER = {
+    "Core Firewalls": "传输与 IP 网管部",
+    "VSAT Customers": "MS 项目组",
+}
+
 _PEER_PATTERN = re.compile(r"^\((\d+)\)\s+to\s+(.+)$")
 _INTERFACE_TOKEN = re.compile(r"\b([A-Za-z]+\d+(?:/\d+)+)\b")
 
@@ -137,14 +144,17 @@ def build_blindspot_rows(devices: Iterable[dict[str, Any]]) -> list[dict[str, An
         group = str(device.get("group", ""))
         if group not in BLINDSPOT_GROUPS:
             continue
+        device_name = str(device.get("device", ""))
         rows.append(
             {
-                "device_name": str(device.get("device", "")),
+                "device_name": device_name,
                 "group_name": group,
                 "region": None,
-                "customer": None,
+                # VSAT 设备名就是客户名（Supreme / Lee Group / BHP-…），直接落到 customer；
+                # 防火墙组没有客户概念，留空。
+                "customer": device_name if group == "VSAT Customers" else None,
                 "reason": BLINDSPOT_DEFAULT_REASON,
-                "owner": None,
+                "owner": BLINDSPOT_OWNER.get(group),
                 "monitored": False,
             }
         )
