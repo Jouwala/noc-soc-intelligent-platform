@@ -113,10 +113,13 @@ def snapshot_day(now: datetime | None = None) -> dict[str, Any]:
                         if coverage_delta > 0:
                             coverage = coverage_delta
                         else:
-                            stats["no_coverage"] += 1  # 整段 Paused：无覆盖，不回退到自然日
-                    elif previous.day is not None:
-                        # 老快照没有 updowntotal（0012 之前的行）：按自然日回退并标注
-                        coverage = max(1.0, (day - previous.day).total_seconds() / 60.0)
+                            # PRTG 的 updowntotal 是**天粒度**（"958 d"），增量 0 可能是
+                            # 整段 Paused（无覆盖）也可能是半天 Paused（无法精确判定）。
+                            # 两者都不能按自然日 1440 当可用时间，故 coverage=None，
+                            # 该日可用率标 undefined，不猜。
+                            stats["no_coverage"] += 1
+                    # 老快照没有 updowntotal（0012 之前的行）：不按自然日兜底，
+                    # 同样标 undefined（宁可缺一天，也不把 Paused 当可用）。
 
             down_count = session.execute(
                 select(PrtgSensorEvent)
@@ -127,8 +130,11 @@ def snapshot_day(now: datetime | None = None) -> dict[str, Any]:
             ).all()
 
             availability = None
-            if delta is not None and coverage:
-                availability = round(max(0.0, 100.0 - delta / coverage * 100.0), 4)
+            if delta is not None:
+                # 有停机增量时只在覆盖可判定时算当天可用率；覆盖未知就留空，
+                # 不能回退累计值（否则等于把累计可用率当成当天）。
+                if coverage:
+                    availability = round(max(0.0, 100.0 - delta / coverage * 100.0), 4)
             elif sensor.uptime_pct is not None:
                 availability = round(sensor.uptime_pct, 4)
                 stats["no_baseline"] += 1
@@ -278,11 +284,19 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
         coverages = [r.coverage_minutes for r in rows if r.coverage_minutes is not None]
         month_downtime = sum(deltas) if deltas else None
         month_coverage = sum(coverages) if coverages else None
-        month_availability = (
-            round(max(0.0, 100.0 - month_downtime / month_coverage * 100.0), 4)
-            if month_downtime is not None and month_coverage
-            else (round(sensor.uptime_pct, 4) if sensor.uptime_pct is not None else None)
-        )
+        if month_downtime is not None:
+            if month_coverage:
+                month_availability = round(
+                    max(0.0, 100.0 - month_downtime / month_coverage * 100.0), 4
+                )
+                basis = "month_delta"
+            else:
+                # 有停机增量但覆盖无法判定：宁可显示「—」，也不把累计值冒充当月值
+                month_availability = None
+                basis = "undefined_coverage"
+        else:
+            month_availability = round(sensor.uptime_pct, 4) if sensor.uptime_pct is not None else None
+            basis = "all_time_fallback"
         down_count = month_down.get(sensor.objid, 0)
         mapping = mappings.get(sensor.objid)
         links.append({
@@ -301,7 +315,7 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
             "uptime_days": round(sensor.uptime_minutes / 1440.0, 1) if sensor.uptime_minutes else None,
             "target_pct": target,
             "below_target": month_availability is not None and month_availability < target,
-            "basis": "month_delta" if month_downtime is not None else "all_time_fallback",
+            "basis": basis,
         })
 
     links.sort(key=lambda r: (r["availability_pct"] is None, r["availability_pct"] or 999))
@@ -333,7 +347,7 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
         "month_end": end.isoformat() + "Z",
         "target_pct": target,
         "method": {
-            "denominator": "PRTG 监控覆盖时间（updowntotal 的相邻快照增量），Paused/维护窗口不计入；无覆盖基线时回退累计 uptime 并标注",
+            "denominator": "PRTG 监控覆盖时间（updowntotal 的相邻快照增量，天粒度），Paused/维护窗口不计入；覆盖增量无法判定时该日可用率置空（basis=undefined_coverage），不按自然日也不回退累计值",
             "month_downtime": "相邻日快照累计 downtimetime 的差分求和；首日无基线不猜",
             "fallback": "当月无快照时 availability 回退到 PRTG 累计 uptime_pct（basis=all_time_fallback）",
             "down_count": "月内 Down 次数直接按 prtg_sensor_events 统计，不受日快照时刻截断",

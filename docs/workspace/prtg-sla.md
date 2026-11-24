@@ -10,6 +10,7 @@
 | 可用率分母是什么 | PRTG 的**监控覆盖时间增量**（相邻日快照 `updowntotal` 之差），不是自然日历时间 | `getsensordetails.xml` 返回 `uptimetime` / `downtimetime` / `updowntotal`，2721 实测 `99.8775%` + `28 h 9 m` + `958 d`，与 PRTG 页面一致；Paused 期间 `updowntotal` 不增长，分母只按实际覆盖算 |
 | 维护窗口/Paused 是否计入停机 | **不计入**：Paused 期间不累计 `downtimetime`，覆盖率（updowntotal）也不增长 | 用 PRTG 累计值直接出报表，天然排除维护窗口；若两次快照间 `updowntotal` 增量明显小于自然时长，报表用实际覆盖分钟做分母并标注 |
 | 月故障时长怎么算 | 每天快照累计 `downtimetime`，月内相邻快照差分求和 | PRTG 不提供逐日停机历史；首日无前序快照时该日不计（`basis=all_time_fallback`） |
+| 部分 Paused 的一天能算吗 | **不能精确算**：`updowntotal` 是**天粒度**（实测 `958 d`），半天 Paused 与整天 Paused 都表现为增量 0。此时该日 `coverage_minutes=None`、当天/当月可用率置空（`basis=undefined_coverage`），不按 1440 也不回退累计值 | PRTG API 只给 `"958 d"` / `"28 h 9 m"`，没有秒级覆盖；宁可缺一天也不把 Paused 当可用 |
 | Down 次数怎么算 | 月内直接按 `prtg_sensor_events` 统计 | 日快照只统计到快照时刻，月报不依赖它，避免每天丢失快照后的晚间事件 |
 | 累计可用率能否直接当本月 | 不能。累计值是自传感器创建以来的；当月无快照时仅作回退展示，并在「口径」列标「累计回退」 | `prtg_sla_daily` 的 `downtime_delta_minutes` 为空即回退 |
 | 容量从哪来 | PRTG **不提供**接口速率（实测 `columns=speed` 返回 `"Not found"`），只能人工登记 `network_link_capacity`（`manual`）或未来接 SNMP `ifSpeed` | `sla.set_capacity()` / CLI `--set-capacity` |
@@ -45,7 +46,9 @@ python -m backend.services.prtg.sla --snapshot
 
 ## 4. 已知限制
 
-- 月故障时长需要至少两天的日快照；上线当天只能给累计可用率回退值。
+- 月故障时长需要至少两天的日快照；上线当天只能给累计可用率回退值（`basis=all_time_fallback`）。
+- **部分 Paused 日不可判定**：`updowntotal` 天粒度导致半天 Paused 与整天 Paused 无法区分；这类日子的可用率留空并标 `undefined_coverage`，月度平均只按可判定的覆盖日计算。这是明确的降级口径，不是实现缺陷。
 - 若某传感器被删除/重建，累计停机计数会回退，`snapshot_day` 检测到负增量会跳过该日（`reset_skipped`），不产生负数故障时长。
 - 区域排名目前 24 条为 `Unknown`（站点映射待人工确认，见 #226）。
 - 容量需人工补；未登记前 SLA 页签的容量表全部显示「待补全」，这是设计行为而非数据缺失报错。
+- `prtg_sla_daily.updown_total_minutes_cum` 自 0012 起才有值；更早的行没有基线，升级当天按首日回退处理。

@@ -50,13 +50,14 @@ def test_snapshot_delta_and_month_report(db):
     day1 = datetime(2026, 11, 20, 0, 0)
     day2 = datetime(2026, 11, 21, 0, 0)
     with db() as session:
-        _sensor(session, 2721)
+        _sensor(session, 2721, updown_total_minutes=1000.0)
         session.commit()
     sla.snapshot_day(now=day1)  # 首日：无前序，回退累计 uptime
 
     with db() as session:
         sensor = session.execute(__import__("sqlalchemy").select(PrtgSensor)).scalar_one()
         sensor.downtime_minutes = 160.0  # 一天停机 60 分钟
+        sensor.updown_total_minutes = 2440.0  # 覆盖 +1440
         session.add(PrtgSensorEvent(sensor_objid=2721, event_type="down",
                                     happened_at=day2 + timedelta(hours=3),
                                     created_at=day2))
@@ -132,8 +133,8 @@ def test_below_target_sorted_and_region_ranking(db):
     assert report["region_ranking"][0]["region"] == "Unknown"
 
 
-def test_paused_half_day_uses_monitored_coverage_as_denominator(db):
-    """Paused 半天：分母用 updowntotal 增量（720），不是自然日 1440。"""
+def test_day_coverage_uses_updown_delta(db):
+    """整天有覆盖：分母 = updowntotal 增量（1440），不是自然日兜底。"""
     day1 = datetime(2026, 11, 20, 0, 0)
     day2 = datetime(2026, 11, 21, 0, 0)
     with db() as session:
@@ -144,15 +145,43 @@ def test_paused_half_day_uses_monitored_coverage_as_denominator(db):
     with db() as session:
         sensor = session.execute(__import__("sqlalchemy").select(PrtgSensor)).scalar_one()
         sensor.downtime_minutes = 160.0
-        sensor.updown_total_minutes = 1720.0
+        sensor.updown_total_minutes = 2440.0  # 覆盖 +1440
         session.commit()
     sla.snapshot_day(now=day2)
 
     from sqlalchemy import select
     with db() as session:
         row = session.execute(select(PrtgSlaDaily).where(PrtgSlaDaily.day == day2)).scalar_one()
-    assert row.coverage_minutes == 720.0
-    assert row.availability_pct == pytest.approx(100 - 60 / 720 * 100, rel=1e-4)
+    assert row.coverage_minutes == 1440.0
+    assert row.availability_pct == pytest.approx(100 - 60 / 1440 * 100, rel=1e-4)
+
+
+def test_partial_paused_day_is_undefined_not_full_day(db):
+    """PRTG updowntotal 是天粒度：增量 0（半天/整天 Paused）时不能按 1440 当可用。"""
+    day1 = datetime(2026, 11, 20, 0, 0)
+    day2 = datetime(2026, 11, 21, 0, 0)
+    with db() as session:
+        _sensor(session, 2721, downtime_minutes=100.0, updown_total_minutes=1000.0)
+        session.commit()
+    sla.snapshot_day(now=day1)
+    with db() as session:
+        sensor = session.execute(__import__("sqlalchemy").select(PrtgSensor)).scalar_one()
+        sensor.downtime_minutes = 160.0
+        sensor.updown_total_minutes = 1000.0  # 没有覆盖增量
+        session.commit()
+    sla.snapshot_day(now=day2)
+
+    from sqlalchemy import select
+    with db() as session:
+        row = session.execute(select(PrtgSlaDaily).where(PrtgSlaDaily.day == day2)).scalar_one()
+    assert row.coverage_minutes is None
+    assert row.availability_pct is None
+
+    report = sla.month_report("2026-11", now=day2 + timedelta(hours=1))
+    link = report["links"][0]
+    assert link["basis"] == "undefined_coverage"
+    assert link["availability_pct"] is None  # 不把累计 uptime 冒充当月值
+    assert link["downtime_hours_month"] == pytest.approx(1.0)
 
 
 def test_multi_day_gap_uses_real_coverage_not_1440(db):
