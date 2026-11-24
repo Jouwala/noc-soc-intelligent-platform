@@ -10,7 +10,7 @@
 
 - [1. Platform Overview](#1-platform-overview)
 - [2. General Usage](#2-general-usage)
-- [3. Task Manager Deep Dive (87 tasks)](#3-task-manager-deep-dive)
+- [3. Task Manager Deep Dive (88 tasks)](#3-task-manager-deep-dive)
 - [4. Pages Guide](#4-pages-guide)
 - [5. Ops & Troubleshooting](#5-ops-troubleshooting)
 - [6. FAQ](#6-faq)
@@ -70,7 +70,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 
 | Group | Why grouped |
 | --- | --- |
-| **u** | RAN UME single-account session; tasks run serially (parallel runs kick the session). Added 2026-11-07: ran_element_management_sync at 23:00 (RNM element table into PG), sharing the zte_ume session with ran_ume_daily at 02:00 |
+| **u** | RAN UME single-account session; tasks run serially (parallel runs kick the session). Added 2026-11-07: ran_element_management_sync at 23:00 (RNM element table into PG), sharing the zte_ume session with ran_ume_daily at 02:00. Added 2026-11-24: ngi_param_coverage_sync on Sundays 02:00 (NGI parameters and coverage grid into PG; own host and own ngi credential, no UME session involved) |
 | **n** | NMS / eFlow API / remote systems: independent but conservatively grouped |
 | **v** | VMAX portal (local 8790 single-session proxy): the three tasks share one session and must serialize; split out of group n on 2026-09-18 so long tasks no longer block them |
 | **m** | Housekeeping tasks: EWS mail session + screenshot/WhatsApp file dependencies |
@@ -83,7 +83,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 
 > ⚠️ **New tasks MUST also be registered in `GROUP_TASK_MAP` in worker_watchdog.py** — declaring them only in TASK_SPECS leaves them pending forever. This accident happened four times (finebi_report_sync / whatsapp_send_ext / sp_email_details / the olib_soc and vmax_multi_data_sync tasks found on 2026-09-18).
 
-### 3.3 Full task catalog (87 tasks)
+### 3.3 Full task catalog (88 tasks)
 
 | Task | task_id | Default cron | Group | Workflow script |
 | --- | --- | --- | --- | --- |
@@ -174,6 +174,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | IPT Site Power Collect | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN Element Management Sync | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
 | RAN KPI 15-Min Sync | `ran_kpi_15mins_sync` | `6,21,36,51 * * * *` | u | `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync` |
+| NGI Parameter & Coverage Sync | `ngi_param_coverage_sync` | `0 2 * * sun` | u | `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync` |
 
 Workflow & maintenance notes per task:
 
@@ -1837,6 +1838,30 @@ Workflow & maintenance notes per task:
 - WARNING: belongs to group u because it shares the same zte_ume account and session with the other RAN UME tasks; concurrent logins kick each other. It runs every 15 minutes and a measured run takes about 4.5 minutes (four techs, including 24 metrics for 5G)
 - WARNING: an export with 0 rows is treated as an empty state and skipped, not failed (same convention as cnn_kpi_sync_5mins)
 - The only consumer is ?page=ran_kpi_15mins (routers/ran_kpi_15mins.py + the read side of services/ran_kpi_assurance/ran_kpi_15mins_service.py)
+
+#### NGI Parameter & Coverage Sync（`ngi_param_coverage_sync`）
+
+- Default cron: `0 2 * * sun`　|　worker group: **u**
+- Workflow script: `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync`
+
+**What it does**: Sundays at 02:00, export two datasets from the NGI planning platform (10.100.29.17:28001) into PostgreSQL: LTE/NR engineering parameters (8,227 + 101 cells) and the 50 m coverage grid (178,370 cells)
+
+**Workflow & data flow**:
+
+1. Log into the NGI planning platform: auth_manager.get_auth with the ngi credential group (a different server from RAN UME; accounts are not interchangeable). Login uses the same uportal/oauth2 RSA password + Z-AUTH-CODE flow
+1. Parameters: GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 returns ProjectData.zip. The workbook has a 3-row header (Chinese notes / English notes / field names): drop the first two rows, use row 3 as the header, data starts at row 4
+1. Blank SectorID fill: within the same eNodeB ID + Downlink Center Frequency group, sort by Azimuth ascending and number 1, 2, 3, 4...; existing values are preserved and sector_source records file / derived
+1. Coverage: GET taskmanager/gettasklogbytaskid?taskid=1647 for the latest evaluation taskLogId -> POST commonGis/getLayerFiles for the layer hash and legend -> POST MapServerService/exportMap(CSV) -> poll exportMapChecking -> downloadExportMapFile for CSV.zip
+1. Persist (explicit BEGIN/COMMIT transactions): upsert parameters by cell_uid into app.ngi_lte_cell_param / app.ngi_nr_cell_param and prune cells missing from this run; delete-then-insert the grid per kpi into app.ngi_coverage_grid; one app.ngi_sync_log row per stage
+
+**Maintenance**:
+
+- WARNING: exportMap MUST echo back the legend returned by getLayerFiles (name/showtitle/range, seven bands). With only taskID + renderType + layerName + colDes the server still returns a token but the job stays in processing forever (measured 2026-11-24: four jobs still processing after 30 minutes); with the legend it finishes in four polls (~15 s)
+- WARNING: download goes through downloadExportMapFile (form {mapType, params: token}), not exportMapChecking; the file name is always CSV.zip, matching saveFile() in the portal gis3d.js
+- WARNING: minimum rows: NGI_MIN_LTE_ROWS=5000 / NGI_MIN_NR_ROWS=50 / NGI_MIN_GRID_ROWS=50000. Below that the run fails without writing, so a partial upstream response cannot replace last week good data
+- WARNING: belongs to group u (RAN-side data collection), queued with ran_ume_daily at 02:00; it uses its own host and credential group, so it shares no session with UME and cannot kick it. A new task MUST also be registered in GROUP_TASK_MAP (worker_watchdog.py)
+- The schema is created idempotently by DDL inside the service (CREATE TABLE IF NOT EXISTS) - no Alembic needed. When changing ngi_store.FIELDS, update the DDL and indexes too; tests/test_ngi_param.py compares both sides
+- Troubleshooting order: check app.ngi_sync_log first (status / message / detail; the coverage row also carries task_log_id and run_id), then the task execution log; for session issues test the ngi credential in Settings -> Credentials
 
 ### 3.4 Reliability mechanisms (timeout / retry / self-healing)
 
