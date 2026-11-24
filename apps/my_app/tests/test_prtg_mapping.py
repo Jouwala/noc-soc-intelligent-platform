@@ -161,3 +161,28 @@ def test_seed_cli_from_recorded_files(tmp_path):
     assert payload["mappings"][1]["site_id"] == "Kakata City"
     assert len(payload["blindspots"]) == 1
     assert payload["blindspots"][0]["device_name"] == "FW-01"
+
+
+def test_models_package_registers_prtg_tables():
+    """聚合注册：只 import backend.models 时两张 PRTG 表须在 Base.metadata 中。
+
+    否则 sqlite 模式下 Base.metadata.create_all() 不会建这两张表，
+    全新 sqlite 库缺表（Muse 1 对 PR #266 的审查意见，2026-11-24）。
+    用子进程隔离：本模块顶部已直接 import backend.models.prtg，
+    同进程内断言无法区分注册来源、守不住回归。
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "import backend.models\n"
+        "from backend.database import Base\n"
+        "assert 'prtg_sensor_mapping' in Base.metadata.tables\n"
+        "assert 'prtg_blindspot_device' in Base.metadata.tables\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
