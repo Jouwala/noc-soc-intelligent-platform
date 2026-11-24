@@ -10,6 +10,12 @@ from backend.models.task_queue import TaskQueue  # noqa: F401 (Phase 3 跨进程
 from backend.models.credential import Credential  # noqa: F401
 from backend.models.sp_sync import SpSyncLog  # noqa: F401
 from backend.models.prtg import PrtgBlindspotDevice, PrtgSensorMapping  # noqa: F401
+from backend.models.network_topology import (  # noqa: F401
+    NetworkLink,
+    NetworkLinkLayout,
+    NetworkNodeAlias,
+    NetworkTopologyNode,
+)
 from backend.models.prtg_collector import (  # noqa: F401
     NetworkAnomalyEvent,
     NetworkLinkCapacity,

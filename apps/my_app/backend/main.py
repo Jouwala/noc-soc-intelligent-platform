@@ -119,6 +119,7 @@ from backend.routers import (
     vmax_cxo_dashboard,
     vmax_cxo_daily,
     prtg,
+    network_topology,
     soc_trend,
     vmax_cca_query,
     vmax_xdr_query,
@@ -316,6 +317,8 @@ app.include_router(phone_query_acl.router)
 app.include_router(email_reports.router)
 # PRTG 链路健康度看板（#227 采集 / #228 看板）：只读接口，数据由常驻采集线程写入
 app.include_router(prtg.router)
+# 门户流量拓扑（#230）：节点/链路/布局/映射；容量缺失时利用率返回 null
+app.include_router(network_topology.router)
 app.include_router(mw_ume.router)
 app.include_router(mw_links.router)
 # 一键门户登录（用默认浏览器打开 ZTE/CCN/iPRAN UME、eFlow、FW(UMC)、VMAX 并自动登录）
