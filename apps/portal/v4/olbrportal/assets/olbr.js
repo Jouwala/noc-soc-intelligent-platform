@@ -8368,11 +8368,9 @@
   }
   function setTheme(v) {
     state.theme = v; root.classList.toggle('dark', v === 'dark'); ss('olbr.theme', v);
-    /* V4：同步小样说明条的主题按钮与顶栏按钮的 aria-pressed（不存在时静默跳过）。 */
+    /* 同步顶栏按钮的 aria-pressed（不存在时静默跳过）。 */
     try {
       var _dark = v === 'dark';
-      var _sl = document.getElementById('sampleLight'); if (_sl) _sl.setAttribute('aria-pressed', String(!_dark));
-      var _sd = document.getElementById('sampleDark'); if (_sd) _sd.setAttribute('aria-pressed', String(_dark));
       var _tb = document.getElementById('themeBtn'); if (_tb) _tb.setAttribute('aria-pressed', String(_dark));
     } catch (e) { /* ignore */ }
     /* 2026-09-23：本页的深色主题要能带到 /MsPortal/viewer.html（「打开看板」整个交给它）。
@@ -8455,12 +8453,6 @@
       }
     });
     $('#themeBtn').addEventListener('click', function () { setTheme(state.theme === 'dark' ? 'light' : 'dark'); });
-
-    /* V4 小样说明条的主题按钮：与 #themeBtn 同一套 setTheme。 */
-    var _sl2 = document.getElementById('sampleLight');
-    var _sd2 = document.getElementById('sampleDark');
-    if (_sl2) _sl2.addEventListener('click', function () { setTheme('light'); });
-    if (_sd2) _sd2.addEventListener('click', function () { setTheme('dark'); });
 
     /* 系统主题跟随（2026-09-30 加）：用户**没有**显式选择过主题时，页面跟着
        操作系统的深色/浅色偏好走。三个前提，缺一不可：
