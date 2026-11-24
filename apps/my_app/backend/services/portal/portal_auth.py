@@ -29,6 +29,14 @@ uniplam 门户鉴权形态（见 D:/01_RPA/liberia-noc_soc-数据看板统一门
 - 新建 / 注销 / 过期清理同时写内存与库；
 - 落盘是「尽力而为」：库不可用时仅告警并退回纯内存模式，绝不让鉴权 500。
 
+--- 请求路径不碰数据库（2026-11-23 故障后修正）---
+上面那条「退回纯内存模式」此前**并没有真正做到**：每个会话每 60 秒仍会在请求线程里
+同步写库，鉴权中间件又是 async 的，数据库连不上时事件循环被卡住一整个连接超时，
+全站请求排队（2026-11-23 09:39–11:08，nginx 大量 504）。现在：
+- 内存命中只改内存，落盘由后台线程 `portal-session-writer` 批量完成，失败自动重试；
+- 内存未命中的回查放进线程池（`current_user_async`），且不在 _LOCK 内读库；
+- 预热失败不再永久放弃，30 秒后重试，数据库恢复后已有会话可以找回。
+
 大屏常驻登录两道手段：
 - **滑动续期**：每次请求把有效期重置为「当前时间 + MYAPP_SESSION_TTL」，
   只要大屏还在轮询（看板自带自动刷新）就永不过期；绝对上限
@@ -67,10 +75,12 @@ from typing import Any, Optional
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from backend.security import client_is_local, client_ip
 from backend.database import get_raw_connection
 from backend import auth_switch
+from backend.services.portal.session_writer import BackgroundWriter
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +120,16 @@ _warm_done = False
 _last_persist: dict[str, float] = {}
 _last_purge = 0.0
 _db_warned = False
+
+# ---- 2026-11-23：会话落盘改为后台写（见模块 docstring「请求路径不碰数据库」一节）----
+# 此前 `_touch` / `create_session` / `_prune` 都在**请求线程里同步写库**，而鉴权中间件是
+# async 的 —— 数据库连不上时，事件循环被卡住整整一个 connect_timeout（当时是 30s），
+# 期间所有请求（包括不查库的）一个都处理不了。实测 2026-11-23 09:39–11:08。
+# 现在：请求路径只改内存并登记到后台写入器（session_writer.BackgroundWriter），
+# 由单个后台线程批量落盘；失败的条目稍后重试，同一 sid 只保留最新状态（None = 删除）。
+_warm_lock = threading.Lock()
+_warm_retry_at = 0.0
+_WARM_RETRY_SECONDS = 30.0
 
 
 def _new_sid() -> str:
@@ -179,7 +199,15 @@ def _db_warn(exc: Exception, action: str) -> None:
         logger.warning("[portal-auth] 会话%s失败，已退回纯内存模式（同类告警后续静默）: %s", action, exc)
 
 
-def _db_upsert(sid: str, s: dict) -> None:
+def _db_ok() -> None:
+    """落盘恢复：重新打开告警（下次失败会再报一次），并记一条恢复日志。"""
+    global _db_warned
+    if _db_warned:
+        _db_warned = False
+        logger.warning("[portal-auth] 会话落盘已恢复")
+
+
+def _db_upsert(sid: str, s: dict) -> bool:
     try:
         with get_raw_connection() as conn:
             _ensure_table(conn)
@@ -205,15 +233,20 @@ def _db_upsert(sid: str, s: dict) -> None:
             )
     except Exception as exc:  # noqa: BLE001
         _db_warn(exc, "落盘")
+        return False
+    _db_ok()
+    return True
 
 
-def _db_delete(sid: str) -> None:
+def _db_delete(sid: str) -> bool:
     try:
         with get_raw_connection() as conn:
             _ensure_table(conn)
             conn.execute("DELETE FROM portal_sessions WHERE sid=?", (sid,))
     except Exception as exc:  # noqa: BLE001
         _db_warn(exc, "删除")
+        return False
+    return True
 
 
 def _db_get(sid: str) -> Optional[dict]:
@@ -231,8 +264,8 @@ def _db_get(sid: str) -> Optional[dict]:
         return None
 
 
-def _db_load_all(now: float) -> dict[str, dict]:
-    """把未过期会话全部读回内存（进程重启后恢复登陆态）。"""
+def _db_load_all(now: float) -> Optional[dict[str, dict]]:
+    """把未过期会话全部读回内存（进程重启后恢复登陆态）。失败返回 None（稍后重试）。"""
     out: dict[str, dict] = {}
     try:
         with get_raw_connection() as conn:
@@ -246,6 +279,7 @@ def _db_load_all(now: float) -> dict[str, dict]:
             out[row["sid"]] = _row_to_session(row)
     except Exception as exc:  # noqa: BLE001
         _db_warn(exc, "预热")
+        return None
     return out
 
 
@@ -259,15 +293,44 @@ def _db_purge(now: float) -> None:
 
 
 def _warm() -> None:
-    """首次使用时预热内存缓存（须持有 _LOCK）。"""
-    global _warm_done
+    """首次使用时预热内存缓存。**不要**在持有 _LOCK 时调用（读库期间不占全局锁）。
+
+    读库失败（数据库不可用）时不标记完成，_WARM_RETRY_SECONDS 后由下一个请求重试；
+    此前失败一次就永久放弃，数据库恢复后已有会话也不会被找回。
+    """
+    global _warm_done, _warm_retry_at
     if _warm_done:
         return
-    _warm_done = True
-    loaded = _db_load_all(_now())
+    with _warm_lock:
+        if _warm_done or _now() < _warm_retry_at:
+            return
+        loaded = _db_load_all(_now())
+        if loaded is None:
+            _warm_retry_at = _now() + _WARM_RETRY_SECONDS
+            return
+        with _LOCK:
+            for sid, sess in loaded.items():
+                _SESSIONS.setdefault(sid, sess)  # 内存里已有的（本进程新建的）更新，不覆盖
+        _warm_done = True
     if loaded:
-        _SESSIONS.update(loaded)
         logger.info("[portal-auth] 从数据库恢复 %d 个会话", len(loaded))
+
+
+# ============================================================
+# 后台落盘（请求路径不碰数据库）
+# ============================================================
+_writer = BackgroundWriter(
+    upsert_fn=_db_upsert,
+    delete_fn=_db_delete,
+    periodic_fn=_db_purge,  # 库里的过期行由后台线程按 _PURGE_INTERVAL 清理
+    periodic_seconds=_PURGE_INTERVAL,
+    retry_seconds=15.0,
+)
+
+
+def _enqueue(sid: str, payload: Optional[dict]) -> None:
+    """登记一次落盘：payload 为会话快照（upsert）或 None（删除）。只碰内存。"""
+    _writer.enqueue(sid, payload)
 
 
 # ============================================================
@@ -288,7 +351,7 @@ def _prune(force: bool = False) -> None:
     if not force and (now - _last_purge) < _PURGE_INTERVAL:
         return
     _last_purge = now
-    _db_purge(now)
+    _writer.wake()  # 库里的过期行由后台线程清理，这里只唤醒，不同步写库
 
 
 def _touch(sid: str, s: dict) -> None:
@@ -305,7 +368,7 @@ def _touch(sid: str, s: dict) -> None:
             s["exp"] = new_exp
     if (now - _last_persist.get(sid, 0.0)) >= SESSION_PERSIST_INTERVAL:
         _last_persist[sid] = now
-        _db_upsert(sid, s)
+        _enqueue(sid, s)
 
 
 def _cookie_kwargs(max_age: int) -> dict:
@@ -464,7 +527,7 @@ def create_session(user: dict, response: Response, persistent: bool = False) -> 
         _prune()
         _SESSIONS[sid] = payload
         _last_persist[sid] = now
-    _db_upsert(sid, payload)
+    _enqueue(sid, payload)
     response.set_cookie(
         value=sid,
         **_cookie_kwargs(KIOSK_COOKIE_MAX_AGE if persistent else SESSION_COOKIE_MAX_AGE),
@@ -479,31 +542,49 @@ def destroy_session(request: Request, response: Response):
         with _LOCK:
             _SESSIONS.pop(sid, None)
             _last_persist.pop(sid, None)
-        _db_delete(sid)
+        _enqueue(sid, None)
     response.delete_cookie(key=SESSION_COOKIE, path="/")
 
 
-def read_session(request: Request) -> Optional[dict]:
-    """按 Cookie 取当前有效会话；不存在/过期返回 None。内存未命中时回查数据库。"""
-    sid = request.cookies.get(SESSION_COOKIE)
-    if not sid:
-        return None
+def _from_memory(sid: str) -> tuple[str, Optional[dict]]:
+    """只查内存：返回 ("hit", 会话) / ("expired", None) / ("miss", None)。不碰数据库。"""
     with _LOCK:
-        _warm()
         session = _SESSIONS.get(sid)
         if session is None:
-            # 回查落盘（进程刚重启 / 另一进程创建 / 内存被清）
-            session = _db_get(sid)
-            if session is None:
-                return None
-            _SESSIONS[sid] = session
+            return "miss", None
         if _is_expired(session):
             _SESSIONS.pop(sid, None)
             _last_persist.pop(sid, None)
-            _db_delete(sid)
-            return None
-        _touch(sid, session)
+            _enqueue(sid, None)
+            return "expired", None
+        _touch(sid, session)  # 只改内存 + 登记后台落盘
+        return "hit", session
+
+
+def read_session(request: Request) -> Optional[dict]:
+    """按 Cookie 取当前有效会话；不存在/过期返回 None。内存未命中时回查数据库。
+
+    ⚠ 内存未命中时会**同步读库**：只能在线程池里调用（同步路由、依赖、
+    run_in_threadpool），不要在 async 函数里直接调 —— 用 `current_user_async`。
+    读库在 _LOCK 之外进行，数据库慢时不会拖住其它请求的内存查找。
+    """
+    sid = request.cookies.get(SESSION_COOKIE)
+    if not sid:
+        return None
+    _warm()
+    status, session = _from_memory(sid)
+    if status == "hit":
         return session
+    if status == "expired":
+        return None
+    # 回查落盘（进程刚重启 / 另一进程创建 / 内存被清）；数据库不可用时快速返回 None
+    loaded = _db_get(sid)
+    if loaded is None:
+        return None
+    with _LOCK:
+        _SESSIONS.setdefault(sid, loaded)
+    status, session = _from_memory(sid)
+    return session if status == "hit" else None
 
 
 def current_user(request: Request) -> Optional[dict]:
@@ -517,6 +598,28 @@ def current_user(request: Request) -> Optional[dict]:
     if client_is_local(request):
         return {"username": "local", "role": "admin"}
     return read_session(request)
+
+
+async def current_user_async(request: Request) -> Optional[dict]:
+    """`current_user` 的 async 版本，供鉴权中间件与 async 路由使用。
+
+    内存命中（绝大多数请求）直接在事件循环里返回，零数据库访问；只有内存未命中
+    或尚未预热时，才把 `read_session` 放进线程池执行，事件循环不会被数据库阻塞。
+    """
+    if auth_switch.is_auth_bypass():
+        return dict(DEV_USER)
+    if client_is_local(request):
+        return {"username": "local", "role": "admin"}
+    sid = request.cookies.get(SESSION_COOKIE)
+    if not sid:
+        return None
+    if _warm_done:
+        status, session = _from_memory(sid)
+        if status == "hit":
+            return session
+        if status == "expired":
+            return None
+    return await run_in_threadpool(read_session, request)
 
 
 def require_user(request: Request):
@@ -547,7 +650,7 @@ def _local_session(response: Response) -> dict:
     with _LOCK:
         _SESSIONS[sid] = payload
         _last_persist[sid] = now
-    _db_upsert(sid, payload)
+    _enqueue(sid, payload)
     response.set_cookie(value=sid, **_cookie_kwargs(SESSION_COOKIE_MAX_AGE))
     return {"username": "local", "role": "admin"}
 
@@ -642,7 +745,7 @@ async def logout(request: Request, response: Response):
 
 @router.get("/me")
 async def me(request: Request):
-    user = current_user(request)
+    user = await current_user_async(request)
     if user is None:
         raise HTTPException(status_code=401, detail="未登录：请通过统一门户登录")
     return {"user": user}
