@@ -34,12 +34,22 @@ def prtg_link_detail(sensor_id: int, window: str = Query("24h")):
     return detail
 
 
+@router.get("/anomalies")
+def prtg_anomalies(
+    window: str = Query("24h", description="5m / 24h / 7d / 30d"),
+    open_only: bool = Query(True, description="只看未结束事件"),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    """异常事件（#229 规则 + Ping 状态机），按开始时间倒序。"""
+    return dashboard.anomalies(window, open_only=open_only, limit=limit)
+
+
 @router.get("/collector/status")
 def prtg_collector_status():
     """采集各作业的同步状态与最近错误（不含任何凭证）。"""
     from backend.services.prtg import store
 
-    keys = ("catalog", "live", "backfill", "aggregate", "prune")
+    keys = ("catalog", "live", "backfill", "aggregate", "anomaly", "history_import", "prune")
     states = []
     for key in keys:
         state = store.get_state(key)

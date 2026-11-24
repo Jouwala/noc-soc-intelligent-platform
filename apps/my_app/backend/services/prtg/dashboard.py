@@ -9,6 +9,7 @@
   - 数据新鲜度来自 prtg_sync_state.live.last_success_at，过期时界面必须
     标注，不得把旧值当实时值。
 """
+import json
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -245,7 +246,14 @@ def overview(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
 
     with SessionLocal() as session:
         open_anomalies = session.execute(
-            select(NetworkAnomalyEvent).where(NetworkAnomalyEvent.ended_at.is_(None))
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.ended_at.is_(None))
+            .where(NetworkAnomalyEvent.rule_code == "composite")
+            .where(NetworkAnomalyEvent.severity.in_(("warning", "critical")))
+        ).scalars().all()
+        anomaly_by_rule = session.execute(
+            select(NetworkAnomalyEvent.rule_code)
+            .where(NetworkAnomalyEvent.ended_at.is_(None))
         ).scalars().all()
     state = _live_state()
     last_success = state["last_success_at"] if state else None
@@ -270,6 +278,7 @@ def overview(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
             "unknown": counts["unknown"],
             "avg_uptime_pct": round(sum(uptimes) / len(uptimes), 4) if uptimes else None,
             "anomaly_links": len({row.sensor_objid for row in open_anomalies}),
+            "anomaly_events": len(anomaly_by_rule),
             "uptime_samples": len(uptimes),
         },
         "trend": trend_series(window),
@@ -368,6 +377,12 @@ def link_detail(sensor_objid: int, window: str = DEFAULT_WINDOW) -> dict[str, An
             .order_by(PrtgSensorEvent.happened_at.desc())
             .limit(20)
         ).scalars().all()
+        anomalies = session.execute(
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.sensor_objid == sensor_objid)
+            .order_by(NetworkAnomalyEvent.started_at.desc())
+            .limit(20)
+        ).scalars().all()
     return {
         "sensor_id": sensor.objid,
         "sensor_name": sensor.sensor_name,
@@ -388,6 +403,17 @@ def link_detail(sensor_objid: int, window: str = DEFAULT_WINDOW) -> dict[str, An
         "mappings": [
             {"site_id": row.site_id, "region": row.region, "match_status": row.match_status}
             for row in mappings
+        ],
+        "anomalies": [
+            {
+                "rule_code": row.rule_code,
+                "severity": row.severity,
+                "message": row.message,
+                "evidence": json.loads(row.evidence_json) if row.evidence_json else None,
+                "started_at": _iso(row.started_at),
+                "ended_at": _iso(row.ended_at),
+            }
+            for row in anomalies
         ],
         "events": [
             {
@@ -413,3 +439,51 @@ def link_detail(sensor_objid: int, window: str = DEFAULT_WINDOW) -> dict[str, An
 
 def _value(sample: dict[str, Any] | None) -> float | None:
     return sample["value_num"] if sample else None
+
+
+def anomalies(window: str = DEFAULT_WINDOW, *, open_only: bool = True,
+              limit: int = 200) -> dict[str, Any]:
+    """异常事件列表（#229）：默认只返回未结束事件，附传感器名与规则标签。"""
+    window = normalize_window(window)
+    now = sqlite_now()
+    since = _ago(now, window)
+    stmt = (
+        select(NetworkAnomalyEvent, PrtgSensor.sensor_name, PrtgSensor.device_name,
+               PrtgSensor.sensortype)
+        .join(PrtgSensor, PrtgSensor.objid == NetworkAnomalyEvent.sensor_objid)
+        .where(NetworkAnomalyEvent.started_at >= since)
+        .order_by(NetworkAnomalyEvent.started_at.desc())
+        .limit(limit)
+    )
+    if open_only:
+        stmt = stmt.where(NetworkAnomalyEvent.ended_at.is_(None))
+    with SessionLocal() as session:
+        rows = session.execute(stmt).all()
+    labels = {
+        "below_baseline_30": "低于 7 天同期基线 30%",
+        "zero_traffic": "流量归零",
+        "above_baseline_200": "超过基线 200%",
+        "errors_discards_growth": "Errors/Discards 持续增长",
+        "low_traffic_30min": "连续 30 分钟低流量",
+        "ping_state": "Ping 状态机转换",
+        "composite": "综合异常",
+    }
+    items = []
+    for event, sensor_name, device_name, sensor_type in rows:
+        items.append({
+            "id": event.id,
+            "sensor_id": event.sensor_objid,
+            "sensor_name": sensor_name,
+            "device_name": device_name,
+            "sensor_type": sensor_type,
+            "rule_code": event.rule_code,
+            "rule_label": labels.get(event.rule_code, event.rule_code),
+            "severity": event.severity,
+            "message": event.message,
+            "evidence": json.loads(event.evidence_json) if event.evidence_json else None,
+            "started_at": _iso(event.started_at),
+            "ended_at": _iso(event.ended_at),
+            "is_open": event.ended_at is None,
+        })
+    return {"generated_at": _iso(now), "window": window, "open_only": open_only,
+            "count": len(items), "anomalies": items}

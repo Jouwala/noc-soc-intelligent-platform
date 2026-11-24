@@ -17,6 +17,7 @@ from backend.models.prtg_collector import (  # noqa: F401
     PrtgChannelSample1h,
     PrtgChannelSample5m,
     PrtgDevice,
+    PrtgPingState,
     PrtgHistoricalSample,
     PrtgSensor,
     PrtgSensorChannel,
