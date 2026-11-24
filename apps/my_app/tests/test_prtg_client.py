@@ -162,3 +162,19 @@ def test_retry_logs_do_not_leak_passhash(caplog):
     assert attempts["n"] == 2
     assert "dummy-passhash" not in caplog.text
     assert "PRTG 请求失败" in caplog.text
+
+def test_redact_filter_preserves_dict_style_logging():
+    """%(name)s 风格日志不能被 Filter 改成 tuple（2026-11-24 CI 实测 TypeError）。"""
+    import logging
+
+    from backend.services.prtg.client import _SecretRedactFilter
+
+    filt = _SecretRedactFilter()
+    record = logging.LogRecord(
+        "x", logging.WARNING, __file__, 1, "upstream %(name)s failed", None, None,
+    )
+    record.args = {"name": "a&passhash=SECRET"}  # 模拟 logger.warning(msg, mapping)
+    assert filt.filter(record) is True
+    assert record.args == {"name": "a&passhash=***"}
+    # 真按 logging 的格式化路径走一遍，确认不再抛 TypeError
+    assert record.getMessage() == "upstream a&passhash=*** failed"
