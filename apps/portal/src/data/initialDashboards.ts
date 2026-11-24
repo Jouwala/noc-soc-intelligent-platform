@@ -65,6 +65,25 @@ const RAW_DASHBOARDS: DashboardItem[] = [
       status: 'online'
     },
     {
+      id: 'custom-prtg-link-health',
+      title: 'PRTG Link Health (核心链路健康度)',
+      description: 'PRTG 25 个核心链路传感器的健康度总览：Up/Unusual/Down、In/Out/Total、Errors、Discards、可用率与 Last Down，支持 5 分钟/24 小时/7 天/30 天四档时间范围与单链路下钻。',
+      platform: 'custom',
+      url: `${MYAPP_BASE}prtg_links`,
+      category: '网络性能与无线/核心网',
+      tags: ['PRTG', '链路健康', 'SLA'],
+      iconName: 'Activity',
+      updateFrequency: '实时流式',
+      department: '传输与 IP 网管部',
+      owner: '传输工程师',
+      isFavorite: false,
+      isPinned: false,
+      clickCount: 0,
+      lastVisited: '2026-11-24 14:00',
+      themeColor: 'cyan',
+      status: 'online'
+    },
+    {
       id: 'custom-tt-wo-dashboard',
       title: 'TT&WO Dashboard (故障与运维工单流转看板)',
       description: 'Trouble Ticket (TT) 与 Work Order (WO) 工单生命周期闭环追踪、SLA 处理时效与分区完成率，全部组件支持下钻表格、列筛选排序与 Excel 导出。',

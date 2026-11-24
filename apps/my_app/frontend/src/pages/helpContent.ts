@@ -55,6 +55,7 @@ export const PAGE_LIST: { key: string; iframe?: boolean }[] = [
   { key: 'ran_cells_kpi' },
   { key: 'ran_inventory' },
   { key: 'packet_loss' },
+  { key: 'prtg_links' },
   { key: 'battery' },
   { key: 'ume_in_kpi' },
   { key: 'cn_kpi' },
@@ -140,6 +141,7 @@ export const NAV_KEY_MAP: Record<string, string> = {
   ran_cells_kpi: 'nav.ranCellsKpi',
   ran_inventory: 'nav.ranInventory',
   packet_loss: 'nav.packetLoss',
+  prtg_links: 'nav.prtgLinks',
   battery: 'nav.battery',
   ume_in_kpi: 'nav.umeInKpi',
   cn_kpi: 'nav.cnKpi',
@@ -176,7 +178,7 @@ export const CATEGORIES: { id: string; pages: string[] }[] = [
   { id: 'tasks', pages: ['sync', 'email_reports', 'upload', 'tables', 'overview'] },
   {
     id: 'boards',
-    pages: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'tt_state', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'alarmManagement', 'fme_ranking', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'bm_speedtest', 'bm_meta', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'bp_report', 'ran_cells_kpi', 'ran_inventory', 'packet_loss', 'battery', 'ume_in_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'cs_cn_kpi_15mins', 'ps_cn_kpi_15mins', 'ran_kpi_15mins', 'imonitor', 'gis', 'location', 'realtime_alarm', 'person', 'incident_overview', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary'],
+    pages: ['alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'tt_state', 'nur', 'ms_nur_only', 'ms_sla', 'ms_sla_only', 'ms_wo_sla', 'ms_contract_kpi', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'alarmManagement', 'fme_ranking', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'bm_speedtest', 'bm_meta', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'bp_report', 'ran_cells_kpi', 'ran_inventory', 'packet_loss', 'prtg_links', 'battery', 'ume_in_kpi', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'cs_cn_kpi_15mins', 'ps_cn_kpi_15mins', 'ran_kpi_15mins', 'imonitor', 'gis', 'location', 'realtime_alarm', 'person', 'incident_overview', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary'],
   },
   { id: 'analysis', pages: ['eflow_qa', 'eflow_flow', 'dashboard', 'archive', 'ip_trace', 'vmax_user_query', 'vmax_user_cca', 'ipt_power'] },
   { id: 'workflow', pages: ['ap_center', 'feedback'] },
@@ -549,6 +551,17 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '每日趋势的中位数**只取当天 >0 的读数**（逐小时丢包约 59% 是 0，全量取中位会被压成 0 失去意义）；而 Top 站点用的是**含 0 的每站点中位**（否则「半天全断」与「整天全断」同为 100，失去区分度）—— 同名「中位数」两种口径，气泡各写各的',
         '本页原先有两份自写气泡（复制按钮、主题色、强调渲染各自一套），已删除并统一走 `components/MetricExplain`；下钻「共 N 行」气泡写明它是搜索框筛过的行数、接口按上限截断',
         '**站点类型过滤（2026-11-17）**：Packet Loss Status 横幅右侧的下拉按主数据站点类型（ERA / COOL / NORMAL，取 `eflow_site.site_type`；口述的 `COOLI` 在库里就是 `COOL`）筛选，**整页数字一起变** —— 站点总数、Affected Sites、六张状态卡、饼图、区域分布、每日趋势、Top 站点、地图圆点与图例、点击下钻的明细全部换成选中档位。**默认档位是 NORMAL**（用户口径），需要看全网时切到 `All`。下拉里的两个数是「被丢包监控的站点数 / 主数据站点总数」，恒为全量分布（切档不变），实测 ERA `197/216`、NORMAL `520/600`、COOL `0/64`。**COOLI 的分子是 0 不是漏做**：64 个 COOL 站在 UME 网元清单里都在，但丢包数据只来自 `SDR_IPPD` / `ITRAN_IPPD` 两个 IP 承载模板，这些站在源表 `packet_loss_data` 里一条读数都没有（按编码、按站名模糊查均为 0），下拉里因此置灰；在 eflow_site 里按编码和名称都找不到的站点归入「未匹配主数据」（4 个），保证 197 + 0 + 520 + 4 = 721 与「全部」对得上',
+      ],
+    },
+    prtg_links: {
+      desc: 'PRTG 核心链路健康度看板：只读 PRTG（GRAPHER-ISP）25 个传感器（24 个 SNMP Traffic 64bit + 1 个 Ping），按所选时间窗看链路状态、流量、错误 / 丢弃、可用率与容量利用率；点任意链路查看传感器信息、站点映射、最近状态事件与 In/Out/Total 时序。',
+      usage: [
+        '顶部 KPI 是时点快照：传感器总数 / Up / Unusual / Down、平均可用率（仅有可用率样本的传感器算术平均）、异常链路数；数据新鲜度取采集器最近一次成功时间，超过 5 分钟会常驻提示「已过期」',
+        '时间范围切 5 分钟 / 24 小时 / 7 天 / 30 天：5 分钟读 60 秒原始采样，24 小时读 5 分钟聚合，7/30 天读小时聚合；范围只影响趋势与详情时序，KPI 不随时间窗变化',
+        'In / Out / Total 为 Mbps（后端由原始 byte/s 换算）；Errors / Discards / Unicast 是 PRTG 给的区间速率（#/s），不是累计计数器，不需要前端差分',
+        '容量来自 snmp_ifspeed / manual，缺失时显示「待补全」；利用率按 max(In/Cin, Out/Cout) 计算，不用 Total/容量，容量缺失时利用率显示「—」',
+        '**每个列头都有 ⓘ 讲这一列怎么算，数字悬浮给出这一格的接口字段与采样时间**（2026-11-24）；取不到的字段显示「—」，不补 0；所有时间为 UTC',
+        '按页刷新建议间隔 60 秒（与 PRTG 采集节拍一致），可在顶栏自行开启 / 关闭',
       ],
     },
     battery: {
@@ -1399,6 +1412,17 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         'The daily-trend median **uses only readings above 0 for that day** (about 59% of hourly readings are 0, so a full median collapses to zero and stops being meaningful), while Top sites use a **per-site median that includes zeros** (otherwise "half a day fully down" and "fully down all day" both become 100 and the ranking loses its point) — the same word "median" for two calibers, each stated where it is used',
         'This page used to carry two hand-written popovers (their own copy button, theme colours and emphasis rendering); both were deleted in favour of `components/MetricExplain`. The drill "N rows" bubble now states that it is the count after the search-box filter and that the API truncates at a cap',
         '**Site-type filter (2026-11-17)**: the dropdown on the right of the Packet Loss Status bar filters by the master-data site type (ERA / COOL / NORMAL, from `eflow_site.site_type`; what you call `COOLI` is stored as `COOL`) and **every number on the page follows** — total sites, Affected Sites, the six status cards, the pie, region bars, daily trend, Top sites, map dots and legend, and the drill-down detail all switch to the selected grade. **It opens on NORMAL** (the user caliber); pick `All` for the whole network. The two numbers in brackets are "sites covered by packet-loss monitoring / sites in the master data", always the full distribution (unchanged when you switch): ERA `197/216`, NORMAL `520/600`, COOL `0/64` as measured. **COOLI being 0 is not a missing feature**: all 64 COOL sites are in the UME inventory, but packet loss comes only from the `SDR_IPPD` / `ITRAN_IPPD` IP-transport templates and those sites have no reading at all in the source table `packet_loss_data` (0 hits by code and by fuzzy name), so the grade is greyed out. Sites that cannot be matched in eflow_site by code or name fall under "Unmapped site" (4), keeping 197 + 0 + 520 + 4 = 721 consistent with "All"',
+      ],
+    },
+    prtg_links: {
+      desc: 'PRTG core link health board: reads the 25 PRTG sensors (24 SNMP Traffic 64bit + 1 Ping) in GRAPHER-ISP and shows link status, traffic, errors / discards, uptime and capacity utilization for the selected window. Click any link for sensor details, site mappings, recent status events and the In/Out/Total series.',
+      usage: [
+        'The KPI row is a point-in-time snapshot: total sensors / Up / Unusual / Down, average uptime (arithmetic mean over sensors that have an uptime sample) and links with anomalies. Freshness comes from the last successful collection of the collector; anything older than 5 minutes raises a persistent stale banner',
+        'Time range: 5 minutes / 24 hours / 7 days / 30 days. 5 minutes reads 60-second raw samples, 24 hours reads 5-minute aggregates, 7 / 30 days read hourly aggregates; the range only affects the trend and detail series — the KPIs do not move with it',
+        'In / Out / Total are Mbps (converted from raw byte/s by the backend). Errors / Discards / Unicast are PRTG interval rates (#/s), not cumulative counters, so the frontend does not difference them',
+        'Capacity comes from snmp_ifspeed / manual and shows "To be completed" when missing. Utilization is max(In/Cin, Out/Cout), never Total/capacity, and shows "—" when capacity is missing',
+        '**Every column header has an ⓘ explaining the column, and hovering a number shows the API fields and sample time of that cell** (2026-11-24). Unavailable values show "—", never 0; all times are UTC',
+        'The suggested per-page refresh interval is 60 seconds (matching the PRTG collection cadence) and can be turned on or off from the top bar',
       ],
     },
     battery: {
