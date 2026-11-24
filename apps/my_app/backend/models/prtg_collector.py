@@ -323,6 +323,7 @@ class PrtgSlaDaily(Base):
     uptime_pct = Column(Float)  # 快照时的累计可用率
     downtime_pct = Column(Float)
     downtime_minutes_cum = Column(Float)  # 累计停机分钟（PRTG downtimetime）
+    updown_total_minutes_cum = Column(Float)  # 累计监控覆盖分钟（PRTG updowntotal 差分 = 分母）
     downtime_delta_minutes = Column(Float)  # 相对上一快照的停机分钟（当月故障时长）
     down_count = Column(Integer, nullable=False, default=0)  # 当天 down 事件数
     availability_pct = Column(Float)  # 当天可用率（=100 - delta/覆盖率分钟）

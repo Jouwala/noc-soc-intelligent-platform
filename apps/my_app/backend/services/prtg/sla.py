@@ -30,7 +30,7 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from backend.database import SessionLocal
 from backend.models.prtg import PrtgSensorMapping
@@ -67,7 +67,7 @@ def snapshot_day(now: datetime | None = None) -> dict[str, Any]:
     """每日快照：累计停机分钟差分 + 当天可用率。可重复跑（同一天覆盖更新）。"""
     now = now or datetime.utcnow()
     day = _day_start(now)
-    stats = {"sensors": 0, "written": 0, "reset_skipped": 0, "no_baseline": 0}
+    stats = {"sensors": 0, "written": 0, "reset_skipped": 0, "no_baseline": 0, "no_coverage": 0}
     with SessionLocal() as session:
         sensors = list(session.execute(
             select(PrtgSensor).where(PrtgSensor.active.is_(True))
@@ -102,7 +102,21 @@ def snapshot_day(now: datetime | None = None) -> dict[str, Any]:
                     stats["reset_skipped"] += 1  # 传感器重建/计数器重置：不猜
                 else:
                     delta = diff
-                    coverage = min(1440.0, max(1.0, (day - previous.day).total_seconds() / 60.0))
+                    # 分母 = 实际监控覆盖时间增量（PRTG updowntotal），不是自然日间隔：
+                    # Paused/维护窗口期间 updowntotal 不增长，不能当成可用时间。
+                    # 跨多天补跑也用真实增量，不截断到 1440。
+                    if (
+                        previous.updown_total_minutes_cum is not None
+                        and sensor.updown_total_minutes is not None
+                    ):
+                        coverage_delta = sensor.updown_total_minutes - previous.updown_total_minutes_cum
+                        if coverage_delta > 0:
+                            coverage = coverage_delta
+                        else:
+                            stats["no_coverage"] += 1  # 整段 Paused：无覆盖，不回退到自然日
+                    elif previous.day is not None:
+                        # 老快照没有 updowntotal（0012 之前的行）：按自然日回退并标注
+                        coverage = max(1.0, (day - previous.day).total_seconds() / 60.0)
 
             down_count = session.execute(
                 select(PrtgSensorEvent)
@@ -122,11 +136,13 @@ def snapshot_day(now: datetime | None = None) -> dict[str, Any]:
             current.uptime_pct = sensor.uptime_pct
             current.downtime_pct = sensor.downtime_pct
             current.downtime_minutes_cum = sensor.downtime_minutes
+            current.updown_total_minutes_cum = sensor.updown_total_minutes
             current.downtime_delta_minutes = delta
             current.coverage_minutes = coverage
             current.availability_pct = availability
             current.down_count = len(down_count)
-            current.created_at = now
+            if current.created_at is None:
+                current.created_at = now
             stats["written"] += 1
         session.commit()
 
@@ -240,6 +256,15 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
             .where(PrtgSlaDaily.day >= start)
             .where(PrtgSlaDaily.day < end)
         ).scalars().all()
+        # 月内 Down 次数直接按事件表统计（日快照只统计到快照时刻，会丢晚间事件）
+        month_down_rows = session.execute(
+            select(PrtgSensorEvent.sensor_objid, func.count())
+            .where(PrtgSensorEvent.event_type == DOWN_EVENT)
+            .where(PrtgSensorEvent.happened_at >= start)
+            .where(PrtgSensorEvent.happened_at < end)
+            .group_by(PrtgSensorEvent.sensor_objid)
+        ).all()
+        month_down = {int(sensor_id): int(count) for sensor_id, count in month_down_rows}
         capacity_rows = _capacity_rows(session, now)
 
     by_sensor: dict[int, list[PrtgSlaDaily]] = {}
@@ -258,7 +283,7 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
             if month_downtime is not None and month_coverage
             else (round(sensor.uptime_pct, 4) if sensor.uptime_pct is not None else None)
         )
-        down_count = sum(r.down_count or 0 for r in rows)
+        down_count = month_down.get(sensor.objid, 0)
         mapping = mappings.get(sensor.objid)
         links.append({
             "sensor_id": sensor.objid,
@@ -308,9 +333,10 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
         "month_end": end.isoformat() + "Z",
         "target_pct": target,
         "method": {
-            "denominator": "PRTG 监控覆盖时间（updowntotal），Paused/维护窗口不计入",
+            "denominator": "PRTG 监控覆盖时间（updowntotal 的相邻快照增量），Paused/维护窗口不计入；无覆盖基线时回退累计 uptime 并标注",
             "month_downtime": "相邻日快照累计 downtimetime 的差分求和；首日无基线不猜",
             "fallback": "当月无快照时 availability 回退到 PRTG 累计 uptime_pct（basis=all_time_fallback）",
+            "down_count": "月内 Down 次数直接按 prtg_sensor_events 统计，不受日快照时刻截断",
             "capacity": "利用率只在 network_link_capacity.capacity_mbps > 0 时计算；否则 null/待补全",
             "utilization_formula": "max(In/Cin, Out/Cout) 的 24h/7d 峰值；阈值 70/80/90",
         },

@@ -130,3 +130,63 @@ def test_below_target_sorted_and_region_ranking(db):
     assert report["links"][0]["sensor_id"] == 2724  # 可用率最低排最前
     assert report["below_target"][0]["sensor_id"] == 2724
     assert report["region_ranking"][0]["region"] == "Unknown"
+
+
+def test_paused_half_day_uses_monitored_coverage_as_denominator(db):
+    """Paused 半天：分母用 updowntotal 增量（720），不是自然日 1440。"""
+    day1 = datetime(2026, 11, 20, 0, 0)
+    day2 = datetime(2026, 11, 21, 0, 0)
+    with db() as session:
+        _sensor(session, 2721, downtime_minutes=100.0, updown_total_minutes=1000.0)
+        session.commit()
+    sla.snapshot_day(now=day1)
+
+    with db() as session:
+        sensor = session.execute(__import__("sqlalchemy").select(PrtgSensor)).scalar_one()
+        sensor.downtime_minutes = 160.0
+        sensor.updown_total_minutes = 1720.0
+        session.commit()
+    sla.snapshot_day(now=day2)
+
+    from sqlalchemy import select
+    with db() as session:
+        row = session.execute(select(PrtgSlaDaily).where(PrtgSlaDaily.day == day2)).scalar_one()
+    assert row.coverage_minutes == 720.0
+    assert row.availability_pct == pytest.approx(100 - 60 / 720 * 100, rel=1e-4)
+
+
+def test_multi_day_gap_uses_real_coverage_not_1440(db):
+    day1 = datetime(2026, 11, 17, 0, 0)
+    day4 = datetime(2026, 11, 20, 0, 0)
+    with db() as session:
+        _sensor(session, 2721, downtime_minutes=100.0, updown_total_minutes=1000.0)
+        session.commit()
+    sla.snapshot_day(now=day1)
+    with db() as session:
+        sensor = session.execute(__import__("sqlalchemy").select(PrtgSensor)).scalar_one()
+        sensor.downtime_minutes = 160.0
+        sensor.updown_total_minutes = 5320.0
+        session.commit()
+    sla.snapshot_day(now=day4)
+    from sqlalchemy import select
+    with db() as session:
+        row = session.execute(select(PrtgSlaDaily).where(PrtgSlaDaily.day == day4)).scalar_one()
+    assert row.coverage_minutes == 4320.0
+    assert row.availability_pct == pytest.approx(100 - 60 / 4320 * 100, rel=1e-4)
+
+
+def test_month_report_counts_down_events_after_snapshot(db):
+    """快照发生在当天 10:00，18:00 的 Down 事件也要计入月报。"""
+    day = datetime(2026, 11, 24, 10, 0)
+    with db() as session:
+        _sensor(session, 2721)
+        session.commit()
+    sla.snapshot_day(now=day)
+    with db() as session:
+        session.add(PrtgSensorEvent(sensor_objid=2721, event_type="down",
+                                    happened_at=datetime(2026, 11, 24, 18, 0),
+                                    created_at=day))
+        session.commit()
+    report = sla.month_report("2026-11", now=datetime(2026, 11, 24, 23, 0))
+    row = report["links"][0]
+    assert row["down_count"] == 1
