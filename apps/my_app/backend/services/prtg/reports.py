@@ -123,39 +123,77 @@ def weekly_report(now: datetime | None = None) -> dict[str, Any]:
     by_sensor: dict[int, list[PrtgSlaDaily]] = {}
     for row in rows:
         by_sensor.setdefault(row.sensor_objid, []).append(row)
-    sensors = {s["sensor_id"]: s for s in dashboard.links("24h")["links"]}
+
     ranking = []
-    for sensor_id, items in by_sensor.items():
+    for link in dashboard.links("24h")["links"]:
+        sensor_id = link["sensor_id"]
+        items = by_sensor.get(sensor_id, [])
         covered = [(r.downtime_delta_minutes, r.coverage_minutes) for r in items
                    if r.downtime_delta_minutes is not None and r.coverage_minutes]
+        unknown = [r.downtime_delta_minutes for r in items
+                   if r.downtime_delta_minutes is not None and not r.coverage_minutes]
         if covered:
             downtime = sum(d for d, _ in covered)
             coverage = sum(c for _, c in covered)
             availability = round(max(0.0, 100 - downtime / coverage * 100), 4)
             basis = "week_delta"
+            covered_hours = round(downtime / 60.0, 2)
+        elif unknown:
+            availability = None  # 有停机但覆盖不可判定：不拿累计值冒充本周
+            basis = "undefined_coverage"
+            covered_hours = None
         else:
-            sensor = sensors.get(sensor_id, {})
-            availability = sensor.get("uptime_pct")
+            availability = link.get("uptime_pct")  # 本周无快照：回退累计并标注
             basis = "all_time_fallback"
-        sensor = sensors.get(sensor_id, {})
+            covered_hours = None
         ranking.append({
             "sensor_id": sensor_id,
-            "device_name": sensor.get("device_name"),
-            "sensor_name": sensor.get("sensor_name"),
-            "region": sensor.get("region"),
+            "device_name": link.get("device_name"),
+            "sensor_name": link.get("sensor_name"),
+            "region": link.get("region"),
             "availability_pct": availability,
             "basis": basis,
+            "downtime_hours_week": (
+                round(((downtime if covered else 0) + sum(unknown)) / 60.0, 2)
+                if covered or unknown else None
+            ),
+            "downtime_hours_covered": covered_hours,
+            "downtime_hours_unknown_coverage": (
+                round(sum(unknown) / 60.0, 2) if unknown else None
+            ),
+            "coverage_hours_week": round(coverage / 60.0, 1) if covered else None,
         })
-    ranking.sort(key=lambda r: (r["availability_pct"] is None, r["availability_pct"] or 999))
-    regions: dict[str, list[float]] = {}
+    # 0% 可用率是最差，不能用 `or 999` 被排到最后
+    ranking.sort(key=lambda r: (r["availability_pct"] is None,
+                                r["availability_pct"] if r["availability_pct"] is not None else 999))
+
+    regions: dict[str, dict[str, Any]] = {}
     for row in ranking:
+        slot = regions.setdefault(row["region"] or "Unknown", {
+            "values": [], "week_delta": 0, "fallback": 0, "undefined": 0,
+        })
+        if row["basis"] == "week_delta":
+            slot["week_delta"] += 1
+        elif row["basis"] == "all_time_fallback":
+            slot["fallback"] += 1
+        else:
+            slot["undefined"] += 1
         if row["availability_pct"] is not None:
-            regions.setdefault(row["region"] or "Unknown", []).append(row["availability_pct"])
+            slot["values"].append(row["availability_pct"])
+
     region_quality = sorted(
-        ({"region": region, "links": len(values),
-          "avg_availability_pct": round(sum(values) / len(values), 4)}
-         for region, values in regions.items()),
-        key=lambda r: r["avg_availability_pct"],
+        ({
+            "region": region,
+            "links": slot["week_delta"] + slot["fallback"] + slot["undefined"],
+            "avg_availability_pct": (
+                round(sum(slot["values"]) / len(slot["values"]), 4) if slot["values"] else None
+            ),
+            "week_delta_links": slot["week_delta"],
+            "fallback_links": slot["fallback"],
+            "undefined_links": slot["undefined"],
+        } for region, slot in regions.items()),
+        key=lambda r: (r["avg_availability_pct"] is None,
+                       r["avg_availability_pct"] if r["avg_availability_pct"] is not None else 999),
     )
     return {
         "kind": "weekly",
@@ -163,6 +201,7 @@ def weekly_report(now: datetime | None = None) -> dict[str, Any]:
         "source": SOURCE,
         "week_start": start.date().isoformat(),
         "week_end": (start + timedelta(days=6)).date().isoformat(),
+        "as_of": _iso(now),
         "ranking": ranking,
         "bottom5": ranking[:5],
         "region_quality": region_quality,
@@ -215,6 +254,10 @@ def _expansion_advice(report: dict[str, Any]) -> list[str]:
     return advice
 
 
+def _fmt(value: Any, suffix: str = "") -> str:
+    return "—" if value is None else f"{value}{suffix}"
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     kind = report["kind"]
     lines = [f"# PRTG {dict(daily='日报', weekly='周报', monthly='月报')[kind]}（{report.get('generated_at')}）", ""]
@@ -226,9 +269,9 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "## KPI",
             f"- 传感器：{kpi.get('total')}（Up {kpi.get('up')} / Unusual {kpi.get('unusual')} / Down {kpi.get('down')}）",
-            f"- 平均可用率：{kpi.get('avg_uptime_pct')}%",
-            f"- 异常链路：{kpi.get('anomaly_links')}",
-            f"- 全网峰值 / 均值：{report['traffic']['peak_mbps']} / {report['traffic']['avg_mbps']} Mbps",
+            f"- 平均可用率：{_fmt(kpi.get('avg_uptime_pct'), '%')}",
+            f"- 异常链路：{_fmt(kpi.get('anomaly_links'))}",
+            f"- 全网峰值 / 均值：{_fmt(report['traffic']['peak_mbps'])} / {_fmt(report['traffic']['avg_mbps'])} Mbps",
             f"- 容量已登记：{report['capacity']['known']} / {report['capacity']['total']}（缺失 {report['capacity']['missing']}）",
             "",
             "## 异常明细（warning/critical）",
@@ -239,17 +282,21 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append("- 无")
     elif kind == "weekly":
         lines += [
-            f"> 周期：{report['week_start']} ~ {report['week_end']}",
+            f"> 周期：{report['week_start']} ~ {report['week_end']}（截至 {report.get('as_of')}）",
             "",
             "## 可用率排名（末 5）",
-            "| 设备 / 传感器 | 区域 | 可用率 | 口径 |",
-            "| --- | --- | ---: | --- |",
+            "| 设备 / 传感器 | 区域 | 可用率 | 本周停机(h) | 口径 |",
+            "| --- | --- | ---: | ---: | --- |",
         ]
         for row in report["bottom5"]:
-            lines.append(f"| {row['device_name'] or ''} / {row['sensor_name'] or ''} | {row['region'] or 'Unknown'} | {row['availability_pct']} | {row['basis']} |")
-        lines += ["", "## 区域质量", "| 区域 | 链路数 | 平均可用率 |", "| --- | ---: | ---: |"]
+            lines.append(
+                f"| {row['device_name'] or ''} / {row['sensor_name'] or ''} | {row['region'] or 'Unknown'} "
+                f"| {_fmt(row['availability_pct'], '%')} | {_fmt(row.get('downtime_hours_week'))} | {row['basis']} |"
+            )
+        lines += ["", "## 区域质量", "| 区域 | 链路数 | 平均可用率 | 口径 |", "| --- | ---: | ---: | --- |"]
         for row in report["region_quality"]:
-            lines.append(f"| {row['region']} | {row['links']} | {row['avg_availability_pct']}% |")
+            basis = f"周差分 {row['week_delta_links']} / 回退 {row['fallback_links']} / 不可判定 {row['undefined_links']}"
+            lines.append(f"| {row['region']} | {row['links']} | {_fmt(row['avg_availability_pct'], '%')} | {basis} |")
         lines += ["", "## 异常规则命中（本周）"]
         for code, count in sorted(report["anomalies"].items(), key=lambda kv: -kv[1]):
             lines.append(f"- {code}：{count}")
@@ -263,9 +310,9 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"> 月份：{report['month']}；目标可用率：{base['target_pct']}%",
             "",
             "## 月度 SLA",
-            f"- 平均可用率：{summary.get('avg_availability_pct')}%",
-            f"- 低于目标：{summary.get('below_target')} 条",
-            f"- 当月总停机：{summary.get('total_downtime_hours_month')} 小时",
+            f"- 平均可用率：{_fmt(summary.get('avg_availability_pct'), '%')}",
+            f"- 低于目标：{_fmt(summary.get('below_target'))} 条",
+            f"- 当月总停机：{_fmt(summary.get('total_downtime_hours_month'))} 小时",
             f"- Down 次数：{sum(r.get('down_count') or 0 for r in base['links'])}",
             "",
             "## 低于目标清单",
@@ -273,7 +320,11 @@ def render_markdown(report: dict[str, Any]) -> str:
             "| --- | ---: | ---: | ---: | --- |",
         ]
         for row in base["below_target"][:15]:
-            lines.append(f"| {row['device_name'] or ''} / {row['sensor_name'] or ''} | {row['availability_pct']} | {row['downtime_hours_month']} | {row['down_count']} | {row['basis']} |")
+            lines.append(
+                f"| {row['device_name'] or ''} / {row['sensor_name'] or ''} "
+                f"| {_fmt(row['availability_pct'], '%')} | {_fmt(row['downtime_hours_month'])} "
+                f"| {_fmt(row['down_count'])} | {row['basis']} |"
+            )
         lines += ["", "## 异常规则命中（本月）"]
         for code, count in sorted(report["anomalies"].items(), key=lambda kv: -kv[1]):
             lines.append(f"- {code}：{count}")

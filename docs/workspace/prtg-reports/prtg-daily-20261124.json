@@ -1,6 +1,6 @@
 {
   "kind": "daily",
-  "generated_at": "2026-11-24T18:37:28.778963Z",
+  "generated_at": "2026-11-24T18:47:19.750508Z",
   "source": "my_app /api/prtg（PRTG 采集服务，60 秒轮询）",
   "window": "近 24 小时",
   "kpi": {
@@ -13,31 +13,31 @@
     "anomaly_links": 15,
     "uptime_samples": 25
   },
-  "data_age_seconds": 16,
+  "data_age_seconds": 55,
   "traffic": {
-    "peak_mbps": 23710.652,
-    "avg_mbps": 3132.009
+    "peak_mbps": 23576.482,
+    "avg_mbps": 3262.736
   },
   "anomalies": {
     "open_links": 15,
     "items": [
       {
-        "sensor_id": 2720,
-        "device_name": "PTP_SW",
-        "sensor_name": "B2B_CORE-SW G1/0/45",
-        "rule": "errors_discards_growth",
-        "rule_label": "Errors/Discards 持续增长",
-        "severity": "warning",
-        "started_at": "2026-11-24T18:32:56.091794Z"
-      },
-      {
         "sensor_id": 2717,
         "device_name": "PTP_SW",
         "sensor_name": "(10115) to MATADI-SW",
-        "rule": "below_baseline_30",
-        "rule_label": "低于 7 天同期基线 30%",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
         "severity": "warning",
-        "started_at": "2026-11-24T17:57:36.301210Z"
+        "started_at": "2026-11-24T18:45:12.343007Z"
+      },
+      {
+        "sensor_id": 2725,
+        "device_name": "AML TOKADEH1",
+        "sensor_name": "AML_TOKADEH_LAN",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
       },
       {
         "sensor_id": 2791,
@@ -151,15 +151,6 @@
         "sensor_id": 2721,
         "device_name": "PTP_SW",
         "sensor_name": "(10152) to CSQUARED",
-        "rule": "above_baseline_200",
-        "rule_label": "超过基线 200%",
-        "severity": "warning",
-        "started_at": "2026-11-24T16:59:34.568224Z"
-      },
-      {
-        "sensor_id": 2725,
-        "device_name": "AML TOKADEH1",
-        "sensor_name": "AML_TOKADEH_LAN",
         "rule": "above_baseline_200",
         "rule_label": "超过基线 200%",
         "severity": "warning",

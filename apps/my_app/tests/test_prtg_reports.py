@@ -78,3 +78,50 @@ def test_bot_data_prtg_endpoint_has_timestamp_and_source(monkeypatch):
     assert payload["ok"] is True and payload["domain"] == "prtg"
     assert payload["generated_at"] and payload["data_source"]
     assert payload["kpi"]["total"] == 25
+
+
+def _fake_sla_row(sensor_id, delta, coverage):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(sensor_objid=sensor_id, downtime_delta_minutes=delta,
+                           coverage_minutes=coverage)
+
+
+def test_weekly_zero_availability_sorts_first(monkeypatch):
+    links = [
+        {"sensor_id": 1, "device_name": "d1", "sensor_name": "zero", "region": "R", "uptime_pct": 0.0},
+        {"sensor_id": 2, "device_name": "d2", "sensor_name": "ok", "region": "R", "uptime_pct": 99.0},
+    ]
+    monkeypatch.setattr(reports.dashboard, "links", lambda w="24h": {"links": links})
+    monkeypatch.setattr(reports, "_sla_rows", lambda start, end: [])
+    monkeypatch.setattr(reports, "_anomaly_counts_since", lambda since: {})
+    monkeypatch.setattr(reports, "_capacity_summary", lambda: {"total": 0, "known": 0, "missing": 0, "attention": []})
+
+    report = reports.weekly_report()
+    assert report["bottom5"][0]["sensor_id"] == 1  # 0% 不能因 `or 999` 被排到最后
+    assert report["ranking"][0]["availability_pct"] == 0.0
+
+
+def test_weekly_unknown_coverage_is_not_shown_as_100_percent(monkeypatch):
+    links = [{"sensor_id": 2721, "device_name": "d", "sensor_name": "s", "region": "R", "uptime_pct": 99.9}]
+    monkeypatch.setattr(reports.dashboard, "links", lambda w="24h": {"links": links})
+    monkeypatch.setattr(reports, "_sla_rows", lambda start, end: [_fake_sla_row(2721, 60.0, None)])
+    monkeypatch.setattr(reports, "_anomaly_counts_since", lambda since: {})
+    monkeypatch.setattr(reports, "_capacity_summary", lambda: {"total": 0, "known": 0, "missing": 0, "attention": []})
+
+    row = reports.weekly_report()["ranking"][0]
+    assert row["availability_pct"] is None
+    assert row["basis"] == "undefined_coverage"
+    assert row["downtime_hours_week"] == pytest.approx(1.0)
+
+
+def test_weekly_without_snapshot_is_labelled_fallback(monkeypatch):
+    links = [{"sensor_id": 1, "device_name": "d", "sensor_name": "s", "region": "R", "uptime_pct": 98.5}]
+    monkeypatch.setattr(reports.dashboard, "links", lambda w="24h": {"links": links})
+    monkeypatch.setattr(reports, "_sla_rows", lambda start, end: [])
+    monkeypatch.setattr(reports, "_anomaly_counts_since", lambda since: {})
+    monkeypatch.setattr(reports, "_capacity_summary", lambda: {"total": 0, "known": 0, "missing": 0, "attention": []})
+
+    row = reports.weekly_report()["ranking"][0]
+    assert row["basis"] == "all_time_fallback"
+    assert row["availability_pct"] == 98.5

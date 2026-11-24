@@ -342,7 +342,7 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
             "basis": basis,
         })
 
-    links.sort(key=lambda r: (r["availability_pct"] is None, r["availability_pct"] or 999))
+    links.sort(key=lambda r: (r["availability_pct"] is None, r["availability_pct"] if r["availability_pct"] is not None else 999))
     below = [r for r in links if r["below_target"]]
 
     regions: dict[str, list[float]] = {}
