@@ -54,8 +54,9 @@ export default function SubscriberSearchOverlay({
     <div
       style={{
         position: 'absolute', top: 10, right: 10, zIndex: 1200,
-        width: isMobile ? 'auto' : 330,
-        left: isMobile ? 10 : undefined,
+        /* 固定 330：门户 GIS Map 栏的 iframe 约 650px 宽，若按移动端铺满会把
+           LAYERS 面板与地图上半截全盖住；390px 手机上 330 也仍可用。 */
+        width: 330,
         maxWidth: 'calc(100% - 20px)',
         background: WH.cardBg, border: WH.cardBorder,
         borderRadius: 'var(--wh-radius-md, 10px)',
