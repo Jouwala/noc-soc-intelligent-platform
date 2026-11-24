@@ -334,13 +334,17 @@ def test_live(msisdn: str):
 # ---------------------------------------------------------------- 8. 时间窗
 def test_normalize_window():
     section("8. normalize_window 归一")
-    from datetime import datetime
+    from datetime import datetime, timedelta
     w = vcc.normalize_window("2026-10-23", "2026-10-23")
     check("日粒度补 CCA 日界", w == {"starttime": "2026-10-23 00:00:00",
                                     "endtime": "2026-10-23 23:59:59"}, str(w))
     w = vcc.normalize_window(None, None)
     check("缺省窗口=今天", w["starttime"].endswith("00:00:00"))
-    w = vcc.normalize_window("2026-10-23 08:30", None)
+    # 2026-11-24 修：原先写死 2026-10-23，终点取「今天」后跨度随日期增长，
+    # 到 11-24 变成 32 天、触发 31 天上限 —— 测试自己过期了。
+    # 改为相对今天取最近一天，语义（终点取 max(起点, 今天)）不变。
+    recent = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d 08:30")
+    w = vcc.normalize_window(recent, None)
     check("只给起点：终点取 max(起点, 今天)", w["endtime"] >= w["starttime"])
     w = vcc.normalize_window(datetime(2026, 10, 25, 8, 0), datetime(2026, 10, 23, 9, 0))
     check("起止颠倒自动交换", w["starttime"].startswith("2026-10-23"), str(w))
