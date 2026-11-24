@@ -137,7 +137,16 @@ export default function PrtgSlaView() {
       width: 115,
       align: 'right',
       render: (_: unknown, row: PrtgSlaLink) => (
-        row.downtime_hours_month == null ? NA : `${fmtNum(row.downtime_hours_month, 2)} h`
+        row.downtime_hours_month == null ? NA : (
+          <div>
+            <div>{fmtNum(row.downtime_hours_month, 2)} h</div>
+            {(row.downtime_hours_unknown_coverage ?? 0) > 0 && (
+              <div style={{ fontSize: 11, color: WH.warn }}>
+                {t('prtg.sla.unknownCoverageHint', { h: fmtNum(row.downtime_hours_unknown_coverage, 2) })}
+              </div>
+            )}
+          </div>
+        )
       ),
     },
     {

@@ -307,7 +307,12 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
         else:
             month_availability = round(sensor.uptime_pct, 4) if sensor.uptime_pct is not None else None
             basis = "all_time_fallback"
-        month_downtime = covered_downtime if covered_downtime is not None else unknown_downtime
+        # 当月真实停机 = 可判定日 + 不可判定日；可用率分母仍只用可判定日。
+        # 两个字段分开给出，避免「同一字段有时只含 covered、有时只含 unknown」。
+        total_downtime = None
+        if covered_downtime is not None or unknown_downtime is not None:
+            total_downtime = (covered_downtime or 0.0) + (unknown_downtime or 0.0)
+        month_downtime = total_downtime
         month_coverage = covered_coverage
         down_count = month_down.get(sensor.objid, 0)
         mapping = mappings.get(sensor.objid)
@@ -321,6 +326,9 @@ def month_report(month: str | None = None, target: float = DEFAULT_TARGET,
             "availability_pct": month_availability,
             "uptime_pct_all_time": round(sensor.uptime_pct, 4) if sensor.uptime_pct is not None else None,
             "downtime_hours_month": round(month_downtime / 60.0, 2) if month_downtime is not None else None,
+            "downtime_hours_covered": (
+                round(covered_downtime / 60.0, 2) if covered_downtime is not None else None
+            ),
             "coverage_hours_month": round(month_coverage / 60.0, 1) if month_coverage else None,
             "downtime_hours_unknown_coverage": (
                 round(unknown_downtime / 60.0, 2) if unknown_downtime is not None else None

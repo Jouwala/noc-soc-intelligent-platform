@@ -247,6 +247,7 @@ def test_mixed_covered_and_unknown_days_do_not_pollute_denominator(db):
     link = report["links"][0]
     assert link["basis"] == "month_delta"
     assert link["availability_pct"] == pytest.approx(100 - 60 / 1440 * 100, rel=1e-4)
-    assert link["downtime_hours_month"] == pytest.approx(1.0)  # 只含可判定日
+    assert link["downtime_hours_month"] == pytest.approx(2.0)  # covered + unknown 总停机
+    assert link["downtime_hours_covered"] == pytest.approx(1.0)
     assert link["downtime_hours_unknown_coverage"] == pytest.approx(1.0)
     assert link["unknown_coverage_days"] == 1

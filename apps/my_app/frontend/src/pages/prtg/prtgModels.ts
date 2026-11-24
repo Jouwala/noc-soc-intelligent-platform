@@ -320,6 +320,9 @@ export interface PrtgSlaLink {
   availability_pct?: number | null
   uptime_pct_all_time?: number | null
   downtime_hours_month?: number | null
+  downtime_hours_covered?: number | null
+  downtime_hours_unknown_coverage?: number | null
+  unknown_coverage_days?: number | null
   coverage_hours_month?: number | null
   down_count?: number | null
   last_down?: string | null
