@@ -443,6 +443,61 @@ function renderTaskStats(d, lang = 'zh') {
   return lines.join('\n');
 }
 
+/** PRTG 核心链路实时健康度（#232）：数字原样渲染，带时间戳与来源。 */
+function renderPrtg(d, lang = 'zh') {
+  const en = lang === 'en';
+  const kpi = d?.kpi || {};
+  const traffic = d?.traffic || {};
+  const cap = d?.capacity || {};
+  const sla = d?.sla || {};
+  const summary = sla.summary || {};
+  const lines = [];
+  lines.push(en ? '## PRTG core link health' : '## PRTG 核心链路健康度');
+  lines.push('');
+  lines.push(
+    en
+      ? `- Sensors: ${kpi.total ?? '—'} (Up ${kpi.up ?? '—'} / Unusual ${kpi.unusual ?? '—'} / Down ${kpi.down ?? '—'})`
+      : `- 传感器：${kpi.total ?? '—'}（Up ${kpi.up ?? '—'} / Unusual ${kpi.unusual ?? '—'} / Down ${kpi.down ?? '—'}）`
+  );
+  lines.push(
+    en
+      ? `- Avg availability: ${kpi.avg_uptime_pct ?? '—'}%`
+      : `- 平均可用率：${kpi.avg_uptime_pct ?? '—'}%`
+  );
+  lines.push(
+    en
+      ? `- Links with anomalies: ${kpi.anomaly_links ?? '—'}`
+      : `- 异常链路：${kpi.anomaly_links ?? '—'}`
+  );
+  lines.push(
+    en
+      ? `- Network peak / avg: ${traffic.peak_mbps ?? '—'} / ${traffic.avg_mbps ?? '—'} Mbps`
+      : `- 全网峰值 / 均值：${traffic.peak_mbps ?? '—'} / ${traffic.avg_mbps ?? '—'} Mbps`
+  );
+  lines.push(
+    en
+      ? `- Capacity registered: ${cap.known ?? '—'} / ${cap.total ?? '—'}`
+      : `- 容量已登记：${cap.known ?? '—'} / ${cap.total ?? '—'}`
+  );
+  lines.push(
+    en
+      ? `- ${sla.month || ''} SLA: avg ${summary.avg_availability_pct ?? '—'}%, ${summary.below_target ?? '—'} link(s) below target`
+      : `- ${sla.month || ''} SLA：平均 ${summary.avg_availability_pct ?? '—'}%，低于目标 ${summary.below_target ?? '—'} 条`
+  );
+  const items = Array.isArray(d?.anomalies) ? d.anomalies.filter((x) => x.severity !== 'info') : [];
+  if (items.length) {
+    lines.push('');
+    lines.push(en ? 'Open anomalies:' : '未结束异常：');
+    for (const item of items.slice(0, MAX_ROWS_SHOWN)) {
+      lines.push(`- ${item.device_name || ''} / ${item.sensor_name || ''}：${item.rule_label || item.rule}（${item.severity}）`);
+    }
+  }
+  lines.push('');
+  lines.push(en ? `Source: ${d?.data_source || 'my_app /api/prtg'}` : `来源：${d?.data_source || 'my_app /api/prtg'}`);
+  lines.push(en ? `Generated at: ${d?.generated_at || '—'} (age ${d?.data_age_seconds ?? '—'}s)` : `生成时间：${d?.generated_at || '—'}（数据年龄 ${d?.data_age_seconds ?? '—'} 秒）`);
+  return lines.join('\n');
+}
+
 /**
  * 按域分发渲染。
  * @param {string} domain
@@ -461,6 +516,7 @@ export function renderDataDomain(domain, d, lang = 'zh', site = '') {
     case 'wo': return renderWo(d, lang, site);
     case 'site-availability': return renderAvail(d, lang, site);
     case 'task-stats': return renderTaskStats(d, lang);
+    case 'prtg': return renderPrtg(d, lang);
     default: {
       const t = T[lang] || T.zh;
       return t.error(`未知数据域 ${domain}`);

@@ -77,6 +77,7 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 | `GET /api/prtg/anomalies?window=…` | 异常事件（#229 规则 + Ping 状态机），默认只看未结束 |
 | `GET /api/prtg/sla?month=YYYY-MM&target=99.5` | 月度 SLA：可用率、故障时长、Down 次数、区域排名、低于目标清单、容量利用率（#231，口径见 `prtg-sla.md`） |
 | `GET /api/prtg/capacity` | 容量登记与 24h/7d 峰值、30d P95 利用率 |
+| `GET /api/prtg/report?kind=daily|weekly|monthly&month=` | 日/周/月报（#232）：与看板同源，返回 JSON + Markdown |
 | `GET /api/prtg/collector/status` | 八类作业（catalog/live/backfill/aggregate/anomaly/history_import/sla/prune）的最近运行/成功/错误（排障用，无凭证） |
 
 窗口 → 数据源：`5m` 用 60 秒原始（**近 5 分钟**，不是近 1 小时）、`24h` 用 5 分钟聚合、`7d`/`30d` 用小时聚合；聚合同时读实时与 `prtg_historical_samples`，回填的历史才会进 7d/30d。

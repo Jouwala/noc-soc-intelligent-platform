@@ -1,0 +1,176 @@
+{
+  "kind": "daily",
+  "generated_at": "2026-11-24T18:37:28.778963Z",
+  "source": "my_app /api/prtg（PRTG 采集服务，60 秒轮询）",
+  "window": "近 24 小时",
+  "kpi": {
+    "total": 25,
+    "up": 17,
+    "unusual": 8,
+    "down": 0,
+    "unknown": 0,
+    "avg_uptime_pct": 99.1397,
+    "anomaly_links": 15,
+    "uptime_samples": 25
+  },
+  "data_age_seconds": 16,
+  "traffic": {
+    "peak_mbps": 23710.652,
+    "avg_mbps": 3132.009
+  },
+  "anomalies": {
+    "open_links": 15,
+    "items": [
+      {
+        "sensor_id": 2720,
+        "device_name": "PTP_SW",
+        "sensor_name": "B2B_CORE-SW G1/0/45",
+        "rule": "errors_discards_growth",
+        "rule_label": "Errors/Discards 持续增长",
+        "severity": "warning",
+        "started_at": "2026-11-24T18:32:56.091794Z"
+      },
+      {
+        "sensor_id": 2717,
+        "device_name": "PTP_SW",
+        "sensor_name": "(10115) to MATADI-SW",
+        "rule": "below_baseline_30",
+        "rule_label": "低于 7 天同期基线 30%",
+        "severity": "warning",
+        "started_at": "2026-11-24T17:57:36.301210Z"
+      },
+      {
+        "sensor_id": 2791,
+        "device_name": "AML TOKADEH1",
+        "sensor_name": "(002) AML_TOKADEH_ISP Link",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2569,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(369098788) port-channel37",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2565,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(369098753) port-channel2",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2567,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(369098762) port-channel11",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2579,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(436232192) ======== OLIB-NX-3172-WAN-2-FG1500-LAN-2-P-39 ==========",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2580,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(436236288) ======== OLIB-NX-3172-OLIB-FG-1500-LAN-2-P-40 ==========",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2574,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(436207616) ======== PEER-LINK  ==========",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2575,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(436211712) ======== PEER-LINK  ==========",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2720,
+        "device_name": "PTP_SW",
+        "sensor_name": "B2B_CORE-SW G1/0/45",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2587,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(436375552) ======== ROAMING-1 ==========",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2589,
+        "device_name": "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]",
+        "sensor_name": "(436383744) ======== BICS_VOICE ==========",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2719,
+        "device_name": "PTP_SW",
+        "sensor_name": "(10127) to ASR-PORT G1/1/0",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2721,
+        "device_name": "PTP_SW",
+        "sensor_name": "(10152) to CSQUARED",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      },
+      {
+        "sensor_id": 2725,
+        "device_name": "AML TOKADEH1",
+        "sensor_name": "AML_TOKADEH_LAN",
+        "rule": "above_baseline_200",
+        "rule_label": "超过基线 200%",
+        "severity": "warning",
+        "started_at": "2026-11-24T16:59:34.568224Z"
+      }
+    ]
+  },
+  "capacity": {
+    "total": 25,
+    "known": 0,
+    "missing": 25,
+    "attention": []
+  }
+}

@@ -72,6 +72,21 @@ def prtg_capacity():
             "capacity": sla.capacity_list()}
 
 
+@router.get("/report")
+def prtg_report(
+    kind: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
+    month: str | None = Query(None, description="月报月份 YYYY-MM"),
+):
+    """日 / 周 / 月报（#232）：返回结构化 JSON + Markdown，数字与看板同源。"""
+    from backend.services.prtg import reports
+
+    try:
+        report = reports.build_report(kind, month)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"report": report, "markdown": reports.render_markdown(report)}
+
+
 @router.get("/collector/status")
 def prtg_collector_status():
     """采集各作业的同步状态与最近错误（不含任何凭证）。"""
