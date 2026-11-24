@@ -19,7 +19,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Mapping
+from typing import Any, Callable
 
 import httpx
 
@@ -82,6 +82,9 @@ _install_http_log_guard()
 ENV_BASE_URL = "PRTG_BASE_URL"
 ENV_USERNAME = "PRTG_USERNAME"
 ENV_PASSHASH = "PRTG_PASSHASH"
+
+# content=channels 必须显式指定列，否则 objid/lastvalue 都不在返回里。
+CHANNEL_COLUMNS = "objid,name,lastvalue,lastvalue_raw"
 
 
 class PrtgError(RuntimeError):
@@ -212,6 +215,44 @@ class PrtgClient:
         if extra:
             params.update(extra)
         return self.get_text("/api/table.json", params)
+
+    def channels_xml(self, sensor_id: int) -> str:
+        """GET /api/table.xml?content=channels&id=<sensor>。
+
+        采集端用 XML 而非 JSON：lastvalue / lastvalue_raw 在这里各重复三次
+        （速率、体积、体积），JSON 的普通 dict 解析只留一个（#227 实测）。
+        """
+        return self.get_text(
+            "/api/table.xml",
+            {
+                "content": "channels",
+                "id": str(sensor_id),
+                "columns": CHANNEL_COLUMNS,
+            },
+        )
+
+    def sensor_details_xml(self, sensor_id: int) -> str:
+        """GET /api/getsensordetails.xml（无 .json 版，实测 404）。"""
+        return self.get_text("/api/getsensordetails.xml", {"id": str(sensor_id)})
+
+    def historicdata_csv(
+        self,
+        sensor_id: int,
+        sdate: str | datetime,
+        edate: str | datetime,
+        *,
+        avg: int = 0,
+    ) -> str:
+        """GET /api/historicdata.csv（回填用；列结构见 parsing.parse_historic_csv）。"""
+        return self.get_text(
+            "/api/historicdata.csv",
+            {
+                "id": str(sensor_id),
+                "avg": str(avg),
+                "sdate": _format_prtg_datetime(sdate),
+                "edate": _format_prtg_datetime(edate),
+            },
+        )
 
     def sensortree_html(self) -> str:
         """GET /api/table.xml?content=sensortree。注意：实测返回的是
