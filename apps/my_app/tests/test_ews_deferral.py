@@ -361,3 +361,36 @@ def test_auto_retry_is_deferred_too(monkeypatch, deferrable_task):
     _patch_probe(monkeypatch, _probe(kind="server_down"))
     res = ed.maybe_defer(deferrable_task, "auto_retry")
     assert res is not None and res["deferred"] is True
+
+
+def test_fw_kpi_run_promotes_email_deferral(monkeypatch):
+    """#298 第 1 项：FW 日报通道 down 时，顶层必须带 deferred + EWS_DEFERRED。
+
+    场景是数据同步**已成功**、按设计只跳过发信：若延后标记没提升到顶层，
+    ``task_runner`` 会当普通失败报红并立刻发告警，``email_recovery`` 也认不到
+    「恢复后要补」这条失败链。这里用 skipped_email_result 驱动 ``run()`` 的接线，
+    并确认同步结果（rows_written / devices）没有被延后吞掉。
+    """
+    from backend.services.fw_kpi import fw_kpi_services as fw
+
+    monkeypatch.setattr(fw, "Session", lambda: object())
+    monkeypatch.setattr(fw, "login", lambda sess: None)
+    monkeypatch.setattr(fw, "DEVICE_IDS", ["37781505"])
+    monkeypatch.setattr(fw, "fetch_throughput_html", lambda *a, **k: "<html/>")
+    monkeypatch.setattr(fw, "parse_throughput",
+                        lambda *a, **k: [("2026-11-25 00:00", 1, 2)])
+    monkeypatch.setattr(fw, "write_to_local_db", lambda rows, device_id: len(rows))
+    monkeypatch.setattr(fw, "ENABLE_CHART_EMAIL", True)
+    monkeypatch.setattr(fw, "generate_chart_and_send_email",
+                        lambda rows: dict(ed.skipped_email_result("fw_kpi_sync")))
+
+    result = fw.run()
+
+    assert result["deferred"] is True
+    assert result["success"] is False
+    assert ed.DEFERRED_MARKER in result["error"]
+    assert er.is_ews_resendable(result["error"]) is True
+    assert "仅跳过发信" in result["error"]
+    # 同步产物不能被延后标记吞掉
+    assert result["rows_written"] == 1
+    assert result["devices"] == ["37781505"]
