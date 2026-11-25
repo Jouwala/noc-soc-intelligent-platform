@@ -1249,6 +1249,7 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 - **不告警**：通道不可用属「依赖不可用」，不是任务故障；延后记录跳过失败告警，通道状态由 `email_recovery` 的「翻转通知 + 持续故障升级」统一负责。
 - **回滚**：`EWS_DEFER_ON_DOWN=0`（环境变量）即恢复旧行为，无需改代码。
 - **维护**：新增邮件任务若带同步/群发/远端写库，**不要**加进 `EWS_DEFERRABLE_IDS`；纯发信任务可加。延后只影响 `run_task` 的调度路径，`email_recovery` 的补发调用（直接调 service 函数）不受门禁影响。
+- **错误串是补发判据的输入，长错误必须保留尾部（2026-11-25 事故）**：`email_recovery.is_ews_resendable()` 与 `auto_retry` 都拿任务记录的 `error` **原串**匹配关键字。任务把长错误写回 `error` 时若只留头部，会把尾部真实异常（如 .NET 的 `Unable to connect to the remote server`）砍掉，补发判据判 False，恢复后永不补发。11-25 FW 日报（`fw_kpi_sync`）07:15/07:20 两次失败即因此漏补发；同时 UI 只剩半句 `Exception calling "Ge`。参考写法见 `services/fw_kpi/fw_kpi_services.py` 的 `_summarize_email_error()`：超 4000 字符时保留首 1500 + 尾 2500 并标注省略，回归用例 `tests/test_fw_kpi_error_summary.py`。
 
 ## 看门狗与自愈
 
