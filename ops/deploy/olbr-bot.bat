@@ -23,11 +23,11 @@ if /i "%ACT%"=="stop" goto stop
 if /i "%ACT%"=="status" goto status
 if /i "%ACT%"=="restart" goto restart
 echo [ERROR] Unknown action: %ACT%  - use start, stop, restart or status.
-goto done
+goto :eof
 
 :missing
 echo [ERROR] Not found: %BOT%
-goto done
+goto :eof
 
 :start
 echo Starting WhatsApp bot (src/index.js) + web Q^&A assistant (:9269) ...
@@ -43,8 +43,11 @@ goto done
 echo This will STOP the WhatsApp bot (src/index.js) + web Q^&A assistant (:9269).
 echo The P1 alert push (notify.js) is NOT touched.
 choice /c YN /n /m "Stop now? [Y/N] "
-if errorlevel 2 goto done
+if errorlevel 2 goto :eof
 "%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%" -Stop
+echo.
+echo ---- current status ----
+"%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%" -Status
 echo.
 echo NOTE: the WhatsAppKB_Bot_EnsureRunning task brings the bot back within
 echo       5 minutes. To keep it down, disable both tasks first:
@@ -60,7 +63,7 @@ goto done
 echo This will RESTART the WhatsApp bot (src/index.js) + web Q^&A assistant (:9269).
 echo The P1 alert push (notify.js) is NOT touched.
 choice /c YN /n /m "Restart now? [Y/N] "
-if errorlevel 2 goto done
+if errorlevel 2 goto :eof
 "%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%" -Stop
 echo.
 echo [*] Starting WhatsApp bot again ...
@@ -71,6 +74,5 @@ echo ---- current status ----
 goto done
 
 :done
-echo.
-pause
+call "%~dp0finish.bat" "" "WhatsApp bot %ACT%"
 endlocal

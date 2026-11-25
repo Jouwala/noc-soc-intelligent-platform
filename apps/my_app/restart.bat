@@ -14,6 +14,5 @@ call "%~dp0stop.bat"
 echo.
 echo [*] Starting my_app again ...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start_hidden.ps1" -Force
-echo.
-pause
+call "%~dp0..\..\ops\deploy\finish.bat" "7038,7090" "my_app restart"
 endlocal
