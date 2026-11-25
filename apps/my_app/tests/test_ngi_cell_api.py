@@ -94,6 +94,20 @@ def test_etag_changes_with_count_and_fetch_time():
     assert a != api.make_etag(8227, datetime(2026, 11, 22, 2, 5), "ngn")
 
 
+def test_etag_is_ascii_for_chinese_degrade_reason():
+    """表缺失时 fetched_at 传的是中文原因；ETag 必须能进 latin-1 响应头。
+
+    2026-11-25 复审实测：中文经 `str.isalnum()` 判定为 True，原实现把中文拼进
+    ETag → Starlette 写 raw_headers 时 UnicodeEncodeError → 降级路径变 500。
+    """
+    tag = api.make_etag(0, "NGI 工参表不存在，请先跑同步任务", "ngl")
+    tag.encode("latin-1")  # 不抛异常即合格
+    assert tag.startswith('W/"') and tag.endswith('"')
+    # 不同原因不能撞同一个 ETag（否则浏览器会拿到过期 304）
+    other = api.make_etag(0, "NGI 工参表为空", "ngl")
+    assert tag != other
+
+
 if __name__ == "__main__":
     import pytest
 

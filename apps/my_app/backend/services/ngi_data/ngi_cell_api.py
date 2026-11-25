@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import logging
 import math
@@ -113,7 +114,17 @@ def build_payload(rows, *, snapshot_date=None, fetched_at=None, rat: str = "LTE"
 
 
 def make_etag(count, fetched_at, prefix: str = "ngl") -> str:
-    stamp = "".join(ch for ch in str(_cell(fetched_at) or "none") if ch.isalnum())
+    """弱 ETag。`fetched_at` 正常是时间戳，降级时是中文原因串。
+
+    HTTP 头只能放 latin-1：中文原因串直接拼进去会让 Starlette 在写
+    `Response.raw_headers` 时抛 `UnicodeEncodeError`，把「表缺失 → available:false」
+    的降级路径变成 500。这里只保留 ASCII 安全字符；一旦原文含其它字符（中文、
+    空白、引号），改用原文的短哈希，既保证 ASCII 又保证原因变化时 ETag 跟着变。
+    """
+    raw = str(_cell(fetched_at) or "none")
+    stamp = "".join(ch for ch in raw if ch.isascii() and (ch.isalnum() or ch in "-:._TZ+"))
+    if len(stamp) != len(raw):
+        stamp = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
     return f'W/"{prefix}-{count}-{stamp}"'
 
 

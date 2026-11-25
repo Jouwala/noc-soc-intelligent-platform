@@ -982,11 +982,18 @@ def run():
     if mirror_errors:
         errors.append("本地镜像失败（看板数据可能未更新）: " + "; ".join(mirror_errors))
     if email_failed:
-        reason = (email_result.get("error") or email_result.get("message")
-                  or str(email_result))
-        errors.append(f"邮件发送失败（数据已同步 {total_inserted} 条，"
-                      f"remote_api={api_ok}）: {str(reason)[:800]}")
-        print(f"[MAIN] 邮件失败，任务判定为失败: {str(reason)[:200]}")
+        from backend.services.email import ews_deferral
+        # 通道降级时 _send_email 返回的是「仅跳过发信」的 deferred 结果：必须把
+        # deferred 提升到顶层，task_runner 才会静默、email_recovery 恢复后补发；
+        # 否则本轮会按失败报红并立刻发告警（同步其实已成功）。同 ume_in_osg_report。
+        if ews_deferral.apply_email_deferral(result, email_result, "fw_kpi_sync"):
+            print("[MAIN] 邮箱通道降级：本轮只跳过发信（数据已同步），等待恢复后补发。")
+        else:
+            reason = (email_result.get("error") or email_result.get("message")
+                      or str(email_result))
+            errors.append(f"邮件发送失败（数据已同步 {total_inserted} 条，"
+                          f"remote_api={api_ok}）: {str(reason)[:800]}")
+            print(f"[MAIN] 邮件失败，任务判定为失败: {str(reason)[:200]}")
     if errors:
         result["error"] = "\n".join(errors)
     return result

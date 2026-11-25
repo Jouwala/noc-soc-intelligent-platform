@@ -100,6 +100,13 @@ METRICS_4G: Tuple[Tuple[str, str, int, int, str], ...] = (
     ("ul_thr_mbps", "1638004469785", 2, 1, "Mbps"),
     ("active_users", "C373384373", 1, 0, ""),
 )
+# 4G 派生指标：模板里没有单用户速率，由「小区吞吐 / 活跃用户数」现算（见下）。
+# 必须一并出现在返回的 `metrics` 里 —— 前端按 `result.metrics` 过滤要画哪条曲线，
+# 只写进 series 不登记会导致默认勾选的曲线永远不渲染（2026-11-25 复审发现）。
+DERIVED_4G: Tuple[Tuple[str, str, int, int, str], ...] = (
+    ("dl_user_thr_mbps", "derived", 0, 0, "Mbps"),
+    ("ul_user_thr_mbps", "derived", 0, 0, "Mbps"),
+)
 METRIC_LABELS = {
     "dl_prb": "DL PRB 利用率",
     "ul_prb": "UL PRB 利用率",
@@ -731,6 +738,16 @@ def _gran_for(span_end: datetime, now: datetime) -> str:
     return "900" if (now - span_end) <= timedelta(hours=AUTO_15M_HOURS) else "3600"
 
 
+def describe_metrics(tech: str, metrics_def=()) -> List[Dict[str, str]]:
+    """返回给前端的指标清单。
+
+    4G 要把**派生**的单用户速率一并列出：前端 `SiteKpiRt.tsx` 用 `result.metrics`
+    过滤要画哪条曲线，只在 `series` 里放值而清单里没有，默认勾选的曲线会静默消失。
+    """
+    defs = list(metrics_def) + list(DERIVED_4G if tech == "4G" else ())
+    return [{"key": m[0], "label": METRIC_LABELS.get(m[0], m[0]), "unit": m[4]} for m in defs]
+
+
 def collect_series(
     site: str,
     days: int = 8,
@@ -850,8 +867,7 @@ def collect_series(
         "row_count": len(rows),
         "grid": grid,
         "cells": cells,
-        "metrics": [{"key": m[0], "label": METRIC_LABELS.get(m[0], m[0]), "unit": m[4]}
-                    for m in metrics_def],
+        "metrics": describe_metrics(tech, metrics_def),
         "series": series,
         "warnings": warnings,
     }
