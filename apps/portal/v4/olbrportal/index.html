@@ -281,6 +281,16 @@
        数据口径、下钻、两档刷新节奏都没动 —— 改的只是呈现。 -->
   <section class="band" id="band" aria-label="Quality Control"></section>
 
+  <!-- ===================== L0.4 · 关键业务（2026-11-23 新增） =====================
+       用户要求：在 Network Status 之上新增一行「关键业务」，六张卡：
+         · VIP 站点的告警（点卡进 GIS 地图）
+         · VIP 链路的容量利用率 / VIP FTTH 的状态（暂为占位，下钻待接入）
+         · VLR Subscribers / Voice Traffic(Erl) / Data Subscribers · 4G
+           （取 my_app CS/PS CN KPI 15 分钟看板的最新点 + 较昨日同时刻波动）
+       数据、口径与渲染见 olbr.js 的「关键业务」段；容器 id 固定为 #keybiz，
+       团队门户 index.html 有同名容器，按 kpi 域决定是否显示。 -->
+  <section class="band" id="keybiz" aria-label="Key Business"></section>
+
   <!-- ===================== L0.5 · CXO 每日经营指标（v1 新增） =====================
        「CXO Daily Dashboard」里最常被追问的三个值，从那张看板里提出来平铺：
          · Total Traffic / Active Users / Valid Throughput of Video Download
