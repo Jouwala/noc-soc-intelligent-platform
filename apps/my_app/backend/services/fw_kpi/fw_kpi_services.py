@@ -839,9 +839,12 @@ _ERROR_SUMMARY_HEAD = 1500
 def _summarize_email_error(reason) -> str:
     """把过长的邮件失败信息压成「头 + 尾」摘要，保留尾部真实异常。
 
-    未超限时原样返回；超限时省略中间并写明省略字符数。
+    未超限时**原样**返回：不 strip、不吞 falsy 值 —— 调用方写进 ``error`` 的
+    原文就是补发判据的输入，任何改写都可能让 ``EWS_FAIL_KEYS`` 匹配不上。
+    ``None`` 规范为空串；其余（含 0 / False / 空容器）取 ``str()``。
+    超限时省略中间并写明省略字符数。
     """
-    text = str(reason or "").strip()
+    text = "" if reason is None else str(reason)
     if len(text) <= _ERROR_SUMMARY_LIMIT:
         return text
     head = text[:_ERROR_SUMMARY_HEAD]
@@ -953,7 +956,10 @@ def run():
         summary = _summarize_email_error(reason)
         errors.append(f"邮件发送失败（数据已同步 {total_inserted} 条，"
                       f"remote_api={api_ok}）: {summary}")
-        print(f"[MAIN] 邮件失败，任务判定为失败: {summary}")
+        # 运行日志只留末尾 200 字符：头部是收件账号 / 邮件主机等上下文，不进日志；
+        # 真正的异常（EWS 关键字）在尾部，排障看这一截就够。完整摘要仍写
+        # result["error"]（那是补发判据的输入，不是日志）。
+        print(f"[MAIN] 邮件失败，任务判定为失败（末 200 字符）: {summary[-200:]}")
     if errors:
         result["error"] = "\n".join(errors)
     return result
