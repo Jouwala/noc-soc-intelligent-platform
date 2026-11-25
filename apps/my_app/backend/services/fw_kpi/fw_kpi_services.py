@@ -825,6 +825,31 @@ def generate_chart_and_send_email(device_rows):
     return result
 
 
+# 邮件失败错误的存储上限与首尾保留长度（2026-11-25 事故后定）。
+#
+# 这个错误串不只是给人看的：`email_recovery.is_ews_resendable()` 与 auto_retry
+# 都拿它当**判据输入**，靠关键字判断该不该补发。原来的 `str(reason)[:800]`
+#（只留头部）把 .NET/EWS 的真实异常砍在中间：11-25 07:15/07:20 的
+# `Unable to connect to the remote server` 正好落在尾部，于是判据返回 False，
+# FW 日报在通道恢复后从未进入补发链。截断必须**首尾都留**，尾部尤其不能丢。
+_ERROR_SUMMARY_LIMIT = 4000
+_ERROR_SUMMARY_HEAD = 1500
+
+
+def _summarize_email_error(reason) -> str:
+    """把过长的邮件失败信息压成「头 + 尾」摘要，保留尾部真实异常。
+
+    未超限时原样返回；超限时省略中间并写明省略字符数。
+    """
+    text = str(reason or "").strip()
+    if len(text) <= _ERROR_SUMMARY_LIMIT:
+        return text
+    head = text[:_ERROR_SUMMARY_HEAD]
+    tail = text[-(_ERROR_SUMMARY_LIMIT - _ERROR_SUMMARY_HEAD):]
+    omitted = len(text) - len(head) - len(tail)
+    return f"{head}\n...（中间省略 {omitted} 字符）...\n{tail}"
+
+
 # ============================================================
 # 主流程
 # ============================================================
@@ -921,9 +946,14 @@ def run():
     if email_failed:
         reason = (email_result.get("error") or email_result.get("message")
                   or str(email_result))
+        # 错误串同时是 email_recovery.is_ews_resendable() / auto_retry 的判据输入，
+        # 不能只留头部（2026-11-25：.NET 的 "Unable to connect to the remote
+        # server" 落在尾部，旧的 [:800] 砍掉后判据返回 False，FW 日报恢复后
+        # 从未进入补发链）。_summarize_email_error 保留首尾。
+        summary = _summarize_email_error(reason)
         errors.append(f"邮件发送失败（数据已同步 {total_inserted} 条，"
-                      f"remote_api={api_ok}）: {str(reason)[:800]}")
-        print(f"[MAIN] 邮件失败，任务判定为失败: {str(reason)[:200]}")
+                      f"remote_api={api_ok}）: {summary}")
+        print(f"[MAIN] 邮件失败，任务判定为失败: {summary}")
     if errors:
         result["error"] = "\n".join(errors)
     return result
