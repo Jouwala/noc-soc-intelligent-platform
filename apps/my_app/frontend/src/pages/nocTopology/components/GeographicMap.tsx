@@ -125,6 +125,16 @@ function MapHome({ token, nodes }: { token: number; nodes: NocNode[] }) {
   return null
 }
 
+/** 线宽随地图缩放**连续**自适应（不是分档跳变）。
+ *  Leaflet 的 weight 是屏幕像素、本身不随缩放变化，所以按 zoom 换算一个系数：
+ *  以全国视图 LB_ZOOM=7 为基准 1.0，每放大一级 ×1.15、每缩小一级 ÷1.15，夹在 [0.75, 2.0]：
+ *    z6 ≈ 0.87 · z7 = 1 · z8 ≈ 1.15 · z9 ≈ 1.32 · z10 ≈ 1.52 · z11 ≈ 1.75 · z12+ = 2
+ *  （全国视图下光纤 ≈ 2px、微波 ≈ 2.6px，放大后线跟着变粗。） */
+const LINE_BASE_ZOOM = 7
+function zoomScale(zoom: number): number {
+  return Math.min(2, Math.max(0.75, Math.pow(1.15, zoom - LINE_BASE_ZOOM)))
+}
+
 /** 一张地图只用一个 canvas 渲染器：每次点选都 new 一个会在地图里留下
  *  越来越多的空 canvas 元素（Leaflet 不会因为图层被移除就回收渲染器）。 */
 function canvasRenderer(map: L.Map): L.Canvas {
@@ -151,7 +161,8 @@ function NocGeoLayer({
     const group = L.layerGroup().addTo(map)
     const byKey = new Map(nodes.map((n) => [n.key, n]))
 
-    // 线先画（压在点下面）
+    // 线先画（压在点下面）；缩放时只 setStyle，不重建几何
+    const lines: { line: L.Polyline; weight: number; opacity: number }[] = []
     for (const e of edges) {
       const a = byKey.get(e.sourceNode)
       const b = byKey.get(e.targetNode)
@@ -159,18 +170,38 @@ function NocGeoLayer({
       const color = mode === 'overview'
         ? (e.medium === 'microwave' ? palette.warn : palette.teal)
         : statusInk(e.status, palette)
-      group.addLayer(L.polyline(
+      /* 全国视图（系数 1.0）下的基准线宽；实际线宽 = 基准 × zoomScale(zoom) */
+      const weight = e.medium === 'microwave' ? 2.6 : 2
+      const opacity = mode === 'overview' ? 0.7 : 0.85
+      const line = L.polyline(
         [[a.latitude as number, a.longitude as number], [b.latitude as number, b.longitude as number]],
         {
           renderer,
           color,
-          weight: e.medium === 'microwave' ? 1.4 : 1,
-          opacity: mode === 'overview' ? 0.3 : 0.5,
+          weight,
+          opacity,
           dashArray: e.planned ? '4 4' : (e.schematic ? '2 4' : undefined),
           interactive: false,
         },
-      ))
+      )
+      group.addLayer(line)
+      lines.push({ line, weight, opacity })
     }
+
+    const restyle = () => {
+      if (!isMapAlive(map)) return
+      const k = zoomScale(map.getZoom())
+      for (const it of lines) it.line.setStyle({ weight: it.weight * k, opacity: it.opacity })
+    }
+    restyle()
+    /* 缩放过程中每帧最多重算一次（滚轮/捏合会连续触发 zoom），zoomend 兜底 */
+    let raf = 0
+    const tick = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => { raf = 0; restyle() })
+    }
+    map.on('zoom', tick)
+    map.on('zoomend', restyle)
 
     for (const n of nodes) {
       if (!hasGeo(n)) continue
@@ -189,7 +220,12 @@ function NocGeoLayer({
       group.addLayer(m)
     }
 
-    return () => { group.remove() }
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      map.off('zoom', tick)
+      map.off('zoomend', restyle)
+      group.remove()
+    }
   }, [map, nodes, edges, mode, palette, onSelect])
 
   return null

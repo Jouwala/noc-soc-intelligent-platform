@@ -1128,6 +1128,13 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 | 覆盖 | `gettasklogbytaskid?taskid=1647` → `getLayerFiles` → `exportMap(CSV)` → `exportMapChecking` → `downloadExportMapFile` | `app.ngi_coverage_grid`（178 370 个 50 m 格点） |
 | 留痕 | — | `app.ngi_sync_log`（两阶段各一条，含行数 / 耗时 / 任务号 / 原始错误 / `run_id`） |
 
+> **下游消费方（2026-11-24 / 11-25）**：位置页（`?page=location`）「图层」浮层里的
+> 覆盖 RSRP / LTE 小区 / 5G NR 小区三层直接读这三张表，接口前缀 `/api/ngi-coverage`
+> （见 `11-feature-guide.md` §11b）。接口进程内缓存最多 60 s 后自动发现新一轮数据（覆盖网格按
+> `run_id`、工参按「行数 + max(fetched_at)」判断），**同步后无需重启后端**。
+> 覆盖阶段的 `sync_log.detail.kpis[*]` 现在一并记下 NGI 的 `legend`（档位区间原始定义），
+> 图层 meta 接口会带出来作参考；前端配色以库内每档实测 RSRP 均值为准。
+
 > ⚠ **cron 的星期必须写字面量 `sun`，不能写 `0`。** APScheduler 的 `day_of_week`
 > 是 **0=周一**（与 crontab 的 0=周日相反）：`0 2 * * 0` 实测排到的是「周一 02:00」。
 > 项目内既有周任务同样用字面量（`kpi_email`: `0 7 * * mon`），照此保持一致。

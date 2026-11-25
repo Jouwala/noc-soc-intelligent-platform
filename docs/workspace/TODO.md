@@ -171,6 +171,16 @@
 
 ### P2 —— 体验与工程规范
 
+- [ ] **`ran_site_kpi_rt_service.py` 拆分（2026-11-25 立）。**
+      站点 KPI 实时查询的服务层已 **942 行**，超过 `AGENTS.md` 三.2 的 500 行上限（2026-11-24 新建时
+      已 780 行，后续修「小区名被写成站点 ID」、补大小写归一化、接入服务端单网元过滤与 5G 模板驱动
+      继续增长）。可拆的边界：工参读取与站点解析（`search_sites` / `load_site_cells` / `_resolve_site`）、
+      UME 取数与分页（`_build_payload` / `fetch_chunk` / `_post` / `_get` 与重试）、曲线组装
+      （`build_cells` / `collect_series`）、缓存与异步任务（`start_job` / `get_job` / `_jobs`）。
+      不要求一次性拆完，但下次改这个文件前先拆出至少一块，不要继续在单文件里加逻辑
+      （网元过滤与 5G 模板构造已按此原则独立到 `ran_ume_ne_filter.py` 150 行、
+      `ran_ume_pm_template.py` 93 行）。
+
 - [ ] **看板「打开慢」治理（2026-11-24 立；Muse 接手 AWS Quick 会话「本地项目快照方案推广规划」里的「提升网页速度」任务）。**
       已完成两项（分支 `muse-pl-warmup-qc-singleflight`，依据是 11-19 切生产 ~ 11-23 的 nginx access.log 实测）：
       ① **丢包总览预热**从「只热 `site_type=""`（ALL）」扩到「页面下拉里每个站点类型 + 每 480s 周期重算」——

@@ -165,23 +165,30 @@ export function TaskHistoryModal({
             // 后端 status=pending_cmdb 专门标这类（fiber_assign_service.apply_outcome），
             // 这里按橙色「提示」渲染（2026-11-17 如意要求：提示照旧，但不报错）。
             const pendingCmdb = rj?.status === 'pending_cmdb'
-            const cmdbNotice = pendingCmdb ? String(rj?.message || '') : ''
+            // 上游未建单：eFlow 回了 success 但没建出 TT，属上游派单问题，不是任务故障
+            // （2026-11-25 如意要求：不报错，群里通报即可）。同样按橙色提示渲染。
+            const upstreamNoTt = rj?.status === 'upstream_no_tt'
+            const amberNotice = pendingCmdb || upstreamNoTt
+            const notice = amberNotice ? String(rj?.message || '') : ''
+            const noticeLabel = pendingCmdb
+              ? t('sync.runNotice.pendingCmdb')
+              : t('sync.runNotice.upstreamNoTt')
             // 延后不是失败：邮箱通道降级时本轮没执行，用琥珀色与「失败」区分开
             const deferred = !run.success && run.trigger === 'deferred'
             return (
             <List.Item style={{
-              background: pendingCmdb || deferred
+              background: amberNotice || deferred
                 ? 'rgba(250, 173, 20, 0.05)'
                 : (run.success ? 'rgba(82, 196, 26, 0.05)' : 'rgba(255, 77, 79, 0.05)'),
               borderRadius: 'var(--wh-radius-md)',
               padding: 'var(--wh-space-sm) var(--wh-space-md)',
               marginBottom: 'var(--wh-space-xs)',
-              border: `1px solid ${pendingCmdb || deferred
+              border: `1px solid ${amberNotice || deferred
                 ? 'rgba(250, 173, 20, 0.25)'
                 : (run.success ? 'rgba(82, 196, 26, 0.2)' : 'rgba(255, 77, 79, 0.2)')}`,
             }}>
               <List.Item.Meta
-                avatar={pendingCmdb
+                avatar={amberNotice
                   ? <ExclamationCircleFilled style={{ color: '#faad14', fontSize: '1.125rem' }} />
                   : deferred
                     ? <ClockCircleFilled style={{ color: '#faad14', fontSize: '1.125rem' }} />
@@ -191,12 +198,14 @@ export function TaskHistoryModal({
                 }
                 title={
                   <Space>
-                    <Tag color={pendingCmdb ? 'orange' : deferred ? 'gold' : (run.success ? 'green' : 'red')}>
+                    <Tag color={amberNotice ? 'orange' : deferred ? 'gold' : (run.success ? 'green' : 'red')}>
                       {pendingCmdb
                         ? t('sync.runStatus.pendingCmdb')
-                        : deferred
-                          ? (locale === 'zh' ? '已延后' : 'Deferred')
-                          : (run.success ? (locale === 'zh' ? '成功' : 'Success') : (locale === 'zh' ? '失败' : 'Failed'))}
+                        : upstreamNoTt
+                          ? t('sync.runStatus.upstreamNoTt')
+                          : deferred
+                            ? (locale === 'zh' ? '已延后' : 'Deferred')
+                            : (run.success ? (locale === 'zh' ? '成功' : 'Success') : (locale === 'zh' ? '失败' : 'Failed'))}
                     </Tag>
                     <Text style={{ fontSize: '0.75rem', color: WH.textMuted }}>
                       {run.trigger === 'manual' ? '🔧' : deferred ? '⏸' : '⏰'} {formatDateTime(run.started_at, { zone: true })}
@@ -206,10 +215,10 @@ export function TaskHistoryModal({
                 description={
                   <div>
                     <Text style={{ fontSize: '0.75rem', color: WH.textDim }}>⏱ {(run.elapsed_seconds ?? 0).toFixed(2)}s</Text>
-                    {cmdbNotice && (
+                    {notice && (
                       <div style={{ marginTop: 'var(--wh-space-sm)' }}>
                         <Text style={{ fontSize: '0.75rem', color: '#faad14', fontWeight: 600 }}>
-                          ⚠ {t('sync.runNotice.pendingCmdb')}
+                          ⚠ {noticeLabel}
                         </Text>
                         <pre style={{
                           margin: 'var(--wh-space-xs) 0 0', padding: 'var(--wh-space-sm)', fontSize: '0.6875rem', lineHeight: 1.5,
@@ -217,7 +226,7 @@ export function TaskHistoryModal({
                           border: '1px solid rgba(250,173,20,0.25)', whiteSpace: 'pre-wrap',
                           wordBreak: 'break-word', maxHeight: '10rem', overflow: 'auto',
                         }}>
-                          {cmdbNotice}
+                          {notice}
                         </pre>
                       </div>
                     )}

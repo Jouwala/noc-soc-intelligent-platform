@@ -15,6 +15,7 @@ import {
 } from '../model'
 import { layoutGraph } from '../layouts/graphLayout'
 import { projectGeographic } from '../layouts/geographicLayout'
+import { nodeFillStatus } from '../registry'
 import type { NocEdge, NocModel, NocNode } from '../types'
 
 function node(key: string, over: Partial<NocNode> = {}): NocNode {
@@ -163,6 +164,94 @@ describe('逻辑布局', () => {
     const l = layoutGraph([], [])
     expect(l.components).toBe(0)
     expect(l.pos).toEqual({})
+  })
+
+  it('IPRAN 分量按层自上而下：ISP < 核心 < 汇聚 < 接入（y 递增）', () => {
+    const nodes = [
+      node('ipran:isp', { deviceType: 'isp' }),
+      node('ipran:c1', { deviceType: 'core' }),
+      node('ipran:c2', { deviceType: 'core' }),
+      node('ipran:g1', { deviceType: 'aggregation' }),
+      node('ipran:a1', { deviceType: 'access' }),
+      node('ipran:a2', { deviceType: 'access' }),
+      node('ipran:a3', { deviceType: 'access' }),
+    ]
+    const edges = [
+      edge('ipran:1', 'ipran:isp', 'ipran:c1'),
+      edge('ipran:2', 'ipran:c1', 'ipran:c2'),
+      edge('ipran:3', 'ipran:c2', 'ipran:g1'),
+      edge('ipran:4', 'ipran:g1', 'ipran:a1'),
+      edge('ipran:5', 'ipran:g1', 'ipran:a2'),
+      edge('ipran:6', 'ipran:a2', 'ipran:a3'),
+    ]
+    const { pos } = layoutGraph(nodes, edges)
+    const y = (k: string) => pos[k].y
+    expect(y('ipran:isp')).toBeLessThan(y('ipran:c1'))
+    expect(y('ipran:c1')).toBe(y('ipran:c2'))
+    expect(y('ipran:c2')).toBeLessThan(y('ipran:g1'))
+    for (const a of ['ipran:a1', 'ipran:a2', 'ipran:a3']) expect(y('ipran:g1')).toBeLessThan(y(a))
+    // 确定性
+    expect(layoutGraph(nodes, edges).pos).toEqual(pos)
+  })
+
+  it('非 IPRAN 分量不分层（MW 全是微波，仍走同心环）', () => {
+    const nodes = Array.from({ length: 7 }, (_, i) => node(`mw:${i}`, { deviceType: 'microwave' }))
+    const edges = nodes.slice(1).map((n, i) => edge(`mw:e${i}`, 'mw:0', n.key))
+    const { pos } = layoutGraph(nodes, edges)
+    const ys = new Set(nodes.map((n) => Math.round(pos[n.key].y)))
+    // 星形放在环上，y 不会只有一两档
+    expect(ys.size).toBeGreaterThan(2)
+  })
+})
+
+describe('节点填充色（告警不染色）', () => {
+  it('IPRAN：有紧急告警但在线 → ok；离线 → down', () => {
+    const alarms = { crit: 3, major: 1, minor: 0, warn: 0 }
+    expect(nodeFillStatus(node('ipran:x', { status: 'critical', alarms }))).toBe('ok')
+    expect(nodeFillStatus(node('ipran:y', { status: 'down', alarms }))).toBe('down')
+  })
+
+  it('无告警计数的来源（MW/OLIB）原样返回', () => {
+    expect(nodeFillStatus(node('mw:x', { status: 'major' }))).toBe('major')
+    expect(nodeFillStatus(node('olib:x', { status: 'static' }))).toBe('static')
+  })
+})
+
+describe('流量视图：按负载排序', () => {
+  // 两个点对：cold（10%）编号在前，hot（95%）编号在后 —— 默认排序 cold 在前
+  const nodes = [node('mw:a'), node('mw:b'), node('mw:y'), node('mw:z')]
+  const edges = [
+    edge('mw:cold', 'mw:a', 'mw:b', { trafficAvailable: true, txUtilization: 10, rxUtilization: 4 }),
+    edge('mw:hot', 'mw:y', 'mw:z', { trafficAvailable: true, txUtilization: 30, rxUtilization: 95 }),
+  ]
+
+  it('不开 sortByLoad：维持原排序（编号在前的先排）', () => {
+    const { pos } = layoutGraph(nodes, edges)
+    expect(pos['mw:a'].x).toBeLessThan(pos['mw:y'].x)
+  })
+
+  it('开 sortByLoad：满载点对排到最前（左上）', () => {
+    const { pos } = layoutGraph(nodes, edges, { sortByLoad: true })
+    expect(pos['mw:y'].x).toBeLessThan(pos['mw:a'].x)
+  })
+
+  it('同一色阶档位内的小波动不改变顺序（避免刷新时网格乱跳）', () => {
+    const e2 = [
+      edge('mw:cold', 'mw:a', 'mw:b', { trafficAvailable: true, txUtilization: 86, rxUtilization: 0 }),
+      edge('mw:hot', 'mw:y', 'mw:z', { trafficAvailable: true, txUtilization: 99, rxUtilization: 0 }),
+    ]
+    const { pos } = layoutGraph(nodes, e2, { sortByLoad: true })
+    // 86% 与 99% 同属 85-100% 档 → 退回原排序
+    expect(pos['mw:a'].x).toBeLessThan(pos['mw:y'].x)
+  })
+
+  it('没有流量的分量排在有流量的后面，单侧 null 不当 0', () => {
+    const e3 = [
+      edge('mw:cold', 'mw:a', 'mw:b', { trafficAvailable: false, txUtilization: null, rxUtilization: null }),
+      edge('mw:hot', 'mw:y', 'mw:z', { trafficAvailable: true, txUtilization: null, rxUtilization: 0.5 }),
+    ]
+    const { pos } = layoutGraph(nodes, e3, { sortByLoad: true })
+    expect(pos['mw:y'].x).toBeLessThan(pos['mw:a'].x)
   })
 })
 

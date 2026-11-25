@@ -12,8 +12,14 @@
  *   · 规划链路：虚线；
  *   · 示意连接（OLIB）：点线 + 更细；
  *   · 故障：红色虚线 + 目标端断开的小叉。
+ *
+ * 流量视图的「可读性」两条（2026-11-25，MW 几百个点对挤在一起时数字叠成一团）：
+ *   · 百分比标签：全景下只给峰值 ≥ LABEL_MIN_UTIL 的链路显示；其余在悬停 / 选中时显示，
+ *     放大到 LABEL_ALL_SCALE 以上全部显示；
+ *   · 低负载弱化：< LOW_LOAD_UTIL 的那一段降低不透明度（色值不变，与 IPRAN 专页
+ *     同一套 8 档色），悬停 / 选中时恢复。没有数据的段（null）不弱化，仍按 N/A 处理。
  * ========================================================================== */
-import { memo, type ReactNode } from 'react'
+import { memo, useState, type ReactNode } from 'react'
 
 import { WH } from '../../../theme'
 import {
@@ -45,16 +51,29 @@ function dashFor(edge: NocEdge): string | undefined {
   return undefined
 }
 
+/** 连线整体线宽系数：2026-11-25 按值班反馈「线太粗」整体减半（含流量视图的带宽加粗量） */
+const LINK_WIDTH_SCALE = 0.5
+
+/** 全景下始终显示百分比的门槛（峰值方向 ≥ 70%，即 8 档色阶里的橙 / 红两档） */
+const LABEL_MIN_UTIL = 70
+/** 放大到这个屏幕比例以上，所有有数据的链路都显示百分比 */
+const LABEL_ALL_SCALE = 1.6
+/** 低于这个利用率的段降低不透明度（0-40% 是灰 / 紫 / 深蓝 / 浅蓝四档） */
+const LOW_LOAD_UTIL = 40
+const LOW_LOAD_OPACITY = 0.35
+
 function widthFor(edge: NocEdge, mode: 'logical' | 'traffic'): number {
   const base = mediumWidth(edge.medium)
-  if (mode !== 'traffic' || !edge.capacityMbps) return base
+  if (mode !== 'traffic' || !edge.capacityMbps) return base * LINK_WIDTH_SCALE
   // 带宽越大线越粗：100Mbps ≈ +0，10Gbps ≈ +2
-  return base + Math.min(2.4, Math.max(0, Math.log10(edge.capacityMbps / 100) * 0.7))
+  const bonus = Math.min(2.4, Math.max(0, Math.log10(edge.capacityMbps / 100) * 0.7))
+  return (base + bonus) * LINK_WIDTH_SCALE
 }
 
 export default memo(function DirectionalLink({
   edge, a, b, c, mode, dimmed, selected, scale, onSelect,
 }: DirectionalLinkProps) {
+  const [hover, setHover] = useState(false)
   const traffic = mode === 'traffic' && edge.trafficAvailable
   const width = widthFor(edge, mode)
   const dim = dimmed ? 0.12 : 1
@@ -67,8 +86,19 @@ export default memo(function DirectionalLink({
 
   const font = 8.5 / Math.max(0.7, Math.min(scale, 2))
   /* 默认「适配全景」时 scale 约 0.4~0.6，一对两点链路只有几十像素宽，
-     TX/RX 两个标签必然叠在一起。低于 0.75 先只画颜色，放大后再出数字。 */
-  const showLabels = scale >= 0.75
+     TX/RX 两个标签必然叠在一起。低于 0.75 先只画颜色，放大后再出数字；
+     即使放大，也只有高负载链路常显，其余悬停 / 选中才显示。 */
+  const peak = Math.max(
+    edge.txUtilization ?? Number.NEGATIVE_INFINITY,
+    edge.rxUtilization ?? Number.NEGATIVE_INFINITY,
+  )
+  const active = hover || selected
+  const showLabels = active
+    || (scale >= 0.75 && (peak >= LABEL_MIN_UTIL || scale >= LABEL_ALL_SCALE))
+  /** 低负载段弱化；悬停 / 选中时恢复全不透明 */
+  const segOpacity = (u: number | null | undefined) => (
+    !active && u != null && Number.isFinite(u) && u < LOW_LOAD_UTIL ? LOW_LOAD_OPACITY : 1
+  )
 
   const labelStyle = {
     fill: WH.text,
@@ -89,8 +119,8 @@ export default memo(function DirectionalLink({
     const l2 = quadraticAt(a, c, b, 0.75)
     body = (
       <>
-        <path d={p1} fill="none" stroke={weathermapColor(tx)} strokeWidth={width} strokeLinecap="round" />
-        <path d={p2} fill="none" stroke={weathermapColor(rx)} strokeWidth={width} strokeLinecap="round" />
+        <path d={p1} fill="none" stroke={weathermapColor(tx)} strokeOpacity={segOpacity(tx)} strokeWidth={width} strokeLinecap="round" />
+        <path d={p2} fill="none" stroke={weathermapColor(rx)} strokeOpacity={segOpacity(rx)} strokeWidth={width} strokeLinecap="round" />
         {showLabels && tx != null && (
           <text x={l1.x} y={l1.y - 3} textAnchor="middle" fontSize={font} {...labelStyle}>
             {`TX ${trafficLabel(tx)}`}
@@ -124,6 +154,8 @@ export default memo(function DirectionalLink({
     <g
       opacity={dim}
       style={{ cursor: 'pointer' }}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
       onClick={(e) => { e.stopPropagation(); onSelect(edge.key) }}
       data-interactive="1"
     >
@@ -139,7 +171,7 @@ export default memo(function DirectionalLink({
           points={`0,0 ${-arrow * 1.8},${-arrow * 0.75} ${-arrow * 1.8},${arrow * 0.75}`}
           transform={`translate(${ax.toFixed(2)},${ay.toFixed(2)}) rotate(${(angle * 180 / Math.PI).toFixed(1)})`}
           fill={traffic ? weathermapColor(edge.txUtilization) : statusColor(edge.status)}
-          opacity={0.95}
+          opacity={0.95 * (traffic ? segOpacity(edge.txUtilization) : 1)}
         />
       )}
     </g>
