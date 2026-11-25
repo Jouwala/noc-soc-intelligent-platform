@@ -3333,6 +3333,14 @@ WhatsApp WebSocket 协议，凭据独立于问答 bot）轮询消费，<code>sen
 </tbody>
 </table>
 <blockquote>
+<p><strong>下游消费方（2026-11-24 / 11-25）</strong>：位置页（<code>?page=location</code>）「图层」浮层里的
+覆盖 RSRP / LTE 小区 / 5G NR 小区三层直接读这三张表，接口前缀 <code>/api/ngi-coverage</code>
+（见 <code>11-feature-guide.md</code> §11b）。接口进程内缓存最多 60 s 后自动发现新一轮数据（覆盖网格按
+<code>run_id</code>、工参按「行数 + max(fetched_at)」判断），<strong>同步后无需重启后端</strong>。
+覆盖阶段的 <code>sync_log.detail.kpis[*]</code> 现在一并记下 NGI 的 <code>legend</code>（档位区间原始定义），
+图层 meta 接口会带出来作参考；前端配色以库内每档实测 RSRP 均值为准。</p>
+</blockquote>
+<blockquote>
 <p>⚠ <strong>cron 的星期必须写字面量 <code>sun</code>，不能写 <code>0</code>。</strong> APScheduler 的 <code>day_of_week</code>
 是 <strong>0=周一</strong>（与 crontab 的 0=周日相反）：<code>0 2 * * 0</code> 实测排到的是「周一 02:00」。
 项目内既有周任务同样用字面量（<code>kpi_email</code>: <code>0 7 * * mon</code>），照此保持一致。</p>
@@ -3568,6 +3576,7 @@ RAN UME 是 <code>10.100.28.27:28001</code>），账号<strong>不通用</strong
 <li><strong>不告警</strong>：通道不可用属「依赖不可用」，不是任务故障；延后记录跳过失败告警，通道状态由 <code>email_recovery</code> 的「翻转通知 + 持续故障升级」统一负责。</li>
 <li><strong>回滚</strong>：<code>EWS_DEFER_ON_DOWN=0</code>（环境变量）即恢复旧行为，无需改代码。</li>
 <li><strong>维护</strong>：新增邮件任务若带同步/群发/远端写库，<strong>不要</strong>加进 <code>EWS_DEFERRABLE_IDS</code>；纯发信任务可加。延后只影响 <code>run_task</code> 的调度路径，<code>email_recovery</code> 的补发调用（直接调 service 函数）不受门禁影响。</li>
+<li><strong>错误串是补发判据的输入，长错误必须保留尾部（2026-11-25 事故）</strong>：<code>email_recovery.is_ews_resendable()</code> 与 <code>auto_retry</code> 都拿任务记录的 <code>error</code> <strong>原串</strong>匹配关键字。任务把长错误写回 <code>error</code> 时若只留头部，会把尾部真实异常（如 .NET 的 <code>Unable to connect to the remote server</code>）砍掉，补发判据判 False，恢复后永不补发。11-25 FW 日报（<code>fw_kpi_sync</code>）07:15/07:20 两次失败即因此漏补发；同时 UI 只剩半句 <code>Exception calling &quot;Ge</code>。参考写法见 <code>services/fw_kpi/fw_kpi_services.py</code> 的 <code>_summarize_email_error()</code>：超 4000 字符时保留首 1500 + 尾 2500 并标注省略，回归用例 <code>tests/test_fw_kpi_error_summary.py</code>。</li>
 </ul>
 <p><a id="ch-04-s23"></a></p>
 <h3>看门狗与自愈</h3>
@@ -7656,7 +7665,7 @@ KPI 卡讲 <strong>FE 人群</strong> —— 32 名 FE（<code>isfe=Yes</code>�
 <li>「问问答助手」：向 <code>POST /api/portal-qa/ask</code> 提问，再从<strong>答案文字</strong>里解析经纬度（<code>parseLatLon</code> 支持 <code>6.29, -10.78</code>、<code>lat: … lng: …</code>、<code>6.29 N, 10.78 W</code> 等写法）。答案原样显示在输入框下方；解析不到坐标时如实提示，<strong>不猜点</strong>。</li>
 </ul>
 </li>
-<li><strong>页面结构（2026-11-23 用户要求）</strong>：地图在上、控制条在下。地图右上角是「查询订阅者」手机号搜索窗，右下角是「按经纬度定位」坐标搜索窗；经纬度、半径、站点数、问答助手等完整控制条在<strong>页面最下面</strong>，与地图坐标窗共用同一份 lat/lon 状态（两边显示永远一致）。订阅者轨迹结果表放在控制条之后；<strong>标题与口径说明卡放在页面最下面一行</strong>（页脚式收尾，用户 2026-11-23 要求）。</li>
+<li><strong>页面结构（2026-11-23 用户要求，11-25 调整）</strong>：地图在上、控制条在下。地图右上角是「查询订阅者」手机号搜索窗；右下角原有的「按经纬度定位」坐标搜索窗 <strong>2026-11-25 起不再显示</strong>（用户要求，右下角留给图层图例；组件 <code>location/CoordinateSearchOverlay.tsx</code> 保留，<code>LocationMapCard</code> 的 <code>coord</code> 参数改为可选，要恢复只需把它加回 canvas）。经纬度、半径、站点数、问答助手等完整控制条在<strong>页面最下面</strong>，按坐标定位走这里的「应用坐标」。订阅者轨迹结果表放在控制条之后；<strong>标题与口径说明卡放在页面最下面一行</strong>（页脚式收尾，用户 2026-11-23 要求）。</li>
 <li><strong>底图与 <code>?page=gis</code> 完全同源</strong>：本机自托管 PMTiles 离线瓦片（nginx <code>/tiles/liberia.pmtiles</code>），不依赖公网；默认<strong>关闭地名注记与道路</strong>（瓦片自带 1.7 万个地名，全开会糊住站点），地图左上角「图层」浮层可分别打开。右下角 attribution 里的 <code>© OpenStreetMap contributors</code> 是<strong>瓦片数据的署名要求</strong>（数据本身由 OSM 衍生），不代表浏览器在请求在线 OSM。</li>
 <li><strong>Find subscriber 的时间窗</strong>：默认查<strong>最近 3 小时</strong>（与 VMAX 页同一默认）；地图搜索窗下方有起止时间选择器，可改开始/结束时间，最多回看 <strong>24 小时</strong>（VMAX 上游保留期），点「查询」后生效。轨迹卡顶部显示的是<strong>已执行</strong>的那次窗口；当前选择器里的未执行时间不会冒充已查询窗口。</li>
 <li><strong>最近一圈站点</strong>：<code>ringOf()</code>（<code>pages/location/geo.ts</code>）先按所选半径筛，再按 haversine 距离升序取前 N 个；半径内不足 3 个时自动扩到第 3 个最近站点，地图虚线圈与列表同步改用扩后半径，控制条下方用 <code>loc.warn.widened</code> 写明原因与数字。</li>
@@ -7679,6 +7688,23 @@ KPI 卡讲 <strong>FE 人群</strong> —— 32 名 FE（<code>isfe=Yes</code>�
 <li>usertrack <strong>本身没有时间字段</strong>，所以地图只画点、不画连线（连线会被读成「按时间走过」）；拿到轨迹后地图自动 fit 到这些点，输了号码就能直接看到人；</li>
 <li><strong>时间信息</strong>：卡片顶部显示本次查询时间窗（诊断窗口优先）；表格「最新出现」列按小区匹配 VMAX 1100/1300/1301 记录的 <code>start_time</code> 取最后一次，匹配不到显示 <code>—</code>（只代表该窗口内没有对应记录，不代表没去过）；</li>
 <li>点小区圆点或列表行打开 <code>location/SubscriberDrawer.tsx</code>：复用 <code>VmaxCcaCards</code>（Subscriber Info / Terminal Info / User Track Cells / CCA 根因）、<code>VmaxWorkspaceAnalysis</code>（Fault analysis，内嵌 Evidence timeline）、<code>VmaxWorkspaceVerdict</code>（Root cause &amp; recommendations），KPI / 根因明细沿用 <code>DraggableClickModal</code>。</li>
+</ul>
+</li>
+<li><strong>NGI 网络图层（2026-11-24 / 11-25 新增）</strong>：「图层」浮层里在地名注记、道路之后多了三项 —— 覆盖 RSRP / LTE 小区 / 5G NR 小区，<strong>默认全关、勾选后才取数</strong>，不影响首屏。三层都用 Canvas <code>L.GridLayer</code> 按 256 px 瓦片绘制，<strong>不为每个要素建 Leaflet 对象或 React 组件</strong>（17.8 万格点 / 8 千扇面若逐个 <code>&lt;Polygon&gt;</code> 会卡死主线程，评估见 <code>location/coverageGrid.ts</code> 文件头）。tilePane 叠放顺序：覆盖 5 &lt; LTE 6 &lt; NR 7，均在站点 / 链路（overlayPane）之下；图例统一进右下角停靠区（<code>location/mapDock.ts</code>），自动上下排开、可折叠。
+<ul>
+<li><strong>覆盖 RSRP</strong>：数据 <code>app.ngi_coverage_grid</code>（NGI 覆盖评估 50 m 网格，一轮约 17.8 万格点）。<code>GET /api/ngi-coverage/meta</code>（各 kpi 行数 / run_id / 范围 / 档位 RSRP 统计）+ <code>GET /api/ngi-coverage/grid?kpi=</code>（<code>NGC1</code> 紧凑二进制：只含中心经纬度 float32 + 档位 uint8，<strong>不传 <code>polygon</code> 列</strong>，约 1.6 MB、gzip 后约 0.4 MB）。后端按 <code>run_id</code> 缓存打包结果，响应带弱 ETag + <code>Cache-Control: no-cache</code>，同一轮同步内浏览器只做 304 协商。7 档配色按每档实测 RSRP 均值从好到差排，不假设档位编号顺序。点格点调 <code>GET /api/ngi-coverage/point</code>（kpi + 经纬度小框，索引 <code>ix_ngi_grid_geo</code>）取 RSRP / 好点率 / 采样点 / 覆盖小区（回查 LTE 工参小区名）/ PCI。代码：<code>services/ngi_data/ngi_coverage_api.py</code>、<code>location/coverageGrid.ts</code>、<code>location/CoverageGridLayer.tsx</code>；二进制格式两边各有单测（<code>tests/test_ngi_coverage_api.py</code>、<code>location/__tests__/coverageGrid.test.ts</code>）。</li>
+<li><strong>LTE / 5G NR 小区</strong>：数据 <code>app.ngi_lte_cell_param</code>（约 8 227 小区）/ <code>app.ngi_nr_cell_param</code>（约 101 小区）。<code>GET /api/ngi-coverage/lte-cells</code> / <code>nr-cells</code> 下发全量列式 JSON；<strong>两张表输出同一套列名</strong>（NR 的 <code>gnb_*</code> / <code>ssb_arfcn</code> / <code>freq_band_index</code> / <code>dl_bandwidth</code> 在 SQL 里别名，没有的 <code>sector_id</code> / <code>tac</code> / <code>active</code> 给 NULL，见 <code>services/ngi_data/ngi_cell_api.py</code> 的 <code>NR_SELECT</code>，单测校验每个引用列都真实存在）。同样按「行数 + max(fetched_at)」缓存 + 弱 ETag。前端一个组件 <code>location/LteCellLayer.tsx</code>（<code>kind=&quot;lte&quot; | &quot;nr&quot;</code>）、一份画法 <code>location/lteCells.ts</code> 两层共用。
+<ul>
+<li>扇面固定 <strong>65°</strong>，以方位角为中线；方位角为空或室分（<code>cover_type</code> 含 indoor）画小圆点，不猜方向。坐标优先 <code>cell_lat/lon</code>，缺失退回站点坐标；都缺的不画，图例里写出跳过数量。</li>
+<li><strong>频点决定颜色与半径</strong>：频点从低到高排序，依次取色（LTE / NR 各一组调色板），半径比例从 1.0 线性降到 0.5（低频大、高频小）；先画大后画小，同站多载波层层可见。只有一个频点时比例取 1。</li>
+<li><strong>半径按站间距自适应</strong>（2026-11-25 用户反馈「固定米数在密集区叠成一片」）：每站取「到最近邻站的距离 × <code>SITE_R_RATIO</code>（0.45）」作为最外层扇面的地面半径，夹在 50 m ~ 1.5 km；相距 &lt; 30 m 视为共站址（同铁塔不同 eNB），不算邻站。半径是地面米数，缩放时与站间距同比例变化，相邻两站在 13<del>18 级都不会互相压住（有单测）。像素再夹在下限 <code>MIN_PX_BY_ZOOM</code>（全国视图 7</del>9 px，保证看得见；高频至少保留 80%）与上限 <code>MAX_PX</code>（160）之间；12 级以下填充加深、描边加粗。</li>
+<li><strong>5G NR 的区别</strong>：另一组颜色 + <strong>虚线描边</strong>，画在 LTE 之上；站间距按「NR + LTE 全部站点」算（NR 站稀疏，只看自己会顶到上限、盖住周围 LTE 站），所以打开 NR 时会顺带取一次 LTE 工参（与 LTE 图层共用同一份前端缓存）；整体半径再乘 <code>NR_SCALE</code>（0.8），LTE 外环仍露在外面。NR 工参没有扇区号，同扇区按方位角 ±3° 分组；弹窗里频点号显示为 SSB-ARFCN，Band 写成 <code>n78</code>。</li>
+<li><strong>悬浮</strong>：站点名 / 站点 ID / 扇区（或方位角）/ 本扇区全部载波（频点、Band、PCI、小区名），当前载波加粗；mousemove 用 requestAnimationFrame 节流，拖动中、压在站点 / 链路 / 浮层上时不出提示。<strong>点击</strong>：弹窗显示站点、Cell ID、扇区、PCI/TAC、频点 / EARFCN（NR 为 SSB-ARFCN）/ Band / 带宽、方位角、挂高、下倾、覆盖类型、状态 / 厂家，并高亮该扇面轮廓。图例每个频点一行，可逐个勾选显隐（隐藏的既不画也点不中）。</li>
+<li><strong>多层点击仲裁</strong>：命中判断放在 Leaflet <code>preclick</code>，结果挂在原生事件上（<code>mapDock.CELL_HIT_KEY</code>）；NR 与 LTE 都命中时 prio 高的 NR 留下，「覆盖 RSRP」看到标记就让路 —— 点扇面只弹小区、点空白处才弹格点，<strong>与监听器注册顺序无关</strong>。悬浮同理（<code>CELL_HOVER_KEY</code>）。</li>
+<li><strong>可调参数</strong>（都在 <code>location/lteCells.ts</code>）：<code>SITE_R_RATIO</code>（扇面相对站间距的大小，0.35 更疏 / 0.5 更大）、<code>MIN_PX_BY_ZOOM</code>（缩小时的最小尺寸，<code>[缩放级别, 像素]</code>）、<code>NR_SCALE</code>、<code>FREQ_OVERRIDES</code> / <code>NR_FREQ_OVERRIDES</code>（按频点固定颜色或半径比例，键为保留 1 位小数的频点，如 <code>'1815.1'</code>）。</li>
+</ul>
+</li>
+<li><strong>数据新鲜度</strong>：三层都来自每周日 02:00 的 <code>ngi_param_coverage_sync</code>（见 <code>04-task-system.md</code>）；后端缓存最多 60 s 后自动发现新一轮数据，无需重启。前端在同一次页面会话内只下载、建索引一次（关掉再开不重下），刷新页面后靠 ETag 协商。</li>
 </ul>
 </li>
 <li><strong>刷新</strong>：本页登记在 <code>AR_PAGE_DEFAULTS</code>（300 秒）且进 <code>AR_INPLACE_REFRESH_PAGES</code>，收到 <code>myapp-refresh</code> 后只静默重取三层数据与订阅者数据，地图不重挂载。</li>
@@ -15163,12 +15189,14 @@ Top-N 的小时明细（SQL-B）——Web 类目全天 1810 个 APP，全存不�
 <p>投诉排查专用：输入站点名称或 eNodeB ID，<strong>实时直查 RAN UME</strong> 小区级明细，按「扇区 × 载波」画出最近 1~14 天的 KPI 曲线，用来判断该站是「一直这样」还是「忙时才这样」。<strong>不落库</strong>——结果只放服务进程内存（TTL 600s、最多 6 份，<code>SITE_KPI_RT_CACHE_TTL</code> / <code>SITE_KPI_RT_CACHE_MAX</code> 可调），进程重启即全清，换站点也不残留。</p>
 <ul>
 <li><strong>服务端按网元过滤（2026-11-25 修正此前的错误结论）</strong>：UME 支持把历史查询限定到单个站点，但<strong>只有唯一一种组合</strong>生效——<code>filterlayer=&quot;me&quot;</code> 配 <code>uilocations=[{&quot;haslogicmoc&quot;: false, &quot;id&quot;: &quot;&lt;网元 GUID&gt;&quot;, &quot;moc&quot;: &quot;ITBBU&quot;, &quot;model&quot;: &quot;ranme&quot;}]</code>。只写其中一个（例如 <code>uilocations</code> 配 <code>filterlayer=all</code>、或配 <code>filterlayer=group</code>）会被 UME <strong>静默忽略</strong>并照旧回全网，HTTP 200 不报错——2026-11-24 据此误判「UME 不支持按站点过滤」，实际是组合没凑对。实测同一时间片（<code>5300</code> 单站单日 15 分钟粒度）：全网 <code>totalcount=662,661 / 54.7s</code>，单网元 <code>totalcount=1,152 / 3.9s</code>。</li>
-<li><strong>网元 GUID 来源</strong>：<code>GET /api/res/v1/ranmes?queryDn=model:subnetwork</code> 返回的 <code>id</code>，由每日 23:00 的同步任务落到 PG <code>app.ran_element_management</code>；4G 侧 <code>nbi_id</code> 与工参 <code>enodeb_id</code> 同体系，可直接精确匹配。实现在 <code>backend/services/ran/ran_ume_ne_filter.py</code>。</li>
-<li><strong>两条取数路径（4G / 5G 都适用）</strong>：命中网元映射 → 一次查完整个窗口且<strong>全程 15 分钟粒度</strong>，实测 4G 1 天 6.9s / 8 天 7.6s（8760 行、730 点/曲线）、5G 1 天 6.6s（60 点）/ 8 天 6.9s（717 点）；查不到映射（新开站、网元表同步滞后、5G 重名站）或查询失败 → 回退拉全网 + 本地过滤（4G 按 <code>eNodeBId</code>、5G 按网元名忽略大小写），按天切片（<code>CHUNK_DAYS=1</code>），<code>gran=auto</code> 为近 24 小时 15 分钟 / 更早 1 小时。返回体的 <code>server_filtered</code> 字段标明实际走的是哪条。</li>
-<li><strong>5G 也已启用（2026-11-25）</strong>：同样用 <code>filterlayer=me</code> + <code>uilocations</code>，实测 3 小时窗口从 419 行（全网）降到 12 行。但网元映射不能照抄 4G：<code>nbi_id</code> 与工参 <code>gnb_id</code> 不是同一套编号（工参 <code>6004</code> → 网元 <code>4004</code>，且 6010 → 5010，差值无规律），只能按<strong>网元名忽略大小写精确匹配</strong>（UME 写 <code>Liscr</code>、工参写 <code>LISCR</code>）。重名站（<code>Orange</code> 同时命中 <code>Orange</code> / <code>Orange Tower</code> / <code>Qcell Orange</code>）不猜，回退全网。</li>
+<li><strong>网元 GUID 来源</strong>：<code>GET /api/res/v1/ranmes?queryDn=model:subnetwork</code> 返回的 <code>id</code>，由每日 23:00 的同步任务落到 PG <code>app.ran_element_management</code>。4G 的映射是<strong>两级</strong>：先按 <code>nbi_id == enodeb_id</code> 精确匹配（942 个工参站点里 806 个命中），匹配不到再按<strong>站名兜底</strong>（忽略大小写、唯一命中、且 <code>moc='ITBBU'</code>，再覆盖 52 个）——因为两者并非在所有站点上都相等：<code>16th Street</code> 工参是 <code>4245</code>、网元只有 <code>nbi_id=5245</code> 的 ITBBU，而用该网元过滤回的正是 4245 的 12 个小区（8 天 8880 行 / <strong>8.7s</strong>）。只按编号匹配时这类站点每次查询都退回全网，8 天要 <strong>270s</strong>（2026-11-25 用户体感「原来 8 秒，现在被弄坏了」）。同名 SDR/MRNC/MEC 是 2G/3G 网元，兜底时 SQL 直接排除。实现在 <code>backend/services/ran/ran_ume_ne_filter.py</code>。</li>
+<li><strong>两条取数路径（4G / 5G 都适用）</strong>：命中网元映射 → 一次查完整个窗口且<strong>全程 15 分钟粒度</strong>，实测 4G 1 天 6.9s / 8 天 7.3s（8844 行、12 小区、737 点/曲线）、5G 1 天 6.4s（195 行、3 小区、65 点）/ 8 天 6.8s（2166 行、3 小区、722 点）；查不到映射（新开站、网元表同步滞后、5G 重名站）或查询失败 → 回退拉全网 + 本地过滤（4G 按 <code>eNodeBId</code>、5G 按网元名忽略大小写），按天切片（<code>CHUNK_DAYS=1</code>），<code>gran=auto</code> 为近 24 小时 15 分钟 / 更早 1 小时。返回体的 <code>server_filtered</code> 字段标明实际走的是哪条。</li>
+<li><strong>5G 也已启用（2026-11-25）</strong>：同样用 <code>filterlayer=me</code> + <code>uilocations</code>，实测 3 小时窗口从 419 行（全网）降到 12 行。但网元映射不能照抄 4G：<code>nbi_id</code> 与工参 <code>gnb_id</code> 不是同一套编号（工参 <code>6245</code> → 网元 <code>5245</code>、<code>6004</code> → <code>4004</code>，差值无规律），只能按<strong>网元名忽略大小写精确匹配</strong>（UME 写 <code>Liscr</code>、工参写 <code>LISCR</code>）。重名站（<code>Orange</code> 同时命中 <code>Orange</code> / <code>Orange Tower</code> / <code>Qcell Orange</code>）不猜，回退全网。</li>
+<li><strong>5G 是小区级（2026-11-25 第二次修正）</strong>：小区维度的正确组合是 <code>grouplayer=&quot;me,NRRadioInfrastructure,NRPhysicalCellDU&quot;</code> + <code>basemotid=&quot;NRPhysicalCellDU&quot;</code>，<strong>两者同时给</strong>。只写 <code>grouplayer=&quot;me&quot;</code> 时 UME 不报错、静默按网元级返回（同站同窗口 288 行 → 3351 行全网）；只下沉 <code>NRCellDU</code> 又只回 11 个时间片 —— 这两条都曾让人误判&quot;5G 只能到网元级&quot;。实测单站单日 288 行 = 96 时间片 × 3 小区，每小区一条完整曲线。</li>
+<li><strong>5G 小区 ↔ 工参的映射键</strong>：UME 返回 <code>NRPhysicalCellDU-1/2/3</code>，工参是 <code>站名-S0/S1/S2</code>，不能按顺序猜。用 <code>masterOperatorId</code>（形如 <code>61807-4004-50</code>）的<strong>尾号 = 工参 <code>cell_id</code></strong> 映射（Vai Town 50/51/52、Orange 21/22/23 两站实测吻合），映射不到才退回 UME 原始标签并进 <code>warnings</code>。</li>
 <li><strong>5G 的 payload 必须模板驱动</strong>：5G 模板的 24 项指标之间存在派生依赖，只发本页需要的 9 项会被 UME <strong>HTTP 499 <code>0001619999</code> 即时拒绝</strong>（0.0s，不是超时）。因此 5G 每轮先 <code>GET /api/pm-model/v1/templates/detail?id=1638004472759</code> 拿模板，用模板的 items / position / position1 / motid / nfctid / indexfillingtype 原样构造（进程内缓存 10 分钟），构造逻辑在 <code>backend/services/ran/ran_ume_pm_template.py</code>。<strong>不要</strong>给 5G 硬编码指标清单。</li>
-<li><strong>5G 出图仍是网元级</strong>：UME 不提供 5G 小区级完整时间序列，本页按整站一条曲线出图（工参里的小区数与方位角写进 <code>warnings</code>）。</li>
-<li><strong>扇区与载波</strong>：扇区号取 PG <code>app.ngi_lte_cell_param.sector_id</code>；一个扇区可挂多个频点小区（Wood Camp2 Sector 1 有 801 / 1815.1 / 1832.2 / 2310 / 2670 五个），载波按 <code>dl_center_freq</code> 区分，一条曲线一个小区，颜色按频点固定。实测约 13% 的 UME 小区不在工参里（928/6950），这类小区按名称后缀推断扇区并在 <code>warnings</code> 中显式列出。</li>
+<li><strong>模板驱动的两个反直觉点</strong>：① <code>showbusinesscolumn</code> 必须<strong>强制 True</strong>，不能跟随模板（模板返回 False）—— 关掉后 UME 不返回 <code>masterOperatorId</code> / <code>nrCarrierGroupId</code> 等小区维列，映射只能退化成 <code>NRPhysicalCellDU-1/2/3</code>；② <code>relative</code> 用 <strong>-7</strong>，-1 时 UME 只回窗口第一个时间片（看起来像&quot;5G 没有历史数据&quot;）。</li>
+<li><strong>扇区与载波（5G 同样适用）</strong>：4G 扇区号取 <code>app.ngi_lte_cell_param.sector_id</code>，5G 取 <code>app.ngi_nr_cell_param.sector_id</code>（该字段确实存在，此前代码误写 <code>NULL AS sector_id</code> 导致 5G 永远扇区 0，2026-11-25 已修）。一个扇区可挂多个频点小区（Wood Camp2 Sector 1 有 801 / 1815.1 / 1832.2 / 2310 / 2670 五个），载波按 <code>dl_center_freq</code> 区分，一条曲线一个小区，颜色按频点固定。实测约 13% 的 UME 小区不在工参里（928/6950），这类小区按名称后缀推断扇区并在 <code>warnings</code> 中显式列出。</li>
 <li><strong>指标</strong>：<code>1638004469342</code> DL PRB、<code>1638004469343</code> UL PRB、<code>1638004469330</code> DL 业务量、<code>1638004469331</code> UL 业务量、<code>1638004469332</code> DL IP 吞吐、<code>1638004469785</code> UL IP 吞吐、<code>C373384373</code> 活跃用户数；单用户速率 = 吞吐 ÷ 活跃用户（网络侧估算）。注意 <code>C373384373</code> 在日粒度会被 UME 静默丢列，15 分钟/小时粒度正常返回，服务端会校验列存在性，缺列直接报错而不是当空数据。</li>
 <li><strong>接口</strong>：<code>GET /api/site-kpi-rt/sites</code>（站点搜索）、<code>POST /api/site-kpi-rt/query</code>（起异步任务，返回 <code>job_id</code>）、<code>GET /api/site-kpi-rt/jobs/{job_id}</code>（轮询进度/结果）、<code>POST /api/site-kpi-rt/cache/clear</code>、<code>GET /api/site-kpi-rt/health</code>。仍用异步：单网元路径约 8s，但回退全网时 8 天窗口可达数分钟，超过前端 axios 的 120s 超时。</li>
 <li><strong>按页刷新</strong>：<code>App.tsx</code> 的 <code>AR_PAGE_DEFAULTS</code> 登记 <code>site_kpi_rt: 300</code>，并进 <code>AR_INPLACE_REFRESH_PAGES</code>（图多，整页重挂载会闪白）。</li>
@@ -22101,7 +22129,13 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <ul>
 <li>坐标有四个入口：URL 的 lat / lon（问答助手答案里的链接直接可达）、手动输入、浏览器定位（需 https）、以及「问问答助手」——向 /api/portal-qa/ask 提问后从答案文字里解析坐标</li>
 <li>底图与 ?page=gis 共用本机自托管的 PMTiles 离线瓦片（/tiles/liberia.pmtiles），不依赖公网；默认关闭地名注记与道路，地图左上角「图层」浮层可分别打开。右下角 © OpenStreetMap 是瓦片数据的署名要求，不是在线请求</li>
-<li>地图上有两个搜索窗：右上角「查询订阅者」输手机号查轨迹，右下角「按经纬度定位」输纬度/经度直接定位；经纬度、半径、站点数、问答助手等完整控制条在<strong>页面最下面</strong>，与地图坐标窗共用同一份经纬度状态。手机号搜索默认查<strong>最近 3 小时</strong>，搜索窗下方可改起止时间（最多回看 24 小时），点「查询」生效；标题与口径说明卡放在整个页面的最下面一行</li>
+<li>地图右上角是「查询订阅者」搜索窗：输手机号查轨迹，默认查<strong>最近 3 小时</strong>，搜索窗下方可改起止时间（最多回看 24 小时），点「查询」生效。按经纬度定位请用<strong>页面最下面</strong>的完整控制条（经纬度、半径、站点数、问答助手）—— 地图右下角原来的坐标搜索窗已去掉（2026-11-25），位置留给图层图例。标题与口径说明卡放在整个页面的最下面一行</li>
+<li>「图层」浮层里还有三个网络图层：覆盖 RSRP / LTE 小区 / 5G NR 小区，<strong>默认全关、勾选后才下载</strong>，不影响页面打开速度；各自的图例在地图右下角，点标题可折叠</li>
+<li>「覆盖 RSRP」：NGI 覆盖评估的 50 m 网格（约 17.8 万格点），按 RSRP 分 7 档着色（绿 = 好、红 = 差，按每档实测均值排序）；放大到 13 级以上能看清单个格点，点格点看 RSRP、好点率、采样点、覆盖小区与 PCI；图例里「定位到覆盖区」一键缩放到覆盖范围</li>
+<li>「LTE 小区」/「5G NR 小区」：按 NGI 工参在站点位置画 <strong>65° 扇面</strong>，朝向即方位角；<strong>不同频点不同颜色</strong>，同站低频扇面大、高频扇面小，叠在一起几层都看得见；室分或缺方位角的小区画成小圆点。扇面大小<strong>按站间距自适应</strong>：站密的城区画得小、郊区画得大，任何缩放级别下相邻站都不会压在一起；缩到全国视图时仍保留一个看得见的最小尺寸</li>
+<li>鼠标悬停在扇面上显示站点名、站点 ID、扇区与本扇区全部载波（频点 / Band / PCI / 小区名）；点击弹出小区详情（PCI、TAC、频点 / EARFCN、挂高、下倾、覆盖类型等）并高亮该扇面。图例里每个频点可单独勾选显示 / 隐藏，也可「全选 / 全不选」</li>
+<li>5G NR 用另一组颜色 + <strong>虚线描边</strong>，画在 LTE 之上，扇面比同站 LTE 小一圈；两层同时打开时，重叠处悬停 / 点击只出 5G 的内容。打开小区图层时点扇面只弹小区、点空白处才弹覆盖格点</li>
+<li>三个网络图层的数据都来自每周日 02:00 的 NGI 同步任务（ngi_param_coverage_sync），同一周内浏览器只下载一次；新一轮同步后刷新页面即可看到</li>
 <li>「最近的一圈站点」按所选半径筛站点、按距离升序取前 N 个；半径内不足 3 个时自动扩到第 3 个最近站点，地图虚线圈与列表同步改用扩后半径，并在控制条下方提示</li>
 <li>站点颜色与 ?page=gis 完全同一套规则与色值（实时告警 / 历史 / VIP / 普通）；点站点打开的是 GIS 页同一个下钻抽屉（基本信息 + KPI 图表 + 明细页签）</li>
 <li>MW 链路取 GIS 页同一份 KML 链路并按点到线段距离排序，最近一条加粗；点链路打开「链路详情」抽屉，字段与 ?page=mwRealTime 点链路一致（容量 / Node IP / 接口 / TX-RX 吞吐与利用率 / 24H 趋势 / 端口明细）</li>
@@ -22586,6 +22620,10 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <tr>
 <td><code>/api/ipran-topo</code></td>
 <td>IP RAN 光纤拓扑（<code>/graph</code>，8 次 UME 调用聚合成一次响应，缓存 120s，<code>refresh=1</code> 绕缓存）</td>
+</tr>
+<tr>
+<td><code>/api/ngi-coverage</code></td>
+<td>位置页 NGI 网络图层（只读）：<code>/meta</code>、<code>/grid?kpi=</code>（覆盖网格 <code>NGC1</code> 二进制）、<code>/point</code>（单格点详情）、<code>/lte-cells</code>、<code>/nr-cells</code>（工参全量列式 JSON）；均带弱 ETag，见 <code>11-feature-guide.md</code> §11b</td>
 </tr>
 <tr>
 <td><code>/api/incident-overview</code></td>

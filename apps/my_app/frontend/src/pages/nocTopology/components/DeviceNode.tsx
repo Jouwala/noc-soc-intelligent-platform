@@ -5,9 +5,11 @@
  *   · 形状表示**设备类别**：核心=六边形、汇聚=圆角方、交换机=菱形、
  *     接入=圆点、防火墙=方盾、运营商/云=云、微波=三角、站点=小圆；
  *   · 填充表示**状态**（ok/minor/major/critical/down/unknown/static）；
+ *     IPRAN 只按在线/离线填色（registry.nodeFillStatus），告警不进填充；
  *   · 外环表示**来源**（IPRAN 蓝 / MW 黄 / OLIB 青），一眼分清是谁的设备。
  *
- * 告警不做主着色，只在右上角点一颗小红点 —— IPRAN 实测 80% 网元带紧急告警，
+ * 告警不做主着色，只在右上角点一颗角标：紧急=红、重要=橙（无紧急时）——
+ * IPRAN 实测 80% 网元带紧急告警，
  * 按告警填色会全红、失去区分度（见 ipranTopo 页头注释与数据契约 §3.1）。
  * ========================================================================== */
 import { memo } from 'react'
@@ -100,9 +102,14 @@ function DeviceNodeImpl({
       {/* 来源外环：比设备本体大 2px，深色底上也能看清来源 */}
       <circle r={r + 2} fill="none" stroke={ring} strokeWidth={1.4} opacity={0.9} />
       {glyph(node, r, color)}
-      {node.alarms && node.alarms.crit > 0 && (
+      {node.alarms && (node.alarms.crit > 0 || node.alarms.major > 0) && (
         <g transform={`translate(${r + 2},${-r - 2})`}>
-          <circle r={3.1} fill={WH.sev.Critical} stroke={WH.cardBg} strokeWidth={0.8} />
+          <circle
+            r={3.1}
+            fill={node.alarms.crit > 0 ? WH.sev.Critical : WH.sev.Major}
+            stroke={WH.cardBg}
+            strokeWidth={0.8}
+          />
         </g>
       )}
       {showLabel && (
