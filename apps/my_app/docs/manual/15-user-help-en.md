@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-24.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-25.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -370,8 +370,9 @@ Workflow & maintenance notes per task:
 - Assign delay of 15 minutes: the alarm must have been alive for at least 15 minutes before it is assigned and notified to WhatsApp (business rule: "assign only after the alarm has lasted more than 15 minutes") — it is NOT dispatched the moment it raises; the delay lets short transient breaks clear by themselves. Set it to 0 to restore immediate dispatch
 - Dry-run (dry_run) by default: match + record only, no real assign; turn it off on the Task Config page once verified
 - When the 99933 correlation cannot be determined (fiber only has an ME-derived site name that differs from cmdb, e.g. luogan/luogon) the alarm is treated as "no correlation" and still assigned, with the count logged under correlation_undetermined — never let a name mismatch silently block assignment indefinitely
-- When site resolution fails (site absent from cmdb, e.g. Tokadeh) the TT cannot be created automatically: record N and post a "manual handling required in eFlow" notice to the group, once per alarm (suppressed via send_status) so nothing is silently dropped
+- When site resolution fails (site absent from cmdb, e.g. Tokadeh) the TT cannot be created automatically: record N and post a "manual handling required in eFlow" notice to the group, at most once per alarm per 6 hours (time-boxed suppression via notified_recently; a re-raised alarm under a reused key is reported again) so nothing is silently dropped
 - A site resolution failure means the site is missing from cmdb (the ME / site name is not found there), which is a cmdb gap, NOT a task error (2026-11-17): when every failure in a round is of this kind AND the cmdb index itself loaded fine, the result is recorded as pending_cmdb (success=true, the notice stays in message) and Run History shows an amber "Needs cmdb" notice instead of a red Error; fixing the site/ME mapping in cmdb restores assignment on the next round. An empty cmdb index (fetch failed) or any assign failure still counts as a real failure
+- Upstream created no TT (2026-11-25): the assign API returns success but the ttid is still empty (including the no-TT cases caused by an abnormal eFlow ttstatus) — this is an eFlow-side dispatch problem, unrelated to this task script. When every failure in a round is of this kind the result is recorded as upstream_no_tt (success=true, no error), Run History shows an amber No-TT-upstream notice instead of a red Error, and one WhatsApp notice per alarm asks for a manual TT in eFlow (at most once per 6 hours); the next round retries automatically. A real API error (HTTP 5xx / timeout / ok=false) or a mix with real failures still counts as failed
 - Fiber assign must carry the numeric site ID + site name; passing only the ME name makes the API return success without creating a TT (measured lesson)
 - Fiber assign is intermittent, so it retries and only treats success as confirmed when ttid is found (never trusts status:true)
 - Skip alarms whose upstream ttid is already set: eFlow's own assign rule may have created the TT first, otherwise duplicate TTs are created (measured: two Zardun alarms)
@@ -1850,7 +1851,7 @@ Workflow & maintenance notes per task:
 
 1. Log into the NGI planning platform: auth_manager.get_auth with the ngi credential group (a different server from RAN UME; accounts are not interchangeable). Login uses the same uportal/oauth2 RSA password + Z-AUTH-CODE flow
 1. Parameters: GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 returns ProjectData.zip. The workbook has a 3-row header (Chinese notes / English notes / field names): drop the first two rows, use row 3 as the header, data starts at row 4
-1. Blank SectorID fill: within the same eNodeB ID + Downlink Center Frequency group, sort by Azimuth ascending and number 1, 2, 3, 4...; existing values are preserved and sector_source records file / derived
+1. SectorID generation: cells sharing a site and a center frequency are numbered by Azimuth ascending. LTE fills blanks only (7,054 measured) and keeps existing values; the NR parameter file has no such column, so it is generated from scratch per gNodeBID + DLCenterFrequency; sector_source records file / derived
 1. Coverage: GET taskmanager/gettasklogbytaskid?taskid=1647 for the latest evaluation taskLogId -> POST commonGis/getLayerFiles for the layer hash and legend -> POST MapServerService/exportMap(CSV) -> poll exportMapChecking -> downloadExportMapFile for CSV.zip
 1. Persist (explicit BEGIN/COMMIT transactions): upsert parameters by cell_uid into app.ngi_lte_cell_param / app.ngi_nr_cell_param and prune cells missing from this run; delete-then-insert the grid per kpi into app.ngi_coverage_grid; one app.ngi_sync_log row per stage
 
