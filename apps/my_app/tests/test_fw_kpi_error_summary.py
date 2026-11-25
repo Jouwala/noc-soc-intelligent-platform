@@ -73,8 +73,9 @@ def test_head_only_truncation_would_break_resend_chain():
 
 
 def test_summary_keeps_short_error_verbatim():
+    """未超限必须**原样**返回：不 strip，否则判据输入被改写（2026-11-25 复审）。"""
     raw = "  [WinError 10065] No route to host  \n"
-    assert fw._summarize_email_error(raw) == "[WinError 10065] No route to host"
+    assert fw._summarize_email_error(raw) == raw
     # 短错误原样保留，且非 EWS 失败仍不会被误判为可补发
     assert er.is_ews_resendable(fw._summarize_email_error(raw)) is False
 
@@ -83,3 +84,11 @@ def test_summary_handles_non_string_reason():
     """reason 可能是 dict（email_result 兜底 str()），不得抛异常。"""
     assert fw._summarize_email_error({"success": False}) == "{'success': False}"
     assert fw._summarize_email_error(None) == ""
+
+
+def test_summary_does_not_swallow_falsy_values():
+    """falsy 值（0 / False / 空容器）必须各自 str()，不能一律变空串。"""
+    assert fw._summarize_email_error(0) == "0"
+    assert fw._summarize_email_error(False) == "False"
+    assert fw._summarize_email_error("") == ""
+    assert fw._summarize_email_error([]) == "[]"
