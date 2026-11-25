@@ -1377,3 +1377,22 @@ export function getPrtgSla(params?: { month?: string; target?: number }) {
 export function getPrtgCapacity() {
   return api.get('/prtg/capacity')
 }
+
+// ========== 站点 KPI 实时查询（?page=site_kpi_rt，投诉排查）==========
+// 直查 RAN UME 小区级 15 分钟明细，后端按站点过滤，结果只放内存不落库。
+// 因单次取数常超过 axios 的 120s 超时，query 只起任务，前端轮询 jobs。
+export function siteKpiRtSites(params?: { q?: string; limit?: number; tech?: string }) {
+  return api.get('/site-kpi-rt/sites', { params })
+}
+
+export function siteKpiRtQuery(payload: { site: string; days?: number; gran?: string; force?: boolean; tech?: string }) {
+  return api.post('/site-kpi-rt/query', payload)
+}
+
+export function siteKpiRtJob(jobId: string) {
+  return api.get(`/site-kpi-rt/jobs/${jobId}`)
+}
+
+export function siteKpiRtCacheClear() {
+  return api.post('/site-kpi-rt/cache/clear')
+}

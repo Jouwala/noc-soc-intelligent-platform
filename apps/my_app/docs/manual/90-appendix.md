@@ -2,7 +2,7 @@
 
 ## A. 后端接口前缀速查
 
-注册在 `backend/main.py`（实测 89 处 `include_router`）。前端 `baseURL` 是 `/api`（`frontend/src/api.ts:4`）。
+注册在 `backend/main.py`（实测 91 处 `include_router`）。前端 `baseURL` 是 `/api`（`frontend/src/api.ts:4`）。
 
 **带 prefix 的 router**
 
@@ -21,6 +21,7 @@
 | `/api/nur` | NUR 看板（`/overview`、`/options`、`/detail`） |
 | `/api/mw-ume` | MW 微波拓扑（`/topology` 日粒度）、MW 微波实时（`/realtime` 15 分钟槽位） |
 | `/api/ipran-topo` | IP RAN 光纤拓扑（`/graph`，8 次 UME 调用聚合成一次响应，缓存 120s，`refresh=1` 绕缓存） |
+| `/api/ngi-coverage` | 位置页 NGI 网络图层（只读）：`/meta`、`/grid?kpi=`（覆盖网格 `NGC1` 二进制）、`/point`（单格点详情）、`/lte-cells`、`/nr-cells`（工参全量列式 JSON）；均带弱 ETag，见 `11-feature-guide.md` §11b |
 | `/api/incident-overview` | 事件总览（iframe 内页调用） |
 | `/api/ip-trace` | IP 链路探测（iframe 内页调用：`/trace`、`/status`、`/stop`、`/analyze`） |
 | `/api/portals` | 门户一键登录（`/`、`/login`、`/login/status`、`/close`） |

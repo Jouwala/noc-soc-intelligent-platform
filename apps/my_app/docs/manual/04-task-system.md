@@ -1128,6 +1128,13 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 | 覆盖 | `gettasklogbytaskid?taskid=1647` → `getLayerFiles` → `exportMap(CSV)` → `exportMapChecking` → `downloadExportMapFile` | `app.ngi_coverage_grid`（178 370 个 50 m 格点） |
 | 留痕 | — | `app.ngi_sync_log`（两阶段各一条，含行数 / 耗时 / 任务号 / 原始错误 / `run_id`） |
 
+> **下游消费方（2026-11-24 / 11-25）**：位置页（`?page=location`）「图层」浮层里的
+> 覆盖 RSRP / LTE 小区 / 5G NR 小区三层直接读这三张表，接口前缀 `/api/ngi-coverage`
+> （见 `11-feature-guide.md` §11b）。接口进程内缓存最多 60 s 后自动发现新一轮数据（覆盖网格按
+> `run_id`、工参按「行数 + max(fetched_at)」判断），**同步后无需重启后端**。
+> 覆盖阶段的 `sync_log.detail.kpis[*]` 现在一并记下 NGI 的 `legend`（档位区间原始定义），
+> 图层 meta 接口会带出来作参考；前端配色以库内每档实测 RSRP 均值为准。
+
 > ⚠ **cron 的星期必须写字面量 `sun`，不能写 `0`。** APScheduler 的 `day_of_week`
 > 是 **0=周一**（与 crontab 的 0=周日相反）：`0 2 * * 0` 实测排到的是「周一 02:00」。
 > 项目内既有周任务同样用字面量（`kpi_email`: `0 7 * * mon`），照此保持一致。
@@ -1242,6 +1249,7 @@ worker 分组重启才生效（`backend/routers/task_configs.py`）。
 - **不告警**：通道不可用属「依赖不可用」，不是任务故障；延后记录跳过失败告警，通道状态由 `email_recovery` 的「翻转通知 + 持续故障升级」统一负责。
 - **回滚**：`EWS_DEFER_ON_DOWN=0`（环境变量）即恢复旧行为，无需改代码。
 - **维护**：新增邮件任务若带同步/群发/远端写库，**不要**加进 `EWS_DEFERRABLE_IDS`；纯发信任务可加。延后只影响 `run_task` 的调度路径，`email_recovery` 的补发调用（直接调 service 函数）不受门禁影响。
+- **错误串是补发判据的输入，长错误必须保留尾部（2026-11-25 事故）**：`email_recovery.is_ews_resendable()` 与 `auto_retry` 都拿任务记录的 `error` **原串**匹配关键字。任务把长错误写回 `error` 时若只留头部，会把尾部真实异常（如 .NET 的 `Unable to connect to the remote server`）砍掉，补发判据判 False，恢复后永不补发。11-25 FW 日报（`fw_kpi_sync`）07:15/07:20 两次失败即因此漏补发；同时 UI 只剩半句 `Exception calling "Ge`。参考写法见 `services/fw_kpi/fw_kpi_services.py` 的 `_summarize_email_error()`：超 4000 字符时保留首 1500 + 尾 2500 并标注省略，回归用例 `tests/test_fw_kpi_error_summary.py`。
 
 ## 看门狗与自愈
 

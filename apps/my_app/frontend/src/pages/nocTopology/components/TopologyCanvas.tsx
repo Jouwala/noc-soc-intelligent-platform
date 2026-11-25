@@ -21,7 +21,7 @@ import {
 import { WH } from '../../../theme'
 import { layoutGraph } from '../layouts/graphLayout'
 import { focusSet } from '../model'
-import { statusColor } from '../registry'
+import { nodeFillStatus, statusColor } from '../registry'
 import type { NocEdge, NocNode } from '../types'
 import DeviceNode from './DeviceNode'
 import DirectionalLink, { type Pt } from './DirectionalLink'
@@ -58,7 +58,11 @@ export default function TopologyCanvas({
   onSelectNode, onSelectEdge, onBackground, showLabels, focus, viewCmd, resetKey, locate,
 }: TopologyCanvasProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
-  const layout = useMemo(() => layoutGraph(nodes, edges), [nodes, edges])
+  // 流量视图按负载档位排分量：满载的点对排到左上角（见 layouts/graphLayout.ts）
+  const layout = useMemo(
+    () => layoutGraph(nodes, edges, { sortByLoad: mode === 'traffic' }),
+    [nodes, edges, mode],
+  )
   const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0 })
   /** 画布实际像素宽：user-space 的 k 不等于屏幕缩放（viewBox 会被缩到卡片宽度），
    *  标签/箭头是否可读必须按**屏幕比例**判断。 */
@@ -274,7 +278,8 @@ export default function TopologyCanvas({
               node={n}
               x={p.x}
               y={p.y}
-              color={statusColor(n.status)}
+              // 填充只表达在线/离线；告警走右上角角标（见 registry.nodeFillStatus）
+              color={statusColor(nodeFillStatus(n))}
               dimmed={focusKeep.size > 0 && !focusKeep.has(n.key)}
               selected={selectedNode === n.key}
               showLabel={show}
