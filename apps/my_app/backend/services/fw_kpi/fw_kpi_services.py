@@ -887,22 +887,61 @@ def generate_chart_and_send_email(device_rows):
 _ERROR_SUMMARY_LIMIT = 4000
 _ERROR_SUMMARY_HEAD = 1500
 
+# 邮件失败串的脱敏规则（2026-11-25 复审）。
+#
+# 为什么要脱敏：失败时 `_send_email` 把子进程的整段输出写进 ``error``，里面
+# 有发送上下文 —— 收件账号、OWA 内部主机，URL 里还可能带凭据。它既落
+# ``task_execution_log.result_json`` 又被 print 进运行日志，违反「敏感信息不得
+# 进入日志」。但脱敏只许抹这些**身份信息**，绝不能碰 ``EWS_FAIL_KEYS`` 的措辞：
+# ``email_recovery.is_ews_resendable()`` 拿同一个串做补发判据，抹掉
+# ``Unable to connect to the remote server`` 就等于把 11-25 漏补发的事故装回去。
+_URL_RE = re.compile(r"\b[a-z][a-z0-9+.\-]*://[^\s'\"<>，。；、）】]+", re.I)
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_IPV4_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
+# 只认**带常见 TLD 的完整域名**，避免把 ``Exchange.asmx`` / ``xxx.py`` 这类
+# 路径与文件名当主机吃掉（排障需要它们）。
+_HOST_RE = re.compile(
+    r"\b(?:[A-Za-z0-9\-]+\.)+(?:com|net|org|local|lan|corp|internal|intra|cn|io)\b",
+    re.I,
+)
+_CRED_RE = re.compile(r"(?i)\b(password|passwd|pwd|username|account)\s*[=:]\s*[^\s,;)\]]+")
+
+
+def _redact_email_error(text: str) -> str:
+    """把邮件失败串里的账号 / 主机 / 凭据换成占位符，保留判据关键字。"""
+    if not text:
+        return text
+    out = _URL_RE.sub("https://<host>", text)          # 整条 URL：含主机与可能的凭据
+    out = _EMAIL_RE.sub("<email>", out)                # 收件人 / 发件账号
+    out = _CRED_RE.sub(lambda m: f"{m.group(1)}=***", out)  # password=... / username: ...
+    out = _IPV4_RE.sub("<ip>", out)                    # 内网 IP
+    out = _HOST_RE.sub("<host>", out)                  # 裸内部主机名
+    return out
+
+
+def _redact_email_result(email_result):
+    """就地把 ``result["email"]["error"]`` 脱敏；同一对象也会进 ``result``。"""
+    if isinstance(email_result, dict) and isinstance(email_result.get("error"), str):
+        email_result["error"] = _redact_email_error(email_result["error"])
+    return email_result
+
 
 def _summarize_email_error(reason) -> str:
-    """把过长的邮件失败信息压成「头 + 尾」摘要，保留尾部真实异常。
+    """把过长的邮件失败信息压成「头 + 尾」摘要，保留尾部真实异常，并做脱敏。
 
-    未超限时**原样**返回：不 strip、不吞 falsy 值 —— 调用方写进 ``error`` 的
-    原文就是补发判据的输入，任何改写都可能让 ``EWS_FAIL_KEYS`` 匹配不上。
+    未超限时不 strip、不吞 falsy 值 —— 调用方写进 ``error`` 的原文就是补发判据
+    的输入，改写措辞可能让 ``EWS_FAIL_KEYS`` 匹配不上；唯一允许的改写是脱敏
+    （账号 / 主机 / 凭据换占位符），它不影响任何判据关键字。
     ``None`` 规范为空串；其余（含 0 / False / 空容器）取 ``str()``。
-    超限时省略中间并写明省略字符数。
+    超限时省略中间并写明省略字符数（按**原文**计），再脱敏。
     """
     text = "" if reason is None else str(reason)
-    if len(text) <= _ERROR_SUMMARY_LIMIT:
-        return text
-    head = text[:_ERROR_SUMMARY_HEAD]
-    tail = text[-(_ERROR_SUMMARY_LIMIT - _ERROR_SUMMARY_HEAD):]
-    omitted = len(text) - len(head) - len(tail)
-    return f"{head}\n...（中间省略 {omitted} 字符）...\n{tail}"
+    if len(text) > _ERROR_SUMMARY_LIMIT:
+        head = text[:_ERROR_SUMMARY_HEAD]
+        tail = text[-(_ERROR_SUMMARY_LIMIT - _ERROR_SUMMARY_HEAD):]
+        omitted = len(text) - len(head) - len(tail)
+        text = f"{head}\n...（中间省略 {omitted} 字符）...\n{tail}"
+    return _redact_email_error(text)
 
 
 # ============================================================
@@ -997,6 +1036,9 @@ def run():
     # 这正是 fw_kpi_sync 长期游离在 EMAIL_TASK_IDS 之外却没人发现的另一半原因。
     # 数据同步本身已完成，故在 error 里同时说明，避免误判成"数据没同步"。
     email_failed = bool(email_result) and not email_result.get("success")
+    # 同一对象也挂在 result["email"] 上：整段子进程输出里的收件账号 / 内部主机
+    # 不能随任务记录落库（2026-11-25 复审）。顶层 error 由下面的摘要统一脱敏。
+    _redact_email_result(email_result)
     result = {
         "success": not email_failed and not mirror_errors,
         "rows_written": total_inserted,

@@ -92,3 +92,69 @@ def test_summary_does_not_swallow_falsy_values():
     assert fw._summarize_email_error(False) == "False"
     assert fw._summarize_email_error("") == ""
     assert fw._summarize_email_error([]) == "[]"
+
+
+# ---------------------------------------------------------------------------
+# 脱敏（2026-11-25 复审）：账号 / 主机 / 凭据不得随错误摘要落库或进日志
+# ---------------------------------------------------------------------------
+
+def test_summary_redacts_recipients_and_mail_host():
+    """摘要进 task_execution_log 与运行日志前，必须抹掉收件账号与内部主机。"""
+    summary = fw._summarize_email_error(_dotnet_output())
+
+    for leaked in ("noc@example.com", "ops@example.com", "lead@example.com",
+                   "exchmail.example.com"):
+        assert leaked not in summary, f"未脱敏: {leaked}"
+
+    # 排障上下文与补发判据关键字一个都不能少
+    assert "[RECIPIENTS]" in summary
+    assert "[SEND] 通过 .NET HttpWebRequest" in summary
+    assert "Unable to connect to the remote server" in summary
+    assert er.is_ews_resendable(summary) is True
+
+
+def test_redact_keeps_ews_keywords_resendable():
+    """脱敏只换身份信息，不能顺手把 EWS_FAIL_KEYS 的措辞换掉。"""
+    cases = (
+        "Unable to connect to the remote server",
+        "The remote name could not be resolved: 'exchmail.corp.local'",
+        "[WinError 10054] 连接被重置",
+        "CreateItem failed: SOAP fault",
+        "SendItem 退避中 (RateLimit)",
+    )
+    for raw in cases:
+        assert er.is_ews_resendable(fw._redact_email_error(raw)) is True, raw
+    # 非 EWS 失败不得因为脱敏反而"变成"可补发
+    assert er.is_ews_resendable(fw._redact_email_error("本地磁盘已满")) is False
+
+
+def test_redact_hides_url_credentials_and_ip():
+    raw = ("发送失败: https://svc:Passw0rd@exchmail.example.com/EWS/Exchange.asmx "
+           "via 10.100.2.101")
+    out = fw._redact_email_error(raw)
+
+    assert "Passw0rd" not in out
+    assert "svc:" not in out
+    assert "exchmail.example.com" not in out
+    assert "10.100.2.101" not in out
+    assert "发送失败" in out
+
+
+def test_redact_leaves_plain_text_untouched():
+    """没有身份信息的错误串保持原样，别为了脱敏改了排障信息。"""
+    assert fw._redact_email_error("") == ""
+    plain = "普通错误: 连接超时，Exchange.asmx 返回 503"
+    assert fw._redact_email_error(plain) == plain
+
+
+def test_redact_email_result_in_place():
+    """`result["email"]["error"]` 与顶层 error 同样会落库，必须一起脱敏。"""
+    res = {"success": False,
+           "error": "To : ['noc@example.com'] 主机 exchmail.example.com 失败"}
+    fw._redact_email_result(res)
+    assert "noc@example.com" not in res["error"]
+    assert "exchmail.example.com" not in res["error"]
+
+    # 无 error / 非 dict 的输入不得抛异常
+    assert fw._redact_email_result({"success": True}) == {"success": True}
+    assert fw._redact_email_result(None) is None
