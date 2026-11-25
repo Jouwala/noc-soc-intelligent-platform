@@ -1,6 +1,6 @@
 # my_app 使用帮助
 
-> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-24。
+> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-25。
 
 > 站内入口：侧边栏「使用帮助」，或直链 `http://<host>/myapp/?page=help`。
 
@@ -370,8 +370,9 @@
 - 派单等待时长 15 分钟：告警升起后要先存在满 15 分钟才派单并发 WhatsApp（业务口径「告警发生到选择超过 15 分钟才派」）——不是一升起就派，留这段时间让短时闪断自然清除；配 0 可恢复立即派单
 - 默认 dry_run 演练（只匹配记录不真派单），核对无误后到「任务配置」关掉
 - 关联 99933 无法判定时（fiber 只有 ME 推导站名、与 cmdb 写法不同，如 luogan/luogon）按「没有关联」继续派单并记 correlation_undetermined 留痕——不能因为站名匹配不到就长期漏派
-- 站点解析失败（cmdb 无此站点，如实测 Tokadeh）时自动派不了：记 N 并在群里发一条「需人工在 eFlow 处理」通报，同一条只发一次（send_status 抑制），不静默漏派
+- 站点解析失败（cmdb 无此站点，如实测 Tokadeh）时自动派不了：记 N 并在群里发一条「需人工在 eFlow 处理」通报，同一告警 6 小时内只发一次（notified_recently 按时效抑制；alarm_key 被复用时跨天的新告警仍会通报），不静默漏派
 - 站点解析失败是 cmdb 缺档（ME/站名在 cmdb 里找不到站点），不是任务错误（2026-11-17）：本轮失败全是这一类、且 cmdb 索引本身拉到了时，结果记 pending_cmdb（success=true，提示文案留在 message），执行历史显示橙色「待补 cmdb」提示而不是红色 Error；补齐 cmdb 站点/ME 命名后下一轮自动派单。cmdb 索引为空（没拉到）或混有建单失败时仍判 failed
+- 上游未建单（2026-11-25）：派单接口回 success 但回查 ttid 仍为空（含 eFlow 侧 ttstatus 异常导致的不建单）—— 这是 eFlow 上游侧派单问题，跟本任务脚本无关；本轮失败全是这一类时结果记 upstream_no_tt（success=true，不写 error），执行历史显示橙色「上游未建单」提示而不是红色 Error，同时在 WhatsApp 群按条通报一次「请人工在 eFlow 建单」（同一告警 6 小时内只通报一次），下一轮自动重试；接口真报错（HTTP 5xx / 超时 / ok=false）或与真失败混在同一轮时仍判 failed
 - Fiber 派单必须带数字站点 ID + 站点名，只传 ME 名接口回 success 却不建 TT（实测教训）
 - Fiber 派单时灵时不灵，故内置重试，且以回查到 ttid 才判成功（不信接口的 status:true）
 - 告警上游已有 ttid 时直接跳过：eFlow 自己的派单规则会先建 TT，不跳过就会重复建单（实测 Zardun 两条）
@@ -1851,7 +1852,7 @@
 
 1. 登录 NGI 规划平台：auth_manager.get_auth + credential_store 的 ngi 凭据组（与 RAN UME 的 zte_ume 是两台设备、账号不通用），登录协议同为 uportal/oauth2 的 RSA 口令 + Z-AUTH-CODE
 1. 工参：GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 取 ProjectData.zip；工作簿表头是 3 行（中文说明 / 英文说明 / 字段名），丢弃前两行、第 3 行作表头，数据从第 4 行起
-1. 空 SectorID 补号：同一 eNodeB ID + 同一 Downlink Center Frequency 的小区按 Azimuth 升序依次补 1、2、3、4…；已有值原样保留，sector_source 记 file / derived
+1. SectorID 生成：同一站点 + 同一中心频点的小区按 Azimuth 升序编号。LTE 只补空值（实测 7 054 行）、已有值原样保留；NR 工参没有这一列，按 gNodeBID + DLCenterFrequency 整列生成；sector_source 记 file / derived
 1. 覆盖：GET taskmanager/gettasklogbytaskid?taskid=1647 取最新一次评估任务的 taskLogId → POST commonGis/getLayerFiles 拿图层 hash 与 legend → POST MapServerService/exportMap(CSV) → exportMapChecking 轮询 → downloadExportMapFile 下载 CSV.zip
 1. 落库（显式 BEGIN/COMMIT 事务）：工参按 cell_uid upsert 进 app.ngi_lte_cell_param / app.ngi_nr_cell_param 并清理本轮未出现的旧小区；网格按 kpi 先删后插进 app.ngi_coverage_grid；两阶段各写一条 app.ngi_sync_log
 

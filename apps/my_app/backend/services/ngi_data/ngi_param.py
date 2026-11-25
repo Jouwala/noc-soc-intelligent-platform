@@ -22,18 +22,22 @@
 若把第 1 行当表头，列名会变成一堆"字符串；必填"；若把第 3 行当数据，
 会把字段名当成一个小区写进库 —— 两种都会静默产出脏数据，故这里显式跳过前两行。
 
-## `SectorID` 补号规则（2026-11-24 如意定）
+## `SectorID` 补号规则（2026-11-24 如意定，2026-11-25 扩到 5G）
 
 LTE 工参里 `SectorID` 有大量空值（实测 8 227 行里 7 054 行为空），空值按
-**同一站点（`eNodeB ID`）+ 同一 `Downlink Center Frequency`** 分组后，
-按 `Azimuth` 升序依次补 1、2、3、4……
+**同一站点 + 同一中心频点**分组后，按 `Azimuth` 升序依次补 1、2、3、4……
 
-* 只填空值，**已有值原样保留**（实测已有值只取 1~4，且 355/383 个全有值分组
+| 制式 | 站点列 | 频点列 | 来源 |
+| --- | --- | --- | --- |
+| LTE | `eNodeB ID` | `Downlink Center Frequency` | 有 `SectorID` 列，只补空值 |
+| NR | `gNodeBID` | `DLCenterFrequency` | **61 列里没有 `SectorID`**，整列生成 |
+
+* 只填空值，**已有值原样保留**（实测 LTE 已有值只取 1~4，且 355/383 个全有值分组
   与"按方位角升序编号"完全一致；剩下 28 组是现场自定义的起编位置，改了会破坏
   现场口径）；
 * 分组必须带站点：只按频点分组时每组有 1 883~2 324 个小区（全网同频），
   编号会变成 1~2324，不可能是扇区号；
-* 方位角缺失的行排在最后，按 `Cell ID` 排序兜底（实测当前数据无缺失）；
+* 方位角缺失的行排在最后，按 `Cell ID` / `CellID` 排序兜底（实测当前数据无缺失）；
 * **补出的号要跳过本组已被占用的号**（实测 2 个站点共用同一 `eNodeB ID`：
   4269 的 `Faith Comm` 与 `Redlight 3`、4428 的 `New Georgian Bassa Comm` 与
   `Wood Camp2`，同频下一共 15 个小区、其中 3 个已有 1/2/3 —— 若按"位置号直接写"，
@@ -154,53 +158,84 @@ def read_sheet(zip_bytes: bytes, rat: str) -> list[dict]:
     return out
 
 
-def fill_missing_sector_ids(rows: list[dict]) -> dict:
+# 各制式里「站点 / 中心频点 / 小区 / 方位角 / 扇区号」对应的列名。
+# NR 工参**没有 SectorID 这一列**（61 列里不存在），所以 NR 是整列从零生成；
+# LTE 有这一列，只补空值。
+SECTOR_KEYS = {
+    "LTE": {
+        "site": "eNodeB ID",
+        "site_name": "eNodeB Name",
+        "freq": "Downlink Center Frequency",
+        "cell": "Cell ID",
+        "cell_name": "Cell Name",
+        "sector": "SectorID",
+    },
+    "NR": {
+        "site": "gNodeBID",
+        "site_name": "gNodeBName",
+        "freq": "DLCenterFrequency",
+        "cell": "CellID",
+        "cell_name": "CellName",
+        "sector": "SectorID",
+    },
+}
+
+
+def fill_missing_sector_ids(rows: list[dict], rat: str = "LTE") -> dict:
     """按「站点 + 下行中心频点」分组，按方位角升序给空的 `SectorID` 补 1、2、3…
 
     就地修改 `rows`，并写入 `_sector_source`（`file` / `derived`）。
     返回统计 `{filled, groups_touched, groups_total, collisions, missing_azimuth}`，
     其中 `collisions` 只统计**上游已有值自身重复**的个数（补号不会造出重复）。
+
+    NR 工参没有 `SectorID` 列，`rows` 里压根没有这个键 → 全部按 `derived` 生成。
     """
+    keys = SECTOR_KEYS.get(rat)
+    if not keys:
+        raise ValueError(f"不支持的制式: {rat}（可用：{sorted(SECTOR_KEYS)}）")
+    k_site, k_freq = keys["site"], keys["freq"]
+    k_cell, k_name, k_sector = keys["cell"], keys["cell_name"], keys["sector"]
+
     groups: dict[tuple[str, str], list[dict]] = {}
     for r in rows:
-        site = _s(r.get("eNodeB ID")) or ""
-        freq = _s(r.get("Downlink Center Frequency")) or ""
+        site = _s(r.get(k_site)) or ""
+        freq = _s(r.get(k_freq)) or ""
         groups.setdefault((site, freq), []).append(r)
 
     filled = touched = collisions = missing_az = 0
     for _key, items in groups.items():
         seen: set[int] = set()
         for r in items:
-            if _blank(r.get("SectorID")):
+            if _blank(r.get(k_sector)):
                 r["_sector_source"] = None
                 continue
             r["_sector_source"] = "file"
-            n = _i(r.get("SectorID"))
+            n = _i(r.get(k_sector))
             if n is not None:
                 if n in seen:
                     collisions += 1
                 seen.add(n)
-        if not any(_blank(r.get("SectorID")) for r in items):
+        if not any(_blank(r.get(k_sector)) for r in items):
             continue
         touched += 1
 
         def _sort_key(r: dict):
             az = _f(r.get("Azimuth"))
-            cid = _i(r.get("Cell ID"))
+            cid = _i(r.get(k_cell))
             return (az is None, az if az is not None else 0.0,
-                    cid is None, cid if cid is not None else 0, _s(r.get("Cell Name")) or "")
+                    cid is None, cid if cid is not None else 0, _s(r.get(k_name)) or "")
 
         used = set(seen)
         next_no = 1
         for r in sorted(items, key=_sort_key):
-            if not _blank(r.get("SectorID")):
+            if not _blank(r.get(k_sector)):
                 continue
             # 跳过本组已被占用的号：保证同站同频下扇区号唯一
             while next_no in used:
                 next_no += 1
             if _f(r.get("Azimuth")) is None:
                 missing_az += 1
-            r["SectorID"] = str(next_no)
+            r[k_sector] = str(next_no)
             r["_sector_source"] = "derived"
             used.add(next_no)
             filled += 1
