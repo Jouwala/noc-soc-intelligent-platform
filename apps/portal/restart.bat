@@ -13,6 +13,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop_services.ps1" -Qu
 echo.
 echo [*] Starting portal again ...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start_hidden.ps1"
-echo.
-pause
+call "%~dp0..\..\ops\deploy\finish.bat" "9267,9268" "portal restart"
 endlocal

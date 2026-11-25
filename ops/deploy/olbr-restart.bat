@@ -7,5 +7,4 @@ echo   P1 alert push (notify.js) is NOT touched. PostgreSQL (5432) is left runni
 choice /c YN /n /m "Restart now? [Y/N] "
 if errorlevel 2 goto :eof
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0portal-ctl.ps1" -Action restart
-echo.
-pause
+call "%~dp0finish.bat" "" "OLBR restart"
