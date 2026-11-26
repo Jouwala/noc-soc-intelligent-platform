@@ -104,6 +104,7 @@ export const INCLUDE_FILES = [
   { src: 'ops/deploy/make-selfsigned-cert.py', required: true },
   { src: 'ops/deploy/env_template.txt', required: true },
   { src: 'ops/deploy/bundle_data.ps1', required: true },
+  { src: 'ops/deploy/bundle_data.sh', required: true },
   { src: 'ops/deploy/local_authority_tools.py', required: true },
   // 根入口与模板。
   { src: 'nginx.conf.template', required: true },
