@@ -1,6 +1,6 @@
 // Alarm Dashboard - 实时告警综合看板（置于 TT&WO Dashboard 上方）
 // 设计风格参考 Warehouse 看板：深空蓝底 + 青/蓝渐变高亮，数字可下钻。
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { Card, Row, Col, Tag, Spin, Alert, Empty, Tooltip, Table, Input, Button } from 'antd'
 import {
   AlertOutlined, WarningOutlined, ClockCircleOutlined,
@@ -13,13 +13,17 @@ import ReactECharts from '../components/ECharts'
 import { exportAoaReport, exportReport, type ReportSheetSpec } from '../utils/excelReport'
 import dayjs from 'dayjs'
 import api from '../api'
-import { cachedGet } from '../cache'
+import { cachedGet, invalidateCache } from '../cache'
 import { useI18n, numLocale } from '../i18n'
 import DraggableClickModal from '../components/DraggableClickModal'
 import { ExplainCorner, ExplainIcon, ExplainPopover } from '../components/MetricExplain'
 import { WH, DARK, LIGHT, WH_COLORS, LIGHT_COLORS, useTheme, darkTooltip, axisLabel, axisLine, splitLine, pageWrap, cardStyle } from '../theme'
 
 const CHART_HEIGHT = 252
+
+// 静默刷新间隔：后端告警快照随 eflow_active_alarm 每分钟同步一次
+// （routers/alarm_dashboard.py「快照读取层」），这里与之对齐。
+const POLL_MS = 60_000
 
 // 分区标题（Warehouse 青蓝渐变图标）
 const SectionTitle = ({ icon, title, sub }: { icon: React.ReactNode; title: string; sub?: string }) => (
@@ -115,6 +119,13 @@ export default function AlarmDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<any>(null)
+  // 后端响应头 X-Snapshot：hit | miss | stale | stale-error（旧后端或 shadow/off 模式下没有该头 → null）。
+  // stale / stale-error 表示 Worker 没有按时发布新快照，页面顶部提示「数据可能有延迟」。
+  const [snapshotState, setSnapshotState] = useState<string | null>(null)
+  // 上一次应用的响应签名（ETag，没有 ETag 时用 JSON 本身）：内容没变就不 setData，
+  // 避免每分钟整页 ECharts 重绘，打断正在看 tooltip 或下钻弹窗的人。
+  const lastSigRef = useRef('')
+  const lastPollAtRef = useRef(0)
   const { t, locale } = useI18n()
   const { isDark } = useTheme()
 
@@ -130,14 +141,50 @@ export default function AlarmDashboard() {
   const [drillDistinctSites, setDrillDistinctSites] = useState<number | null>(null)
   const [drillAnchor, setDrillAnchor] = useState<{ x: number; y: number } | null>(null)
 
+  const applyOverview = useCallback((res: any) => {
+    const headers = res?.headers || {}
+    setSnapshotState(headers['x-snapshot'] ?? null)
+    const sig = headers['etag'] || JSON.stringify(res?.data ?? null)
+    if (sig === lastSigRef.current) return
+    lastSigRef.current = sig
+    setData(res.data)
+    setError(null)
+  }, [])
+
   useEffect(() => {
     setLoading(true)
     setError(null)
+    lastPollAtRef.current = Date.now()
     cachedGet('alarm:overview', () => api.get('/alarm-dashboard/overview'))
-      .then(res => { setData(res.data); setError(null) })
+      .then(applyOverview)
       .catch(err => { console.error('Alarm Dashboard API error:', err); setError(err.message || 'Failed to load') })
       .finally(() => setLoading(false))
-  }, [])
+  }, [applyOverview])
+
+  // 静默轮询：只在标签页可见时请求，切回标签页时补一次（距上次不足半个周期则跳过）。
+  // 响应带 ETag + Cache-Control: no-cache，浏览器自动带 If-None-Match，内容没变时后端回 304，
+  // axios 拿到的仍是浏览器缓存里的完整内容，不需要特殊处理。
+  // 轮询失败只记日志、保留当前数据，下一轮再试；401 仍由 api.ts 的拦截器统一处理。
+  useEffect(() => {
+    let inflight = false
+    const tick = () => {
+      if (document.visibilityState !== 'visible' || inflight) return
+      if (Date.now() - lastPollAtRef.current < POLL_MS / 2) return
+      inflight = true
+      lastPollAtRef.current = Date.now()
+      api.get('/alarm-dashboard/overview')
+        .then(res => { invalidateCache('alarm:overview'); applyOverview(res) })
+        .catch(err => console.warn('Alarm Dashboard poll failed:', err))
+        .finally(() => { inflight = false })
+    }
+    const timer = window.setInterval(tick, POLL_MS)
+    const onVisible = () => { if (document.visibilityState === 'visible') tick() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [applyOverview])
 
   type DrillReq =
     | { source: 'history'; metric: string; title: string }
@@ -680,6 +727,13 @@ export default function AlarmDashboard() {
           </div>
         </div>
       </Card>
+
+      {/* 快照过期提示：后端回落到现算（stale）或现算失败改给旧快照（stale-error）时显示 */}
+      {(snapshotState === 'stale' || snapshotState === 'stale-error') && (
+        <Alert type="warning" showIcon banner
+          message={t('alarm.dataDelayed', { at: data.generated_at || 'N/A' })}
+          style={{ flexShrink: 0, borderRadius: 'var(--wh-radius-sm)' }} />
+      )}
 
       {/* ====== 2. 核心指标卡片（全部可下钻） ====== */}
       <Row gutter={[12, 12]}>
