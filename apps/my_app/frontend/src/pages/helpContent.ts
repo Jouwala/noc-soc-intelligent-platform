@@ -580,6 +580,8 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '容量来自 snmp_ifspeed / manual，缺失时显示「待补全」；利用率按 max(In/Cin, Out/Cout) 计算，不用 Total/容量，容量缺失时利用率显示「—」',
         '**每个列头都有 ⓘ 讲这一列怎么算，数字悬浮给出这一格的接口字段与采样时间**（2026-11-24）；取不到的字段显示「—」，不补 0；所有时间为 UTC',
         '按页刷新建议间隔 60 秒（与 PRTG 采集节拍一致），可在顶栏自行开启 / 关闭',
+        '**PRTG 日志与异常原因**（2026-11-26）：状态列悬停直接给 PRTG 的原因（Unusual 时是「1 天平均 213 Mbps，低于同星期几常态」这类基线判定，标签带 ↑ / ↓）；「24h Down / ICMP 超时 · MTTR」列来自 PRTG 日志——PRTG 自身只留约 30 天，后端每 5 分钟增量采集并长期保留（默认 730 天）；点链路的详情里有「PRTG 日志」，可按 ICMP 超时 / SNMP 无响应 / 异常偏低 / 偏高筛选',
+        '**设备事件**：同一设备 120 秒内相继 Down 的传感器合并为一条（例：一台交换机 16 个端口传感器依次 Down 只算 1 次），分「设备不可达 / SNMP 管理面 / 单链路」三类，展开看每个传感器的 Down / 恢复时间；未结束事件显示「未结束」而不是 0；与「异常链路数」口径不同，两者不对账',
       ],
     },
     battery: {
@@ -1460,6 +1462,8 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         'Capacity comes from snmp_ifspeed / manual and shows "To be completed" when missing. Utilization is max(In/Cin, Out/Cout), never Total/capacity, and shows "—" when capacity is missing',
         '**Every column header has an ⓘ explaining the column, and hovering a number shows the API fields and sample time of that cell** (2026-11-24). Unavailable values show "—", never 0; all times are UTC',
         'The suggested per-page refresh interval is 60 seconds (matching the PRTG collection cadence) and can be turned on or off from the top bar',
+        '**PRTG logs and anomaly reasons** (2026-11-26): hovering the status shows PRTG\'s own reason (for Unusual, its baseline check such as "1-day average 213 Mbps, unusually low for this weekday"; the tag carries ↑ / ↓). The "24h Down / ICMP timeouts · MTTR" column comes from PRTG logs — PRTG keeps only ~30 days, so the backend collects them every 5 minutes and keeps them (730 days by default). The link detail has a "PRTG log" section filterable by ICMP timeout / SNMP no response / unusually low / high',
+        '**Device incidents**: sensors on one device that go Down within 120 seconds of each other become one incident (e.g. 16 port sensors on one switch going Down in sequence count once), typed Device unreachable / SNMP management / Single link; expand a row for each sensor\'s Down / recovery time. Open incidents show "Open", not 0. This is a different measure from "Links with anomalies" and is not reconciled with it',
       ],
     },
     battery: {

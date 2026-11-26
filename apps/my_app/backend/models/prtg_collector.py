@@ -77,6 +77,8 @@ class PrtgSensor(Base):
     first_seen_at = Column(DateTime)
     last_seen_at = Column(DateTime)
     updated_at = Column(DateTime)
+    last_message = Column(Text)  # PRTG 当前状态说明（table.json message 列去 HTML；Unusual 时即基线判定原因）
+    last_message_at = Column(DateTime)  # 最近一次轮询看到它的时间（迁移 0014）
 
 
 class PrtgSensorChannel(Base):

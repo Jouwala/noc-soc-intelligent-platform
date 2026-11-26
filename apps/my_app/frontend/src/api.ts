@@ -1369,6 +1369,28 @@ export function getPrtgLinkDetail(sensorId: number, params?: { window?: string }
   return api.get(`/prtg/links/${sensorId}`, { params })
 }
 
+/** PRTG 日志明细（P0）：PRTG 自身只留约 30 天，后端长期保留；has_data=false 表示采集还没跑过 */
+export function getPrtgLogs(params?: {
+  sensor_id?: number
+  device?: string
+  reason?: string
+  since?: string
+  until?: string
+  limit?: number
+}) {
+  return api.get('/prtg/logs', { params })
+}
+
+/** 设备级事件（P0）：同设备 120 秒内相继 Down 的传感器合并为一条 */
+export function getPrtgIncidents(params?: {
+  window?: '24h' | '7d' | '30d'
+  device?: string
+  sensor_id?: number
+  limit?: number
+}) {
+  return api.get('/prtg/incidents', { params })
+}
+
 // ========== PRTG SLA 与容量（?page=prtg_links 的 SLA 页签，Issue #231）==========
 export function getPrtgSla(params?: { month?: string; target?: number }) {
   return api.get('/prtg/sla', { params })

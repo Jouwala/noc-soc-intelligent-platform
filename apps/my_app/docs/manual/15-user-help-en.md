@@ -2461,6 +2461,8 @@ PRTG core link health board: reads the 25 PRTG sensors (24 SNMP Traffic 64bit + 
 - Capacity comes from snmp_ifspeed / manual and shows "To be completed" when missing. Utilization is max(In/Cin, Out/Cout), never Total/capacity, and shows "—" when capacity is missing
 - **Every column header has an ⓘ explaining the column, and hovering a number shows the API fields and sample time of that cell** (2026-11-24). Unavailable values show "—", never 0; all times are UTC
 - The suggested per-page refresh interval is 60 seconds (matching the PRTG collection cadence) and can be turned on or off from the top bar
+- **PRTG logs and anomaly reasons** (2026-11-26): hovering the status shows PRTG's own reason (for Unusual, its baseline check such as "1-day average 213 Mbps, unusually low for this weekday"; the tag carries ↑ / ↓). The "24h Down / ICMP timeouts · MTTR" column comes from PRTG logs — PRTG keeps only ~30 days, so the backend collects them every 5 minutes and keeps them (730 days by default). The link detail has a "PRTG log" section filterable by ICMP timeout / SNMP no response / unusually low / high
+- **Device incidents**: sensors on one device that go Down within 120 seconds of each other become one incident (e.g. 16 port sensors on one switch going Down in sequence count once), typed Device unreachable / SNMP management / Single link; expand a row for each sensor's Down / recovery time. Open incidents show "Open", not 0. This is a different measure from "Links with anomalies" and is not reconciled with it
 
 #### Battery Dashboard（`battery`）
 

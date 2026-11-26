@@ -11,6 +11,7 @@
  * ========================================================================== */
 
 import { formatDateTime } from '../../datetime'
+import type { PrtgIncidentSummary, PrtgUnusualReason } from './prtgLogModels'
 
 /** 时间范围（与后端 WINDOWS 的 key 一致） */
 export type PrtgWindow = '5m' | '24h' | '7d' | '30d'
@@ -54,6 +55,10 @@ export interface PrtgOverview {
   data_age_seconds?: number | null
   kpi?: PrtgKpi
   trend?: PrtgTrendPoint[]
+  /** P0：设备事件 7 天汇总；合并从未成功时为 null */
+  incidents_7d?: PrtgIncidentSummary | null
+  /** P0：近 7 天日志最多的设备 */
+  top_noisy_device?: { device_name: string; messages: number; share_pct: number; days: number } | null
 }
 
 export interface PrtgDataQuality {
@@ -90,6 +95,13 @@ export interface PrtgLink {
   utilization_pct?: number | null
   sample_time?: string | null
   data_quality?: PrtgDataQuality
+  /** P0-2：PRTG 当前状态说明（Unusual 时即基线判定原因） */
+  last_message?: string | null
+  unusual_reason?: PrtgUnusualReason | null
+  /** P0-1：日志派生指标；日志采集没跑过为 null */
+  down_count_24h?: number | null
+  icmp_timeouts_24h?: number | null
+  mttr_minutes_7d?: number | null
 }
 
 export interface PrtgLinksResponse {
@@ -137,6 +149,9 @@ export interface PrtgLinkDetailData {
   last_check?: string | null
   capacity_mbps?: number | null
   capacity_source?: string | null
+  last_message?: string | null
+  last_message_at?: string | null
+  unusual_reason?: PrtgUnusualReason | null
   mappings?: PrtgMapping[]
   events?: PrtgEvent[]
   series?: Record<string, PrtgSeriesPoint[]>
