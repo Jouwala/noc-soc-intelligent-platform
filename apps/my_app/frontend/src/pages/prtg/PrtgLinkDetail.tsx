@@ -17,6 +17,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { useI18n } from '../../i18n'
 import { WH } from '../../theme'
 import { PrtgSeriesChart, type SeriesDef } from './PrtgCharts'
+import PrtgLogTable from './PrtgLogTable'
 import {
   eventLabelKey, fmtNum, fmtTime, matchLabelKey, NA, PrtgWindow,
   statusColor, statusLabelKey, PrtgEvent, PrtgLinkDetailData, PrtgMapping,
@@ -144,6 +145,11 @@ export default function PrtgLinkDetail({ detail, windowKey, isDark }: Props) {
               ? t('prtg.capacityMissing')
               : `${fmtNum(detail.capacity_mbps)} ${t('prtg.trend.unit')}`,
           },
+          {
+            key: 'lastMessage',
+            label: t('prtg.detail.lastMessage'),
+            children: detail.last_message || NA,
+          },
         ]}
       />
 
@@ -174,6 +180,14 @@ export default function PrtgLinkDetail({ detail, windowKey, isDark }: Props) {
           scroll={{ x: 620 }}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('prtg.detail.noEvents')} /> }}
         />
+      </div>
+
+      {/* ③b PRTG 日志（P0-1）：带原因分类，PRTG 只留 30 天、本地长期保留 */}
+      <div>
+        <Text strong>{t('prtg.logs.title')}</Text>
+        <div style={{ marginTop: 'var(--wh-space-xs)' }}>
+          <PrtgLogTable sensorId={detail.sensor_id} />
+        </div>
       </div>
 
       {/* ④ In / Out / Total 时序（Ping 等非流量传感器不画，避免错误语义） */}

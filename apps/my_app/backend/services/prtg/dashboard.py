@@ -230,6 +230,8 @@ def link_series(sensor_objid: int, window: str = DEFAULT_WINDOW,
 
 def overview(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
     """KPI 卡：状态计数、平均可用率、异常链路数、数据新鲜度、趋势。"""
+    from backend.services.prtg import incidents, logs
+
     window = normalize_window(window)
     sensors = _sensor_rows()
     now = sqlite_now()
@@ -278,21 +280,29 @@ def overview(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
             "uptime_samples": len(uptimes),
         },
         "trend": trend_series(window),
+        # P0：设备事件 7 天汇总与日志最多的设备；日志采集 / 合并从未成功时为 null（不是 0）。
+        # 与 kpi.anomaly_links 是不同口径（事件按设备合并、异常按传感器去重），不对账。
+        "incidents_7d": incidents.summary(now, 7),
+        "top_noisy_device": logs.top_noisy_device(now, 7),
     }
 
 
 def links(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
     """25 条链路总览：最新值 + 可用率 + 容量/利用率 + 数据质量。"""
+    from backend.services.prtg import logs
+
     window = normalize_window(window)
     sensors = _sensor_rows()
     mappings = _mapping_map()
     capacities = _capacity_map()
     latest = latest_samples([s.objid for s in sensors])
     now = sqlite_now()
+    log_stats = logs.sensor_stats(now)  # None = 日志采集还没成功跑过
     rows = []
     for sensor in sensors:
         mapping = mappings.get(sensor.objid)
         capacity = capacities.get(sensor.objid)
+        stat = (log_stats or {}).get(sensor.objid)
         def sample(channel_id: int) -> dict[str, Any] | None:
             return latest.get((sensor.objid, channel_id))
 
@@ -338,6 +348,13 @@ def links(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
             "utilization_pct": utilization,
             "is_traffic": traffic,
             "sample_time": _iso(sample_time),
+            # P0-2：PRTG 当前状态说明；Unusual 时解析出结构化原因（窗口 / 通道 / Mbps / 偏高偏低）
+            "last_message": sensor.last_message,
+            "unusual_reason": logs.parse_unusual(sensor.last_message),
+            # P0-1：日志派生指标。日志采集从未成功 → null；采过但该传感器 7 天内无日志 → 计数 0、MTTR null
+            "down_count_24h": None if log_stats is None else (stat["down_count_24h"] if stat else 0),
+            "icmp_timeouts_24h": None if log_stats is None else (stat["icmp_timeouts_24h"] if stat else 0),
+            "mttr_minutes_7d": stat["mttr_minutes_7d"] if stat else None,
             "data_quality": {
                 "traffic_available": total_mbps is not None,
                 "capacity_known": bool(capacity_mbps),
@@ -396,6 +413,9 @@ def link_detail(sensor_objid: int, window: str = DEFAULT_WINDOW) -> dict[str, An
         "is_traffic": is_traffic_sensor(sensor.sensortype),
         "capacity_mbps": capacity.capacity_mbps if capacity else None,
         "capacity_source": capacity.capacity_source if capacity else None,
+        "last_message": sensor.last_message,
+        "last_message_at": _iso(sensor.last_message_at),
+        "unusual_reason": _parse_unusual(sensor.last_message),
         "mappings": [
             {"site_id": row.site_id, "region": row.region, "match_status": row.match_status}
             for row in mappings
@@ -483,3 +503,9 @@ def anomalies(window: str = DEFAULT_WINDOW, *, open_only: bool = True,
         })
     return {"generated_at": _iso(now), "window": window, "open_only": open_only,
             "count": len(items), "anomalies": items}
+
+
+def _parse_unusual(message: str | None) -> dict[str, Any] | None:
+    from backend.services.prtg import logs
+
+    return logs.parse_unusual(message)

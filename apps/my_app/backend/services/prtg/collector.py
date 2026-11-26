@@ -24,6 +24,7 @@ from typing import Any, Callable, Iterable
 from backend.services.prtg import store
 from backend.services.prtg.channels import HISTORIC_CHANNEL_ORDER, get_channel
 from backend.services.prtg.client import PrtgClient
+from backend.services.prtg.logs import strip_html
 from backend.services.prtg.parsing import (
     excel_serial_to_datetime,
     parse_channels_xml,
@@ -37,7 +38,9 @@ logger = logging.getLogger(__name__)
 # 实时轮询保留的通道：9 个有值的通道（-4 Downtime 无值，不采）。
 LIVE_CHANNEL_IDS = (-1, 0, 1, 2, 3, 10, 11, 12, 13)
 
-SENSOR_COLUMNS = "objid,group,device,sensor,status,status_raw,type,priority,lastvalue,lastvalue_raw"
+# message = PRTG 当前状态说明（带 HTML，入库前去标签）；Unusual 时就是基线判定原因，
+# 例 "1 day interval average of 213,373 kbit/s (Traffic Out) is unusually low for this weekday"（P0-2）。
+SENSOR_COLUMNS = "objid,group,device,sensor,status,status_raw,type,priority,lastvalue,lastvalue_raw,message"
 DEVICE_COLUMNS = "objid,group,device,type"
 
 CATALOG_INTERVAL_SECONDS = 3600
@@ -193,13 +196,19 @@ class PrtgCollector:
                     "sampled_at": sample_time,
                 })
             if changed and sensor_id in previous:
+                # 事件说明带上 PRTG 原因（P0-2），例：
+                # "PRTG 状态 Up → Unusual：1 day interval average of … is unusually low for this weekday"
+                reason = strip_html(sensor.get("message_raw") or sensor.get("message"))
+                text = f"PRTG 状态 {previous.get(sensor_id)} → {status}"
+                if reason and reason.upper() != "OK":
+                    text = f"{text}：{reason}"
                 store.insert_event(
                     sensor_id,
                     _event_type(status),
                     previous.get(sensor_id),
                     status,
                     sample_time,
-                    message=f"PRTG 状态 {previous.get(sensor_id)} → {status}",
+                    message=text,
                 )
                 events += 1
 

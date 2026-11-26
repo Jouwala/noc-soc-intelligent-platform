@@ -33,9 +33,11 @@ import DraggableClickModal from '../components/DraggableClickModal'
 import { PrtgTrendChart } from './prtg/PrtgCharts'
 import PrtgLinkDetail from './prtg/PrtgLinkDetail'
 import PrtgSlaView from './prtg/PrtgSlaView'
+import PrtgIncidents from './prtg/PrtgIncidents'
+import { explainStatusReason, fmtDuration } from './prtg/prtgLogModels'
 import {
   explainCapacity, explainDiscards, explainErrors, explainIn, explainLastDown,
-  explainOut, explainSite, explainStatus, explainTotal, explainUnicast,
+  explainOut, explainSite, explainTotal, explainUnicast,
   explainUptime, explainUtilization,
   fmtInt, fmtNum, fmtTime, matchLabelKey, NA, PRTG_WINDOWS,
   PrtgLink, PrtgLinkDetailData, PrtgOverview, PrtgWindow,
@@ -62,6 +64,8 @@ export default function PrtgLinkHealth() {
   const [links, setLinks] = useState<PrtgLink[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  /* 设备事件卡片跟随页面刷新（P0） */
+  const [refreshToken, setRefreshToken] = useState(0)
 
   /* ---- 详情抽屉 ---- */
   const [detailOpen, setDetailOpen] = useState(false)
@@ -75,6 +79,7 @@ export default function PrtgLinkHealth() {
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
+    setRefreshToken(n => n + 1)
     try {
       const [overviewRes, linksRes] = await Promise.all([
         getPrtgOverview({ window: windowKey }),
@@ -202,8 +207,12 @@ export default function PrtgLinkHealth() {
       dataIndex: 'status',
       width: 100,
       render: (_: unknown, link: PrtgLink) => (
-        <ExplainPopover text={explainStatus(link, t)}>
-          <Tag color={statusColor(link.status)}>{t(statusLabelKey(link.status))}</Tag>
+        // P0-2：悬停直接给 PRTG 自己的原因（Unusual 时是基线判定原文 + 结构化解析）
+        <ExplainPopover text={explainStatusReason(link.status, link.status_raw, link.last_message, link.unusual_reason, t)}>
+          <Tag color={statusColor(link.status)}>
+            {t(statusLabelKey(link.status))}
+            {link.unusual_reason ? (link.unusual_reason.direction === 'high' ? ' ↑' : ' ↓') : ''}
+          </Tag>
         </ExplainPopover>
       ),
     },
@@ -281,6 +290,31 @@ export default function PrtgLinkHealth() {
       width: 110,
       align: 'right',
       render: (_: unknown, link: PrtgLink) => numCell(link.uptime_pct, explainUptime(link, t), 3, '%'),
+    },
+    {
+      // P0-1：PRTG 日志派生。24h Down 次数 / ICMP 超时次数（Ping 单通道时的丢包替代信号）/ 7 天 MTTR
+      title: <>{t('prtg.col.stability')} <ExplainIcon text={t('prtg.colExplain.stability')} /></>,
+      key: 'stability',
+      width: 150,
+      align: 'right',
+      render: (_: unknown, link: PrtgLink) => (
+        <ExplainPopover
+          placement="left"
+          text={t('prtg.cellExplain.stability', {
+            down: fmtInt(link.down_count_24h),
+            icmp: fmtInt(link.icmp_timeouts_24h),
+            mttr: link.mttr_minutes_7d == null ? NA : fmtDuration(link.mttr_minutes_7d * 60),
+          })}
+        >
+          <span style={{
+            fontVariantNumeric: 'tabular-nums',
+            color: (link.down_count_24h ?? 0) > 0 ? WH.danger : undefined,
+          }}>
+            {fmtInt(link.down_count_24h)} / {fmtInt(link.icmp_timeouts_24h)}
+            <span style={{ color: WH.textMuted }}> · {link.mttr_minutes_7d == null ? NA : fmtDuration(link.mttr_minutes_7d * 60)}</span>
+          </span>
+        </ExplainPopover>
+      ),
     },
     {
       title: <>{t('prtg.col.lastDown')} <ExplainIcon text={t('prtg.colExplain.lastDown')} /></>,
@@ -458,7 +492,7 @@ export default function PrtgLinkHealth() {
           loading={loading}
           pagination={false}
           size="small"
-          scroll={{ x: 1750 }}
+          scroll={{ x: 1900 }}
           onRow={link => ({
             onClick: e => openDetail(link, { x: e.clientX, y: e.clientY }),
             style: { cursor: 'pointer' },
@@ -473,6 +507,9 @@ export default function PrtgLinkHealth() {
           }}
         />
       </CardBase>
+
+      {/* ⑥b 设备事件（P0-3）：同设备 120 秒内相继 Down 合并为一条 */}
+      <PrtgIncidents refreshToken={refreshToken} />
 
       {/* ⑦ 详情弹窗：传感器信息 + 映射 + 事件 + In/Out/Total 时序 */}
       <DraggableClickModal
