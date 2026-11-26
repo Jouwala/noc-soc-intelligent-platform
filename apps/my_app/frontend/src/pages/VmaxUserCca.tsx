@@ -205,6 +205,7 @@ export default function VmaxUserCca() {
         flowXdr={d.flowXdr}
         scores={d.scores}
         cca={d.result}
+        sources={d.sources}
         loading={d.diagLoading}
         onOpenEvidence={openDrawer}
       />

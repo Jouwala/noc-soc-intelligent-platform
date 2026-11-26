@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-25.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-26.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -2787,6 +2787,7 @@ VMAX complaint diagnosis: enter a subscriber number and time window to answer "w
 - **Complaint-type tabs** (not a dropdown) come first: All / Voice / OTT voice & video / Video / Game / Slow data. Switching them **does not re-query** — it only changes the weighting and which chain gets judged, so switching is instant
 - The three-line layout is deliberate: query bar → complaint-type tabs (what the user is complaining about) → view tabs (diagnosis / traffic / connection / radio). The hint under the complaint tabs always states which chain is being judged right now
 - The "Voice" tab judges **CSFB and VoLTE**. The 1100 SGs interface records are the evidence source: SGs location update count, CS Fallback Triggered, Extended Service Request, paging, timeout/failure and QCI=1 bearers are all counted, plus the fallback chain (S1-MME / SGs interleaved by time) and the fallback duration
+- The diagnosis view also has a "Data call dropped by a circuit-switched call" card. It pairs each CS Fallback Triggered release with the next TAU and lists the cell left, the cell returned to, the seconds away, mobile-terminated or not, and the bearer cause on return. The fallback duration on the voice card is the signaling procedure itself (usually a few milliseconds), not how long the phone was off 4G. The card is shown for All / Voice / OTT, and for other complaint types only when a fallback actually happened
 - CSFB fallback time over 2 s is flagged; when the window has CSFB activity but **zero SGs records**, the card raises an explicit warning instead of quietly reporting success — that usually means the SGs interface is not reporting
 - The "Game" tab is kept on purpose: XDR bills really do carry app names such as egame / E-GAME. Game detection is keyword-based (so new titles can be added without code changes), and **app stores are blacklisted** (palmplaystore / googleplay / app store / huawei_appgallery) — otherwise "opened the store" would be counted as "played a game"
 - **Capability boundary — OTT voice/video (WeChat, WhatsApp) cannot be judged at the application layer**: this platform has no SIP/RTP signaling. The OTT card therefore answers only "was there a call" and "how good was the network during the call" (duration, downlink RTT, RTT jitter, retransmission) and **cannot answer "the other side rejected me / my call failed to connect"**. That banner is rendered above the conclusion on purpose — please do not read the OTT card as a call-failure verdict
@@ -2816,6 +2817,7 @@ VMAX Intelligent Diagnosis Workspace: complaint-driven single-page narrative —
 
 - Use the full number with the 231 prefix (e.g. 231777777322), digits only; the local 9-digit format is not matched upstream
 - Complaint type defaults to "All", switching only re-weights and reorders — it never hides cross-module evidence
+- Zone 2 opens with "Data call dropped by a circuit-switched call": the same card as the user-query page. It builds the leave-4G-until-next-TAU timeline from the 1100/1300/32 rows already fetched, and adds non-4G dwelling cells plus cell-level OTT findings from CCA. "Copy conclusion" copies that text
 - Chain node status takes the worst of its metrics: no data shows "no data to judge", never "normal"
 - Every metric answers five parts: why it matters / what was observed / when it occurred / possible impact / what needs verification
 - Raw XDR / remote radio records / TCP load only when "View evidence" is clicked
