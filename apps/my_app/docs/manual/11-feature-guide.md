@@ -5842,6 +5842,14 @@ eFlow 里 FE 处理完后大量 WO 停在 `WaitConfirm`（待 NOC 确认关闭�
   寻呼、超时失败、QCI=1 承载逐项计数 + 回落链明细 + 回落耗时（>2s 标黄）。
   窗口内有 CSFB 活动但 **SGs 为 0 条**时给明确预警（`noSgs`），
   因为那通常意味着 SGs 接口没上报，而不是「没发生回落」。
+  这里的回落耗时是 **ESR 到 context release 的过程耗时**（通常几毫秒），
+  不是人离开 4G 的时长。
+- `analyzeCallDrop`（`pages/vmaxCallDrop.ts`，两页诊断结论都渲染
+  `VmaxCallDropReport`）：把每次原因含 CS Fallback Triggered 的 UE context release
+  配上 3 分钟内的下一次 TAU，输出离开小区、回到小区、离开秒数、被叫/主叫、
+  返回时承载修改原因；另外列出 Inter-RAT Redirection 簇、用户面制式、
+  有没有 QCI=1、DPI 有没有标出 WhatsApp，以及 CCA 的非 4G 驻留小区和
+  OTT 小区质差。全部投诉 / 语音 / OTT 常显，其它投诉类型只有发生了回落才显。
 - `analyzeOtt`：STUN / 长连接识别 + 抖动对比基线。**能力边界必须显式告知**：
   本平台无 SIP/RTP 信令（实测 XDR `protocol ∈ {SIP, RTP}` 恒为 0 条），
   只能答「有没有通话」+「通话期间网络质量」，**不能答「对方拒接 / 未拨通」**。

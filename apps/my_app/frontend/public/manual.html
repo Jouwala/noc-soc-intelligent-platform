@@ -89,7 +89,7 @@ footer.colophon { text-align: center; color: var(--muted); font-size: 12px; marg
     <div class="logo">📘</div>
     <h1>my_app 项目手册</h1>
     <div class="sub">网络运维数据平台 · 设计手册 + 使用手册</div>
-    <div class="meta">基准日期 2026-08-27　|　适用版本 main 当前代码　|　HTML 合成生成 2026-11-25<br>含 13 章 · 152 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
+    <div class="meta">基准日期 2026-08-27　|　适用版本 main 当前代码　|　HTML 合成生成 2026-11-26<br>含 13 章 · 152 个小节　|　打印本页（Ctrl+P）即可导出 PDF<br>英文版使用帮助另见仓库 docs/manual/15-user-help-en.md</div>
     <ul class="parts"><li><a href="#ch-00">前言 · 关于本手册</a></li><li><a href="#ch-01">设计篇 · 01 项目总览</a></li><li><a href="#ch-02">设计篇 · 02 架构设计</a></li><li><a href="#ch-03">设计篇 · 03 数据层设计</a></li><li><a href="#ch-04">设计篇 · 04 任务与调度系统</a></li><li><a href="#ch-05">设计篇 · 05 访问控制与凭据</a></li><li><a href="#ch-10">使用篇 · 10 快速上手</a></li><li><a href="#ch-11">使用篇 · 11 功能页使用手册</a></li><li><a href="#ch-12">使用篇 · 12 配置项与开关</a></li><li><a href="#ch-13">使用篇 · 13 运维手册</a></li><li><a href="#ch-14">使用篇 · 14 外部系统与数据流</a></li><li><a href="#ch-15">使用篇 · 使用帮助（一站式指南）</a></li><li><a href="#ch-90">附录 · 90 附录</a></li></ul>
   </section>
   <section class="toc-section">
@@ -3577,6 +3577,7 @@ RAN UME 是 <code>10.100.28.27:28001</code>），账号<strong>不通用</strong
 <li><strong>回滚</strong>：<code>EWS_DEFER_ON_DOWN=0</code>（环境变量）即恢复旧行为，无需改代码。</li>
 <li><strong>维护</strong>：新增邮件任务若带同步/群发/远端写库，<strong>不要</strong>加进 <code>EWS_DEFERRABLE_IDS</code>；纯发信任务可加。延后只影响 <code>run_task</code> 的调度路径，<code>email_recovery</code> 的补发调用（直接调 service 函数）不受门禁影响。</li>
 <li><strong>错误串是补发判据的输入，长错误必须保留尾部（2026-11-25 事故）</strong>：<code>email_recovery.is_ews_resendable()</code> 与 <code>auto_retry</code> 都拿任务记录的 <code>error</code> <strong>原串</strong>匹配关键字。任务把长错误写回 <code>error</code> 时若只留头部，会把尾部真实异常（如 .NET 的 <code>Unable to connect to the remote server</code>）砍掉，补发判据判 False，恢复后永不补发。11-25 FW 日报（<code>fw_kpi_sync</code>）07:15/07:20 两次失败即因此漏补发；同时 UI 只剩半句 <code>Exception calling &quot;Ge</code>。参考写法见 <code>services/fw_kpi/fw_kpi_services.py</code> 的 <code>_summarize_email_error()</code>：超 4000 字符时保留首 1500 + 尾 2500 并标注省略，回归用例 <code>tests/test_fw_kpi_error_summary.py</code>。</li>
+<li><strong>同一串进任务记录与运行日志前必须脱敏（2026-11-25 复审）</strong>：失败时子进程 stdout 里有收件账号、OWA 内部主机，URL 里还可能带凭据；它既落 <code>task_execution_log.result_json</code> 又被 <code>print</code> 进运行日志，违反「敏感信息不得进入日志」。脱敏只换身份信息（<code>_redact_email_error()</code>：URL / 邮箱 / IP / 裸内部主机 / <code>password=</code>·<code>username:</code> → 占位符），<strong>绝不能碰 <code>EWS_FAIL_KEYS</code> 的措辞</strong>，否则等于把上面漏补发的事故装回去；<code>result[&quot;email&quot;][&quot;error&quot;]</code> 与顶层 <code>error</code> 都要脱敏（<code>_redact_email_result()</code>）。</li>
 </ul>
 <p><a id="ch-04-s23"></a></p>
 <h3>看门狗与自愈</h3>
@@ -14222,7 +14223,15 @@ vmax_cxo：门户同账号会话有限，避免与 8790 看板代理互踢）。
 <li><code>analyzeVoice</code>：CSFB/VoLTE。SGs 位置更新、CS Fallback Triggered、ESR、
 寻呼、超时失败、QCI=1 承载逐项计数 + 回落链明细 + 回落耗时（&gt;2s 标黄）。
 窗口内有 CSFB 活动但 <strong>SGs 为 0 条</strong>时给明确预警（<code>noSgs</code>），
-因为那通常意味着 SGs 接口没上报，而不是「没发生回落」。</li>
+因为那通常意味着 SGs 接口没上报，而不是「没发生回落」。
+这里的回落耗时是 <strong>ESR 到 context release 的过程耗时</strong>（通常几毫秒），
+不是人离开 4G 的时长。</li>
+<li><code>analyzeCallDrop</code>（<code>pages/vmaxCallDrop.ts</code>，两页诊断结论都渲染
+<code>VmaxCallDropReport</code>）：把每次原因含 CS Fallback Triggered 的 UE context release
+配上 3 分钟内的下一次 TAU，输出离开小区、回到小区、离开秒数、被叫/主叫、
+返回时承载修改原因；另外列出 Inter-RAT Redirection 簇、用户面制式、
+有没有 QCI=1、DPI 有没有标出 WhatsApp，以及 CCA 的非 4G 驻留小区和
+OTT 小区质差。全部投诉 / 语音 / OTT 常显，其它投诉类型只有发生了回落才显。</li>
 <li><code>analyzeOtt</code>：STUN / 长连接识别 + 抖动对比基线。<strong>能力边界必须显式告知</strong>：
 本平台无 SIP/RTP 信令（实测 XDR <code>protocol ∈ {SIP, RTP}</code> 恒为 0 条），
 只能答「有没有通话」+「通话期间网络质量」，<strong>不能答「对方拒接 / 未拨通」</strong>。
@@ -18875,7 +18884,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
     <h2>使用帮助（一站式指南）</h2>
   </header>
   <blockquote>
-<p>面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-25。</p>
+<p>面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-26。</p>
 </blockquote>
 <blockquote>
 <p>站内入口：侧边栏「使用帮助」，或直链 <code>http://&lt;host&gt;/myapp/?page=help</code>。</p>
@@ -22303,6 +22312,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <li><strong>投诉类型做成页签</strong>（不是下拉）：全部投诉 / 语音 / OTT 语音视频 / 视频 / 游戏 / 上网慢。切换页签<strong>不重新取数</strong>，只换判据权重与优先判定的那条链，所以切起来是秒切</li>
 <li>页面三行骨架是刻意设计的：查询条 → 投诉类型页签（用户投诉什么）→ 视图页签（诊断结论 / 业务流量 / 连接过程 / 无线质量）。投诉类型下面那行说明会一直告诉你「这次按哪条链在判」</li>
 <li>「语音」页签判 <strong>CSFB 与 VoLTE</strong>。判定用 <strong>1100 的 SGs 接口记录</strong>：SGs 位置更新数、CS Fallback Triggered、Extended Service Request、寻呼、超时失败、QCI=1 承载逐项计数，另有回落链明细（S1-MME / SGs 按时间交织）与回落耗时</li>
+<li>诊断结论里另有一张「数据通话被电路域来电打断」：把每次 CS Fallback Triggered 的释放配上下一次 TAU，写出离开小区、回到小区、离开秒数、被叫/主叫、返回时的承载原因。语音卡上的回落耗时是信令过程本身（通常几毫秒），不是人离开 4G 的时长。全部投诉 / 语音 / OTT 都会显示这张卡；其它投诉类型只有真的发生了回落才显示</li>
 <li>回落耗时超过 2 秒会标黄；若窗口内有 CSFB 活动但 <strong>SGs 记录为 0 条</strong>，卡片会给明确预警而不是安静地报「正常」——这通常意味着 SGs 接口没上报</li>
 <li>「游戏」页签不能删：XDR 话单里确实会出现 egame / E-GAME 这类应用名。识别走关键词（加新游戏不用改代码），并且<strong>排除应用商店</strong>（palmplaystore / googleplay / app store / huawei_appgallery）——否则「开了下商店」会被算成「打了游戏」</li>
 <li><strong>能力边界 —— OTT 语音视频（微信 / WhatsApp）在应用层判不了</strong>：本平台没有 SIP/RTP 信令。所以 OTT 卡只能回答「有没有通话」和「通话期间网络质量如何」（时长、下行 RTT、RTT 抖动、重传率），<strong>不能回答「对方拒接 / 我没拨通」</strong>。这张卡的能力边界横幅刻意放在结论之上，请不要把它读成通话失败结论</li>
@@ -22331,6 +22341,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <ul>
 <li>必须用 231 开头的完整号码（如 231777777322），纯数字；本地 9 位格式上游查不到</li>
 <li>投诉类型默认「全部投诉」，切换只换判据权重、不重取数；具体类型只重排/强调、不隐藏跨模块证据</li>
+<li>区域 2 顶部有「数据通话被电路域来电打断」：同用户查询页，用已取回的 1100/1300/32 配出每次离开 4G 到下一次 TAU 的时间线，并带上 CCA 里非 4G 驻留小区和 OTT 小区质差。点「复制结论」得到这段文字</li>
 <li>链路条状态取五段指标的最差值：无数据写「无数据可判」，绝不写「正常」</li>
 <li>每个指标回答五段：为什么重要 / 观测到什么 / 何时发生 / 可能影响 / 需要验证</li>
 <li>原始 XDR / 无线原始 / TCP 只在点「查看证据」时加载，点前无明细请求</li>
@@ -22926,7 +22937,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <p><strong>保留在 PROJECT_DOCS.md 不动</strong>（属于历史决策与复盘，不是&quot;现状描述&quot;）：§2 迁移计划、§3 架构评估与 Django 论证、§4 FastAPI 架构优化方案、§5–§6 i18n 审计与复查、§8 IP Trace 集成方案、§10 迁移失败复盘、§11 优化建议。</p>
 
 </section>
-  <footer class="colophon">my_app 项目手册 · 由 frontend/scripts/generate-manual-html.mjs 从 docs/manual/*.md 同源生成于 2026-11-25 · 改 MD 后重跑该脚本并重新构建前端即可更新</footer>
+  <footer class="colophon">my_app 项目手册 · 由 frontend/scripts/generate-manual-html.mjs 从 docs/manual/*.md 同源生成于 2026-11-26 · 改 MD 后重跑该脚本并重新构建前端即可更新</footer>
 </div>
 </body>
 </html>

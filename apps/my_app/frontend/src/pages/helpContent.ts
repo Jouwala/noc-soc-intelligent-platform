@@ -732,6 +732,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '**投诉类型做成页签**（不是下拉）：全部投诉 / 语音 / OTT 语音视频 / 视频 / 游戏 / 上网慢。切换页签**不重新取数**，只换判据权重与优先判定的那条链，所以切起来是秒切',
         '页面三行骨架是刻意设计的：查询条 → 投诉类型页签（用户投诉什么）→ 视图页签（诊断结论 / 业务流量 / 连接过程 / 无线质量）。投诉类型下面那行说明会一直告诉你「这次按哪条链在判」',
         '「语音」页签判 **CSFB 与 VoLTE**。判定用 **1100 的 SGs 接口记录**：SGs 位置更新数、CS Fallback Triggered、Extended Service Request、寻呼、超时失败、QCI=1 承载逐项计数，另有回落链明细（S1-MME / SGs 按时间交织）与回落耗时',
+        '诊断结论里另有一张「数据通话被电路域来电打断」：把每次 CS Fallback Triggered 的释放配上下一次 TAU，写出离开小区、回到小区、离开秒数、被叫/主叫、返回时的承载原因。语音卡上的回落耗时是信令过程本身（通常几毫秒），不是人离开 4G 的时长。全部投诉 / 语音 / OTT 都会显示这张卡；其它投诉类型只有真的发生了回落才显示',
         '回落耗时超过 2 秒会标黄；若窗口内有 CSFB 活动但 **SGs 记录为 0 条**，卡片会给明确预警而不是安静地报「正常」——这通常意味着 SGs 接口没上报',
         '「游戏」页签不能删：XDR 话单里确实会出现 egame / E-GAME 这类应用名。识别走关键词（加新游戏不用改代码），并且**排除应用商店**（palmplaystore / googleplay / app store / huawei_appgallery）——否则「开了下商店」会被算成「打了游戏」',
         '**能力边界 —— OTT 语音视频（微信 / WhatsApp）在应用层判不了**：本平台没有 SIP/RTP 信令。所以 OTT 卡只能回答「有没有通话」和「通话期间网络质量如何」（时长、下行 RTT、RTT 抖动、重传率），**不能回答「对方拒接 / 我没拨通」**。这张卡的能力边界横幅刻意放在结论之上，请不要把它读成通话失败结论',
@@ -760,6 +761,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       usage: [
         '必须用 231 开头的完整号码（如 231777777322），纯数字；本地 9 位格式上游查不到',
         '投诉类型默认「全部投诉」，切换只换判据权重、不重取数；具体类型只重排/强调、不隐藏跨模块证据',
+        '区域 2 顶部有「数据通话被电路域来电打断」：同用户查询页，用已取回的 1100/1300/32 配出每次离开 4G 到下一次 TAU 的时间线，并带上 CCA 里非 4G 驻留小区和 OTT 小区质差。点「复制结论」得到这段文字',
         '链路条状态取五段指标的最差值：无数据写「无数据可判」，绝不写「正常」',
         '每个指标回答五段：为什么重要 / 观测到什么 / 何时发生 / 可能影响 / 需要验证',
         '原始 XDR / 无线原始 / TCP 只在点「查看证据」时加载，点前无明细请求',
@@ -1610,6 +1612,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
         '**Complaint-type tabs** (not a dropdown) come first: All / Voice / OTT voice & video / Video / Game / Slow data. Switching them **does not re-query** — it only changes the weighting and which chain gets judged, so switching is instant',
         'The three-line layout is deliberate: query bar → complaint-type tabs (what the user is complaining about) → view tabs (diagnosis / traffic / connection / radio). The hint under the complaint tabs always states which chain is being judged right now',
         'The "Voice" tab judges **CSFB and VoLTE**. The 1100 SGs interface records are the evidence source: SGs location update count, CS Fallback Triggered, Extended Service Request, paging, timeout/failure and QCI=1 bearers are all counted, plus the fallback chain (S1-MME / SGs interleaved by time) and the fallback duration',
+        'The diagnosis view also has a "Data call dropped by a circuit-switched call" card. It pairs each CS Fallback Triggered release with the next TAU and lists the cell left, the cell returned to, the seconds away, mobile-terminated or not, and the bearer cause on return. The fallback duration on the voice card is the signaling procedure itself (usually a few milliseconds), not how long the phone was off 4G. The card is shown for All / Voice / OTT, and for other complaint types only when a fallback actually happened',
         'CSFB fallback time over 2 s is flagged; when the window has CSFB activity but **zero SGs records**, the card raises an explicit warning instead of quietly reporting success — that usually means the SGs interface is not reporting',
         'The "Game" tab is kept on purpose: XDR bills really do carry app names such as egame / E-GAME. Game detection is keyword-based (so new titles can be added without code changes), and **app stores are blacklisted** (palmplaystore / googleplay / app store / huawei_appgallery) — otherwise "opened the store" would be counted as "played a game"',
         '**Capability boundary — OTT voice/video (WeChat, WhatsApp) cannot be judged at the application layer**: this platform has no SIP/RTP signaling. The OTT card therefore answers only "was there a call" and "how good was the network during the call" (duration, downlink RTT, RTT jitter, retransmission) and **cannot answer "the other side rejected me / my call failed to connect"**. That banner is rendered above the conclusion on purpose — please do not read the OTT card as a call-failure verdict',
@@ -1639,6 +1642,7 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       usage: [
         'Use the full number with the 231 prefix (e.g. 231777777322), digits only; the local 9-digit format is not matched upstream',
         'Complaint type defaults to "All", switching only re-weights and reorders — it never hides cross-module evidence',
+        'Zone 2 opens with "Data call dropped by a circuit-switched call": the same card as the user-query page. It builds the leave-4G-until-next-TAU timeline from the 1100/1300/32 rows already fetched, and adds non-4G dwelling cells plus cell-level OTT findings from CCA. "Copy conclusion" copies that text',
         'Chain node status takes the worst of its metrics: no data shows "no data to judge", never "normal"',
         'Every metric answers five parts: why it matters / what was observed / when it occurred / possible impact / what needs verification',
         'Raw XDR / remote radio records / TCP load only when "View evidence" is clicked',

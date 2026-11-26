@@ -166,6 +166,7 @@ export default function SubscriberDrawer({
             flowXdr={diag.flowXdr}
             scores={diag.scores}
             cca={diag.result}
+            sources={diag.sources}
             loading={diag.diagLoading}
             onOpenEvidence={openEvidence}
           />
