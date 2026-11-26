@@ -89,35 +89,47 @@ def upsert_devices(devices: Iterable[dict[str, Any]], now: datetime) -> int:
 
 
 def upsert_sensors(sensors: Iterable[dict[str, Any]], now: datetime) -> int:
+    """目录 + 状态 upsert。行里带 message 列（实时轮询）时一并刷新 last_message（P0-2）；
+    不带时（目录同步用的列集合没有 message）不碰这两列，避免把原因清空。"""
+    # 延迟 import：logs 依赖 store，顶层 import 会循环
+    from backend.services.prtg.logs import strip_html
+
     rows = []
+    with_message = False
     for s in sensors:
-        rows.append(
-            {
-                "objid": int(s["objid"]),
-                "group_name": s.get("group"),
-                "device_name": s.get("device"),
-                "sensor_name": s.get("sensor") or "",
-                "sensortype": s.get("type"),
-                "status": s.get("status"),
-                "status_raw": _to_int(s.get("status_raw")),
-                "priority": _to_int(s.get("priority")),
-                "last_value": s.get("lastvalue"),
-                "last_value_raw": _to_float(s.get("lastvalue_raw")),
-                "active": True,
-                "first_seen_at": now,
-                "last_seen_at": now,
-                "updated_at": now,
-            }
-        )
+        row = {
+            "objid": int(s["objid"]),
+            "group_name": s.get("group"),
+            "device_name": s.get("device"),
+            "sensor_name": s.get("sensor") or "",
+            "sensortype": s.get("type"),
+            "status": s.get("status"),
+            "status_raw": _to_int(s.get("status_raw")),
+            "priority": _to_int(s.get("priority")),
+            "last_value": s.get("lastvalue"),
+            "last_value_raw": _to_float(s.get("lastvalue_raw")),
+            "active": True,
+            "first_seen_at": now,
+            "last_seen_at": now,
+            "updated_at": now,
+        }
+        if "message" in s or "message_raw" in s:
+            with_message = True
+            row["last_message"] = strip_html(s.get("message_raw") or s.get("message")) or None
+            row["last_message_at"] = now
+        rows.append(row)
+    update_cols = [
+        "group_name", "device_name", "sensor_name", "sensortype",
+        "status", "status_raw", "priority", "last_value",
+        "last_value_raw", "active", "last_seen_at", "updated_at",
+    ]
+    if with_message:
+        update_cols += ["last_message", "last_message_at"]
+        for row in rows:  # 批量 insert 要求每行同一组列
+            row.setdefault("last_message", None)
+            row.setdefault("last_message_at", now)
     with SessionLocal() as session:
-        count = upsert(
-            session, PrtgSensor, rows, ["objid"],
-            [
-                "group_name", "device_name", "sensor_name", "sensortype",
-                "status", "status_raw", "priority", "last_value",
-                "last_value_raw", "active", "last_seen_at", "updated_at",
-            ],
-        )
+        count = upsert(session, PrtgSensor, rows, ["objid"], update_cols)
         session.commit()
     return count
 

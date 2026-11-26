@@ -12,7 +12,7 @@ import logging
 import threading
 import time
 
-from backend.services.prtg import anomaly, sla, store
+from backend.services.prtg import anomaly, incidents, logs, sla, store
 from backend.services.prtg.collector import (
     AGGREGATE_INTERVAL_SECONDS,
     ANOMALY_INTERVAL_SECONDS,
@@ -39,6 +39,8 @@ def run_forever(collector: PrtgCollector, stop_event: threading.Event | None = N
     next_anomaly = tick + 60
     next_sla = tick + 90
     next_prune = tick + 30
+    next_messages = tick + 20  # 日志采集与设备事件合并（P0）：启动 20 秒后首跑，之后每 5 分钟
+    messages_on = logs.sync_enabled()
     logger.info("PRTG 采集循环启动：每 %s 秒轮询", collector.settings.poll_seconds)
     while not stop.is_set():
         tick = time.monotonic()
@@ -65,8 +67,17 @@ def run_forever(collector: PrtgCollector, stop_event: threading.Event | None = N
             if tick >= next_sla:
                 _safe(collector, "sla", sla.snapshot_day)
                 next_sla = tick + SLA_INTERVAL_SECONDS
+            if messages_on and tick >= next_messages:
+                # 两步各自记状态：日志拉取失败时不合并（避免用残缺日志覆盖事件），合并失败不影响日志
+                _safe(collector, "messages",
+                      lambda: logs.sync_messages(collector._get_client(), collector.now()))
+                if (store.get_state("messages") or {}).get("status") == "ok":
+                    _safe(collector, "incidents", lambda: incidents.correlate(collector.now()))
+                next_messages = tick + logs.MESSAGES_INTERVAL_SECONDS
             if tick >= next_prune:
                 _safe(collector, "prune", collector.prune)
+                if messages_on:
+                    _safe(collector, "prune", lambda: {"logs": logs.prune(collector.now())})
                 next_prune = tick + PRUNE_INTERVAL_SECONDS
         except Exception:  # noqa: BLE001 —— 循环不能因单轮异常退出
             logger.exception("PRTG 采集循环异常，5 秒后继续")

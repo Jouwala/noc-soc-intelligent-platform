@@ -32,6 +32,7 @@ from backend.models.prtg_collector import (  # noqa: F401
     PrtgSensorStatus,
     PrtgSyncState,
 )
+from backend.models.prtg_logs import PrtgIncident, PrtgLogMessage  # noqa: F401（P0：日志 / 设备事件）
 
 # 独立库（各自 Base，不参与主库 Alembic）：
 #   models.packet_loss  -> lte_pl.sqlite3      (PlBase)
