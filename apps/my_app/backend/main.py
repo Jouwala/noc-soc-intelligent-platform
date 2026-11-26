@@ -80,6 +80,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from backend.database import Base, engine, DB_PATH, DB_MODE
+from backend.db_guard import DatabaseUnavailable, is_connection_error, PG_BREAKER_OPEN_SECONDS
 from backend.api_i18n import translate_text
 from backend.models.analysis import AnalysisArchive, UploadedFile
 from backend.routers import (
@@ -504,8 +505,11 @@ async def require_session_middleware(request: Request, call_next):
     # 本机回环放行（内部调度/脚本/看门狗不受浏览器鉴权约束）
     if portal_auth.client_is_local(request):
         return await call_next(request)
-    # 其余一律要求有效会话
-    if portal_auth.current_user(request) is not None:
+    # 其余一律要求有效会话。
+    # ⚠ 必须用 async 版本（2026-11-23 故障）：同步的 current_user 在内存未命中/到点落盘时
+    # 会读写数据库，在 async 中间件里调用会把**事件循环**卡住一整个连接超时，
+    # 数据库一出问题全站请求都排队。current_user_async 内存命中零 I/O，未命中走线程池。
+    if await portal_auth.current_user_async(request) is not None:
         return await call_next(request)
     return JSONResponse(status_code=401, content={"detail": "未登录：请通过统一门户登录"})
 
@@ -572,6 +576,47 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
     )
 
 
+def _db_unavailable_response(request: Request, exc: BaseException) -> JSONResponse:
+    """数据库不可达 → 503 + Retry-After（2026-11-23 故障后新增）。
+
+    此前同类错误要么等满连接超时后变成 500，要么被路由吞掉返回空数据；前端分不清
+    「没数据」和「数据库挂了」。503 让前端/监控能明确识别，并按 Retry-After 退避。
+    """
+    rid = _new_request_id()
+    retry_after = int(getattr(exc, "retry_after", 0) or getattr(getattr(exc, "orig", None), "retry_after", 0)
+                      or PG_BREAKER_OPEN_SECONDS)
+    logger.warning(
+        "[db-unavailable] rid=%s %s %s -> %s: %s",
+        rid, request.method, request.url.path, type(exc).__name__, str(exc)[:200],
+    )
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": translate_text("数据库暂时不可用，请稍后重试", request),
+            "code": "db_unavailable",
+            "request_id": rid,
+        },
+        headers={"Retry-After": str(max(1, retry_after))},
+    )
+
+
+@app.exception_handler(DatabaseUnavailable)
+async def _database_unavailable_handler(request: Request, exc: DatabaseUnavailable):
+    return _db_unavailable_response(request, exc)
+
+
+try:  # ORM 路径：SQLAlchemy 把 DBAPI 异常包成 sqlalchemy.exc.OperationalError（原始异常在 .orig）
+    from sqlalchemy.exc import OperationalError as _SAOperationalError
+
+    @app.exception_handler(_SAOperationalError)
+    async def _sa_operational_error_handler(request: Request, exc: _SAOperationalError):
+        if is_connection_error(exc):
+            return _db_unavailable_response(request, exc)
+        return await _unhandled_exception_handler(request, exc)
+except ImportError:  # pragma: no cover
+    pass
+
+
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     """兜底：未捕获异常返回 500。
@@ -579,6 +624,8 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
     诊断上下文（异常类型、路径、方法、request_id）进日志；响应体只给
     request_id 与一句中文提示，**不回传堆栈**，避免泄露内网路径与库结构。
     """
+    if is_connection_error(exc):
+        return _db_unavailable_response(request, exc)
     rid = _new_request_id()
     logger.error(
         "[unhandled] rid=%s %s %s -> %s: %s",
