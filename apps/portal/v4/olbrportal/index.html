@@ -80,30 +80,6 @@
 </script>
 </head>
 <body>
-<!-- ===================== V4 小样说明条（仅小样说明，不属于门户本体）=====================
-     V4 新增：说明门户本体与 V3 完全一致、只换视觉（黏土粉彩），并提供浅色/深色切换
-     与改前改后对比。接线见 assets/olbr.js（setTheme 附近的 sample-bar 同步）。
-     改前指仓库 v3 原版（深色三级字 #6f8cb4 压 #02050c 深底）。 -->
-<div class="samplebar" role="note">
-  <span class="samplebar-txt">小样说明：门户本体与 V3 完全一致，只换视觉（黏土粉彩）。</span>
-  <span class="samplebar-btns" role="group" aria-label="主题">
-    <button type="button" id="sampleLight" aria-pressed="true">浅色</button>
-    <button type="button" id="sampleDark" aria-pressed="false">深色</button>
-  </span>
-  <span class="contrast-demo">
-    <span class="contrast-card contrast-before"><b>改前</b>三级文字 #6f8cb4 压 #02050c 深底，看不清</span>
-    <span class="contrast-card contrast-after"><b>改后</b>#f2eaf2 / #d8c9dd / #b3a4b8 压 #221c26 深梅底</span>
-  </span>
-</div>
-<script>
-(function () {
-  var dark = document.documentElement.classList.contains('dark');
-  var sl = document.getElementById('sampleLight');
-  var sd = document.getElementById('sampleDark');
-  if (sl) sl.setAttribute('aria-pressed', String(!dark));
-  if (sd) sd.setAttribute('aria-pressed', String(dark));
-})();
-</script>
 <a class="skip" href="#main" data-i18n="skip">跳到主内容</a>
 
 <!-- ===================== masthead =====================

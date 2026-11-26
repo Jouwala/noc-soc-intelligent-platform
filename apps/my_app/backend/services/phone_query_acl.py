@@ -128,3 +128,27 @@ def update_config(patch: dict) -> dict:
         new_cfg["enabled"], len(new_cfg["web_users"]), len(new_cfg["whatsapp_numbers"]),
     )
     return dict(new_cfg)
+
+
+def check_web_user(username: Any, cfg: dict | None = None) -> tuple[bool, str]:
+    """判定门户登录用户能否查号码（与对话面 isPhoneQueryAllowed 的 web 分支同口径）。
+
+    返回 (allowed, reason)：
+      enabled=False          → (True, "acl-disabled")，总开关关掉 = 不限制（配置既定语义）；
+      名单命中（不区分大小写）→ (True, "web-user")；
+      用户名为空             → (False, "web-user-missing")，fail-closed；
+      不在名单（含名单为空）  → (False, "web-user-not-listed")，fail-closed。
+
+    2026-11-24 新增（Issue #241）：此前只有对话面（机器人/问答服务）在查，
+    直连 API（/api/vmax-cca-query、/api/vmax-diagnosis）绕过了名单；
+    本函数供这些接口与对话面共用同一份判定，避免两处口径漂移。
+    """
+    cfg = get_config() if cfg is None else _clean(cfg)
+    if not cfg["enabled"]:
+        return True, "acl-disabled"
+    user = str(username or "").strip().lower()
+    if not user:
+        return False, "web-user-missing"
+    if user in {u.lower() for u in cfg["web_users"]}:
+        return True, "web-user"
+    return False, "web-user-not-listed"

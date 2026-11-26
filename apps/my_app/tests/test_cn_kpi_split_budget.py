@@ -68,23 +68,46 @@ def isolated_state(monkeypatch):
 
 def test_budget_returns_partial_with_timeout(monkeypatch):
     """慢组件不能拖住整页：预算一到就返回，快组件照常出数。"""
+    slow_started = threading.Event()
+    slow_release = threading.Event()
+    slow_finished = threading.Event()
+
     def fake_fetch(w, start, end, timeout=60.0):
         if w["id"] == "d":
-            time.sleep(1.5)
+            slow_started.set()
+            # 慢组件一直堵到用例放行；10s 兜底防产品回归时把用例挂死
+            slow_release.wait(timeout=10)
+            slow_finished.set()
         return _ok(w)
 
     monkeypatch.setattr(svc, "_fetch_widget", fake_fetch)
-    t0 = time.time()
-    data = svc._compute("cs", None, None, budget=0.2)
-    elapsed = time.time() - t0
 
-    assert elapsed < 0.9, f"整页没有按预算返回：{elapsed:.2f}s"
-    widgets = {w["id"]: w for sec in data["sections"] for w in sec["widgets"]}
-    assert widgets["a"]["rows"] == [[1]]
-    assert widgets["d"]["timeout"] is True
-    assert widgets["d"]["error"]
-    assert data["meta"]["degraded"] == 1
-    assert data["meta"]["failed"] == 1
+    box = {}
+
+    def run():
+        box["data"] = svc._compute("cs", None, None, budget=0.2)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    worker.join(timeout=5)
+    try:
+        # 不变量用「完成标志」而非墙钟：整页必须在慢组件仍堵着时返回。
+        # 旧写法 assert elapsed < 0.9（慢组件睡 1.5s）在负载高的机器上测到的是
+        # 线程调度延迟——2026-11-24 冒烟机整套 83s（常态约 64s）时误报（#280），
+        # 预算机制（wait 到截止即返回）本身没有问题。
+        assert not worker.is_alive(), "整页被慢组件拖住：预算到后 5s 仍未返回"
+        assert slow_started.is_set()
+        assert not slow_finished.is_set(), "整页等慢组件跑完才返回"
+        data = box["data"]
+        widgets = {w["id"]: w for sec in data["sections"] for w in sec["widgets"]}
+        assert widgets["a"]["rows"] == [[1]]
+        assert widgets["d"]["timeout"] is True
+        assert widgets["d"]["error"]
+        assert data["meta"]["degraded"] == 1
+        assert data["meta"]["failed"] == 1
+    finally:
+        slow_release.set()
+        worker.join(timeout=5)
 
 
 def test_concurrent_requests_share_one_build(monkeypatch):

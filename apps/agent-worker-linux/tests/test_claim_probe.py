@@ -162,7 +162,16 @@ def test_verify_concurrent_claim_tool_and_cleanup(fake_github, tmp_path):
     cleanup = _run([str(VERIFY_CLI), "--cleanup-winner", str(winner_file)])
     assert cleanup.returncode == 0, cleanup.stdout + cleanup.stderr
     assert _refs(fake_github, "refs/heads/agent-lease/issue-1/") == []
-    assert len(_refs(fake_github, "refs/heads/agent-hwm/issue-1/")) == 1
+    # HWM 是只增不减的代次序列，这里不断言「恰好 1 条」：并发交错下，失败者可能
+    # 在赢家「HWM 已建、lease 未建」的窗口里读到代次并推进到 token 2（ADR-7 §3.3
+    # 窗口；control-plane 的 test_ref_concurrency 有确定性复现用例），那条 ref
+    # 合法存在、cleanup 也只删 lease 不删 HWM。原断言 ==1 只在失败者恰好先读到
+    # 旧代次时成立，是 CI 偶发 assert 2 == 1 的根因。协议真不变量是：token 恰为
+    # 1..N 连续序列（每次铸造都是当前 max+1），且赢家的 token 在其中。
+    hwm_refs = _refs(fake_github, "refs/heads/agent-hwm/issue-1/")
+    tokens = sorted(int(ref.rsplit("/", 1)[1]) for ref in hwm_refs)
+    assert tokens == list(range(1, len(tokens) + 1)), hwm_refs
+    assert int(winner["token"]) in tokens
 
 
 def test_worker_module_imports_without_repo_side_effects():

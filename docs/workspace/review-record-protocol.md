@@ -93,8 +93,40 @@ CI 通过不等于代码没问题。用户指令（2026-11-17）：“审核是�
    对不上，不放行——不需要任何人手动摘标记。
 4. **改判覆盖**：审核者事后补一条 `changes-requested` / `blocked`，最后
    一条标记说了算，旧 passed 失效。
-5. **无记录 = 未审**：一条标记都没有，门禁不通过。
+5. **无记录 = 未审**：一条标记都没有，门禁不通过——**但低风险 PR 例外**，
+   见下一节（2026-11-24 流程提速批）。
 6. **格式不对的标记不算数**：解析不到的标记直接跳过，不抛错、不放行。
+
+## 四之二、低风险免审（2026-11-24 流程提速批，用户定 B 档）
+
+「每个 PR 都必须有独立审核记录」在单人驱动多 Agent 的现状下会变成串行
+等待：审核者不在场，PR 就挂着，而审核本身只要十几分钟。2026-11-24 起
+按**客观事实**分级（不认作者自打的“低风险”标签）：
+
+| 门类 | 条件（全部满足） | 结果 |
+| --- | --- | --- |
+| 免审 | 无 `risk:high`；改动 ≤ 15 个文件；增删合计 ≤ 400 行；未触及受保护路径 | 门禁判 `REVIEW_TIER=waived`，PR 留 `<!-- review-waived: pr-N sha-... -->` 审计评论 |
+| 必审 | 其余全部（含任何受保护路径） | 仍按第四节复核 `review-result`，sha 必须等于当前 head |
+
+**受保护路径**（改到即必审）：`.github/`、`.githooks/`、`.claude/`、`ops/`、
+`runtime/`、`nginx-1.28.0/`、`apps/control-plane/`、`apps/agent-worker/`、
+`apps/my_app/alembic/`、`apps/my_app/monitor_fixes/`、
+`apps/my_app/backend/routers/`（路由层等于鉴权面）、`AGENTS.md`、
+`apps/my_app/backend/main.py`、`apps/my_app/backend/database.py`、
+依赖清单/锁文件、路径含 `auth` / `acl` / `credential` / `secret` 的文件，
+以及本目录的协议文档（`agent-protocol.md`、`dispatch-rules.md`、本文件）。
+
+- **免审不绕过改判**：只要最后一条审核记录是 `changes-requested` /
+  `blocked`，该 PR 一律不放行，必须先重新审——推几行小修复不能靠免审
+  绕过复审（2026-11-24 Muse 1 审核第 1 项阻塞）。
+
+- **免审不等于降低证据要求**：CI 全绿 + `smoke-passed`（绑定当前 head）
+  仍缺一不可，二者才是行为正确性的主要证据；免掉的只是一次跨会话审阅。
+- **审计可复核**：免审评论绑定 head SHA，事后可以回答“哪个 head 免审、
+  为什么免审、改了什么”。
+- **关闭方式**：`review_gate.py --strict` 恢复“一律必审”；阈值常量在
+  `review_gate.py` 顶部（`WAIVER_MAX_FILES` / `WAIVER_MAX_LINES` /
+  `PROTECTED_*`），调小或清空即可收紧。回滚直接 revert 对应提交。
 
 ## 五、谁审、谁不能审
 

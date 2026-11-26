@@ -5,7 +5,8 @@
  * 卡片里只有三件事：
  *   · 地图画布（LocationMapView）
  *   · 右上角「查询订阅者」手机号搜索窗
- *   · 右下角「按经纬度定位」坐标搜索窗
+ *   · （2026-11-25 起不再在地图上显示「按经纬度定位」搜索窗：用户要求去掉，
+ *     右下角留给图层图例；按坐标定位仍可用页面底部控制条的「应用坐标」）
  * 取数、选中态、抽屉仍由页面持有；本组件只接收 props 并回调。
  *
  * 两个浮层都必须放在显式的 position:relative 容器里（不能用 Card body 自身）：
@@ -20,7 +21,6 @@ import type { Site, TopologyLink } from '../gismap/types'
 import { fmtLatLon } from './geo'
 import { LocationMapView, type RingSite, type TrackCell } from './LocationMapView'
 import SubscriberSearchOverlay from './SubscriberSearchOverlay'
-import CoordinateSearchOverlay from './CoordinateSearchOverlay'
 import type { FiberLink } from './useLocationData'
 import type { VmaxRange } from '../vmaxWindow'
 
@@ -29,7 +29,7 @@ const { Text } = Typography
 export default function LocationMapCard({
   center, radiusKm, ringSites, mwLinks, fiberLinks, nearestMw, nearestFiber,
   trackCells, fitToken, loadingSites, onSite, onMw, onFiber, onTrack,
-  sub, coord, bare = false,
+  sub, bare = false,
 }: {
   center: { lat: number; lon: number }
   radiusKm: number
@@ -61,7 +61,9 @@ export default function LocationMapCard({
     range: VmaxRange
     onRangeChange: (r: VmaxRange) => void
   }
-  coord: {
+  /** 地图上的坐标搜索窗已去掉（见文件头）；保留为可选参数，调用方不必改。
+   *  组件 CoordinateSearchOverlay.tsx 仍在，需要时把它加回下方 canvas 即可。 */
+  coord?: {
     latText: string
     lonText: string
     onLatText: (v: string) => void
@@ -114,17 +116,6 @@ export default function LocationMapCard({
         onOpen={sub.onOpen}
         range={sub.range}
         onRangeChange={sub.onRangeChange}
-      />
-
-      {/* 经纬度搜索窗：右下角。输入后点「定位」即应用；
-          底部控制条里的「应用坐标」与它共用同一份 state。 */}
-      <CoordinateSearchOverlay
-        latText={coord.latText}
-        lonText={coord.lonText}
-        onLatText={coord.onLatText}
-        onLonText={coord.onLonText}
-        onApply={coord.onApply}
-        error={coord.error}
       />
     </div>
   )

@@ -228,8 +228,8 @@ html body > header.mp-mast {
     linear-gradient(120deg, #ffe3ef 0%, #ffedd8 46%, #e0f0ff 100%);
   border-radius: 0 0 28px 28px;
   background-repeat: no-repeat;
-  background-size: 100% 1.1rem, 100% 100%;
-  background-position: left bottom, left top;
+  background-size: 100% 100%;
+  background-position: left top;
 }
 
 /* 底部那道光晕：把上面那条 1.1rem 的亮带晕开，避免看着像一条硬边 */

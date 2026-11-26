@@ -266,6 +266,31 @@ def _decode_chunked(data):
     return result
 
 
+def _chunked_advance(buf, pos):
+    """从 pos 起按 chunk 边界向前推进，返回 (是否已收到终止块, 下次续扫位置)。
+
+    按 chunk 边界逐个推进：`<hex-size>\r\n<data>\r\n` ... `0\r\n\r\n`。
+    只前进不回头：调用方保存返回的位置，下次 recv 接着推进。
+    若每轮都从响应体开头重扫（旧写法），20MB 响应会退化成 O(n²)。
+    `pos` 必须指向某个 chunk 头的起始位置。
+    """
+    n = len(buf)
+    while True:
+        eol = buf.find(b"\r\n", pos)
+        if eol == -1:
+            return False, pos          # chunk 头都没收全，下次从原处继续
+        try:
+            size = int(buf[pos:eol].split(b";")[0].strip(), 16)
+        except ValueError:
+            return False, pos
+        nxt = eol + 2
+        if size == 0:
+            return n >= nxt + 2, pos   # 终止块：还要结尾 CRLF 才算完整
+        if n < nxt + size + 2:
+            return False, pos          # 数据或尾部 CRLF 未到齐
+        pos = nxt + size + 2
+
+
 def _http_request(method, path, headers_extra=None, body=None):
     """发送原始 HTTP 请求并返回状态行、响应头字典、原始头文本和响应体字节。"""
     ssock = _create_ssl_socket()
@@ -293,6 +318,8 @@ def _http_request(method, path, headers_extra=None, body=None):
     ssock.sendall(request_bytes)
 
     response_data = b""
+    # -1 = 尚未判定；0 = 明确不是 chunked；>0 = chunked 体的起始偏移
+    chunked_body_start = -1
     while True:
         try:
             chunk = ssock.recv(65536)
@@ -301,6 +328,22 @@ def _http_request(method, path, headers_extra=None, body=None):
             response_data += chunk
         except socket.timeout:
             break
+
+        # chunked 响应没有 Content-Length：终止块到齐就提前退出。
+        # 服务器发完常不关连接（keep-alive），否则要一路等到读超时才认为收完。
+        if chunked_body_start == -1:
+            _he = response_data.find(b"\r\n\r\n")
+            if _he != -1:
+                _head_low = response_data[:_he].lower()
+                chunked_body_start = (
+                    _he + 4
+                    if b"transfer-encoding" in _head_low and b"chunked" in _head_low
+                    else 0
+                )
+        if chunked_body_start > 0:
+            _ck_done, chunked_body_start = _chunked_advance(response_data, chunked_body_start)
+            if _ck_done:
+                break
     ssock.close()
 
     header_end = response_data.find(b"\r\n\r\n")

@@ -14,6 +14,14 @@
       中文全部变成 ?；现在备注改由 Shell.Application（Unicode）写入，并回读校验。
     · 修 my_app-Start：powershell.exe 真实路径在 WindowsPowerShell\v1.0 下，
       原来写成 System32\powershell.exe，生成出的快捷方式双击报「找不到项目」（2026-11-23 用户报告）。
+  2026-11-25 补齐：每个组件都加「重启」（先停后起，二次确认）——OLBR 重启走
+    portal-ctl.ps1 -Action restart；my_app / 门户 / nginx 各自 restart.bat；WhatsApp bot 走 olbr-bot.bat restart。
+    共 4 总控 + 14 单组件 = 18 个快捷方式。
+    同日：统一所有启停/重启双击入口的收尾为「完成横幅 + 实时端口状态 + 按 Enter 关闭」，
+    由 ops/deploy/finish.bat + port-status.ps1 提供；my_app-Start/Stop 改走 start_gui/stop_gui
+    薄包装，nginx-Start/Stop 改走带守卫的 start_nginx/stop_nginx.bat。程序化核心
+    （start_hidden.ps1 / stop_services.ps1 / my_app stop.bat / nginx.exe）保持字节不变，
+    portal-ctl 与计划任务不受影响。
   用法：
     powershell -NoProfile -File desktop_shortcuts\make_desktop_shortcuts.ps1              # 只生成到 TMP\shortcuts
     powershell -NoProfile -File desktop_shortcuts\make_desktop_shortcuts.ps1 -WriteDesktop  # 写到桌面
@@ -27,7 +35,7 @@ $Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $Deploy = Join-Path $Root 'ops\deploy'
 $Desktop = [Environment]::GetFolderPath('Desktop')
 
-foreach ($need in 'ops\deploy\portal-ctl.ps1', 'ops\deploy\olbr-bot.bat', 'apps\my_app\start_hidden.ps1', 'apps\portal\start_hidden.ps1', 'apps\whatsapp-kb-bot\autostart.ps1', 'nginx-1.28.0\nginx.exe', 'nginx-1.28.0\reload_nginx.bat') {
+foreach ($need in 'ops\deploy\portal-ctl.ps1', 'ops\deploy\olbr-bot.bat', 'apps\my_app\start_hidden.ps1', 'apps\portal\start_hidden.ps1', 'apps\whatsapp-kb-bot\autostart.ps1', 'nginx-1.28.0\nginx.exe', 'nginx-1.28.0\reload_nginx.bat', 'ops\deploy\olbr-restart.bat', 'apps\my_app\restart.bat', 'apps\portal\restart.bat', 'nginx-1.28.0\restart_nginx.bat', 'nginx-1.28.0\start_nginx.bat', 'nginx-1.28.0\stop_nginx.bat', 'apps\my_app\start_gui.bat', 'apps\my_app\stop_gui.bat', 'ops\deploy\finish.bat', 'ops\deploy\port-status.ps1') {
     if (-not (Test-Path -LiteralPath (Join-Path $Root $need))) { throw "根目录不像完整部署（缺 $need）：$Root" }
 }
 
@@ -105,11 +113,12 @@ function New-Lnk {
 
 Write-Host ("生成到：{0}" -f $OutDir) -ForegroundColor Cyan
 
-# ---------- 三个总控（桌面根目录也放一份） ----------
+# ---------- 四个总控（桌面根目录也放一份） ----------
 $controls = @(
     @{ ascii = 'OLBR-start.lnk';  name = 'OLBR 启动.lnk'; bat = 'olbr-start.bat';  icon = 137; desc = '启动 OLBR 生产栈（my_app + 门户 + WhatsApp bot + nginx）' },
     @{ ascii = 'OLBR-stop.lnk';   name = 'OLBR 停止.lnk'; bat = 'olbr-stop.bat';   icon = 27;  desc = '停止 OLBR 生产栈（含 WhatsApp bot；二次确认）' },
-    @{ ascii = 'OLBR-status.lnk'; name = 'OLBR 状态.lnk'; bat = 'olbr-status.bat'; icon = 221; desc = '查看 OLBR 生产栈状态' }
+    @{ ascii = 'OLBR-status.lnk'; name = 'OLBR 状态.lnk'; bat = 'olbr-status.bat'; icon = 221; desc = '查看 OLBR 生产栈状态' },
+    @{ ascii = 'OLBR-restart.lnk'; name = 'OLBR 重启.lnk'; bat = 'olbr-restart.bat'; icon = 238; desc = '重启 OLBR 生产栈（先停后起；含 WhatsApp bot；二次确认）' }
 )
 foreach ($c in $controls) {
     New-Lnk -AsciiName $c.ascii -Name $c.name -Target $cmd `
@@ -120,18 +129,22 @@ foreach ($c in $controls) {
     }
 }
 
-# ---------- 十个单组件（与以前一样：能各自起停；含 nginx 重载与 WhatsApp bot） ----------
+# ---------- 十四个单组件（各自起停/重启；含 nginx 重载与 WhatsApp bot） ----------
 $components = @(
-    @{ ascii = 'my_app-Start.lnk'; name = 'my_app-Start.lnk'; target = $ps; args = ('-NoProfile -ExecutionPolicy Bypass -File "{0}" -Force' -f (Join-Path $Root 'apps\my_app\start_hidden.ps1')); wd = (Join-Path $Root 'apps\my_app'); icon = 137; desc = '启动 my_app（后端 + workers + 前端；PG 不动）' },
-    @{ ascii = 'my_app-Stop.lnk';  name = 'my_app-Stop.lnk';  target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'apps\my_app\stop.bat')); wd = (Join-Path $Root 'apps\my_app'); icon = 27; desc = '停止 my_app（保留 PostgreSQL）' },
+    @{ ascii = 'my_app-Start.lnk'; name = 'my_app-Start.lnk'; target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'apps\my_app\start_gui.bat')); wd = (Join-Path $Root 'apps\my_app'); icon = 137; desc = '启动 my_app（后端 + workers + 前端；PG 不动）' },
+    @{ ascii = 'my_app-Stop.lnk';  name = 'my_app-Stop.lnk';  target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'apps\my_app\stop_gui.bat')); wd = (Join-Path $Root 'apps\my_app'); icon = 27; desc = '停止 my_app（保留 PostgreSQL）' },
     @{ ascii = 'Portal-Start.lnk'; name = 'Portal-Start.lnk'; target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'apps\portal\start.bat')); wd = (Join-Path $Root 'apps\portal'); icon = 137; desc = '启动门户 + WhatsApp 分析（9267/9268）' },
     @{ ascii = 'Portal-Stop.lnk';  name = 'Portal-Stop.lnk';  target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'apps\portal\stop.bat')); wd = (Join-Path $Root 'apps\portal'); icon = 27; desc = '停止门户 + WhatsApp 分析' },
-    @{ ascii = 'nginx-Start.lnk';  name = 'nginx-Start.lnk';  target = (Join-Path $Root 'nginx-1.28.0\nginx.exe'); args = ''; wd = (Join-Path $Root 'nginx-1.28.0'); icon = 137; desc = '启动 nginx（80/443）' },
-    @{ ascii = 'nginx-Stop.lnk';   name = 'nginx-Stop.lnk';   target = (Join-Path $Root 'nginx-1.28.0\nginx.exe'); args = '-s quit'; wd = (Join-Path $Root 'nginx-1.28.0'); icon = 27; desc = '停止 nginx（在 nginx 目录内发信号）' },
+    @{ ascii = 'nginx-Start.lnk';  name = 'nginx-Start.lnk';  target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'nginx-1.28.0\start_nginx.bat')); wd = (Join-Path $Root 'nginx-1.28.0'); icon = 137; desc = '启动 nginx（80/443）' },
+    @{ ascii = 'nginx-Stop.lnk';   name = 'nginx-Stop.lnk';   target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'nginx-1.28.0\stop_nginx.bat')); wd = (Join-Path $Root 'nginx-1.28.0'); icon = 27; desc = '停止 nginx（在 nginx 目录内发信号）' },
     @{ ascii = 'nginx-Reload.lnk'; name = 'nginx-Reload.lnk'; target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'nginx-1.28.0\reload_nginx.bat')); wd = (Join-Path $Root 'nginx-1.28.0'); icon = 238; desc = '重载 nginx 配置（先 nginx -t 校验，通过才 reload）' },
     @{ ascii = 'WhatsAppBot-Start.lnk';  name = 'WhatsAppBot-Start.lnk';  target = $cmd; args = ('/c ""{0}" start"' -f (Join-Path $Deploy 'olbr-bot.bat'));  wd = (Join-Path $Root 'apps\whatsapp-kb-bot'); icon = 137; desc = '启动 WhatsApp 知识库 bot + 网页问答助手（9269）' },
     @{ ascii = 'WhatsAppBot-Stop.lnk';   name = 'WhatsAppBot-Stop.lnk';   target = $cmd; args = ('/c ""{0}" stop"' -f (Join-Path $Deploy 'olbr-bot.bat'));   wd = (Join-Path $Root 'apps\whatsapp-kb-bot'); icon = 27;  desc = '停止 WhatsApp 知识库 bot + 网页问答助手（二次确认；P1 告警推送不动）' },
-    @{ ascii = 'WhatsAppBot-Status.lnk'; name = 'WhatsAppBot-Status.lnk'; target = $cmd; args = ('/c ""{0}" status"' -f (Join-Path $Deploy 'olbr-bot.bat')); wd = (Join-Path $Root 'apps\whatsapp-kb-bot'); icon = 221; desc = '查看 WhatsApp bot 心跳与 9269 状态（只读）' }
+    @{ ascii = 'WhatsAppBot-Status.lnk'; name = 'WhatsAppBot-Status.lnk'; target = $cmd; args = ('/c ""{0}" status"' -f (Join-Path $Deploy 'olbr-bot.bat')); wd = (Join-Path $Root 'apps\whatsapp-kb-bot'); icon = 221; desc = '查看 WhatsApp bot 心跳与 9269 状态（只读）' },
+    @{ ascii = 'my_app-Restart.lnk'; name = 'my_app-Restart.lnk'; target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'apps\my_app\restart.bat')); wd = (Join-Path $Root 'apps\my_app'); icon = 238; desc = '重启 my_app（先停后起；保留 PostgreSQL；二次确认）' },
+    @{ ascii = 'Portal-Restart.lnk'; name = 'Portal-Restart.lnk'; target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'apps\portal\restart.bat')); wd = (Join-Path $Root 'apps\portal'); icon = 238; desc = '重启门户 + WhatsApp 分析（9267/9268；二次确认）' },
+    @{ ascii = 'nginx-Restart.lnk'; name = 'nginx-Restart.lnk'; target = $cmd; args = ('/c ""{0}""' -f (Join-Path $Root 'nginx-1.28.0\restart_nginx.bat')); wd = (Join-Path $Root 'nginx-1.28.0'); icon = 238; desc = '重启 nginx（80/443；先优雅 quit 再启动；二次确认）' },
+    @{ ascii = 'WhatsAppBot-Restart.lnk'; name = 'WhatsAppBot-Restart.lnk'; target = $cmd; args = ('/c ""{0}" restart"' -f (Join-Path $Deploy 'olbr-bot.bat')); wd = (Join-Path $Root 'apps\whatsapp-kb-bot'); icon = 238; desc = '重启 WhatsApp 知识库 bot + 网页问答助手（9269；二次确认；P1 告警推送不动）' }
 )
 foreach ($c in $components) {
     New-Lnk -AsciiName $c.ascii -Name $c.name -Target $c.target -Arguments $c.args `

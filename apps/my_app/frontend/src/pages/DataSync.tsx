@@ -979,13 +979,14 @@ export default function DataSync() {
 
   // 网关分组：按「获取数据的外部系统」动态分组（数据来自后端 task.gateway，不再硬编码 ROW_GROUPS）
   const GATEWAY_ORDER = [
-    'eflow_api', 'ran_ume', 'cnn_ume', 'ipran_ume',
+    'eflow_api', 'ran_ume', 'ngi_data', 'cnn_ume', 'ipran_ume',
     'sp_sftp', 'dp_umc', 'battery_ume',
     'email', 'whatsapp', 'system',
   ]
   const GATEWAY_LABELS: Record<string, { zh: string; en: string }> = {
     eflow_api: { zh: 'ZTE eFlow API', en: 'ZTE eFlow API' },
     ran_ume: { zh: 'RAN UME', en: 'RAN UME' },
+    ngi_data: { zh: 'ZTE NGI 规划平台', en: 'ZTE NGI Planning' },
     cnn_ume: { zh: 'CNN UME', en: 'CNN UME' },
     ipran_ume: { zh: 'iPRAN UME', en: 'iPRAN UME' },
     sp_sftp: { zh: 'SP SFTP 备件', en: 'SP SFTP Spare' },

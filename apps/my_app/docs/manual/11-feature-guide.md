@@ -68,6 +68,8 @@
 | 40 | 实时告警地图 | `realtime_alarm` | React（同组件另一模式） |
 | 41 | 人员位置地图 | `person` | React |
 | 42 | 丢包看板 | `packet_loss` | React |
+| 42b | PRTG 核心链路健康度 | `prtg_links` | React |
+| 42c | 站点 KPI 实时查询 | `site_kpi_rt` | React |
 | 43 | 电池看板 | `battery` | React |
 | 44 | IP 链路探测 | `ip_trace` | **iframe** |
 | 45 | VMAX 用户查询 | `vmax_user_query` | React |
@@ -1404,7 +1406,7 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
   - 手动输入纬度 / 经度后点「应用坐标」。
   - 浏览器定位（`navigator.geolocation`，需 https 或 localhost）；权限拒绝 / 超时分别给出不同提示。
   - 「问问答助手」：向 `POST /api/portal-qa/ask` 提问，再从**答案文字**里解析经纬度（`parseLatLon` 支持 `6.29, -10.78`、`lat: … lng: …`、`6.29 N, 10.78 W` 等写法）。答案原样显示在输入框下方；解析不到坐标时如实提示，**不猜点**。
-- **页面结构（2026-11-23 用户要求）**：地图在上、控制条在下。地图右上角是「查询订阅者」手机号搜索窗，右下角是「按经纬度定位」坐标搜索窗；经纬度、半径、站点数、问答助手等完整控制条在**页面最下面**，与地图坐标窗共用同一份 lat/lon 状态（两边显示永远一致）。订阅者轨迹结果表放在控制条之后；**标题与口径说明卡放在页面最下面一行**（页脚式收尾，用户 2026-11-23 要求）。
+- **页面结构（2026-11-23 用户要求，11-25 调整）**：地图在上、控制条在下。地图右上角是「查询订阅者」手机号搜索窗；右下角原有的「按经纬度定位」坐标搜索窗 **2026-11-25 起不再显示**（用户要求，右下角留给图层图例；组件 `location/CoordinateSearchOverlay.tsx` 保留，`LocationMapCard` 的 `coord` 参数改为可选，要恢复只需把它加回 canvas）。经纬度、半径、站点数、问答助手等完整控制条在**页面最下面**，按坐标定位走这里的「应用坐标」。订阅者轨迹结果表放在控制条之后；**标题与口径说明卡放在页面最下面一行**（页脚式收尾，用户 2026-11-23 要求）。
 - **底图与 `?page=gis` 完全同源**：本机自托管 PMTiles 离线瓦片（nginx `/tiles/liberia.pmtiles`），不依赖公网；默认**关闭地名注记与道路**（瓦片自带 1.7 万个地名，全开会糊住站点），地图左上角「图层」浮层可分别打开。右下角 attribution 里的 `© OpenStreetMap contributors` 是**瓦片数据的署名要求**（数据本身由 OSM 衍生），不代表浏览器在请求在线 OSM。
 - **Find subscriber 的时间窗**：默认查**最近 3 小时**（与 VMAX 页同一默认）；地图搜索窗下方有起止时间选择器，可改开始/结束时间，最多回看 **24 小时**（VMAX 上游保留期），点「查询」后生效。轨迹卡顶部显示的是**已执行**的那次窗口；当前选择器里的未执行时间不会冒充已查询窗口。
 - **最近一圈站点**：`ringOf()`（`pages/location/geo.ts`）先按所选半径筛，再按 haversine 距离升序取前 N 个；半径内不足 3 个时自动扩到第 3 个最近站点，地图虚线圈与列表同步改用扩后半径，控制条下方用 `loc.warn.widened` 写明原因与数字。
@@ -1420,6 +1422,17 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
   - usertrack **本身没有时间字段**，所以地图只画点、不画连线（连线会被读成「按时间走过」）；拿到轨迹后地图自动 fit 到这些点，输了号码就能直接看到人；
   - **时间信息**：卡片顶部显示本次查询时间窗（诊断窗口优先）；表格「最新出现」列按小区匹配 VMAX 1100/1300/1301 记录的 `start_time` 取最后一次，匹配不到显示 `—`（只代表该窗口内没有对应记录，不代表没去过）；
   - 点小区圆点或列表行打开 `location/SubscriberDrawer.tsx`：复用 `VmaxCcaCards`（Subscriber Info / Terminal Info / User Track Cells / CCA 根因）、`VmaxWorkspaceAnalysis`（Fault analysis，内嵌 Evidence timeline）、`VmaxWorkspaceVerdict`（Root cause & recommendations），KPI / 根因明细沿用 `DraggableClickModal`。
+- **NGI 网络图层（2026-11-24 / 11-25 新增）**：「图层」浮层里在地名注记、道路之后多了三项 —— 覆盖 RSRP / LTE 小区 / 5G NR 小区，**默认全关、勾选后才取数**，不影响首屏。三层都用 Canvas `L.GridLayer` 按 256 px 瓦片绘制，**不为每个要素建 Leaflet 对象或 React 组件**（17.8 万格点 / 8 千扇面若逐个 `<Polygon>` 会卡死主线程，评估见 `location/coverageGrid.ts` 文件头）。tilePane 叠放顺序：覆盖 5 < LTE 6 < NR 7，均在站点 / 链路（overlayPane）之下；图例统一进右下角停靠区（`location/mapDock.ts`），自动上下排开、可折叠。
+  - **覆盖 RSRP**：数据 `app.ngi_coverage_grid`（NGI 覆盖评估 50 m 网格，一轮约 17.8 万格点）。`GET /api/ngi-coverage/meta`（各 kpi 行数 / run_id / 范围 / 档位 RSRP 统计）+ `GET /api/ngi-coverage/grid?kpi=`（`NGC1` 紧凑二进制：只含中心经纬度 float32 + 档位 uint8，**不传 `polygon` 列**，约 1.6 MB、gzip 后约 0.4 MB）。后端按 `run_id` 缓存打包结果，响应带弱 ETag + `Cache-Control: no-cache`，同一轮同步内浏览器只做 304 协商。7 档配色按每档实测 RSRP 均值从好到差排，不假设档位编号顺序。点格点调 `GET /api/ngi-coverage/point`（kpi + 经纬度小框，索引 `ix_ngi_grid_geo`）取 RSRP / 好点率 / 采样点 / 覆盖小区（回查 LTE 工参小区名）/ PCI。代码：`services/ngi_data/ngi_coverage_api.py`、`location/coverageGrid.ts`、`location/CoverageGridLayer.tsx`；二进制格式两边各有单测（`tests/test_ngi_coverage_api.py`、`location/__tests__/coverageGrid.test.ts`）。
+  - **LTE / 5G NR 小区**：数据 `app.ngi_lte_cell_param`（约 8 227 小区）/ `app.ngi_nr_cell_param`（约 101 小区）。`GET /api/ngi-coverage/lte-cells` / `nr-cells` 下发全量列式 JSON；**两张表输出同一套列名**（NR 的 `gnb_*` / `ssb_arfcn` / `freq_band_index` / `dl_bandwidth` 在 SQL 里别名，没有的 `sector_id` / `tac` / `active` 给 NULL，见 `services/ngi_data/ngi_cell_api.py` 的 `NR_SELECT`，单测校验每个引用列都真实存在）。同样按「行数 + max(fetched_at)」缓存 + 弱 ETag。前端一个组件 `location/LteCellLayer.tsx`（`kind="lte" | "nr"`）、一份画法 `location/lteCells.ts` 两层共用。
+    - 扇面固定 **65°**，以方位角为中线；方位角为空或室分（`cover_type` 含 indoor）画小圆点，不猜方向。坐标优先 `cell_lat/lon`，缺失退回站点坐标；都缺的不画，图例里写出跳过数量。
+    - **频点决定颜色与半径**：频点从低到高排序，依次取色（LTE / NR 各一组调色板），半径比例从 1.0 线性降到 0.5（低频大、高频小）；先画大后画小，同站多载波层层可见。只有一个频点时比例取 1。
+    - **半径按站间距自适应**（2026-11-25 用户反馈「固定米数在密集区叠成一片」）：每站取「到最近邻站的距离 × `SITE_R_RATIO`（0.45）」作为最外层扇面的地面半径，夹在 50 m ~ 1.5 km；相距 < 30 m 视为共站址（同铁塔不同 eNB），不算邻站。半径是地面米数，缩放时与站间距同比例变化，相邻两站在 13~18 级都不会互相压住（有单测）。像素再夹在下限 `MIN_PX_BY_ZOOM`（全国视图 7~9 px，保证看得见；高频至少保留 80%）与上限 `MAX_PX`（160）之间；12 级以下填充加深、描边加粗。
+    - **5G NR 的区别**：另一组颜色 + **虚线描边**，画在 LTE 之上；站间距按「NR + LTE 全部站点」算（NR 站稀疏，只看自己会顶到上限、盖住周围 LTE 站），所以打开 NR 时会顺带取一次 LTE 工参（与 LTE 图层共用同一份前端缓存）；整体半径再乘 `NR_SCALE`（0.8），LTE 外环仍露在外面。NR 工参没有扇区号，同扇区按方位角 ±3° 分组；弹窗里频点号显示为 SSB-ARFCN，Band 写成 `n78`。
+    - **悬浮**：站点名 / 站点 ID / 扇区（或方位角）/ 本扇区全部载波（频点、Band、PCI、小区名），当前载波加粗；mousemove 用 requestAnimationFrame 节流，拖动中、压在站点 / 链路 / 浮层上时不出提示。**点击**：弹窗显示站点、Cell ID、扇区、PCI/TAC、频点 / EARFCN（NR 为 SSB-ARFCN）/ Band / 带宽、方位角、挂高、下倾、覆盖类型、状态 / 厂家，并高亮该扇面轮廓。图例每个频点一行，可逐个勾选显隐（隐藏的既不画也点不中）。
+    - **多层点击仲裁**：命中判断放在 Leaflet `preclick`，结果挂在原生事件上（`mapDock.CELL_HIT_KEY`）；NR 与 LTE 都命中时 prio 高的 NR 留下，「覆盖 RSRP」看到标记就让路 —— 点扇面只弹小区、点空白处才弹格点，**与监听器注册顺序无关**。悬浮同理（`CELL_HOVER_KEY`）。
+    - **可调参数**（都在 `location/lteCells.ts`）：`SITE_R_RATIO`（扇面相对站间距的大小，0.35 更疏 / 0.5 更大）、`MIN_PX_BY_ZOOM`（缩小时的最小尺寸，`[缩放级别, 像素]`）、`NR_SCALE`、`FREQ_OVERRIDES` / `NR_FREQ_OVERRIDES`（按频点固定颜色或半径比例，键为保留 1 位小数的频点，如 `'1815.1'`）。
+  - **数据新鲜度**：三层都来自每周日 02:00 的 `ngi_param_coverage_sync`（见 `04-task-system.md`）；后端缓存最多 60 s 后自动发现新一轮数据，无需重启。前端在同一次页面会话内只下载、建索引一次（关掉再开不重下），刷新页面后靠 ETag 协商。
 - **刷新**：本页登记在 `AR_PAGE_DEFAULTS`（300 秒）且进 `AR_INPLACE_REFRESH_PAGES`，收到 `myapp-refresh` 后只静默重取三层数据与订阅者数据，地图不重挂载。
 
 
@@ -5829,6 +5842,14 @@ eFlow 里 FE 处理完后大量 WO 停在 `WaitConfirm`（待 NOC 确认关闭�
   寻呼、超时失败、QCI=1 承载逐项计数 + 回落链明细 + 回落耗时（>2s 标黄）。
   窗口内有 CSFB 活动但 **SGs 为 0 条**时给明确预警（`noSgs`），
   因为那通常意味着 SGs 接口没上报，而不是「没发生回落」。
+  这里的回落耗时是 **ESR 到 context release 的过程耗时**（通常几毫秒），
+  不是人离开 4G 的时长。
+- `analyzeCallDrop`（`pages/vmaxCallDrop.ts`，两页诊断结论都渲染
+  `VmaxCallDropReport`）：把每次原因含 CS Fallback Triggered 的 UE context release
+  配上 3 分钟内的下一次 TAU，输出离开小区、回到小区、离开秒数、被叫/主叫、
+  返回时承载修改原因；另外列出 Inter-RAT Redirection 簇、用户面制式、
+  有没有 QCI=1、DPI 有没有标出 WhatsApp，以及 CCA 的非 4G 驻留小区和
+  OTT 小区质差。全部投诉 / 语音 / OTT 常显，其它投诉类型只有发生了回落才显。
 - `analyzeOtt`：STUN / 长连接识别 + 抖动对比基线。**能力边界必须显式告知**：
   本平台无 SIP/RTP 信令（实测 XDR `protocol ∈ {SIP, RTP}` 恒为 0 条），
   只能答「有没有通话」+「通话期间网络质量」，**不能答「对方拒接 / 未拨通」**。
@@ -6476,3 +6497,66 @@ VMAX 数仓 GBase（10.123.255.12:5258/zxvmax，只读）
 - 台账是**快照**，不落库：历史对比（某台上次换板、某站上季度机龄分布）本页不提供。需要趋势时另立任务按日落 PG，而不是在这里加隐式写入。
 - 只有 `hw/sw/opt` 三类；上游的 `/api/rncmoaction/v1/rnc/<uuid>` 详情接口含 `OMM FTP` 明文口令，**刻意不采集**（见 `RANElementManagement/ran_element_management_service.py` 顶部说明）。
 - 882 个网元的明细一次性下发约 450 KB（含逐网元的型号矩阵），页面一次取回；不按网元分页拉取，是因为台账表本身就要全量排序与筛选。
+
+## 42c. 站点 KPI 实时查询（`?page=site_kpi_rt`，2026-11-24 新增）
+
+投诉排查专用：输入站点名称或 eNodeB ID，**实时直查 RAN UME** 小区级明细，按「扇区 × 载波」画出最近 1~14 天的 KPI 曲线，用来判断该站是「一直这样」还是「忙时才这样」。**不落库**——结果只放服务进程内存（TTL 600s、最多 6 份，`SITE_KPI_RT_CACHE_TTL` / `SITE_KPI_RT_CACHE_MAX` 可调），进程重启即全清，换站点也不残留。
+
+- **服务端按网元过滤（2026-11-25 修正此前的错误结论）**：UME 支持把历史查询限定到单个站点，但**只有唯一一种组合**生效——`filterlayer="me"` 配 `uilocations=[{"haslogicmoc": false, "id": "<网元 GUID>", "moc": "ITBBU", "model": "ranme"}]`。只写其中一个（例如 `uilocations` 配 `filterlayer=all`、或配 `filterlayer=group`）会被 UME **静默忽略**并照旧回全网，HTTP 200 不报错——2026-11-24 据此误判「UME 不支持按站点过滤」，实际是组合没凑对。实测同一时间片（`5300` 单站单日 15 分钟粒度）：全网 `totalcount=662,661 / 54.7s`，单网元 `totalcount=1,152 / 3.9s`。
+- **网元 GUID 来源**：`GET /api/res/v1/ranmes?queryDn=model:subnetwork` 返回的 `id`，由每日 23:00 的同步任务落到 PG `app.ran_element_management`。4G 的映射是**两级**：先按 `nbi_id == enodeb_id` 精确匹配（942 个工参站点里 806 个命中），匹配不到再按**站名兜底**（忽略大小写、唯一命中、且 `moc='ITBBU'`，再覆盖 52 个）——因为两者并非在所有站点上都相等：`16th Street` 工参是 `4245`、网元只有 `nbi_id=5245` 的 ITBBU，而用该网元过滤回的正是 4245 的 12 个小区（8 天 8880 行 / **8.7s**）。只按编号匹配时这类站点每次查询都退回全网，8 天要 **270s**（2026-11-25 用户体感「原来 8 秒，现在被弄坏了」）。同名 SDR/MRNC/MEC 是 2G/3G 网元，兜底时 SQL 直接排除。实现在 `backend/services/ran/ran_ume_ne_filter.py`。
+- **两条取数路径（4G / 5G 都适用）**：命中网元映射 → 一次查完整个窗口且**全程 15 分钟粒度**，实测 4G 1 天 6.9s / 8 天 7.3s（8844 行、12 小区、737 点/曲线）、5G 1 天 6.4s（195 行、3 小区、65 点）/ 8 天 6.8s（2166 行、3 小区、722 点）；查不到映射（新开站、网元表同步滞后、5G 重名站）或查询失败 → 回退拉全网 + 本地过滤（4G 按 `eNodeBId`、5G 按网元名忽略大小写），按天切片（`CHUNK_DAYS=1`），`gran=auto` 为近 24 小时 15 分钟 / 更早 1 小时。返回体的 `server_filtered` 字段标明实际走的是哪条。
+- **5G 也已启用（2026-11-25）**：同样用 `filterlayer=me` + `uilocations`，实测 3 小时窗口从 419 行（全网）降到 12 行。但网元映射不能照抄 4G：`nbi_id` 与工参 `gnb_id` 不是同一套编号（工参 `6245` → 网元 `5245`、`6004` → `4004`，差值无规律），只能按**网元名忽略大小写精确匹配**（UME 写 `Liscr`、工参写 `LISCR`）。重名站（`Orange` 同时命中 `Orange` / `Orange Tower` / `Qcell Orange`）不猜，回退全网。
+- **5G 是小区级（2026-11-25 第二次修正）**：小区维度的正确组合是 `grouplayer="me,NRRadioInfrastructure,NRPhysicalCellDU"` + `basemotid="NRPhysicalCellDU"`，**两者同时给**。只写 `grouplayer="me"` 时 UME 不报错、静默按网元级返回（同站同窗口 288 行 → 3351 行全网）；只下沉 `NRCellDU` 又只回 11 个时间片 —— 这两条都曾让人误判"5G 只能到网元级"。实测单站单日 288 行 = 96 时间片 × 3 小区，每小区一条完整曲线。
+- **5G 小区 ↔ 工参的映射键**：UME 返回 `NRPhysicalCellDU-1/2/3`，工参是 `站名-S0/S1/S2`，不能按顺序猜。用 `masterOperatorId`（形如 `61807-4004-50`）的**尾号 = 工参 `cell_id`** 映射（Vai Town 50/51/52、Orange 21/22/23 两站实测吻合），映射不到才退回 UME 原始标签并进 `warnings`。
+- **5G 的 payload 必须模板驱动**：5G 模板的 24 项指标之间存在派生依赖，只发本页需要的 9 项会被 UME **HTTP 499 `0001619999` 即时拒绝**（0.0s，不是超时）。因此 5G 每轮先 `GET /api/pm-model/v1/templates/detail?id=1638004472759` 拿模板，用模板的 items / position / position1 / motid / nfctid / indexfillingtype 原样构造（进程内缓存 10 分钟），构造逻辑在 `backend/services/ran/ran_ume_pm_template.py`。**不要**给 5G 硬编码指标清单。
+- **模板驱动的两个反直觉点**：① `showbusinesscolumn` 必须**强制 True**，不能跟随模板（模板返回 False）—— 关掉后 UME 不返回 `masterOperatorId` / `nrCarrierGroupId` 等小区维列，映射只能退化成 `NRPhysicalCellDU-1/2/3`；② `relative` 用 **-7**，-1 时 UME 只回窗口第一个时间片（看起来像"5G 没有历史数据"）。
+- **扇区与载波（5G 同样适用）**：4G 扇区号取 `app.ngi_lte_cell_param.sector_id`，5G 取 `app.ngi_nr_cell_param.sector_id`（该字段确实存在，此前代码误写 `NULL AS sector_id` 导致 5G 永远扇区 0，2026-11-25 已修）。一个扇区可挂多个频点小区（Wood Camp2 Sector 1 有 801 / 1815.1 / 1832.2 / 2310 / 2670 五个），载波按 `dl_center_freq` 区分，一条曲线一个小区，颜色按频点固定。实测约 13% 的 UME 小区不在工参里（928/6950），这类小区按名称后缀推断扇区并在 `warnings` 中显式列出。
+- **指标**：`1638004469342` DL PRB、`1638004469343` UL PRB、`1638004469330` DL 业务量、`1638004469331` UL 业务量、`1638004469332` DL IP 吞吐、`1638004469785` UL IP 吞吐、`C373384373` 活跃用户数；单用户速率 = 吞吐 ÷ 活跃用户（网络侧估算）。注意 `C373384373` 在日粒度会被 UME 静默丢列，15 分钟/小时粒度正常返回，服务端会校验列存在性，缺列直接报错而不是当空数据。
+- **接口**：`GET /api/site-kpi-rt/sites`（站点搜索）、`POST /api/site-kpi-rt/query`（起异步任务，返回 `job_id`）、`GET /api/site-kpi-rt/jobs/{job_id}`（轮询进度/结果）、`POST /api/site-kpi-rt/cache/clear`、`GET /api/site-kpi-rt/health`。仍用异步：单网元路径约 8s，但回退全网时 8 天窗口可达数分钟，超过前端 axios 的 120s 超时。
+- **按页刷新**：`App.tsx` 的 `AR_PAGE_DEFAULTS` 登记 `site_kpi_rt: 300`，并进 `AR_INPLACE_REFRESH_PAGES`（图多，整页重挂载会闪白）。
+
+## 42b. PRTG 核心链路健康度看板（`?page=prtg_links`，2026-11-24 新增）
+
+**一句话**：把 PRTG（GRAPHER-ISP）25 个传感器（24 个 SNMP Traffic 64bit + 1 个 Ping）的链路状态、流量、错误 / 丢弃、可用率与容量利用率放到一张表里，点任意链路看该链路的时序与状态事件。数据只读，KPI 是时点快照，趋势 / 详情时序随上方时间范围变化。
+
+### 42b.1 数据链路
+
+| 环节 | 位置 |
+| --- | --- |
+| 上游 | PRTG API（只读账号；传感器目录 / 通道采样 / 状态事件） |
+| 采集 | `backend/services/prtg/runner.py` + `collector.py`，线程 **60 秒**一轮；原始采样保留 90 天 |
+| 聚合 | `backend/services/prtg/collector.py` 的 `aggregate()`：60 秒 → 5 分钟 → 1 小时，供 24h / 7d / 30d 使用 |
+| 查询 | `backend/services/prtg/dashboard.py` |
+| 路由 | `backend/routers/prtg.py`：`/api/prtg/overview`、`/api/prtg/links`、`/api/prtg/links/{sensor_id}`、`/api/prtg/collector/status` |
+| 前端 | `frontend/src/pages/PrtgLinkHealth.tsx` + `pages/prtg/`（模型 / 图表 / 详情） |
+
+时间范围与底层表：`5m` 读 60 秒原始表（近 5 分钟、1 分钟桶）、`24h` 读 5 分钟聚合、`7d` / `30d` 读小时聚合（聚合同时读实时与回填历史）（`backend/services/prtg/dashboard.py` 的 `WINDOWS`）。
+
+### 42b.2 口径（页面「数据口径说明」逐条对应）
+
+1. **流量**：`Traffic In / Out / Total` 原始单位是 byte/s，后端按 `×8÷1e6` 换算为 Mbps 后下发（`total_mbps` / `in_mbps` / `out_mbps`）；前端只格式化，不重算。字典实测 `Total = In + Out`，但 Total 列直接展示接口值，不由前端相加。
+2. **Errors / Discards / Unicast**：PRTG 给的是**区间速率**（count/s），不是累计计数器，**不做差分**（`docs/workspace/prtg-channel-dictionary.md` 第 3 节）。
+3. **利用率**：只在有 `capacity_mbps` 时计算，按 `max(In / Cin, Out / Cout) × 100`；**不用 Total / 容量**（会翻倍）。容量缺失时接口返回 null，界面显示「—」。
+4. **容量**：PRTG 不提供容量，`network_link_capacity.capacity_source` 只允许 `snmp_ifspeed` / `manual`；缺失时容量列显示「待补全」，且不参与利用率。
+5. **状态**：`Up / Unusual / Down / Unknown` 是 PRTG 的时点快照；Unknown 表示未给出可识别状态，不代表正常。
+6. **可用率**：取传感器详情的累计 `uptime_pct`，不是按所选时间窗重算。
+7. **数据新鲜度**：`data_age_seconds = 当前时间 − collector.last_success_at`；超过 **5 分钟**页面顶部常驻过期告警（这是异常，不是可收起的口径解释）。
+8. **缺失值**：接口返回 null 的字段一律显示「—」，**不补 0** —— 0 表示确实是 0，null 表示取不到。
+9. **时间**：所有时间戳为 **UTC**（接口带 `Z`），页面用 `frontend/src/datetime.ts` 统一格式化。
+
+### 42b.3 页面构成
+
+- **筛选条**：时间范围（5 分钟 / 24 小时 / 7 天 / 30 天）+ 刷新 + 数据新鲜度标签 + 生成时间。
+- **KPI 卡（6 张）**：传感器总数 / Up / Unusual / Down / 平均可用率 / 异常链路数。标题旁 `ExplainIcon` 讲这一张卡，数字本身由 `StatCard.explainText` 挂 `ExplainPopover`。
+- **趋势图**：`overview.trend[].total_mbps` 自绘 SVG 折线（`pages/prtg/PrtgCharts.tsx`），不嵌 `chart.png`、不引入图表依赖；图例中英随 `t()` 切换。
+- **链路表（25 行）**：状态 / 设备·传感器 / 站点 / In / Out / Total (Mbps) / Unicast / Errors / Discards / 可用率 / Last Down / 容量 / 利用率。列头统一 `ExplainIcon`，每个数字 / 时间单元格 `ExplainPopover`，气泡只引用接口字段（采样时间、样本年龄、capacity_source、match_status 等）。
+- **详情弹窗**：点行打开 `DraggableClickModal`，展示传感器基础信息、全部站点映射、最近 20 条状态事件，以及 `series` 的 `-1 / 0 / 1` 三条时序（原始 byte/s 在图上换算为 Mbps，仅单位换算）。
+- **口径说明**：`CalcChainNote`，默认收起（`AGENTS.md` 三.3b）。
+- **按页刷新**：`App.tsx` 的 `AR_PAGE_DEFAULTS` 登记 `prtg_links: 60`，与采集节拍一致。
+
+### 43.4 已知边界
+
+- 只有 25 个传感器；Ping 传感器的通道集与 SNMP Traffic 不同，本页不把它当流量链路解读。
+- `series` 只取 `-1 / 0 / 1` 三条通道画图；Unicast / Errors / Discards 的时序在详情接口里已返回，但本页只做当前值展示（避免图上多量纲混画）。
+- 异常链路数取「未结束的异常事件涉及的去重传感器数」，与「状态为 Down 的传感器数」不是同一口径，两者不必相等。
+- 采集器失败时页面保留上一轮数据并在顶部常驻报错 / 过期提示，不伪造 0 值。

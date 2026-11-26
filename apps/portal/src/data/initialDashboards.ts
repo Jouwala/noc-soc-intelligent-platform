@@ -29,7 +29,7 @@ const RAW_DASHBOARDS: DashboardItem[] = [
     {
       id: 'custom-task-manager',
       title: 'Task Manager (任务管理 / 自动化调度总控)',
-      description: '调度全部 87 个自动化任务：ZTE eFlow API 同步、RAN/iPRAN/CNN UME KPI、电池、丢包、邮件日报与 WhatsApp 推送，支持手动触发、失败自动重试与 Cron 修改。',
+      description: '调度全部 88 个自动化任务：ZTE eFlow API 同步、RAN/iPRAN/CNN UME KPI、电池、丢包、邮件日报与 WhatsApp 推送，支持手动触发、失败自动重试与 Cron 修改。',
       platform: 'custom',
       url: `${MYAPP_BASE}sync`,
       category: '自动化调度与数据集成',
@@ -62,6 +62,25 @@ const RAW_DASHBOARDS: DashboardItem[] = [
       clickCount: 1421,
       lastVisited: '2026-08-14 23:11',
       themeColor: 'rose',
+      status: 'online'
+    },
+    {
+      id: 'custom-prtg-link-health',
+      title: 'PRTG Link Health (核心链路健康度)',
+      description: 'PRTG 25 个核心链路传感器的健康度总览：Up/Unusual/Down、In/Out/Total、Errors、Discards、可用率与 Last Down，支持 5 分钟/24 小时/7 天/30 天四档时间范围与单链路下钻。',
+      platform: 'custom',
+      url: `${MYAPP_BASE}prtg_links`,
+      category: '网络性能与无线/核心网',
+      tags: ['PRTG', '链路健康', 'SLA'],
+      iconName: 'Activity',
+      updateFrequency: '实时流式',
+      department: '传输与 IP 网管部',
+      owner: '传输工程师',
+      isFavorite: false,
+      isPinned: false,
+      clickCount: 0,
+      lastVisited: '2026-11-24 14:00',
+      themeColor: 'cyan',
       status: 'online'
     },
     {

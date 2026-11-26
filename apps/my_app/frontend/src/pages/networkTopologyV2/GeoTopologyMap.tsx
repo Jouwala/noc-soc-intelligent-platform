@@ -104,6 +104,7 @@ export default function GeoTopologyMap({
         typeLabel={typeLabel}
         clusterLabel={clusterLabel}
         linkTypeLabel={linkTypeLabel}
+        isDark={isDark}
       />
     </MapContainer>
   )

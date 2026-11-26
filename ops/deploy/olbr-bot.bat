@@ -1,12 +1,12 @@
 @echo off
 REM ============================================================
-REM  olbr-bot.bat - WhatsApp knowledge-base bot: start / stop / status
+REM  olbr-bot.bat - WhatsApp knowledge-base bot: start / stop / restart / status
 REM  Thin wrapper around apps\whatsapp-kb-bot\autostart.ps1, the same
 REM  script the WhatsAppKB_Bot_* scheduled tasks run. No logic here.
 REM  Covers src/index.js (group Q&A bot) + src/http-server.js (:9269).
 REM  Does NOT touch notify.js (P1 alert push, autostart-notify.ps1).
 REM
-REM  Usage:  olbr-bot.bat start | stop | status
+REM  Usage:  olbr-bot.bat start | stop | restart | status
 REM  ASCII-only + CRLF on purpose; non-ASCII breaks cmd parsing.
 REM ============================================================
 setlocal
@@ -21,12 +21,13 @@ if not exist "%BOT%" goto missing
 if /i "%ACT%"=="start" goto start
 if /i "%ACT%"=="stop" goto stop
 if /i "%ACT%"=="status" goto status
-echo [ERROR] Unknown action: %ACT%  - use start, stop or status.
-goto done
+if /i "%ACT%"=="restart" goto restart
+echo [ERROR] Unknown action: %ACT%  - use start, stop, restart or status.
+goto :eof
 
 :missing
 echo [ERROR] Not found: %BOT%
-goto done
+goto :eof
 
 :start
 echo Starting WhatsApp bot (src/index.js) + web Q^&A assistant (:9269) ...
@@ -42,8 +43,11 @@ goto done
 echo This will STOP the WhatsApp bot (src/index.js) + web Q^&A assistant (:9269).
 echo The P1 alert push (notify.js) is NOT touched.
 choice /c YN /n /m "Stop now? [Y/N] "
-if errorlevel 2 goto done
+if errorlevel 2 goto :eof
 "%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%" -Stop
+echo.
+echo ---- current status ----
+"%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%" -Status
 echo.
 echo NOTE: the WhatsAppKB_Bot_EnsureRunning task brings the bot back within
 echo       5 minutes. To keep it down, disable both tasks first:
@@ -55,7 +59,20 @@ goto done
 "%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%" -Status
 goto done
 
-:done
+:restart
+echo This will RESTART the WhatsApp bot (src/index.js) + web Q^&A assistant (:9269).
+echo The P1 alert push (notify.js) is NOT touched.
+choice /c YN /n /m "Restart now? [Y/N] "
+if errorlevel 2 goto :eof
+"%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%" -Stop
 echo.
-pause
+echo [*] Starting WhatsApp bot again ...
+"%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%"
+echo.
+echo ---- current status ----
+"%PSEXE%" -NoProfile -ExecutionPolicy Bypass -File "%BOT%" -Status
+goto done
+
+:done
+call "%~dp0finish.bat" "" "WhatsApp bot %ACT%"
 endlocal
