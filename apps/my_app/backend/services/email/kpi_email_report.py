@@ -43,6 +43,8 @@ import re
 import shutil
 import subprocess
 import sys
+
+from backend.services.email import ews_deferral
 import tempfile
 import time
 import threading
@@ -755,15 +757,20 @@ def run_sp_details_email(to: str = None, cc: str = None) -> dict:
         merged_path.name, row_counts, pruned, raw_notes or "无",
     )
 
-    email_res = _run_script(
-        data_dir=_SP_DETAILS_DATA,
-        name_filter="",
-        to=to_arg,
-        cc=cc_arg,
-        no_excel=True,
-        attach=[str(merged_path)],
-        subject=f"SP Spare Parts Details Report {stamp}",
-    )
+    # 邮箱通道已确认不可用时只跳过发信；上面的明细合并与下面的 WhatsApp 群发照常。
+    # 结果与 _run_script 同形，email_recovery 靠 error 里的 EWS_DEFERRED 认领补发。
+    if ews_deferral.should_skip_email_send("sp_email_details"):
+        email_res = ews_deferral.skipped_email_result("sp_email_details")
+    else:
+        email_res = _run_script(
+            data_dir=_SP_DETAILS_DATA,
+            name_filter="",
+            to=to_arg,
+            cc=cc_arg,
+            no_excel=True,
+            attach=[str(merged_path)],
+            subject=f"SP Spare Parts Details Report {stamp}",
+        )
 
     # 邮件之后同步发一份到 WhatsApp 群 WH&SP Management（2026-09-14 新增）。
     # 与邮件互不阻塞：邮件失败也照发群，避免一个渠道故障把另一个渠道一起拖掉。
@@ -801,6 +808,9 @@ def run_sp_details_email(to: str = None, cc: str = None) -> dict:
             f"WHATSAPP_FAIL: WhatsApp 发送失败（群 {';'.join(_SP_DETAILS_WA_GROUPS)}）"
         )
         res["error"] = f"{res['error']} | {wa_mark}" if res.get("error") else wa_mark
+    # 发信被细粒度门禁跳过时，把 deferred 提到顶层：task_runner 静默告警，
+    # email_recovery 按 daily 档补发。合并/群发的真实结果仍原样留在 res 里。
+    ews_deferral.apply_email_deferral(res, email_res, "sp_email_details")
     return res
 
 
@@ -1575,16 +1585,20 @@ def run_sp_online_report(to: str = None, cc: str = None) -> dict:
     if not to_arg:
         return {"success": False, "error": "主送收件人为空，请在 Settings → Email Recipient Settings 配置 sp_online_report"}
 
-    email_res = _run_script(
-        data_dir=_SP_ONLINE_DATA,
-        name_filter="",
-        to=to_arg,
-        cc=cc_arg,
-        no_excel=True,
-        images=images,
-        attach=attach,
-        subject="SP Online Open Tickets Report (Inbound & Outbound)",
-    )
+    # 通道 down 时只跳过发信；下面的 WhatsApp 群发照常（报表文件已在 generate 任务生成）。
+    if ews_deferral.should_skip_email_send("sp_online_report_send"):
+        email_res = ews_deferral.skipped_email_result("sp_online_report_send")
+    else:
+        email_res = _run_script(
+            data_dir=_SP_ONLINE_DATA,
+            name_filter="",
+            to=to_arg,
+            cc=cc_arg,
+            no_excel=True,
+            images=images,
+            attach=attach,
+            subject="SP Online Open Tickets Report (Inbound & Outbound)",
+        )
 
     try:
         # 2026-10-11 起：Baileys 主通道 → Playwright 回退（见 whatsapp_dispatch）
@@ -1622,6 +1636,7 @@ def run_sp_online_report(to: str = None, cc: str = None) -> dict:
     }
     if errors:
         res["error"] = " | ".join(errors)
+    ews_deferral.apply_email_deferral(res, email_res, "sp_online_report_send")
     return res
 
 
@@ -2026,6 +2041,10 @@ def run_ume_in_osg_report_email(report_path=None, to: str = None, cc: str = None
     subject = (f"{_UME_IN_OSG_NAME_PREFIX} {m.group(1)} ~ {m.group(2)}" if m
                else f"{_UME_IN_OSG_NAME_PREFIX} {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
+    # 通道 down 时只跳过发信；上面的 UME KPI 同步与 OSG Excel 生成由调用方
+    # （osg_report_task）在更早步骤完成，不受影响。
+    if ews_deferral.should_skip_email_send("ume_in_osg_report"):
+        return ews_deferral.skipped_email_result("ume_in_osg_report")
     return _run_script(
         data_dir=_UME_IN_OSG_DATA,
         name_filter="",          # 不按名称自动发现 Excel，附件由 --attach 显式指定

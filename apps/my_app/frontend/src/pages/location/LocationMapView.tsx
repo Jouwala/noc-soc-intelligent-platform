@@ -27,6 +27,10 @@ import { circlePolygon, fmtKm, type LatLon } from './geo'
 import { fmtSeen } from './trackTime'
 import type { FiberLink } from './useLocationData'
 import { siteColor } from './siteColors'
+import { CoverageGridLayer } from './CoverageGridLayer'
+import { useCoverageGrid } from './useCoverageGrid'
+import { LteCellLayer } from './LteCellLayer'
+import { useLteCells, useNrCells } from './useLteCells'
 
 export type RingSite = { site: Site; km: number }
 export type TrackCell = {
@@ -132,6 +136,19 @@ export function LocationMapView({
      只是此前固定开了道路、视觉上像在线底图；现改回与 GIS 同档并给出开关。 */
   const [showLabels, setShowLabels] = useState(false)
   const [showRoads, setShowRoads] = useState(false)
+  /* 覆盖 RSRP（NGI 50 m 网格，2026-11-24）：**默认关闭、打开才取数**。
+     17.8 万格点走 NGC1 紧凑二进制 + Canvas 瓦片绘制，不进首屏、不建 Leaflet 对象；
+     评估与方案见 location/coverageGrid.ts 文件头。 */
+  const [showCoverage, setShowCoverage] = useState(false)
+  const coverage = useCoverageGrid(showCoverage)
+  /* LTE 小区扇区（NGI 工参 app.ngi_lte_cell_param，2026-11-25）：默认关闭、打开才取数；
+     65° 扇面，频点决定颜色与半径，画法见 location/lteCells.ts 文件头。 */
+  const [showCells, setShowCells] = useState(false)
+  const lteCells = useLteCells(showCells)
+  /* 5G NR 小区（app.ngi_nr_cell_param，2026-11-25）：与 LTE 同一套画法；另一组颜色 + 虚线描边，
+     半径按「NR + LTE」站间距算并整体缩小一圈（NR_SCALE），画在 LTE 之上。 */
+  const [showNr, setShowNr] = useState(false)
+  const nrCells = useNrCells(showNr)
 
   const bounds: [number, number][] = [
     [center.lat, center.lon],
@@ -176,9 +193,33 @@ export function LocationMapView({
               checked: showRoads,
               onChange: setShowRoads,
             },
+            {
+              key: 'coverage',
+              label: t('loc.cov.layer'),
+              hint: t('loc.cov.layerHint'),
+              checked: showCoverage,
+              onChange: setShowCoverage,
+            },
+            {
+              key: 'lteCells',
+              label: t('loc.cell.layer'),
+              hint: t('loc.cell.layerHint'),
+              checked: showCells,
+              onChange: setShowCells,
+            },
+            {
+              key: 'nrCells',
+              label: t('loc.nr.layer'),
+              hint: t('loc.nr.layerHint'),
+              checked: showNr,
+              onChange: setShowNr,
+            },
           ]}
         />
         <CenterController center={center} fitToken={fitToken} bounds={bounds} trackCells={trackCells} />
+        {showCoverage && <CoverageGridLayer state={coverage} />}
+        {showCells && <LteCellLayer state={lteCells} />}
+        {showNr && <LteCellLayer kind="nr" state={nrCells} />}
 
         {/* 搜索半径 */}
         <Polygon

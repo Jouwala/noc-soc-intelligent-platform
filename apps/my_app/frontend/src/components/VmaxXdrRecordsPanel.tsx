@@ -64,7 +64,13 @@ type RecordResult = {
   field: string[]
   header: string[]
   rows: XdrRow[]
+  /** 0 条时的原因：no_data = 上游 3100100202；no_imsi = RAN 域解析不到 IMSI */
+  empty_reason?: 'no_data' | 'no_imsi'
 }
+
+/** URL 参数名：旧页用 rtSvc/rtTable，CCA 工作台抽屉传 cca 前缀（2026-11-26） */
+export type XdrRecordsParamKeys = { svc: string; table: string }
+const DEFAULT_KEYS: XdrRecordsParamKeys = { svc: 'rtSvc', table: 'rtTable' }
 
 type SavedItem = {
   id: number
@@ -98,12 +104,15 @@ const fmt = (v: unknown) => (v == null || v === '' || v === '--' ? '—' : Strin
 /** 单次导出行数上限：UEMR 一天可达数万条，全拉会拖死上游与浏览器 */
 const MAX_EXPORT = 5000
 
-export default function VmaxXdrRecordsPanel({ msisdn }: { msisdn: string }) {
+export default function VmaxXdrRecordsPanel({ msisdn, paramKeys = DEFAULT_KEYS }: {
+  msisdn: string
+  paramKeys?: XdrRecordsParamKeys
+}) {
   const { t, locale } = useI18n()
   const ctx = useVmaxWindow()
 
-  const [serviceType, setServiceType] = useState(() => readParam('rtSvc') || '32')
-  const [table, setTable] = useState(() => readParam('rtTable'))
+  const [serviceType, setServiceType] = useState(() => readParam(paramKeys.svc) || '32')
+  const [table, setTable] = useState(() => readParam(paramKeys.table))
   const [pageSize, setPageSize] = useState(20)
 
   const [services, setServices] = useState<ServiceItem[]>([])
@@ -203,8 +212,8 @@ export default function VmaxXdrRecordsPanel({ msisdn }: { msisdn: string }) {
       setResult(data)
       // 类型与表名随结果入 URL（时间窗滚动、不再写进 URL，此处只记类型与表）
       writeParams({
-        rtSvc: data.service_type,
-        rtTable: data.table,
+        [paramKeys.svc]: data.service_type,
+        [paramKeys.table]: data.table,
       })
     } catch (e: any) {
       if (seq !== seqRef.current) return
@@ -213,7 +222,7 @@ export default function VmaxXdrRecordsPanel({ msisdn }: { msisdn: string }) {
     } finally {
       if (seq === seqRef.current) setLoading(false)
     }
-  }, [serviceType, table, ctx])
+  }, [serviceType, table, ctx, paramKeys.svc, paramKeys.table])
 
   /* 并行取数：页面级「查询」每执行一次，context.query.token 就 +1。
      这里盯着 token 变化自动发请求 —— 与 CCA 概览、信令详单两个页签
@@ -506,6 +515,8 @@ export default function VmaxXdrRecordsPanel({ msisdn }: { msisdn: string }) {
               }}
             />
           </>
+        ) : !loading && result?.empty_reason === 'no_imsi' ? (
+          <Alert type="warning" showIcon message={t('vmaxxdr.noImsi')} />
         ) : (
           <Text type="secondary">
             {loading ? t('vmaxxdr.loading')

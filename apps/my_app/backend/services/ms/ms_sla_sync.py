@@ -472,6 +472,31 @@ def _decode_chunked(data):
     return bytes(result)
 
 
+def _chunked_advance(buf, pos):
+    """从 pos 起按 chunk 边界向前推进，返回 (是否已收到终止块, 下次续扫位置)。
+
+    按 chunk 边界逐个推进：`<hex-size>\r\n<data>\r\n` ... `0\r\n\r\n`。
+    只前进不回头：调用方保存返回的位置，下次 recv 接着推进。
+    若每轮都从响应体开头重扫（旧写法），20MB 响应会退化成 O(n²)。
+    `pos` 必须指向某个 chunk 头的起始位置。
+    """
+    n = len(buf)
+    while True:
+        eol = buf.find(b"\r\n", pos)
+        if eol == -1:
+            return False, pos          # chunk 头都没收全，下次从原处继续
+        try:
+            size = int(buf[pos:eol].split(b";")[0].strip(), 16)
+        except ValueError:
+            return False, pos
+        nxt = eol + 2
+        if size == 0:
+            return n >= nxt + 2, pos   # 终止块：还要结尾 CRLF 才算完整
+        if n < nxt + size + 2:
+            return False, pos          # 数据或尾部 CRLF 未到齐
+        pos = nxt + size + 2
+
+
 def _http_request(method, path, headers_extra=None, body=None, retry=0):
     """发送原始 HTTP 请求，带连接复用、bytearray接收、截断检测和重试。"""
     try:
@@ -518,6 +543,8 @@ def _http_request(method, path, headers_extra=None, body=None, retry=0):
     content_length = None
     header_end_found = False
     header_end_pos = 0
+    is_chunked = False
+    chunked_scan_pos = -1  # chunked 增量扫描游标（-1 = 未初始化）
 
     while True:
         try:
@@ -543,6 +570,17 @@ def _http_request(method, path, headers_extra=None, body=None, retry=0):
                             logging.getLogger(__name__).warning("[SILENT-EXCEPT] _http_request: exception swallowed", exc_info=True)
                             pass
                         break
+                    if line.lower().startswith("transfer-encoding:") and "chunked" in line.lower():
+                        is_chunked = True
+
+        # chunked 响应没有 Content-Length：终止块到齐就提前退出，
+        # 否则服务器不关连接时要干等到读超时。
+        if header_end_found and content_length is None and is_chunked:
+            if chunked_scan_pos < 0:
+                chunked_scan_pos = header_end_pos + 4
+            _ck_done, chunked_scan_pos = _chunked_advance(response_data, chunked_scan_pos)
+            if _ck_done:
+                break
 
         if header_end_found and content_length is not None:
             if len(response_data) - (header_end_pos + 4) >= content_length:

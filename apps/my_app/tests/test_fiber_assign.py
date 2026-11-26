@@ -932,3 +932,120 @@ def test_outcome_mixed_site_gap_and_assign_failure_is_failure():
     r = _outcome(due=2, failed=2, failed_site_unresolved=1, cmdb_site_count=830,
                  fail_reasons=["A1: 站点解析失败", "A2: 建单失败"])
     assert r["status"] == "failed" and r["success"] is False
+
+
+# ==========================================================
+# 上游未建单 ≠ 任务错误（2026-11-25 如意要求）
+# ==========================================================
+# 现场：`assign API returned success but no TT was created` 连续多轮出现，任务每 5
+# 分钟记一条红色 Error。如意明确「这是上游的问题，跟我们脚本没关系，不该报错，
+# 只在 WhatsApp 群正常通报即可」。判据：本轮失败**全部**是上游未建单 → upstream_no_tt
+# （success=True，不写 error），与 pending_cmdb 同款处理。
+def test_outcome_upstream_no_tt_is_not_failure():
+    r = _outcome(due=2, failed=2, failed_upstream_no_tt=2, fail_reasons=[
+        "A1: 上游未建单：派单接口回 success 但 ttid 仍为空（已尝试 3 次），需在 eFlow 手工建单"])
+    assert r["status"] == "upstream_no_tt"
+    assert r["success"] is True
+    # 写 error 就会在 Run History 显示红色 ❌ Error —— 用户明确不要
+    assert not r.get("error")
+
+
+def test_outcome_upstream_no_tt_ignores_failure_ratio():
+    """100% 派不出去也一样：只要全是上游未建单，就不算大面积失败。"""
+    r = _outcome(due=4, failed=4, failed_upstream_no_tt=4)
+    assert r["status"] == "upstream_no_tt" and r["success"] is True
+
+
+def test_outcome_upstream_http_error_is_still_failure():
+    """接口真报错（不是上游未建单）→ 仍判 failed，不能被新状态吞掉。
+
+    否则 eFlow 整体挂掉时任务会全绿 —— 就是 2026-11-06 那个静默失败的老坑。
+    """
+    r = _outcome(due=2, failed=2, fail_reasons=["A1: HTTP 500 Unable to insert record"])
+    assert r["status"] == "failed" and r["success"] is False
+
+
+def test_outcome_upstream_no_tt_mixed_with_real_error_is_failure():
+    """上游未建单 + 接口真失败混在一轮 → 判 failed，不掩盖真错误。"""
+    r = _outcome(due=2, failed=2, failed_upstream_no_tt=1,
+                 fail_reasons=["A1: 上游未建单", "A2: HTTP 502 Bad Gateway"])
+    assert r["status"] == "failed" and r["success"] is False
+
+
+def test_outcome_upstream_no_tt_with_cmdb_down_is_failure():
+    """cmdb 没拉到（索引 0 条）时，不能靠上游未建单这个桶把整轮判绿。"""
+    r = _outcome(due=2, failed=2, failed_upstream_no_tt=1,
+                 failed_site_unresolved=1, cmdb_site_count=0)
+    assert r["status"] == "failed" and r["success"] is False
+
+
+def test_is_upstream_no_tt_only_matches_sentinel():
+    """只有引擎写的那个哨兵文案算「上游未建单」，其它错误一律不算。"""
+    from backend.services.eflow_assign import assign_engine as eng
+    assert eng.is_upstream_no_tt(eng.NO_TT_ERROR) is True
+    assert eng.is_upstream_no_tt("") is False
+    assert eng.is_upstream_no_tt(None) is False
+    assert eng.is_upstream_no_tt("assign API returned error: HTTP 500") is False
+    assert eng.is_upstream_no_tt("HTTP 500 Unable to insert record") is False
+
+
+def test_manual_message_upstream_no_tt_headline():
+    """上游未建单的群通报：措辞要讲清「接口是成功的、TT 没落地」，不能写成脚本失败。"""
+    svc = _reload_service()
+    alarm = {
+        "alarmcode": {"value": "4758"},
+        "codename": {"value": "Fiber Break"},
+        "mename": {"value": "Zardun"},
+        "alarmraisedtime": {"value": int(time.time() * 1000)},
+    }
+    text = svc.build_manual_message(
+        alarm,
+        "eFlow accepted the assign request but created no TT after 3 attempt(s) (ttid still empty)",
+        headline="⚠ Auto assign accepted by eFlow but no TT was created — manual action required in eFlow",
+        hint_lines=["Note: eFlow returned success for the assign request but",
+                    "      the alarm still has no TT (ttid empty).",
+                    "      Please create the TT manually in eFlow."])
+    assert "Auto assign accepted by eFlow but no TT was created" in text
+    assert "created no TT" in text
+    assert "Zardun" in text
+    _assert_no_cjk(text)
+
+
+# ==========================================================
+# 通报抑制要有时效（2026-11-25 实测：新告警被 3 天前的通报压掉）
+# ==========================================================
+# 现场：08:20 新升起的断纤告警，alarm_key 与 10-29 那次相同（eFlow 复用 key），
+# 状态表 send_status=Y / send_time=10-29 → 旧规则「通报过就永不重发」导致这轮
+# 一条通报都没发出（manual_notified=0、messages 为空），等于静默漏派。
+def test_notified_recently_within_window_suppresses():
+    from datetime import datetime
+    svc = _reload_service()
+    now = datetime(2026, 11, 25, 8, 40, 0)
+    assert svc.notified_recently({"send_status": "Y",
+                                  "send_time": "2026-11-25 08:30:00"}, now) is True
+
+
+def test_notified_recently_expired_window_reports_again():
+    """超过 NOTIFY_REPEAT_HOURS（6 小时）→ 重新通报（含跨天复用的 alarm_key）。"""
+    from datetime import datetime
+    svc = _reload_service()
+    now = datetime(2026, 11, 25, 8, 40, 0)
+    assert svc.notified_recently({"send_status": "Y",
+                                  "send_time": "2026-10-29 05:03:12"}, now) is False
+    # 边界：5 小时 59 分内仍算已通报，6 小时 01 分就重发
+    assert svc.notified_recently({"send_status": "Y",
+                                  "send_time": "2026-11-25 02:41:00"}, now) is True
+    assert svc.notified_recently({"send_status": "Y",
+                                  "send_time": "2026-11-25 02:39:00"}, now) is False
+
+
+def test_notified_recently_unknown_state_reports_again():
+    """没确认送达 / 没时间戳 / 脏数据 → 一律按「没通报过」，宁可多报不静默。"""
+    from datetime import datetime
+    svc = _reload_service()
+    now = datetime(2026, 11, 25, 8, 40, 0)
+    assert svc.notified_recently({}, now) is False
+    assert svc.notified_recently({"send_status": "N",
+                                  "send_time": "2026-11-25 08:30:00"}, now) is False
+    assert svc.notified_recently({"send_status": "Y", "send_time": None}, now) is False
+    assert svc.notified_recently({"send_status": "Y", "send_time": "garbage"}, now) is False

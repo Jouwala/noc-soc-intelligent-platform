@@ -2,6 +2,9 @@
  * VmaxUserCca —— VMAX 智能诊断工作台（Intelligent Diagnosis Workspace）
  * ============================================================================
  *
+ * 2026-11-26：旧页 ?page=vmax_user_query 已收编到本页（菜单下线，旧链接别名跳转，
+ *   见 App.tsx）；以下为 2026-11-07 新建时的说明，保留备查。
+ *
  * 2026-11-07 新建，与旧页 VmaxUserQuery（?page=vmax_user_query）**并存**：
  * 旧页保持「按数据源分视图」的查询工具形态，本页是投诉驱动的单页叙事：
  *
@@ -61,7 +64,17 @@ export default function VmaxUserCca() {
   const [drawer, setDrawer] = useState<{ kind: EvidenceKind | null; open: boolean }>({
     kind: null, open: false,
   })
-  const openDrawer = (kind: EvidenceKind) => setDrawer({ kind, open: true })
+  /* 证据入口收编（2026-11-26）：
+   *   flow    → 滚到区域 2 的流量卡（同一份数据，不再开抽屉重复展示）；
+   *   records → 无线质量专项（含原始下钻，走诊断已解析的 IMSI，能出数）；
+   *   xdr     → 原始信令抽屉（合并表 / 分表两个页签）。 */
+  const openDrawer = (kind: EvidenceKind) => {
+    if (kind === 'flow') {
+      document.getElementById('vmax-ws-flow')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    setDrawer({ kind: kind === 'records' ? 'radio' : kind, open: true })
+  }
 
   const ws = useMemo(() => buildWorkspaceCorrelation({
     payload: d.diag,

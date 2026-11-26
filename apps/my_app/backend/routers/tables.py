@@ -5,6 +5,7 @@ import json
 import re
 import os
 import time
+import threading
 import uuid
 import sqlite3
 from urllib.parse import quote
@@ -301,32 +302,154 @@ def _build_where(conn, table_name, search, col_filters_raw):
     return (" WHERE " + " AND ".join(parts) if parts else ""), params
 
 
-@router.get("")
-def get_tables():
-    """列出所有表和元信息"""
+# ---------------- 表清单 /api/tables 提速（2026-11-24） ----------------
+# 背景：nginx access.log 实测 2026-11-23~24 `GET /api/tables` p50≈13s、最慢 40s，
+#       而同页的 `/api/tables/{t}/data` 只要 0.06~1s —— 表格页首屏慢几乎全卡在这一个请求上。
+# 根因：旧实现对每张表各跑一次 `COUNT(*)` + 一次 information_schema 子查询（N+1），
+#       PG 冷缓存时大表 COUNT 要整表扫描，表越多越慢；同屏多个 iframe 时还会互相排队。
+# 现做法（三件事，互相独立，任一可单独回退）：
+#   ① PG 下列元数据改成**一条** information_schema 查询批量取，schema 选择规则与
+#      `_column_metadata` 完全一致（search_path 里第一个含该表的 schema）。
+#   ② PG 下行数先读 pg_class.reltuples（统计估算，毫秒级）：估算 < _EXACT_COUNT_MAX_ROWS
+#      或从未 ANALYZE（-1）的表仍跑精确 COUNT(*)；只有大表用估算值，并在响应里标
+#      `row_count_estimated: true`，前端显示「≈」—— 估算就说是估算，不冒充精确数
+#      （AGENTS.md 三.6「取不到 ≠ 0」的同一精神）。大表的精确条数在选中后由
+#      `/{t}/data` 的 total 给出，那个请求本来就快。
+#   ③ 整个结果进程内缓存 _TABLES_CACHE_TTL 秒，同一时刻只有一个请求在算（其余等结果），
+#      本文件的导入接口写完表后立即失效缓存；其他路由建表最多晚 TTL 秒出现在清单里，
+#      或带 `?refresh=1` 强制重算。
+# SQLite 模式（DB_MODE=sqlite 熔断回退）逻辑保持旧实现不变，只享受 ③ 的缓存。
+# 移除条件：若改成后台定时刷新表清单快照，可删掉 ③；①② 无副作用，建议保留。
+_TABLES_CACHE_TTL = 60.0
+_EXACT_COUNT_MAX_ROWS = 200_000
+_tables_cache = {"ts": 0.0, "data": None, "gen": 0}
+_tables_cache_lock = threading.Lock()
+
+
+def invalidate_tables_cache():
+    """表结构/行数有变化时调用（导入、建表、删表后），下一次 /api/tables 重新计算。"""
+    _tables_cache["gen"] += 1
+    _tables_cache["data"] = None
+    _tables_cache["ts"] = 0.0
+
+
+def _pg_batch_column_metadata(conn, names):
+    """PG：一次查询取回所有表的列元数据 → {table: [{name,type,notnull,pk}]}。
+
+    与 `_column_metadata` 同一口径：同名表存在于多个 schema 时，只取
+    search_path（current_schemas）里排在最前的那个 schema 的列，避免列混合。
+    """
+    rows = conn.execute(
+        "SELECT c.table_name::text, c.column_name::text, c.data_type::text, c.is_nullable::text, "
+        "       array_position(current_schemas(false), c.table_schema::name) AS sp "
+        "FROM information_schema.columns c "
+        "WHERE c.table_name::text = ANY(?) "
+        "  AND c.table_schema::name = ANY(current_schemas(false)) "
+        "ORDER BY c.table_name, sp, c.ordinal_position",
+        (list(names),),
+    ).fetchall()
+    best_sp, meta = {}, {}
+    for tname, cname, dtype, nullable, sp in rows:
+        if tname not in best_sp:
+            best_sp[tname] = sp
+            meta[tname] = []
+        if sp != best_sp[tname]:
+            continue  # 排在后面的同名表，忽略
+        meta[tname].append({"name": cname, "type": dtype,
+                            "notnull": 1 if nullable == "NO" else 0, "pk": 0})
+    return meta
+
+
+def _pg_batch_row_estimates(conn, names):
+    """PG：一次查询取回各表 pg_class.reltuples（统计估算）→ {table: float}。
+
+    -1 表示从未 VACUUM/ANALYZE（PG14+），调用方据此回落到精确 COUNT。
+    schema 选择规则同上，与 `FROM "表名"` 实际解析到的那张表一致。
+    """
+    rows = conn.execute(
+        "SELECT c.relname::text, c.reltuples::float8, "
+        "       array_position(current_schemas(false), n.nspname) AS sp "
+        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f') "
+        "  AND c.relname::text = ANY(?) "
+        "  AND n.nspname = ANY(current_schemas(false)) "
+        "ORDER BY c.relname, sp",
+        (list(names),),
+    ).fetchall()
+    est = {}
+    for tname, reltuples, _sp in rows:
+        est.setdefault(tname, reltuples)   # ORDER BY sp：第一条即解析到的那张
+    return est
+
+
+def _build_tables_payload():
+    tables = [t for t in list_tables() if not t.startswith('_')]
+    result = []
     with get_raw_connection() as conn:
-        tables = list_tables()
-        result = []
+        is_pg = not isinstance(conn, sqlite3.Connection)
+        meta, est = {}, {}
+        if is_pg and tables:
+            try:
+                meta = _pg_batch_column_metadata(conn, tables)
+                est = _pg_batch_row_estimates(conn, tables)
+            except Exception:
+                logger.warning("[TABLES] 批量元数据查询失败，回落逐表查询", exc_info=True)
+                try:
+                    conn.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                meta, est = {}, {}
 
         for table_name in tables:
-            if table_name.startswith('_'):
-                continue
             try:
-                row_count = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
-                col_info = _column_metadata(conn, table_name)
+                estimated = False
+                guess = est.get(table_name)
+                if guess is not None and guess >= _EXACT_COUNT_MAX_ROWS:
+                    row_count = int(guess)
+                    estimated = True
+                else:
+                    row_count = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
+                col_info = meta.get(table_name)
+                if col_info is None:
+                    col_info = _column_metadata(conn, table_name)
                 columns = [{"name": c["name"], "type": c["type"], "notnull": c["notnull"], "pk": c["pk"]} for c in col_info]
                 result.append({
                     "name": table_name,
                     "row_count": row_count,
+                    "row_count_estimated": estimated,
                     "col_count": len(columns),
                     "columns": columns,
                 })
-            except Exception as e:
-                logging.getLogger(__name__).warning("[SILENT-EXCEPT] get_tables: exception swallowed", exc_info=True)
+            except Exception:
+                logger.warning("[SILENT-EXCEPT] get_tables: exception swallowed (%s)", table_name, exc_info=True)
+                # PG：一条语句失败会让整个事务进入 aborted 状态，不回滚的话后面所有表都会跟着失败
+                try:
+                    conn.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
                 continue
 
         conn.close()
-        return {"tables": result, "total": len(result)}
+    return {"tables": result, "total": len(result)}
+
+
+@router.get("")
+def get_tables(refresh: bool = Query(False, description="跳过缓存强制重算")):
+    """列出所有表和元信息（结果缓存 _TABLES_CACHE_TTL 秒，见上方说明）"""
+    data = _tables_cache["data"]
+    if not refresh and data is not None and time.monotonic() - _tables_cache["ts"] < _TABLES_CACHE_TTL:
+        return data
+    with _tables_cache_lock:
+        data = _tables_cache["data"]
+        if not refresh and data is not None and time.monotonic() - _tables_cache["ts"] < _TABLES_CACHE_TTL:
+            return data   # 排队期间别人已经算好了
+        gen = _tables_cache["gen"]
+        t0 = time.monotonic()
+        data = _build_tables_payload()
+        if gen == _tables_cache["gen"]:   # 计算期间被导入失效过，就不缓存这份旧结果
+            _tables_cache.update(ts=time.monotonic(), data=data)
+        logger.info("[TABLES] 表清单重算 %d 张，用时 %.2fs", data["total"], time.monotonic() - t0)
+        return data
 
 
 @router.get("/{table_name}/data")
@@ -677,6 +800,7 @@ async def import_excel_to_table(
             })
         conn.close()
 
+    invalidate_tables_cache()   # 新表/新行数要立刻出现在 /api/tables（前端导入后会马上重拉清单）
     logging.getLogger(__name__).info(
         "[IMPORT] 自定义导入: %s -> %d 张表 (%s)", raw_name,
         len(created), ", ".join(c["table_name"] for c in created))

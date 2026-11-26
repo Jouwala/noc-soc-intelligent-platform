@@ -55,19 +55,28 @@ type XdrResult = {
   field: string[]
   header: string[]
   rows: XdrRow[]
+  /** 0 条时的原因：no_data = 上游 3100100202；no_imsi = RAN 域解析不到 IMSI */
+  empty_reason?: 'no_data' | 'no_imsi'
 }
+
+/** URL 参数名：旧页用 mxSvc，CCA 工作台抽屉传 ccaMxSvc（2026-11-26，避免两页互踩） */
+export type XdrPanelParamKeys = { svc: string }
+const DEFAULT_KEYS: XdrPanelParamKeys = { svc: 'mxSvc' }
 
 /** 统一空值展示：— 而不是 null / 空串（AGENTS.md 三.6） */
 const fmt = (v: unknown) => (v == null || v === '' || v === '--' ? '—' : String(v))
 
-export default function VmaxXdrPanel({ msisdn }: { msisdn: string }) {
+export default function VmaxXdrPanel({ msisdn, paramKeys = DEFAULT_KEYS }: {
+  msisdn: string
+  paramKeys?: XdrPanelParamKeys
+}) {
   const { t, locale } = useI18n()
   const ctx = useVmaxWindow()
 
   // 号码由父页面给；父页面改了号码要重置本面板的结果，避免张冠李戴
   const lastMsisdn = useRef(msisdn)
 
-  const [serviceType, setServiceType] = useState(() => readParam('mxSvc') || '1100')
+  const [serviceType, setServiceType] = useState(() => readParam(paramKeys.svc) || '1100')
   const [pageSize, setPageSize] = useState(20)
 
   const [services, setServices] = useState<ServiceItem[]>([])
@@ -127,7 +136,7 @@ export default function VmaxXdrPanel({ msisdn }: { msisdn: string }) {
       const data = r.data as XdrResult
       setResult(data)
       // 查询类型随结果入 URL（时间窗滚动、不再写进 URL，此处只记类型）
-      writeParams({ mxSvc: data.service_type })
+      writeParams({ [paramKeys.svc]: data.service_type })
     } catch (e: any) {
       if (seq !== seqRef.current) return
       // 后端 HTTPException 的中文说明在 detail（凭据未配置 / 上游不可用等）
@@ -136,7 +145,7 @@ export default function VmaxXdrPanel({ msisdn }: { msisdn: string }) {
     } finally {
       if (seq === seqRef.current) setLoading(false)
     }
-  }, [serviceType, ctx])
+  }, [serviceType, ctx, paramKeys.svc])
 
   /* 并行取数：页面级「查询」每执行一次，context.query.token 就 +1。
      这里盯着 token 变化自动发请求 —— 与 CCA 概览、XDR 记录两个页签
@@ -346,6 +355,8 @@ export default function VmaxXdrPanel({ msisdn }: { msisdn: string }) {
               }}
             />
           </>
+        ) : !loading && result?.empty_reason === 'no_imsi' ? (
+          <Alert type="warning" showIcon message={t('vmaxxdr.noImsi')} />
         ) : (
           <Text type="secondary">
             {loading ? t('vmaxxdr.loading') : (searched && !error ? t('vmaxxdr.empty') : t('vmaxxdr.idle'))}

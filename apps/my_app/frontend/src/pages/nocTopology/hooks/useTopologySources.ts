@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { getIpranTopoGraph, getIpranTopoLayers, getMwUmeRealtime, getMwUmeTopology } from '../../../api'
 import type { IpranLayerInfo, MwUmeTopologyResponse } from '../../../api'
+import { useI18n } from '../../../i18n'
 import type { LayerKey, TopoResp } from '../../ipranTopo/types'
 import { buildFiberLinks, buildGeoLinks, buildGeoSites } from '../../networkTopologyV2/geoData'
 import { useOlibFiberLinks } from '../../networkTopologyV2/useFiberLinks'
@@ -76,6 +77,7 @@ function mwStateOf(resp: MwUmeTopologyResponse): SourceState {
 
 export function useTopologySources(opts: TopologySourcesOptions): TopologySourcesResult {
   const { layer, includeTraffic, mwRealtime } = opts
+  const { t } = useI18n()
 
   /* ---------------- IPRAN ---------------- */
   const [ipranRaw, setIpranRaw] = useState<TopoResp | null>(null)
@@ -88,6 +90,8 @@ export function useTopologySources(opts: TopologySourcesOptions): TopologySource
   const [mwRaw, setMwRaw] = useState<MwUmeTopologyResponse | null>(null)
   const [mwState, setMwState] = useState<SourceState>('loading')
   const [mwErr, setMwErr] = useState<string | undefined>()
+  /** 15 分钟接口失败、已回退日粒度：MW 照常显示，但来源健康面板要如实写明 */
+  const [mwFellBack, setMwFellBack] = useState(false)
   const mwSeq = useRef(0)
   const hasMw = useRef(false)
 
@@ -140,11 +144,29 @@ export function useTopologySources(opts: TopologySourcesOptions): TopologySource
       setMwRaw(resp)
       setMwState(mwStateOf(resp))
       setMwErr(undefined)
+      setMwFellBack(false)
       hasMw.current = true
       lastAt.current.mw = Date.now()
       setLastSuccessAt(Date.now())
     } catch (e) {
       if (seq !== mwSeq.current) return
+      /* 流量视图默认走 15 分钟（2026-11-25）。实时接口失败时不能让 MW 整片消失，
+         回退取一次日粒度；数据如实标成日粒度 + partial，不冒充实时。 */
+      if (mwRealtime) {
+        try {
+          const r2 = await getMwUmeTopology({ top_n: 20, refresh: 0 })
+          if (seq !== mwSeq.current) return
+          setMwRaw(r2.data as MwUmeTopologyResponse)
+          setMwState('partial')
+          setMwErr(errText(e))
+          setMwFellBack(true)
+          hasMw.current = true
+          lastAt.current.mw = Date.now()
+          setLastSuccessAt(Date.now())
+          return
+        } catch { /* 日粒度也失败：走下面的原有降级 */ }
+        if (seq !== mwSeq.current) return
+      }
       setMwErr(errText(e))
       setMwState(hasMw.current ? 'stale' : 'unavailable')
     }
@@ -182,10 +204,14 @@ export function useTopologySources(opts: TopologySourcesOptions): TopologySource
     [ipranRaw, layer, ipranState, ipranErr, includeTraffic],
   )
 
-  const mw = useMemo(
-    () => adaptMw({ resp: mwRaw, state: mwState, error: mwErr, realtime: mwRealtime }),
-    [mwRaw, mwState, mwErr, mwRealtime],
-  )
+  const mw = useMemo(() => {
+    const slice = adaptMw({ resp: mwRaw, state: mwState, error: mwErr, realtime: mwRealtime && !mwFellBack })
+    if (!mwFellBack) return slice
+    return {
+      ...slice,
+      meta: { ...slice.meta, warnings: [t('nocTopo.mwRealtimeFallback', { err: mwErr ?? '' }), ...slice.meta.warnings] },
+    }
+  }, [mwRaw, mwState, mwErr, mwRealtime, mwFellBack, t])
 
   const olibState: SourceState = geo.loading || fiber.loading
     ? (geo.file || fiber.file ? 'static' : 'loading')

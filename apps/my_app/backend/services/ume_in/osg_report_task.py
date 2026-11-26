@@ -103,6 +103,10 @@ def run_ume_in_osg_report(days_back=None, win_start=None, win_end=None,
     result["email"] = email_res
     if not email_res.get("success"):
         result["error"] = f"Email: {email_res.get('error')}"
+        # 通道 down 时只跳过发信：同步/生成已落库，顶层标记 deferred 让
+        # task_runner 静默、email_recovery 恢复后补发（复用 daily 档）。
+        from backend.services.email import ews_deferral
+        ews_deferral.apply_email_deferral(result, email_res, "ume_in_osg_report")
         return result
 
     result["success"] = True

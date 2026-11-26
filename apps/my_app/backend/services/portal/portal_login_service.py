@@ -206,6 +206,28 @@ PORTALS = {
         # 前端把根地址/接口写死为 https://10.121.8.2/ → 客户端模式直连上游
         "direct": True,
     },
+    # NGI 规划平台（10.100.29.17:28001，2026-11-26 加）——用户要求把该门户
+    # 加进「门户一键登录」页，免去每次手输账号口令。
+    # 与 zte_ume 是**同一套 uportal/oauth2 登录页**（RSA 口令 + Z-AUTH-CODE），
+    # 所以 kind/redirect/success_regex 照抄；但不是同一台设备、账号不通用。
+    #
+    # ⚠ 复用凭据组 `ngi`（credential_store，2026-11-24 为 ngi_param_coverage_sync
+    #   任务建立，同一台设备同一套账号），**不新增分组、不写第二份口令**。
+    #   在「系统设置 → 凭据」里改口令，本页与同步任务同时生效。
+    #
+    # ⚠ 没有配客户端反代：PROXY_PREFIXES 里没给它分端口（8081-8086/8088 已占，
+    #   8087 被 ShadowBot 占用），所以客户端模式下这张卡只提示「无客户端登录」，
+    #   要用本机浏览器登录得先按 11-feature-guide.md 第 24 节给 nginx 加一个新端口。
+    "ngi": {
+        "name": "NGI 规划平台 (10.100.29.17:28001)",
+        "name_en": "NGI Planning Platform (10.100.29.17:28001)",
+        "cred_key": "ngi",
+        "kind": "oauth2",
+        "host_env": "NGI_HOST", "port_env": "NGI_PORT",
+        "default_host": "10.100.29.17", "default_port": 28001,
+        "redirect": "/uportal/framework/default.html",
+        "success_regex": r"https://[^/]+/uportal/framework/default\.html",
+    },
 }
 
 

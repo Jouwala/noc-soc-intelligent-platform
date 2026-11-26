@@ -174,6 +174,12 @@ from backend.routers import (
     cmdb_site_update,
     # IP RAN 光纤拓扑图：UME 8 次调用聚合成一次响应（见 services/ipran_topo/）
     ipran_topo,
+    # 站点 KPI 实时查询（投诉排查）：直查 UME 小区级 15 分钟明细，不落库
+    # 见 services/ran/ran_site_kpi_rt_service.py
+    site_kpi_rt,
+    # NGI 覆盖网格（?page=location 的「覆盖 RSRP」图层）：17.8 万个 50 m 格点按
+    # 紧凑二进制 + ETag 下发，前端 Canvas 按瓦片绘制（见 services/ngi_data/ngi_coverage_api.py）
+    ngi_coverage,
 )
 # 任务配置文件注册表（Settings「任务配置」页签 → 配置文件管理）
 from backend.services.task import task_configs_registry  # noqa: F401  (注册副作用)
@@ -450,6 +456,15 @@ app.include_router(cmdb_site_update.router)
 # IP RAN 光纤拓扑（?page=ipran_topo）：UME lid=1293626099480711168 的网元 + 链路 + 活动告警，
 # 8 次上游调用在服务层聚合成一次响应并缓存 120s（见 services/ipran_topo/ipran_topo_service.py）
 app.include_router(ipran_topo.router)
+
+# 站点 KPI 实时查询（?page=site_kpi_rt）：投诉排查场景，输入站点名/ID 后直查 UME
+# 小区级 15 分钟明细（grouplayer=me,eNodeBFunction,EUtranCellFDD），在服务端按
+# eNodeBId 过滤出目标站点，不写任何表；结果只放进程内内存（TTL 600s / 最多 6 份）。
+# 扇区号取 PG app.ngi_lte_cell_param.sector_id，载波按 dl_center_freq 区分。
+app.include_router(site_kpi_rt.router)
+
+# NGI 覆盖网格只读接口（?page=location「覆盖 RSRP」图层）：meta / grid（NGC1 二进制 + ETag）/ point
+app.include_router(ngi_coverage.router)
 
 
 # ========== 统一门户鉴权中间件 ==========

@@ -829,6 +829,9 @@ def run_task(task_id: str, trigger: str = "manual") -> dict:
     deferred_result = None
     try:
         from backend.services.email import ews_deferral
+        # 透传触发方式给 service 层的细粒度发信门禁（manual 不拦），见
+        # ews_deferral.FINE_GRAINED_TASK_IDS。ContextVar 随线程上下文隔离。
+        ews_deferral.set_current_trigger(trigger)
         deferred_result = ews_deferral.maybe_defer(task, trigger)
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[{task_id}] EWS 延后判定异常，按原样执行: {e}")

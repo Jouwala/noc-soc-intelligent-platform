@@ -57,12 +57,12 @@ def _sync_param(fetched_at: datetime) -> dict:
         zip_bytes, auth_source = ngi_client.with_auth(ngi_client.fetch_param_zip)
 
         parsed: dict[str, list[dict]] = {}
-        sector_stats: dict = {}
+        sector_stats: dict[str, dict] = {}
         for rat in ("LTE", "NR"):
             rows = ngi_param.read_sheet(zip_bytes, rat)
             parsed[rat] = rows
-            if rat == "LTE":
-                sector_stats = ngi_param.fill_missing_sector_ids(rows)
+            # LTE 只补空值；NR 没有 SectorID 列，整列生成（见 ngi_param.SECTOR_KEYS）
+            sector_stats[rat] = ngi_param.fill_missing_sector_ids(rows, rat)
 
         # 先校验再落库：残片不该覆盖上一周的好数据
         if len(parsed["LTE"]) < MIN_LTE_ROWS:
@@ -84,7 +84,8 @@ def _sync_param(fetched_at: datetime) -> dict:
 
         duration = _ms(started)
         message = (f"LTE={counts['LTE']['rows']} NR={counts['NR']['rows']} "
-                   f"sector_filled={sector_stats.get('filled', 0)}")
+                   f"sector_lte={sector_stats.get('LTE', {}).get('filled', 0)} "
+                   f"sector_nr={sector_stats.get('NR', {}).get('filled', 0)}")
         ngi_store.finish_log(
             log_id, status="success",
             row_count=counts["LTE"]["rows"] + counts["NR"]["rows"],
@@ -93,7 +94,7 @@ def _sync_param(fetched_at: datetime) -> dict:
         )
         logger.info("[NGI] 工参入库完成：%s（%.1fs）", message, duration / 1000)
         return {"lte": counts["LTE"]["rows"], "nr": counts["NR"]["rows"],
-                "sector_filled": sector_stats.get("filled", 0),
+                "sector_filled": {rat: s.get("filled", 0) for rat, s in sector_stats.items()},
                 "zip_bytes": len(zip_bytes), "auth_source": auth_source,
                 "duration_ms": duration}
     except Exception as e:  # noqa: BLE001
@@ -142,8 +143,11 @@ def _sync_coverage() -> dict:
             records = ngi_store.normalize_grid_records(rows, rule, log_id)
             counts = ngi_store.persist_grid(rule, records)
             total_rows += counts["rows"]
+            # legend 一并留痕到 sync_log.detail：位置页覆盖图层的 meta 接口会带出它
+            # （档位 1~7 的原始区间定义），前端配色以库内实测 RSRP 统计为准、legend 作参考。
             results.append({"kpi": rule, "csv": csv_name, "rows": counts["rows"],
-                            "grid_size_m": grid_size, "zip_bytes": len(zip_bytes)})
+                            "grid_size_m": grid_size, "zip_bytes": len(zip_bytes),
+                            "legend": legend})
 
         duration = _ms(started)
         message = (f"taskLogId={task.get('taskLogId')} "

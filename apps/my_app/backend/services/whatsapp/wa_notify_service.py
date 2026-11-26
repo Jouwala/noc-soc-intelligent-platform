@@ -66,13 +66,28 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("wa_notify")
 
 # bot 项目根目录。默认按工作区相对位置解析，可用环境变量覆盖（便于测试与迁移）。
+#
+# ⚠ 层级别再改错（2026-11-25 事故）：本文件在 §11-4「services 按域重组」（0dceb46）
+# 里从 backend/services/ 下沉到 backend/services/whatsapp/，目录多了一层，而这里
+# 仍写着 parents[3] —— 于是解析成 apps/my_app/whatsapp-kb-bot（影子目录，没有
+# src/notify.js，也没有进程在轮询），P1 推送全部写进没人消费的信箱，任务只看到
+# 「推送进程未在 120s 内回报」。本文件路径是 apps/my_app/backend/services/whatsapp/，
+# 退 4 层才是仓库的 apps/（whatsapp-kb-bot 与 my_app 同级），**不要改回 3**。
 _BOT_ROOT = Path(os.environ.get(
     "WA_BOT_ROOT",
-    str(Path(__file__).resolve().parents[3] / "whatsapp-kb-bot"),
+    str(Path(__file__).resolve().parents[4] / "whatsapp-kb-bot"),
 ))
 
 JOB_FILE = _BOT_ROOT / "data" / "notify_job.json"
 HEARTBEAT_FILE = _BOT_ROOT / "data" / "notify_heartbeat.json"
+
+# 解析结果自检：目录层级再被重构错位时，这里先喊一声，而不是等任务连续失败
+# 55 次才发现。只告警不抛错 —— 迁移环境可能确实还没把 bot 拷过来。
+if not (_BOT_ROOT / "src" / "notify.js").is_file():
+    logger.warning(
+        "[WANotify] 推送通道目录疑似解析错误：%s 下没有 src/notify.js，"
+        "作业可能写进无人消费的信箱（可用 WA_BOT_ROOT 覆盖）", _BOT_ROOT,
+    )
 
 # 等待消费端回报的上限。Baileys 发送是秒级的，不像扩展要等页面渲染，
 # 故比扩展通道的 600s 短得多 —— 早失败早重试，不把 worker 占住。

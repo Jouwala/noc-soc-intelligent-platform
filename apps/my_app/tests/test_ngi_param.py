@@ -226,6 +226,45 @@ def test_ddl_column_definitions_are_comma_separated():
             assert ln.endswith(","), f"{table} 的列定义缺逗号：{ln!r}"
 
 
+def _nr_rows(*specs):
+    """specs: (gnb, freq, cid, azimuth) —— NR 工参没有 SectorID 列"""
+    out = []
+    for gnb, freq, cid, az in specs:
+        out.append({"gNodeBID": gnb, "DLCenterFrequency": freq,
+                    "CellID": str(cid), "CellName": f"N{cid}", "Azimuth": str(az)})
+    return out
+
+
+def test_nr_sector_ids_generated_from_scratch():
+    """5G 工参没有 SectorID 列：按 gNodeBID + DLCenterFrequency 分组、方位角升序生成 1..N。"""
+    rows = _nr_rows(("6008", "3450", 50, 0), ("6008", "3450", 51, 120),
+                    ("6008", "3450", 52, 240))
+    stats = ngi_param.fill_missing_sector_ids(rows, "NR")
+    assert [r["SectorID"] for r in rows] == ["1", "2", "3"], [r["SectorID"] for r in rows]
+    assert all(r["_sector_source"] == "derived" for r in rows)
+    assert stats["filled"] == 3 and stats["groups_total"] == 1
+
+
+def test_nr_sector_ids_group_by_gnb_and_frequency():
+    """不同 gNodeB 各编各的；同站不同频点也从 1 起编。"""
+    rows = _nr_rows(("6008", "3450", 1, 200), ("6008", "3450", 2, 20),
+                    ("6008", "3500", 3, 100), ("6245", "3450", 4, 300))
+    ngi_param.fill_missing_sector_ids(rows, "NR")
+    got = {r["CellID"]: r["SectorID"] for r in rows}
+    assert got == {"2": "1", "1": "2", "3": "1", "4": "1"}, got
+
+
+def test_nr_field_map_carries_generated_sector_id():
+    """NR 字段映射必须把生成的 SectorID 落成一列（否则库里没有这一列）。"""
+    cols = [c for c, _h, _k in ngi_store.NR_FIELDS]
+    assert "sector_id" in cols, cols
+    header_of = {c: h for c, h, _k in ngi_store.NR_FIELDS}
+    assert header_of["sector_id"] == "SectorID"
+    # 老库升级路径：DDL 里必须有 ALTER，否则 CREATE TABLE IF NOT EXISTS 不会补列
+    assert "ADD COLUMN IF NOT EXISTS sector_id" in ngi_store.DDL
+    assert "ADD COLUMN IF NOT EXISTS sector_source" in ngi_store.DDL
+
+
 CHECKS = [
     test_header_is_third_row_and_instructions_are_dropped,
     test_missing_required_column_fails_loudly,
@@ -239,6 +278,9 @@ CHECKS = [
     test_no_empty_sector_means_no_work,
     test_ddl_contains_every_field_column,
     test_ddl_column_definitions_are_comma_separated,
+    test_nr_sector_ids_generated_from_scratch,
+    test_nr_sector_ids_group_by_gnb_and_frequency,
+    test_nr_field_map_carries_generated_sector_id,
     test_lte_and_nr_field_names_exist_in_header_constants,
 ]
 

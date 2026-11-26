@@ -111,7 +111,11 @@ export default function TopologyLegend({ view }: { view: NocView }) {
         <Section title={t('nocTopo.legend.traffic')}>
           {TRAFFIC_BINS.map((b) => (
             <Item key={b.label}>
-              <span style={{ width: 14, height: 8, background: b.color, display: 'inline-block', border: `1px solid ${WH.cardBorder}` }} />
+              {/* 与画布一致：0-40% 四档在画布上是淡化显示的，图例同样淡化 */}
+              <span style={{
+                width: 14, height: 8, background: b.color, display: 'inline-block',
+                border: `1px solid ${WH.cardBorder}`, opacity: b.max <= 40 ? 0.35 : 1,
+              }} />
               <span style={{ color: WH.textMuted }}>{b.label}</span>
             </Item>
           ))}
