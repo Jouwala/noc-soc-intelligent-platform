@@ -83,6 +83,8 @@ HTTP_MAX_RETRIES = max(0, int(os.environ.get("MAIN_KPI_HTTP_MAX_RETRIES", "3")))
 HTTP_RETRY_DELAY = float(os.environ.get("MAIN_KPI_HTTP_RETRY_DELAY", "1"))
 HTTP_CONNECT_TIMEOUT = float(os.environ.get("MAIN_KPI_CONNECT_TIMEOUT", "15"))
 HTTP_READ_TIMEOUT = float(os.environ.get("MAIN_KPI_READ_TIMEOUT", "90"))
+# 单次 recv 的字节数。15 分钟全网明细约 165MB，64KB 收一次要 2600+ 轮
+RECV_SIZE = int(os.environ.get("MAIN_KPI_RECV_SIZE", "262144"))
 
 # 时间范围：每日更新只需要最近 3 天（覆盖周末），首次运行可设大值
 DAYS_BACK = int(os.environ.get("MAIN_KPI_DAYS_BACK", "3"))
@@ -369,6 +371,8 @@ def _decode_chunked(data):
         if line_end == -1:
             break
         chunk_size_str = data[pos:line_end].decode('utf-8', errors='replace').strip()
+        # chunk 扩展（"1a3f;name=value"）要按分号截断，否则 int() 失败会把整包当空
+        chunk_size_str = chunk_size_str.split(";", 1)[0].strip() or "0"
         try:
             chunk_size = int(chunk_size_str, 16)
         except ValueError:
@@ -380,6 +384,52 @@ def _decode_chunked(data):
         result.extend(data[pos:pos + chunk_size])
         pos += chunk_size + 2
     return bytes(result)
+
+
+def _chunked_body_complete(buf, body_start, state):
+    """增量判断 chunked 响应体是否已收到终止块（0\\r\\n）。
+
+    只从 `state["pos"]` 继续解析，不对整包重复扫描（165MB 响应下全量重扫是 O(n²)）。
+
+    背景：UME 对大 JSON 走 `Transfer-Encoding: chunked` 且不带 `Content-Length`。
+    旧接收循环只认 `Content-Length`，于是每个请求都要死等到 HTTP_READ_TIMEOUT
+    （默认 90s）才 break —— 实测同一 create 请求 90.4s，加上取回 92.1s，
+    一轮 190s。改为按终止块判定后同请求降到 0.4s / 1.8s。
+    """
+    pos = state.get("pos") or body_start
+    if pos < body_start:
+        pos = body_start
+    n = len(buf)
+    while True:
+        size = state.get("size")
+        if size is not None:
+            # 当前块还差尾部 \r\n 时也算未收完，继续等下一批
+            if n - pos < size + 2:
+                state["pos"] = pos
+                return False
+            pos += size + 2
+            state["size"] = None
+            continue
+        line_start = pos
+        line_end = buf.find(b"\r\n", pos)
+        if line_end == -1:
+            state["pos"] = pos
+            return False
+        try:
+            size = int(bytes(buf[pos:line_end]).split(b";")[0].strip() or b"0", 16)
+        except ValueError:
+            state["pos"] = pos
+            return False
+        pos = line_end + 2
+        if size == 0:
+            # 终止块后必须还有结尾 CRLF；否则连接里会残留空行，下一次 keep-alive
+            # 请求会把 \r\n 当成响应开头而解析失败
+            if n - pos < 2:
+                state["pos"] = line_start
+                return False
+            state["pos"] = pos + 2
+            return True
+        state["size"] = size
 
 
 def _http_request(method, path, headers_extra=None, body=None, retry=0):
@@ -426,12 +476,15 @@ def _http_request(method, path, headers_extra=None, body=None, retry=0):
 
     response_data = bytearray()
     content_length = None
+    chunked = False
+    complete = False
     header_end_found = False
     header_end_pos = 0
+    chunk_state = {"pos": 0, "size": None}
 
     while True:
         try:
-            chunk = ssock.recv(65536)
+            chunk = ssock.recv(RECV_SIZE)
             if not chunk:
                 break
             response_data.extend(chunk)
@@ -445,18 +498,36 @@ def _http_request(method, path, headers_extra=None, body=None, retry=0):
                 header_end_found = True
                 header_end_pos = pos
                 hp = response_data[:pos].decode('utf-8', errors='replace')
-                for line in hp.split("\r\n"):
-                    if line.lower().startswith("content-length:"):
+                for line in hp.split("\r\n")[1:]:
+                    low = line.lower()
+                    if low.startswith("content-length:"):
                         try:
                             content_length = int(line.split(":", 1)[1].strip())
                         except ValueError:
                             logging.getLogger(__name__).warning("[SILENT-EXCEPT] _http_request: exception swallowed", exc_info=True)
                             pass
-                        break
+                    elif low.startswith("transfer-encoding:") and "chunked" in low:
+                        chunked = True
 
-        if header_end_found and content_length is not None:
-            if len(response_data) - (header_end_pos + 4) >= content_length:
+        if not header_end_found:
+            continue
+
+        # chunked 响应没有 Content-Length，必须按终止块判定；否则只会死等到读超时
+        if chunked:
+            if _chunked_body_complete(response_data, header_end_pos + 4, chunk_state):
+                complete = True
                 break
+        elif content_length is not None:
+            if len(response_data) - (header_end_pos + 4) >= content_length:
+                complete = True
+                break
+
+    if header_end_found and chunked and not complete:
+        # 流不完整时连接不可复用，且要让上层知道拿到的是残缺数据而不是正常结束
+        _close_thread_socket()
+        logging.getLogger(__name__).warning(
+            "[HTTP] chunked 响应未收完（已收 %d 字节，%.0fs 读超时），按残缺数据处理",
+            len(response_data), HTTP_READ_TIMEOUT)
 
     # Truncation detection
     if header_end_found and content_length is not None:

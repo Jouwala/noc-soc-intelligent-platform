@@ -106,6 +106,8 @@ NR_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("gnb_lat", "gNodeBLat", "f"),
     ("cell_name", "CellName", "s"),
     ("cell_id", "CellID", "s"),
+    # NR 工参没有 SectorID 列，这里存的是 `ngi_param.fill_missing_sector_ids` 生成的扇区号
+    ("sector_id", "SectorID", "i"),
     ("cell_lon", "CellLongitude", "f"),
     ("cell_lat", "CellLatitude", "f"),
     ("height_m", "Height", "f"),
@@ -229,9 +231,17 @@ CREATE INDEX IF NOT EXISTS ix_ngi_lte_param_pci ON {LTE_TABLE} (pci);
 CREATE INDEX IF NOT EXISTS ix_ngi_lte_param_sector ON {LTE_TABLE} (enodeb_id, sector_id);
 
 {_param_ddl(NR_TABLE, NR_FIELDS)}
+-- 2026-11-25：NR 表后加 sector_id / sector_source（LTE 首版就有）。
+-- CREATE TABLE IF NOT EXISTS 不会给已存在的表补列，所以升级路径必须显式 ALTER；
+-- 全新环境里这两句是 no-op。**顺序不能挪到 CREATE INDEX 之后**（否则老表建索引会报
+-- column "sector_id" does not exist）。以后再加列照此办理：CREATE 与 ALTER 都留。
+ALTER TABLE {NR_TABLE} ADD COLUMN IF NOT EXISTS sector_id INTEGER;
+ALTER TABLE {NR_TABLE} ADD COLUMN IF NOT EXISTS sector_source TEXT;
+
 CREATE INDEX IF NOT EXISTS ix_ngi_nr_param_gnb ON {NR_TABLE} (gnb_id);
 CREATE INDEX IF NOT EXISTS ix_ngi_nr_param_cell ON {NR_TABLE} (cell_name);
 CREATE INDEX IF NOT EXISTS ix_ngi_nr_param_pci ON {NR_TABLE} (pci);
+CREATE INDEX IF NOT EXISTS ix_ngi_nr_param_sector ON {NR_TABLE} (gnb_id, sector_id);
 
 CREATE TABLE IF NOT EXISTS {GRID_TABLE} (
     kpi                    TEXT NOT NULL,
@@ -253,6 +263,8 @@ CREATE TABLE IF NOT EXISTS {GRID_TABLE} (
 );
 CREATE INDEX IF NOT EXISTS ix_ngi_grid_run ON {GRID_TABLE} (run_id);
 CREATE INDEX IF NOT EXISTS ix_ngi_grid_rsrp ON {GRID_TABLE} (kpi, rsrp);
+-- 位置页点击格点查详情（ngi_coverage_api.point）：按 kpi + 经纬度小框查最近一格
+CREATE INDEX IF NOT EXISTS ix_ngi_grid_geo ON {GRID_TABLE} (kpi, center_lat, center_lon);
 
 CREATE TABLE IF NOT EXISTS {LOG_TABLE} (
     id                     BIGSERIAL PRIMARY KEY,

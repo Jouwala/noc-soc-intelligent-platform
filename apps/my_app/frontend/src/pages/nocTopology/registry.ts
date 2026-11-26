@@ -10,7 +10,7 @@
  * ========================================================================== */
 import { WH } from '../../theme'
 import { TRAFFIC_BINS, TRAFFIC_NA_COLOR } from '../ipranTopo/trafficScale'
-import type { NocDeviceType, NocMedium, NocStatus, NocView, SourceKey, SourceState } from './types'
+import type { NocDeviceType, NocMedium, NocNode, NocStatus, NocView, SourceKey, SourceState } from './types'
 
 export const SOURCE_LABEL_KEY: Record<SourceKey, string> = {
   ipran: 'nocTopo.source.ipran',
@@ -58,6 +58,21 @@ export function statusColor(status: NocStatus): string {
     case 'static': return WH.textMuted
     default: return WH.textDim
   }
+}
+
+/**
+ * 画布上节点**填充色**用的状态（不改 node.status 本身）。
+ *
+ * 带告警计数的来源（目前只有 IPRAN）只按**在线 / 离线**填色：
+ * 实测约 80% 网元带紧急告警，若按 node.status（已含告警级）填色整张图会全红，
+ * 与数据契约 §3.1「告警级不能当主着色，只做节点角标」矛盾。告警由 DeviceNode
+ * 右上角角标表达；详情抽屉、风险榜、「只看问题」筛选仍用真实 node.status。
+ *
+ * MW 的四级是链路负载口径（不是告警），OLIB 恒 static，原样返回。
+ */
+export function nodeFillStatus(node: NocNode): NocStatus {
+  if (!node.alarms) return node.status
+  return node.status === 'down' ? 'down' : 'ok'
 }
 
 export const STATUS_LABEL_KEY: Record<NocStatus, string> = {

@@ -9,9 +9,9 @@ FW 整机吞吐 KPI 数据获取脚本（DPtech/ZTE UMC @ 10.100.2.101/UMC）
 2. 对每台设备（DEVICE_IDS，默认 37781505/37781506）拉取整机吞吐趋势页
    DevDeviceWholeThrouput.action（HTML，内嵌 ECharts 数据）。
 3. 从 HTML 中正则提取 timelist / inthrouputlist / outthrouputlist 三个 JS 数组（内存解析）。
-4. 通过远程写入 API（db_writer_client -> http://192.168.100.19:8765/api/write）
-   将数据 upsert 到远程 fw_db.sqlite（E:/01_RPA/LBR_Tools/KPI/FW/fw_db.sqlite），
-   按 (device_id + time_full) 主键替换；API 不可用时降级写入本地 SQLite。
+4. 将数据 upsert 到本地 SQLite（表 device_whole_throughput，
+   按 device_id + time_full 主键替换）。2026-11-25 起**默认全部本地写入**，
+   不再走 192.168.100.19 远端写入 API；FW_REMOTE_WRITE=1 可恢复历史远端优先行为。
    —— 全程不下载 Excel，数据在内存中解析后批量入库。
 5. 同步完成后生成整机吞吐折线图（近 N 天，默认 14 天），
    通过 owa_mail_report.py 发送邮件（名单：Y:/01_RPA/LBR_Tools/KPI/FW/fw_email）。
@@ -127,11 +127,15 @@ API_WRITE_BATCH = 5000  # 每批 POST 行数
 MY_APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR)))
 CHART_OUTPUT_DIR = os.path.join(MY_APP_DIR, "TMP", "fw_charts")
 
-#: 远端写入成功后是否**同时**镜像一份到本地库（默认开）。
+#: 2026-11-25 用户决定：以后 FW 数据**全部本地写入**，不再使用 192.168.100.19
+#: 远端写入 API。默认直接写本地 SQLite；远端优先 + 本地镜像是历史行为，仅当
+#: FW_REMOTE_WRITE=1 时恢复（回滚开关，无需改代码）。
+REMOTE_WRITE = os.environ.get("FW_REMOTE_WRITE", "0").strip().lower() in ("1", "true", "yes", "on")
+
+#: 远端写入成功后是否**同时**镜像一份到本地库（默认开，仅 REMOTE_WRITE=1 时生效）。
 #: 2026-11-03 审计发现：`FW Daily KPI` 看板（native_catalog 的 fw_out/fw_in 组件）
 #: 读的是本地 `fw` schema 的 device_whole_throughput；而原逻辑只在远端**失败**时
 #: 才写本地，远端一直正常 → 本地表自 2026-08-04 起再无更新，看板图表停摆 3 个月。
-#: 置 0 可关闭镜像（恢复旧行为）。
 WRITE_LOCAL_MIRROR = os.environ.get("FW_KPI_WRITE_LOCAL", "1").strip().lower() not in ("0", "false", "no", "off")
 EMAIL_REPORTS_DIR = os.path.join(MY_APP_DIR, "email_reports")
 
@@ -199,6 +203,31 @@ def _decode_chunked(data):
     return result
 
 
+def _chunked_advance(buf, pos):
+    """从 pos 起按 chunk 边界向前推进，返回 (是否已收到终止块, 下次续扫位置)。
+
+    按 chunk 边界逐个推进：`<hex-size>\r\n<data>\r\n` ... `0\r\n\r\n`。
+    只前进不回头：调用方保存返回的位置，下次 recv 接着推进。
+    若每轮都从响应体开头重扫（旧写法），20MB 响应会退化成 O(n²)。
+    `pos` 必须指向某个 chunk 头的起始位置。
+    """
+    n = len(buf)
+    while True:
+        eol = buf.find(b"\r\n", pos)
+        if eol == -1:
+            return False, pos          # chunk 头都没收全，下次从原处继续
+        try:
+            size = int(buf[pos:eol].split(b";")[0].strip(), 16)
+        except ValueError:
+            return False, pos
+        nxt = eol + 2
+        if size == 0:
+            return n >= nxt + 2, pos   # 终止块：还要结尾 CRLF 才算完整
+        if n < nxt + size + 2:
+            return False, pos          # 数据或尾部 CRLF 未到齐
+        pos = nxt + size + 2
+
+
 class Session:
     """极简 HTTP 会话：维护 Cookie，发送原始 HTTP 请求。"""
 
@@ -236,6 +265,8 @@ class Session:
         ssock.sendall(headers.encode('utf-8') + body_bytes)
 
         response_data = b""
+        # -1 = 尚未判定；0 = 明确不是 chunked；>0 = chunked 体的起始偏移
+        chunked_body_start = -1
         while True:
             try:
                 chunk = ssock.recv(65536)
@@ -244,6 +275,22 @@ class Session:
                 response_data += chunk
             except socket.timeout:
                 break
+
+            # chunked 响应没有 Content-Length：终止块到齐就提前退出。
+            # 服务器发完常不关连接（keep-alive），否则要等到读超时才认为收完。
+            if chunked_body_start == -1:
+                _he = response_data.find(b"\r\n\r\n")
+                if _he != -1:
+                    _head_low = response_data[:_he].lower()
+                    chunked_body_start = (
+                        _he + 4
+                        if b"transfer-encoding" in _head_low and b"chunked" in _head_low
+                        else 0
+                    )
+            if chunked_body_start > 0:
+                _ck_done, chunked_body_start = _chunked_advance(response_data, chunked_body_start)
+                if _ck_done:
+                    break
         ssock.close()
 
         header_end = response_data.find(b"\r\n\r\n")
@@ -733,6 +780,11 @@ def generate_chart(df, output_path, device_id):
 
 def _send_email(to, cc, subject, body, inline_images):
     """调用通用邮件脚本 owa_mail_report.py 发送（托管 venv 执行）。"""
+    # 通道 down 时只跳过发信；上面的数据同步与图表生成照常（调用方 run() 已完成同步）。
+    from backend.services.email import ews_deferral
+    if ews_deferral.should_skip_email_send("fw_kpi_sync"):
+        return ews_deferral.skipped_email_result("fw_kpi_sync")
+
     script = os.path.join(EMAIL_REPORTS_DIR, "owa_mail_report.py")
     if not os.path.isfile(script):
         return {"success": False, "error": f"脚本不存在: {script}"}
@@ -825,6 +877,73 @@ def generate_chart_and_send_email(device_rows):
     return result
 
 
+# 邮件失败错误的存储上限与首尾保留长度（2026-11-25 事故后定）。
+#
+# 这个错误串不只是给人看的：`email_recovery.is_ews_resendable()` 与 auto_retry
+# 都拿它当**判据输入**，靠关键字判断该不该补发。原来的 `str(reason)[:800]`
+#（只留头部）把 .NET/EWS 的真实异常砍在中间：11-25 07:15/07:20 的
+# `Unable to connect to the remote server` 正好落在尾部，于是判据返回 False，
+# FW 日报在通道恢复后从未进入补发链。截断必须**首尾都留**，尾部尤其不能丢。
+_ERROR_SUMMARY_LIMIT = 4000
+_ERROR_SUMMARY_HEAD = 1500
+
+# 邮件失败串的脱敏规则（2026-11-25 复审）。
+#
+# 为什么要脱敏：失败时 `_send_email` 把子进程的整段输出写进 ``error``，里面
+# 有发送上下文 —— 收件账号、OWA 内部主机，URL 里还可能带凭据。它既落
+# ``task_execution_log.result_json`` 又被 print 进运行日志，违反「敏感信息不得
+# 进入日志」。但脱敏只许抹这些**身份信息**，绝不能碰 ``EWS_FAIL_KEYS`` 的措辞：
+# ``email_recovery.is_ews_resendable()`` 拿同一个串做补发判据，抹掉
+# ``Unable to connect to the remote server`` 就等于把 11-25 漏补发的事故装回去。
+_URL_RE = re.compile(r"\b[a-z][a-z0-9+.\-]*://[^\s'\"<>，。；、）】]+", re.I)
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_IPV4_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
+# 只认**带常见 TLD 的完整域名**，避免把 ``Exchange.asmx`` / ``xxx.py`` 这类
+# 路径与文件名当主机吃掉（排障需要它们）。
+_HOST_RE = re.compile(
+    r"\b(?:[A-Za-z0-9\-]+\.)+(?:com|net|org|local|lan|corp|internal|intra|cn|io)\b",
+    re.I,
+)
+_CRED_RE = re.compile(r"(?i)\b(password|passwd|pwd|username|account)\s*[=:]\s*[^\s,;)\]]+")
+
+
+def _redact_email_error(text: str) -> str:
+    """把邮件失败串里的账号 / 主机 / 凭据换成占位符，保留判据关键字。"""
+    if not text:
+        return text
+    out = _URL_RE.sub("https://<host>", text)          # 整条 URL：含主机与可能的凭据
+    out = _EMAIL_RE.sub("<email>", out)                # 收件人 / 发件账号
+    out = _CRED_RE.sub(lambda m: f"{m.group(1)}=***", out)  # password=... / username: ...
+    out = _IPV4_RE.sub("<ip>", out)                    # 内网 IP
+    out = _HOST_RE.sub("<host>", out)                  # 裸内部主机名
+    return out
+
+
+def _redact_email_result(email_result):
+    """就地把 ``result["email"]["error"]`` 脱敏；同一对象也会进 ``result``。"""
+    if isinstance(email_result, dict) and isinstance(email_result.get("error"), str):
+        email_result["error"] = _redact_email_error(email_result["error"])
+    return email_result
+
+
+def _summarize_email_error(reason) -> str:
+    """把过长的邮件失败信息压成「头 + 尾」摘要，保留尾部真实异常，并做脱敏。
+
+    未超限时不 strip、不吞 falsy 值 —— 调用方写进 ``error`` 的原文就是补发判据
+    的输入，改写措辞可能让 ``EWS_FAIL_KEYS`` 匹配不上；唯一允许的改写是脱敏
+    （账号 / 主机 / 凭据换占位符），它不影响任何判据关键字。
+    ``None`` 规范为空串；其余（含 0 / False / 空容器）取 ``str()``。
+    超限时省略中间并写明省略字符数（按**原文**计），再脱敏。
+    """
+    text = "" if reason is None else str(reason)
+    if len(text) > _ERROR_SUMMARY_LIMIT:
+        head = text[:_ERROR_SUMMARY_HEAD]
+        tail = text[-(_ERROR_SUMMARY_LIMIT - _ERROR_SUMMARY_HEAD):]
+        omitted = len(text) - len(head) - len(tail)
+        text = f"{head}\n...（中间省略 {omitted} 字符）...\n{tail}"
+    return _redact_email_error(text)
+
+
 # ============================================================
 # 主流程
 # ============================================================
@@ -834,8 +953,8 @@ def run():
     print(f"[MAIN] FW 整机吞吐 KPI 同步开始 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"[MAIN] 目标: https://{HOST}:{PORT}/UMC  设备ID={DEVICE_IDS}")
     print(f"[MAIN] 时间范围: {START_TIME} ~ {END_TIME}")
-    print(f"[MAIN] 远程库: {REMOTE_DB_NAME}/{TABLE_NAME} (db_writer_api)")
-    print(f"[MAIN] 本地降级库: {DB_PATH}")
+    print(f"[MAIN] 写入目标: {'远端优先 + 本地镜像' if REMOTE_WRITE else '本地 SQLite（默认，不走远端 API）'}")
+    print(f"[MAIN] 本地库: {DB_PATH}")
     print("=" * 70)
 
     sess = Session()
@@ -849,7 +968,7 @@ def run():
     # 2-4. 逐设备：拉取 → 解析 → 通过 API 写入远程数据库（失败降级本地 SQLite）
     device_rows = {}
     total_inserted = 0
-    api_ok = True
+    api_ok = REMOTE_WRITE  # 默认本地写入 → remote_api=False，与日志/返回字段一致
     mirror_errors = []
     for device_id in DEVICE_IDS:
         print(f"[MAIN] ---- 设备 {device_id} 开始处理 ----")
@@ -863,20 +982,31 @@ def run():
             continue
         device_rows[device_id] = rows
 
-        try:
-            inserted = write_to_remote_db(rows, device_id)
-            # 看板读本地 fw schema；镜像失败必须让任务失败，不能远端成功就假绿。
-            if WRITE_LOCAL_MIRROR:
-                try:
-                    write_to_local_db(rows, device_id)
-                except Exception as exc:  # noqa: BLE001
-                    msg = f"设备 {device_id} 本地镜像写入失败: {exc}"
-                    mirror_errors.append(msg)
-                    print(f"[LOCAL] {msg}")
-        except Exception as exc:
-            api_ok = False
-            print(f"[API] 设备 {device_id} 远程写入失败，降级写入本地 SQLite: {exc}")
-            inserted = write_to_local_db(rows, device_id)
+        if REMOTE_WRITE:
+            # 历史行为：远端优先 + 本地镜像（默认已关闭，FW_REMOTE_WRITE=1 才走这里）
+            try:
+                inserted = write_to_remote_db(rows, device_id)
+                if WRITE_LOCAL_MIRROR:
+                    try:
+                        write_to_local_db(rows, device_id)
+                    except Exception as exc:  # noqa: BLE001
+                        msg = f"设备 {device_id} 本地镜像写入失败: {exc}"
+                        mirror_errors.append(msg)
+                        print(f"[LOCAL] {msg}")
+            except Exception as exc:
+                api_ok = False
+                print(f"[API] 设备 {device_id} 远程写入失败，降级写入本地 SQLite: {exc}")
+                inserted = write_to_local_db(rows, device_id)
+        else:
+            # 2026-11-25 默认路径：直接写本地。本地写入失败就是硬失败，得报出来，
+            # 不能像"远端降级"那样静默——看板读的就是这张本地表。
+            try:
+                inserted = write_to_local_db(rows, device_id)
+            except Exception as exc:  # noqa: BLE001
+                msg = f"设备 {device_id} 本地写入失败: {exc}"
+                mirror_errors.append(msg)
+                print(f"[LOCAL] {msg}")
+                continue
         total_inserted += inserted
 
     if not device_rows:
@@ -906,6 +1036,9 @@ def run():
     # 这正是 fw_kpi_sync 长期游离在 EMAIL_TASK_IDS 之外却没人发现的另一半原因。
     # 数据同步本身已完成，故在 error 里同时说明，避免误判成"数据没同步"。
     email_failed = bool(email_result) and not email_result.get("success")
+    # 同一对象也挂在 result["email"] 上：整段子进程输出里的收件账号 / 内部主机
+    # 不能随任务记录落库（2026-11-25 复审）。顶层 error 由下面的摘要统一脱敏。
+    _redact_email_result(email_result)
     result = {
         "success": not email_failed and not mirror_errors,
         "rows_written": total_inserted,
@@ -919,11 +1052,24 @@ def run():
     if mirror_errors:
         errors.append("本地镜像失败（看板数据可能未更新）: " + "; ".join(mirror_errors))
     if email_failed:
-        reason = (email_result.get("error") or email_result.get("message")
-                  or str(email_result))
-        errors.append(f"邮件发送失败（数据已同步 {total_inserted} 条，"
-                      f"remote_api={api_ok}）: {str(reason)[:800]}")
-        print(f"[MAIN] 邮件失败，任务判定为失败: {str(reason)[:200]}")
+        from backend.services.email import ews_deferral
+        # 通道降级时 _send_email 返回的是「仅跳过发信」的 deferred 结果：必须把
+        # deferred 提升到顶层，task_runner 才会静默、email_recovery 恢复后补发；
+        # 否则本轮会按失败报红并立刻发告警（同步其实已成功）。同 ume_in_osg_report。
+        if ews_deferral.apply_email_deferral(result, email_result, "fw_kpi_sync"):
+            print("[MAIN] 邮箱通道降级：本轮只跳过发信（数据已同步），等待恢复后补发。")
+        else:
+            reason = (email_result.get("error") or email_result.get("message")
+                      or str(email_result))
+            # 错误串同时是 email_recovery.is_ews_resendable() / auto_retry 的判据输入，
+            # 不能只留头部（2026-11-25 事故：.NET 的真实异常在尾部，[:800] 砍掉后
+            # 补发判据判 False，FW 日报恢复后从未进补发链）。
+            summary = _summarize_email_error(reason)
+            errors.append(f"邮件发送失败（数据已同步 {total_inserted} 条，"
+                          f"remote_api={api_ok}）: {summary}")
+            # 运行日志只留末尾 200 字符：头部是收件账号 / 邮件主机等上下文，不进日志；
+            # 真正的异常在尾部，排障看这一截就够。完整摘要仍写 result["error"]。
+            print(f"[MAIN] 邮件失败，任务判定为失败（末 200 字符）: {summary[-200:]}")
     if errors:
         result["error"] = "\n".join(errors)
     return result

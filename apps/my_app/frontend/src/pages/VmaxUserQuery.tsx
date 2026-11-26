@@ -57,6 +57,7 @@ import VmaxComplaintTabs from '../components/VmaxComplaintTabs'
 import VmaxDiagnosisCard, { type OverrideInfo } from '../components/VmaxDiagnosisCard'
 import VmaxEvidenceTimeline from '../components/VmaxEvidenceTimeline'
 import VmaxVoiceCard from '../components/VmaxVoiceCard'
+import VmaxCallDropReport from '../components/VmaxCallDropReport'
 import VmaxOttCard from '../components/VmaxOttCard'
 import VmaxGameCard from '../components/VmaxGameCard'
 import VmaxOverrideModal from '../components/VmaxOverrideModal'
@@ -73,6 +74,7 @@ import {
   isComplaintKey, isDiagViewKey, scoreAll, sourceLabel, type ComplaintKey,
   type DiagnosisPayload, type DiagViewKey,
 } from './vmaxDiagnosisRules'
+import { analyzeCallDrop } from './vmaxCallDrop'
 import { VmaxRateCard, VmaxTerminalCard } from '../components/vmax/VmaxTerminalRateCards'
 
 const { Text } = Typography
@@ -261,6 +263,10 @@ export default function VmaxUserQuery() {
   const sources = useMemo(() => diag?.sources || [], [diag])
   const scores = useMemo(() => (sources.length ? scoreAll(sources) : []), [sources])
   const voice = useMemo(() => (sources.length ? analyzeVoice(sources) : null), [sources])
+  const callDrop = useMemo(() => (sources.length ? analyzeCallDrop(sources, {
+    cells: result?.cells?.cells,
+    causes: result?.causes,
+  }) : null), [sources, result])
   const ott = useMemo(() => (sources.length ? analyzeOtt(sources) : null), [sources])
   const game = useMemo(() => (sources.length ? analyzeGame(sources) : null), [sources])
   const timeline = useMemo(() => (sources.length ? buildTimeline(sources) : []), [sources])
@@ -514,6 +520,9 @@ export default function VmaxUserQuery() {
           onGotoView={(v) => setView(v === 'flow' ? 'flow' : v === 'connect' ? 'connect' : 'radio')}
         />
 
+        {!!callDrop && (callDrop.hasActivity || complaint === 'all' || complaint === 'voice' || complaint === 'ott') && (
+          <VmaxCallDropReport report={callDrop} />
+        )}
         {!!voice && <VmaxVoiceCard voice={voice} />}
         {!!ott && <VmaxOttCard ott={ott} />}
         {!!game && <VmaxGameCard game={game} />}

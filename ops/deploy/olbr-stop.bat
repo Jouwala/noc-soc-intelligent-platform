@@ -7,5 +7,4 @@ echo PostgreSQL (5432) is left running.
 choice /c YN /n /m "Stop now? [Y/N] "
 if errorlevel 2 goto :eof
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0portal-ctl.ps1" -Action stop
-echo.
-pause
+call "%~dp0finish.bat" "" "OLBR stop"

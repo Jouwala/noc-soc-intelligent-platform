@@ -235,3 +235,27 @@ class TestNotifyClaimAntiReentry:
         body = src.split("function claimJob()", 1)[1].split("\n}", 1)[0]
         assert "catch" in body and "return null" in body, \
             "认领写回失败必须放弃本轮（return null），不能照发"
+
+
+# ==========================================================
+# 六、信箱路径必须指向真正的 bot 目录（2026-11-25 事故）
+# ==========================================================
+class TestBotRootResolution:
+    """`_BOT_ROOT` 解析错位 = 作业写进没人消费的影子目录，任务只会超时。
+
+    2026-11-25：§11-4「services 按域重组」(0dceb46) 把本模块从
+    `backend/services/` 下沉到 `backend/services/whatsapp/`，`parents[3]`
+    于是从 `apps/` 变成了 `my_app/`，作业落到
+    `apps/my_app/whatsapp-kb-bot/data/` —— 那里没有 notify.js 轮询，
+    `eflow_fiber_assign` 连续 55 次「推送进程未在 120s 内回报」。
+    """
+
+    def test_解析到真实的推送通道目录(self):
+        if os.environ.get("WA_BOT_ROOT"):
+            pytest.skip("显式覆盖了 WA_BOT_ROOT，按覆盖值执行")
+        assert n._BOT_ROOT.parent.name == "apps", (
+            f"_BOT_ROOT 解析为 {n._BOT_ROOT}，父目录不是 apps/ —— "
+            "模块可能又被移动到别的层级，请同步修正 parents 层数")
+        assert n._BOT_ROOT.name == "whatsapp-kb-bot"
+        assert (n._BOT_ROOT / "src" / "notify.js").is_file(), \
+            "目录里没有 src/notify.js，说明不是真正的 bot 目录"

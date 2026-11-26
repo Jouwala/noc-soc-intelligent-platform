@@ -23,5 +23,4 @@ if errorlevel 1 (
 echo.
 echo   Detail: log\stop_result.txt
 echo   Double-click start.bat to start both services again.
-echo.
-pause >nul
+call "%~dp0..\..\ops\deploy\finish.bat" "9267,9268" "portal stop"

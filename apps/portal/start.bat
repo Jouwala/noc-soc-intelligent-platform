@@ -54,8 +54,6 @@ echo.
 :: prompt (that way the operator reads every stage in one window and presses
 :: Enter exactly once). Pausing here too would block the controller's
 :: Start-Process -Wait and make the shortcut look like it had hung.
-if not defined MY_PORTAL_NO_PAUSE (
-    echo   Press Enter to close this window.
-    echo.
-    pause >nul
-)
+if defined MY_PORTAL_NO_PAUSE goto :portal_start_end
+call "%~dp0..\..\ops\deploy\finish.bat" "9267,9268" "portal start"
+:portal_start_end
