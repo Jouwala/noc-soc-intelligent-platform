@@ -91,6 +91,11 @@ powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-wa
   `.smoke-runner` 标记直接拒绝。`smoke-local.ps1` 只是薄壳：UTF-8 BOM 让 PS 5.1 能解析、
   `TMP\smoke.lock` 防并发、校验 HEAD == `-HeadSha`、写
   `TMP\smoke-pr-<PR>-<sha7>.md`（干跑写 `.dryrun.md`，不覆盖真跑报告）。
+  **失败分类（#303，2026-11-26）**：`start_all` 失败不再只给歧义的 exit=1，
+  `startup-failure.ps1` 判成 `alembic-diverged`（分支缺共享 pgdata 已在的迁移文件，
+  rebase 可解）、`startup-timeout`（后端/PG/门户探测超时，已放宽窗口并空载重试一次）
+  等，报告末行写 `FAILURE_CLASS=`；`portable-*.out/.err` 与 start_all 日志按
+  `pr-<PR>-<sha7>/<时间戳>` 归档到项目根 `TMP/smoke-logs`，下次冒烟不覆盖上次现场。
 - `smoke-watcher.ps1`：每 60 秒轮询 GitHub，CI 变绿且无 `smoke-passed` 的
   open PR 就地冒烟、贴评论、通过才打标签；贴前重读 PR，head 变了就作废。
   **冒烟前 `git fetch` 并 `checkout --detach` 到该 PR head，finally 切回原分支**
@@ -303,6 +308,18 @@ theirs = 生产工作区，逐文件用 `git merge-file --diff3` 合。
 手动起过 PG（`pg_ctl -D runtime\pgdata -o "-p 55432"`）再跑冒烟，脚本预检会
 发现 02 端口 55432 被占用 → `RESULT: REFUSED`（「可能有别的冒烟在跑」）。
 **冒烟脚本自己会起 PG**（`start_all.ps1`），跑完 pytest 若手动起过，先停掉。
+
+- **`Can't locate revision`（报告 `FAILURE_CLASS=alembic-diverged`）不是代码坏了**：
+  共享 pgdata 已到新 main 的版本，而 PR 分支切出时还没有那份迁移文件。把分支 rebase 到
+  最新 `platform/main` 后重跑；**不要** `alembic stamp`（会把 pgdata 的版本指错）。
+- **启动探测超时（`FAILURE_CLASS=startup-timeout`）**：冒烟会先 `stop_all` 再空载重试一次；
+  仍失败先让机器空闲（别同时跑 `pytest -n 8`、前端构建等重活）。
+- **不要和冒烟并行跑 `agent-done-check --full`**：它的 `pytest -n 8` 会与 start_all 的
+  启动探测抢内存/CPU（2026-11-22 起多次 `start_all exit-1` 的诱因之一）；冒烟已放宽窗口
+  并支持超时空载重试，但两条重活叠加仍可能两次都超时。
+- **失败现场归档在项目根 `TMP/smoke-logs/pr-<PR>-<sha7>/<时间戳>/`**，含
+  `portable-backend.out/.err`、`portable-pg.log`、`portable-alembic.*` 与 start_all 日志，
+  下一次冒烟不会覆盖。
 
 完整的执行记录（2026-11-16 那次，含冲突判定表与踩坑清单）见
 `.agent-work/tasks/active/task-sync-01-to-02-20261116.md`。

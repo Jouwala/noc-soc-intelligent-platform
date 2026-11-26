@@ -469,7 +469,7 @@ if (-not (Test-Path -LiteralPath $pgCtl)) {
             -WindowStyle Hidden -RedirectStandardOutput $pgCtlOut -RedirectStandardError $pgCtlErr
         if (-not $pgProc) { throw "pg_ctl start 未能启动，见 $pgCtlErr" }
     }
-    if (-not (Wait-Port $PgPort 30)) { throw "便携 PG 未在 30s 内监听 $PgPort，见 $pgLog / TMP\portable-pg_ctl.err" }
+    if (-not (Wait-Port $PgPort 60)) { throw "便携 PG 未在 60s 内监听 $PgPort，见 $pgLog / TMP\portable-pg_ctl.err" }
     # 端口 LISTEN != 可连接：PG 恢复阶段会拒绝普通连接并回
     # "the database system is starting up"，必须轮询到 SELECT 1 真正成功。
     # 同时 PS 5.1 会把 native stderr 变成 ErrorRecord，配合 Stop 会中断整个启动器，
@@ -478,12 +478,12 @@ if (-not (Test-Path -LiteralPath $pgCtl)) {
     $ErrorActionPreference = 'Continue'
     try {
         $pgReady = $false
-        for ($i = 0; $i -lt 60; $i++) {
+        for ($i = 0; $i -lt 120; $i++) {
             $probe = & $psql -w -h 127.0.0.1 -p $PgPort -U $PgUser -d postgres -tAc 'SELECT 1' 2>$null
             if ($LASTEXITCODE -eq 0 -and "$probe".Trim() -eq '1') { $pgReady = $true; break }
             Start-Sleep -Milliseconds 500
         }
-        if (-not $pgReady) { throw "便携 PG 未在 30s 内进入可连接状态，见 $pgLog" }
+        if (-not $pgReady) { throw "便携 PG 未在 60s 内进入可连接状态，见 $pgLog" }
         # 写入前确认连上的就是副本自己的 PG 实例：data_directory 必须等于副本 pgdata，
         # 否则可能连到本机别的 PG（含生产），拒绝任何建库/写入。
         $dataDir = "$(& $psql -w -h 127.0.0.1 -p $PgPort -U $PgUser -d postgres -tAc 'SHOW data_directory' 2>$null)".Trim()
@@ -522,6 +522,8 @@ Write-Step '--- 数据库迁移（alembic upgrade head） ---'
 if ($DryRun) {
     Write-Step '<干跑> 跳过 alembic upgrade head'
 } else {
+    # 清掉上一轮留下的发散标记：本轮若迁移成功，后续别的启动失败不应被误判为 alembic-diverged。
+    Remove-Item -LiteralPath (Join-Path $TmpDir 'portable-alembic.class') -Force -ErrorAction SilentlyContinue
     $alembicOut = Join-Path $TmpDir 'portable-alembic.out'
     $alembicErr = Join-Path $TmpDir 'portable-alembic.err'
     # 必须用 Start-Process 直接重定向文件，不能写 `& $PyExe ... > out 2> err`：
@@ -535,6 +537,17 @@ if ($DryRun) {
     if ($alembicProc.ExitCode -ne 0) {
         $tail = ''
         if (Test-Path -LiteralPath $alembicErr) { $tail = (Get-Content -LiteralPath $alembicErr -Tail 10) -join "`n" }
+        # #303：共享 pgdata 的版本可能已被新 main 推到 0013，而当前分支缺这份迁移文件，
+        # 报 "Can't locate revision identified by '...'"。单独分类并写稳定标记
+        # （portable-alembic.class），冒烟据此判为 alembic-diverged，而不是含糊的 exit-1。
+        $alembicAll = $tail
+        if (Test-Path -LiteralPath $alembicErr) { $alembicAll = (Get-Content -LiteralPath $alembicErr -Raw) }
+        $diverged = ''
+        if ("$alembicAll" -match "Can't locate revision identified by '([^']+)'") { $diverged = $Matches[1] }
+        if ($diverged) {
+            [System.IO.File]::WriteAllText((Join-Path $TmpDir 'portable-alembic.class'), "DIVERGED $diverged")
+            throw "alembic 迁移链发散（ALEMBIC_DIVERGED revision=$diverged）：pgdata 已到该版本，当前分支缺少迁移文件。把分支 rebase 到最新 platform/main 后重跑；不要 alembic stamp。见 $alembicErr"
+        }
         throw "alembic upgrade head 失败（退出码 $($alembicProc.ExitCode)，见 $alembicErr）：$tail"
     }
     # alembic 正常日志在 stderr（INFO 行），一并回显，下次失败不用再翻文件。
@@ -564,11 +577,12 @@ Write-Step '--- 3/6 my_app 后端 ---'
 # -u（等价 PYTHONUNBUFFERED=1）：Start-Detached 把 stdout 重定向到文件，Python 默认
 # 块缓冲，失败时 TMP\portable-backend.out 只到最后一个 8KB 刷盘点，看着像卡在
 # 某一步（2026-11-21 PR #199/#201 两次冒烟都是这样，最后一行都停在 TT 预热）。
-# 等待上限 90s：backend.main 导入热态实测 2.2s，冷缓存下会明显变慢；2026-11-21 两次
-# 都在 45s 上限处失败，90s 留出冷启动余量，真实挂死仍会在 90s 报错。
+# 等待上限 150s：backend.main 导入热态实测 2.2s，冷缓存下会明显变慢；2026-11-21 两次
+# 都在 45s 上限处失败，90s 仍不够（2026-11-22 起多次冒烟在 pytest -n 8 并行时超 90s），
+# 150s 留出资源争用余量；真实挂死仍会在 150s 报错（冒烟另有空载重试一次，#303）。
 $ok = Start-Detached -Name 'backend' -Exe $PyExe `
     -ArgList @('-u', '-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', [string]$BePort) `
-    -WorkDir $MyAppDir -Port $BePort -WaitSeconds 90
+    -WorkDir $MyAppDir -Port $BePort -WaitSeconds 150
 if (-not $ok) { throw 'my_app 后端启动失败（见 TMP\portable-backend.err / .out）' }
 
 # ------------------------------------------------------------- 4) my_app 前端
@@ -576,7 +590,7 @@ Write-Step '--- 4/6 my_app 前端（vite preview） ---'
 $viteCli = Join-Path $FeDir 'node_modules\vite\bin\vite.js'
 $ok = Start-Detached -Name 'frontend' -Exe $NodeExe `
     -ArgList @($viteCli, 'preview', '--host', '127.0.0.1', '--port', [string]$FePort, '--strictPort') `
-    -WorkDir $FeDir -Port $FePort -WaitSeconds 30
+    -WorkDir $FeDir -Port $FePort -WaitSeconds 60
 if (-not $ok) { throw 'my_app 前端启动失败（见 TMP\portable-frontend.err / .out）' }
 
 # ----------------------------------------------------------------- 5) 门户
@@ -584,7 +598,7 @@ Write-Step '--- 5/6 统一门户 + 可选服务 ---'
 if ($PortalRoot) {
     $tsxCli = Join-Path $PortalRoot 'node_modules\tsx\dist\cli.mjs'
     $ok = Start-Detached -Name 'portal' -Exe $NodeExe `
-        -ArgList @($tsxCli, 'server/index.ts') -WorkDir $PortalRoot -Port $PortalPort -WaitSeconds 30
+        -ArgList @($tsxCli, 'server/index.ts') -WorkDir $PortalRoot -Port $PortalPort -WaitSeconds 60
     if (-not $ok) { throw '统一门户启动失败（见 TMP\portable-portal.err / .out）' }
 } else {
     Write-Warn2 '未找到门户目录（apps\portal），门户步骤跳过'
