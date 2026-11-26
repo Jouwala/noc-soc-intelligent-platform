@@ -68,6 +68,7 @@ _EXACT = {
     "请填写用户名和密码": "Please enter both username and password",
     "用户名或密码错误": "Incorrect username or password",
     "服务器内部错误，请稍后重试": "Internal server error, please retry later",
+    "数据库暂时不可用，请稍后重试": "Database temporarily unavailable, please retry later",
     # ---- 门户登录任务进度（routers/portals.py 的 login/status；前端只展示，
     #      匹配用的是 state 字段，因此翻译 message 安全）----
     "正在启动浏览器...": "Launching the browser...",

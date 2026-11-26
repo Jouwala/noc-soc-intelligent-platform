@@ -1,0 +1,45 @@
+# 卡死 CI 运行巡检（2026-11-24 流程提速批）
+#
+# 背景：2026-11-24 实测过一次 quality 运行 156 分钟、0 个 job 的异常
+# （run 45389371289）。工作流级卡死既不报错也不释放，PR 只能干等。
+#
+# 本工作流每 15 分钟让 apps/control-plane/backend/dispatch/run_watchdog.py
+# 巡检 quality 运行：
+#   - queued / in_progress 超过 30 分钟：cancel，释放 runner；
+#   - completed + failure 且一个 job 都没有：rerun（最多 2 次尝试）。
+# 判定是纯函数（有单测），动作只有 cancel / rerun，不碰代码、不合并。
+
+name: run-watchdog
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只打印判定，不执行 cancel/rerun"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: 巡检卡死的 quality 运行
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            python3 apps/control-plane/backend/dispatch/run_watchdog.py --repo "$REPO" --dry-run
+          else
+            python3 apps/control-plane/backend/dispatch/run_watchdog.py --repo "$REPO"
+          fi

@@ -1,15 +1,27 @@
-"""Alarm Dashboard API - 实时告警综合看板"""
+"""Alarm Dashboard API - 实时告警综合看板
+
+2026-11 预计算改造：/overview、/alarm-overview、两个下钻接口优先读取 Worker 在
+采集成功后发布的快照（services/dashboard/snapshot_store.py、
+services/alarm/alarm_snapshot.py），读不到或过期时回退到原来的现算逻辑。
+开关：环境变量 ALARM_SNAPSHOT = shadow（默认）| on | off，见文件末尾「快照读取层」。
+"""
+import hashlib
+import json
 import logging
+import os
 import re
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
 import openpyxl
 import pandas as pd
-from fastapi import APIRouter, Query
-from backend.database import get_raw_connection, DB_PATH
+from fastapi import APIRouter, Query, Request, Response
+from backend.database import get_raw_connection, DB_PATH, DB_MODE
 from backend.dialect_helpers import list_table_names
+from backend.services.dashboard import snapshot_store
+from backend.services.alarm.alarm_snapshot import ENRICHED, HISTORY_OUT_COLS
 
 
 def _rows_as_dicts(cursor):
@@ -405,9 +417,12 @@ def _safe_str(val, default="--"):
     return str(val)
 
 
-@router.get("/overview")
-def alarm_dashboard_overview():
-    """实时告警综合看板数据"""
+def _compute_overview_payload(history_metrics=None):
+    """实时告警综合看板数据（原 /overview 的函数体，计算逻辑未改）。
+
+    history_metrics 可由调用方传入（Worker 发布快照时传历史快照，避免每分钟重扫
+    history_alarm）；不传时与原来一样现算。路由见下方 alarm_dashboard_overview()。
+    """
     with get_raw_connection() as conn:
         cur = conn.execute("SELECT * FROM realtime_alarm")
         rows = _rows_as_dicts(cur)
@@ -539,7 +554,8 @@ def alarm_dashboard_overview():
                 region_alarm_type[rc] = dict(sorted(rtypes.items(), key=lambda x: x[1], reverse=True)[:5])
 
         # ---- 历史告警派单时效指标（纯 SQL 聚合 + 60s 缓存，免 10 万行 pandas 载入）----
-        history_metrics = _history_metrics_sql()
+        if history_metrics is None:
+            history_metrics = _history_metrics_sql()
 
         return {
             "generated_at": _last_alarm_sync_iso() or server_iso,
@@ -569,12 +585,17 @@ def alarm_dashboard_overview():
         }
 
 
-@router.get("/history-drilldown")
-def alarm_history_drilldown(
-    metric: str = Query("all"),
-    limit: int = Query(500, ge=1, le=5000),
-):
-    """历史告警明细下钻。
+@router.get("/overview")
+def alarm_dashboard_overview(request: Request):
+    """实时告警综合看板数据（优先读快照，见 _serve）"""
+    return _serve(request, "alarm:overview", REALTIME_MAX_AGE, _compute_overview_payload,
+                  child_keys=(("History", "alarm:history_metrics"),))
+
+
+def _history_drilldown_pandas(metric: str = "all", limit: int = 500):
+    """历史告警明细下钻（原实现：pandas 整表载入）。
+
+    现作为物化表 _history_alarm_enriched 不可用时的兜底，路由见 alarm_history_drilldown()。
     metric: all | dispatch_delay_eflow | alarm_fetch_delay | dispatch_overdue_total
     limit: 返回明细行数上限（默认500）
     """
@@ -621,6 +642,28 @@ def alarm_history_drilldown(
     }
 
 
+@router.get("/history-drilldown")
+def alarm_history_drilldown(
+    metric: str = Query("all"),
+    limit: int = Query(500, ge=1, le=5000),
+):
+    """历史告警明细下钻。
+    metric: all | dispatch_delay_eflow | alarm_fetch_delay | dispatch_overdue_total
+    limit: 返回明细行数上限（默认500）
+
+    优先查物化表（Worker 在历史同步后重建，带索引）；表不存在或开关不是 on 时回退原实现。
+    """
+    if _MODE == "on":
+        try:
+            res = _history_drilldown_sql(metric, limit)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("[SNAPSHOT] history drilldown via %s failed, fallback to pandas", ENRICHED, exc_info=True)
+            res = None
+        if res is not None:
+            return res
+    return _history_drilldown_pandas(metric, limit)
+
+
 @router.get("/realtime-drilldown")
 def alarm_realtime_drilldown(
     dimension: str = Query("all"),
@@ -640,7 +683,7 @@ def alarm_realtime_drilldown(
     去重维度每站只留一行代表、求和维度返回全部活动告警明细，
     并在响应里用 ``measure`` / ``measure_value`` 显式标明度量，供前端对账。
     """
-    rows = _load_realtime_rows()
+    rows = _load_realtime_rows_snap()
     if not rows:
         return {"title": "No data", "count": 0, "total": 0, "data": []}
 
@@ -801,6 +844,9 @@ def _recovery_mttr(conn):
     return out
 
 
+_net_missing_warned = False
+
+
 def _network_availability():
     """读取 Daily_Aailability_KPI.xlsx 的 Availability-NW 页，按 Cell Group 统计
     最新一天 Cell Availability 与本月（最新数据所在月）平均值。
@@ -818,10 +864,13 @@ def _network_availability():
         return cached
 
     result = {"rows": [], "threshold_pct": NETWORK_THRESHOLD_PCT, "latest_month": None}
+    global _net_missing_warned
     try:
         if not _NETWORK_KPI_XLSX.is_file():
-            logging.getLogger(__name__).warning(
-                "[alarm-overview] network KPI xlsx 不存在: %s", _NETWORK_KPI_XLSX)
+            # 开发副本/首次部署本来就可能没有这个文件：只警告一次，别每次请求刷日志。
+            log = logging.getLogger(__name__).debug if _net_missing_warned else logging.getLogger(__name__).warning
+            log("[alarm-overview] network KPI xlsx 不存在: %s", _NETWORK_KPI_XLSX)
+            _net_missing_warned = True
             return _cache_set("network_availability", result)
         wb = openpyxl.load_workbook(_NETWORK_KPI_XLSX, read_only=True, data_only=True)
         if "Availability-NW" not in wb.sheetnames:
@@ -908,9 +957,8 @@ def _network_availability():
     return _cache_set("network_availability", result)
 
 
-@router.get("/alarm-overview")
-def alarm_overview():
-    """告警总览（Alarm Overview）：
+def _compute_alarm_overview_payload():
+    """告警总览（Alarm Overview）——原 /alarm-overview 的函数体，计算逻辑未改：
     1) realtime_alarm 分类计数（ALL/Critical/Major/Minor/Warning/Event）
     2) history_alarm 恢复&MTTR（按 site_class，仅 assign_rulename 非 Null）
     3) 网络可用率（xlsx Availability-NW，按 Cell Group 最新值+本月均值）
@@ -926,4 +974,198 @@ def alarm_overview():
         "network_availability": network["rows"],
         "network_threshold_pct": network["threshold_pct"],
         "network_latest_month": network["latest_month"],
+    }
+
+
+@router.get("/alarm-overview")
+def alarm_overview(request: Request):
+    """告警总览（优先读快照，见 _serve）"""
+    return _serve(request, "alarm:alarm_overview", REALTIME_MAX_AGE, _compute_alarm_overview_payload,
+                  child_keys=(("Recovery", "alarm:recovery_mttr"),
+                              ("Network", "alarm:network_avail")))
+
+
+# =====================================================================
+# 快照读取层（2026-11 预计算改造）
+# =====================================================================
+# 写入端在 Worker：采集任务成功后由 services/alarm/alarm_snapshot.py 发布快照。
+# 本进程只读；快照缺失或过期（Worker 挂了 / 任务被停用）时回退到原现算逻辑，
+# 结果只在本进程内存里缓存 FALLBACK_TTL 秒（与改造前 60s 缓存等价），
+# **不写回快照表** —— 这样"快照过期"这个信号会一直保留，前端能持续提示数据延迟，
+# 直到 Worker 恢复发布。
+#
+# ALARM_SNAPSHOT：
+#   on     读快照
+#   shadow 返回原现算结果，同时与快照比对，不一致记 [SNAPSHOT-SHADOW] mismatch（默认：合并后线上行为不变）
+#   off    完全走原逻辑（回滚开关；Worker 端同名开关为 off 时也停止发布）
+_MODE = os.environ.get("ALARM_SNAPSHOT", "shadow").strip().lower()
+
+# 快照超过这个年龄就认为 Worker 没在更新：实时每分钟同步，给 5 分钟余量；历史每 3 小时同步
+def _env_int(name: str, default: int) -> int:
+    """环境变量解析兜底：写错（如 `5m`）不能把后端启动搞挂。"""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logging.getLogger(__name__).warning(
+            "[SNAPSHOT] %s=%r 不是整数，回退默认 %s", name, raw, default)
+        return default
+
+
+REALTIME_MAX_AGE = _env_int("ALARM_SNAPSHOT_RT_MAX_AGE", 300)
+HISTORY_MAX_AGE = _env_int("ALARM_SNAPSHOT_HIS_MAX_AGE", 4 * 3600)
+FALLBACK_TTL = 60
+
+_fallback: dict = {}                               # key -> (ts, body_bytes, etag)
+_sf_locks: dict = defaultdict(threading.Lock)      # 单飞：同一 key 同时只有一个请求现算
+
+
+def _strip(obj):
+    """比对用：去掉所有 generated_at（快照里写的是本次同步时间，现算的是上一轮日志时间）。"""
+    if isinstance(obj, dict):
+        return {k: _strip(v) for k, v in obj.items() if k != "generated_at"}
+    if isinstance(obj, list):
+        return [_strip(v) for v in obj]
+    return obj
+
+
+def _etag_matches(request: Request, etag: str) -> bool:
+    """容忍弱验证器与多值（nginx gzip 会把强 ETag 改成 W/"..."；写法与 routers/tasks.py 一致）。"""
+    inm = request.headers.get("if-none-match")
+    if not inm:
+        return False
+    candidates = [c.strip().removeprefix("W/").strip() for c in inm.split(",")]
+    return etag in candidates or "*" in candidates
+
+
+def _child_snapshot_age(key: str) -> str:
+    """子快照（恢复率/网络可用率/历史指标）的年龄，给响应头用。"""
+    snap = snapshot_store.get(key)
+    if snap is None:
+        return "missing"
+    age = snap.age_sec()
+    return str(int(age)) if age != float("inf") else "-1"
+
+
+def _respond(request: Request, body: bytes, etag: str, state: str, age_sec: float,
+             child_keys=()):
+    headers = {
+        "ETag": etag,
+        "Cache-Control": "no-cache",   # 允许浏览器缓存副本，但每次都要带 If-None-Match 协商
+        "X-Snapshot": state,           # hit | stale | stale-error | miss
+        "X-Snapshot-Age": str(int(age_sec)) if age_sec != float("inf") else "-1",
+    }
+    # 子快照的年龄也透出（不走 payload）：顶层 generated_at 是本次实时同步时间，
+    # 而恢复率/网络可用率/历史指标来自更早的快照。放进 payload 会让 shadow 比对
+    # 永久 mismatch（现算侧没有这两个字段），所以走响应头（2026-11-24 审核）。
+    for name, key in child_keys:
+        headers[f"X-Snapshot-{name}-Age"] = _child_snapshot_age(key)
+    if _etag_matches(request, etag):
+        # 304 必须直接 return Response（见 routers/tasks.py 的说明）
+        return Response(status_code=304, headers=headers)
+    return Response(content=body, media_type="application/json", headers=headers)
+
+
+def _compute_fallback(key: str, compute):
+    """现算并在本进程缓存 FALLBACK_TTL 秒；返回 (body, etag, age)。"""
+    hit = _fallback.get(key)
+    if hit and time.time() - hit[0] < FALLBACK_TTL:
+        return hit[1], hit[2], time.time() - hit[0]
+    with _sf_locks[key]:
+        hit = _fallback.get(key)
+        if hit and time.time() - hit[0] < FALLBACK_TTL:
+            return hit[1], hit[2], time.time() - hit[0]
+        body = json.dumps(compute(), ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+        etag = '"' + key + "-live-" + hashlib.sha1(body).hexdigest()[:16] + '"'
+        _fallback[key] = (time.time(), body, etag)
+        return body, etag, 0.0
+
+
+def _serve(request: Request, key: str, max_age: int, compute, child_keys=()):
+    if _MODE == "off":
+        return compute()
+
+    if _MODE == "shadow":
+        result = compute()
+        try:
+            snap = snapshot_store.peek_payload(key)
+            if snap is not None:
+                live = json.loads(json.dumps(result, ensure_ascii=False, default=str))
+                if _strip(live) != _strip(snap):
+                    logging.getLogger(__name__).warning("[SNAPSHOT-SHADOW] mismatch key=%s", key)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("[SNAPSHOT-SHADOW] compare failed key=%s", key, exc_info=True)
+        return result
+
+    snap = snapshot_store.get(key)
+    if snap is not None and snap.age_sec() <= max_age:
+        return _respond(request, snap.body, snap.etag, "hit", snap.age_sec(), child_keys)
+
+    # 快照缺失或过期：现算兜底；现算失败但有旧快照时继续给旧快照，页面不白屏
+    try:
+        body, etag, age = _compute_fallback(key, compute)
+        return _respond(request, body, etag, "miss" if snap is None else "stale", age, child_keys)
+    except Exception:  # noqa: BLE001
+        if snap is None:
+            raise
+        logging.getLogger(__name__).warning("[SNAPSHOT] fallback compute failed key=%s, serving old snapshot", key, exc_info=True)
+        return _respond(request, snap.body, snap.etag, "stale-error", snap.age_sec(), child_keys)
+
+
+def _load_realtime_rows_snap():
+    """实时下钻：优先用快照里的增强行，读不到或过期再走原来的 _load_realtime_rows()。"""
+    if _MODE == "on":
+        try:
+            snap = snapshot_store.get("alarm:realtime_rows")
+            if snap is not None and snap.age_sec() <= REALTIME_MAX_AGE:
+                return snapshot_store.peek_payload("alarm:realtime_rows")
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("[SNAPSHOT] realtime_rows read failed, fallback", exc_info=True)
+    return _load_realtime_rows()
+
+
+_FLAG_COL = {
+    "dispatch_delay_eflow": "m_dispatch_delay",
+    "alarm_fetch_delay": "m_fetch_delay",
+    "dispatch_overdue_total": "m_overdue",
+}
+
+
+def _history_drilldown_sql(metric: str, limit: int):
+    """查物化表 _history_alarm_enriched；表不存在或已过期时返回 None（由调用方回退）。
+
+    口径与 _history_drilldown_pandas 一致：同一套派生字段（由 Worker 复用 _load_history_df
+    算出），按 servertime 倒序取前 limit 行。flag 列名来自白名单，不拼接用户输入。
+    """
+    # 新鲜度必须看**物化表本身**的重建时间：alarm:history_metrics 在 rebuild 之前发布，
+    # 拿它当门禁会在「metrics 成功、rebuild 失败」时放行一张 3 小时前的旧表。
+    hm = snapshot_store.get("alarm:history_enriched")
+    if hm is None or hm.age_sec() > HISTORY_MAX_AGE:
+        return None
+    gate = snapshot_store.peek_payload("alarm:history_enriched") or {}
+    if not gate.get("ok"):
+        # 上次重建失败：表可能还是更早那一版，与指标卡对不上（2026-11-24 审核实测
+        # metrics.total=40 而表里 30 行）。失败门禁的 computed_at 是新的，光看年龄
+        # 反而会放行更久，所以必须显式校验 ok。
+        return None
+    flag = _FLAG_COL.get(metric)
+    where = f"WHERE {flag} = 1" if flag else ""
+    nulls = " NULLS LAST" if DB_MODE == "pg" else ""     # 与 pandas sort_values（NaN 排最后）一致
+    cols = ", ".join(f'"{c}"' for c in HISTORY_OUT_COLS)
+    with get_raw_connection() as conn:
+        if not _table_exists(conn, ENRICHED):
+            return None
+        total = conn.execute(f'SELECT COUNT(*) FROM "{ENRICHED}" {where}').fetchone()[0]
+        cur = conn.execute(
+            f'SELECT {cols} FROM "{ENRICHED}" {where} ORDER BY servertime_ms DESC{nulls} LIMIT ?',
+            (int(limit),),
+        )
+        records = _rows_as_dicts(cur)
+    return {
+        "title": METRIC_TITLE.get(metric, metric),
+        "count": len(records),
+        "total": int(total or 0),
+        "data": records,
     }

@@ -40,6 +40,7 @@ import { queryDataDomain, renderDataDomain, fetchDatasets } from './datadomains.
 import { queryData, renderDataQuery, NL2SQL_HINT } from './dataquery.js';
 import { isKnownSite } from './sitelist.js';
 import { parseVmaxCcaIntent, runVmaxCca } from './vmaxcca.js';
+import { checkPhoneQuery, phoneDenyText, describeCaller } from './phoneAcl.js';
 import { parseWarehouseIntent, runWarehouseQuery, isWarehouseKnowledgeQuestion } from './warehousetool.js';
 import {
   queryTickets,
@@ -246,6 +247,16 @@ const TOOL_SPEC = [
       '**不要**用 query_data —— NL2SQL 会把 "my_app" 当成要过滤的字面量，' +
       '生成 `task_name ILIKE \'%my_app%\'` 从而命中 0 行（2026-11-04 实测故障）。',
     args: '{"task_id":"","days":7,"limit":20}',
+  },
+  {
+    name: 'query_prtg_status',
+    desc:
+      '查 **PRTG 核心链路实时健康度**：25 个传感器状态（Up / Unusual / Down）、平均可用率、' +
+      '异常链路（低于基线/流量归零/超基线/Errors 增长，含 Ping 抖动状态机）、全网峰值与均值、' +
+      '当月 SLA（平均可用率/低于目标条数/故障时长）与容量登记数。' +
+      '用于「PRTG 现在怎么样」「核心链路有没有异常」「链路可用率多少」「容量登记了吗」这类问题。' +
+      '⚠️ 数字来自 my_app 的 PRTG 采集服务，回答必须带时间戳与来源，不要把该值套到站点可用率上。',
+    args: '{}',
   },
   {
     name: 'query_data',
@@ -1535,7 +1546,7 @@ function normalizeArgs(args, now = new Date(), question = '') {
  * @param {{tool:string,args:object}} call
  * @param {object} index      知识库索引（search_knowledge 用）
  * @param {'zh'|'en'} lang
- * @param {object} [opts]     { onDebug, onRetry, onLive, now }
+ * @param {object} [opts]     { onDebug, onRetry, onLive, now, caller }（caller 供号码查询鉴权，见 src/phoneAcl.js）
  * @returns {Promise<{text:string, answered:boolean, channel:string, stats?:object}>}
  */
 export async function runTool(call, index, lang, opts = {}) {
@@ -1657,6 +1668,30 @@ export async function runTool(call, index, lang, opts = {}) {
     };
   }
 
+  if (call.tool === 'query_prtg_status') {
+    // PRTG 是**网络链路**实时健康度，与站点级数据域无关；固定口径、秒级返回。
+    const r = await queryDataDomain('prtg', {});
+    if (!r.ok) {
+      return {
+        answered: false,
+        channel: 'datadomain',
+        text:
+          lang === 'en'
+            ? `I couldn't retrieve the PRTG link status${r.error ? `: ${r.error}` : ''}. Please try again later.`
+            : `暂时查不到 PRTG 链路状态${r.error ? `：${r.error}` : ''}。稍后再试试～`,
+        stats: { totalMs: Date.now() - t0 },
+        routeArgs: { domain: 'prtg' },
+      };
+    }
+    return {
+      answered: true,
+      channel: 'datadomain',
+      text: renderDataDomain('prtg', r.data, lang),
+      stats: { ...(r.stats || {}), totalMs: Date.now() - t0, degraded: false, source: r.data?.data_source || 'http' },
+      routeArgs: { domain: 'prtg' },
+    };
+  }
+
   if (call.tool === 'query_power' || call.tool === 'query_alarm_history'
       || call.tool === 'query_wo' || call.tool === 'query_site_availability') {
     // 数据域查询是**数据**（生产库实时值），在接口层渲染，不经 LLM ——
@@ -1765,6 +1800,21 @@ export async function runTool(call, index, lang, opts = {}) {
   }
 
   if (call.tool === 'query_vmax_cca') {
+    // 2026-11-23 号码查询权限：只有名单里的人能查电话信息（见 src/phoneAcl.js）。
+    // 规则层与模型层都汇到这里，拦一处即可。被拒时 answered=false：不进会话历史。
+    const gate = await checkPhoneQuery(opts.caller);
+    if (!gate.allowed) {
+      console.log(`[号码查询] 拒绝 ${describeCaller(opts.caller)}（${gate.reason}）`);
+      return {
+        text: phoneDenyText(gate.acl, lang),
+        answered: false,
+        denied: true,
+        channel: 'vmaxcca',
+        stats: { totalMs: Date.now() - t0, denied: true },
+        routeArgs: { denied: true, reason: gate.reason },
+      };
+    }
+    if (opts.caller) console.log(`[号码查询] 放行 ${describeCaller(opts.caller)}（${gate.reason}）`);
     // 号码/时间的最终解析在 vmaxcca.js 里做（优先级：规则层解析 > 模型参数 > 当前时刻），
     // 与统计通道 normalizeArgs 同一纪律 —— 模型不知道现在几点。
     const r = await runVmaxCca(call.args || {}, {

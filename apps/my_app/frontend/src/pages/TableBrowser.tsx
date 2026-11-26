@@ -17,6 +17,9 @@ import { readParam, writeParams } from '../urlState'
 interface TableInfo {
   name: string
   row_count: number
+  /** 2026-11-24：后端对大表（PG 统计估算 ≥ 20 万行）返回 pg_class.reltuples 估算值以免逐表 COUNT(*)，
+   *  此时为 true，界面在行数前加「≈」。精确条数以选中后分页器的 total 为准。旧后端不带该字段 → 视为精确。 */
+  row_count_estimated?: boolean
   col_count: number
   columns: { name: string; type: string; notnull: number; pk: number }[]
 }
@@ -246,7 +249,7 @@ export default function TableBrowser() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--wh-space-sm)' }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tb.name}</span>
         <span style={{ color: '#999', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-          {tb.row_count.toLocaleString(numLocale(locale))} {t('common.rows')}
+          {tb.row_count_estimated ? '≈' : ''}{tb.row_count.toLocaleString(numLocale(locale))} {t('common.rows')}
         </span>
       </div>
     ),
@@ -872,7 +875,7 @@ export default function TableBrowser() {
                 style={{ width: '100%' }}
                 showSearch
                 placeholder={t('table.selectTable')}
-                options={tables.map(tbl => ({ value: tbl.name, label: `${tbl.name} (${tbl.row_count} ${t('common.rows')})` }))}
+                options={tables.map(tbl => ({ value: tbl.name, label: `${tbl.name} (${tbl.row_count_estimated ? '≈' : ''}${tbl.row_count} ${t('common.rows')})` }))}
               />
             </Col>
             <Col xs={24} sm={12} lg={6}>
@@ -881,7 +884,7 @@ export default function TableBrowser() {
             {tableInfo && (
               <Col xs={24} lg={6}>
                 <ExplainPopover text={t('table.explain.rowCount')}>
-                  <Tag color="blue">{tableInfo.row_count.toLocaleString(numLocale(locale))} {t('common.rows')}</Tag>
+                  <Tag color="blue">{tableInfo.row_count_estimated ? '≈' : ''}{tableInfo.row_count.toLocaleString(numLocale(locale))} {t('common.rows')}</Tag>
                 </ExplainPopover>
                 <ExplainPopover text={t('table.explain.colCount')}>
                   <Tag color="green">{tableInfo.col_count} {t('common.cols')}</Tag>

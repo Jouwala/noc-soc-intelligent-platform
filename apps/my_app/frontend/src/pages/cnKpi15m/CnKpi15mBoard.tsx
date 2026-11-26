@@ -313,7 +313,14 @@ export default function CnKpi15mBoard({ board }: { board: 'cs' | 'ps' }) {
                 ? [t('cnkpi15.note.gran1'), t('cnkpi15.note.gran2'), t('cnkpi15.note.gran3')]
                 : [t('cnkpi15.note.granCs1'), t('cnkpi15.note.granCs2')],
             },
-            { title: t('cnkpi15.note.secAgg'), lines: [t('cnkpi15.note.agg1'), t('cnkpi15.note.agg2'), t('cnkpi15.note.agg3')] },
+            {
+              title: t('cnkpi15.note.secAgg'),
+              // 「流量桶必须采满」只对 PS 的 RG / 4G FDD 生效（CS 页没有 SUM 流量卡），
+              // 所以这条说明只挂在 PS 页，免得 CS 用户去找不存在的卡。
+              lines: board === 'ps'
+                ? [t('cnkpi15.note.agg1'), t('cnkpi15.note.agg2'), t('cnkpi15.note.agg3'), t('cnkpi15.note.aggFlow')]
+                : [t('cnkpi15.note.agg1'), t('cnkpi15.note.agg2'), t('cnkpi15.note.agg3')],
+            },
             ...(board === 'ps'
               ? [{ title: t('cnkpi15.note.secMissing'), lines: [t('cnkpi15.note.missing1'), t('cnkpi15.note.missing2')] }]
               : []),

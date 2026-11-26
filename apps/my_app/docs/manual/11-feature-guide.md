@@ -64,9 +64,12 @@
 | 37d | OLIB 地理网络拓扑 | `olibTopo_v2` | React |
 | 38 | MW 微波实时 | `mwRealTime` | **iframe** |
 | 39 | GIS 地图 | `gis` | React |
+| 39b | 位置分析 | `location` | React |
 | 40 | 实时告警地图 | `realtime_alarm` | React（同组件另一模式） |
 | 41 | 人员位置地图 | `person` | React |
 | 42 | 丢包看板 | `packet_loss` | React |
+| 42b | PRTG 核心链路健康度 | `prtg_links` | React |
+| 42c | 站点 KPI 实时查询 | `site_kpi_rt` | React |
 | 43 | 电池看板 | `battery` | React |
 | 44 | IP 链路探测 | `ip_trace` | **iframe** |
 | 45 | VMAX 用户查询 | `vmax_user_query` | React |
@@ -570,12 +573,13 @@ Service / Network / Summary / Healthscore 四视图经营看板（`CxoDashboard.
 
 - 壳：`LegacyToolFrame` 载入 `public/cxo_dashboard.html`。
 - **数据三层叠加**（2026-09-02 起）：
-  1. HTML 内嵌快照（构建时冻结，保底渲染）；
+  1. **内置数据集**（2026-11-23 从 HTML 抽出到 `public/cxo-dashboard-data.js`）：GEO 州界底图 + DATA 面板数据；抓取时间无从考证（`window.CXO_DASHBOARD_AS_OF` 为空），所以首屏用内置数据时 `#cacheBanner` 常驻写明「构建时内置的数据集，抓取时间未知，不是实时状态」，缓存或实时数据一到即被替换 / 隐藏；
   2. **last-known-good 缓存**：worker 任务 `cxo_dashboard_cache_sync`（每 10 分钟，v 组）经本机 8790 VMAX 代理拉全量接口、**空值保留旧值**，落盘 `data/cxo_dashboard/last_known_good.json`，页面打开/开启自动刷新后到点时经 `GET /api/cxo-dashboard/cache` 应用；
   3. 实时拉取（经 `/api/realtime-proxy/cxo` 转发 8790 代理）成功则覆盖缓存。
   实时不可用时页面显示最近可用缓存数据（状态行 `offline · cached data`），Health 页 live 为空时回退缓存并在标题标注 `cached <时间>`。
 - 缓存任务详情见 `backend/services/cxo/cxo_dashboard_cache.md`；每次运行还向 `data/cxo_dashboard/history.jsonl` 追加一行 Summary KPI + Health 概要（积累趋势用）。
 - **轮播（大屏值守）**：页头 `Carousel` 按钮（2026-09-02 起）每 15 秒轮换 Service→Network→Summary→Healthscore 四页签并**进入全屏**（同 Alarm Management：再点按钮停止并退全屏；Esc 退出全屏会联动停轮播；手动点页签视为接管、停轮播但保留全屏）。
+- **缓存年龄横幅（2026-11-23）**：`#cacheBanner` 按 `/api/cxo-dashboard/cache` 返回的 `updated_at` 常驻显示「当前显示 last-known-good 缓存（更新于 …，距今 …）」。这是为了治住「空值保留旧值」的副作用 —— 上游长期不出数时，缓存会让页面看起来「数据还在」，实际后台任务已经很久没写入新数据。**超过 3 小时（`CACHE_STALE_H`）转红**并写明「不是当前状态」；实时刷新全成功时自动隐藏（`finishStatus` 的 `fail===0` 分支调 `hideCacheBanner()`）。
 - 图表尺寸自适应：所有图表 setOption 后统一排队一次 rAF `resize()`（`queueResizeAll`）——trend-grid 卡片逐个 append 时列宽多次回流，不补偿会把 1570px 画布塞进 359px 卡片（x 轴标签挤压、线条重叠的根因）；实时刷新按代次（`REFRESH_GEN`）管理，切页/轮播后旧刷新静默作废，不在隐藏视图上重建图表、也不覆盖状态行。
 - 数据源是 VMAX 实时保障看板，凭据在「系统设置 → 凭据 → `vmax_cxo`」。
 - 已知限制：Healthscore 的 VMAX 源头分区 `aggr_ds_cxo_score` 为空时综合分显示 `—`（页面有说明横幅），需数据侧聚合后才能填充，缓存只能保证"有过的数据不再丢"。
@@ -781,7 +785,6 @@ v1（8c）的升级版，**v2 不改 v1 的页面骨架**：v2 默认把 OLIB �
     - ⚠️ 该控件与 `MapLegendOverlay` 同约定：**文案不进 i18n**，由页面 `t()` 好再传入（守卫才看得见字面量键）。
 
 #### 10a-2. ⚠️ 门户内嵌与直开的主题一致性（2026-10-14 修，两条根因）
-
 **现象**：`http://localhost/v1/olbrportal/` 的 GIS Map 栏（内嵌 `/myapp/?page=gis&mwembed=1`）在深色门户下，图例观感与直开 `/myapp/?page=gis` 不一致 —— 前者是一块不透明白底 + 深字，后者是透明底 + 白字。
 
 **实测确认的两条根因（都已在代码层修掉，勿只修一条）**：
@@ -865,6 +868,24 @@ v1（8c）的升级版，**v2 不改 v1 的页面骨架**：v2 默认把 OLIB �
 - **可复用探针 `TMP/_verify_gis_series.py`（勿删）**：`python TMP/_verify_gis_series.py` 直接调 `_load_site_kpi_series()`，逐制式打印 `matched_by / days / day 是否唯一 / volume 列清单 / 末日各业务量值`，不依赖 HTTP 也不依赖前端构建 —— 改了 `_RAT_KPI_SPEC` 或折叠逻辑就跑一次（2026-11-04 实测 4472 与 3620 两站、7/30 两档全绿）。
 
 
+
+### 10a-5. 站点类别嵌进图例的 Site Class 组（2026-11-23 首版 / 2026-11-24 改位置，仅 `?page=gis`）
+
+**需求演进**：2026-11-23 用户原话「页面 `?page=gis` 的 Legend 里面的 Site Class 也添加 `?page=person` 的 site class 里面的所有内容」，首版做成了地图右上角一张独立浮层；**2026-11-24 用户纠正「是把 Site Classes 放到 Legend 里面的 Site class 里面」** → 内容改为嵌在左下角图例的「站点等级 / Site Class」组内（`MapLegendOverlay` 的 `MapLegendGroup.node` 插槽），右上角那块浮层及它的 portal 定位壳一并删除。
+
+- **组内结构**：`VIP站点 / 正常` 两行（圆点颜色图例，点它隐藏该类站点）下面多一行 **「站点类别 ▸」**；点开展开人员页那套四组取值（维护分类 / VIP / HUB / 传输类型），有选中时该行行尾显示「已显示 N / total」。
+- **默认收起**（2026-11-24 实测后定的）：四组共 11 个取值全部展开会把图例撑到约 600px（地图 654px 高时），直接盖住左上的 LAYERS 与区域排名条；收起时图例高度与改动前一致（约 207px），类别内容点一下就能展开。人员页那张独立卡片仍默认展开。
+- **展开时的布局约束**（缺一不可）：
+  - 图例 `maxHeight` 由 `calc(100% - 1rem)` 改为 **`calc(100% - 12rem)`**（`MapLegendOverlay.tsx` 的 `panelStyle`）：12rem≈192px 是给 LAYERS（实测高约 84px）留的位置，展开后图例最高到相对 y≈158，与 LAYERS 底边仍留 60px 净距；超出的内容在图例内部滚动。
+  - **区域排名条临时收起**：`index.css` 的 `.gis-legend-overlay:has(.gis-siteclass-block button[aria-expanded='true']) ~ .gis-rank-overlay { display: none }`。两块浮层同处左缘，叠在一起会互相透字，且排名条 DOM 靠后会把类别行挡住（Playwright 实测点击被 `.gis-rank-row__name` 拦截）。收起图例后排名条自动恢复。⚠️ 这条选择器依赖「两浮层都是地图卡片 body 的子节点、图例在前」的渲染顺序。
+- **同一组里有两层东西，语义不同，刻意并列**：上面两行 `VIP站点 / 正常` 是**圆点颜色**图例（色值与地图圆点一致）；下面这块是**类别选择器**（点它在地图上圈出该类站点；组内多选取并集、组间取交集）。去掉前两行，地图上的紫色（VIP）/灰色（正常）圆点就没有解释了。
+- **刻意不复制第二套**：数据 `personmap/useSiteClasses.ts`、面板 `personmap/SiteClassLegend.tsx`（2026-11-24 新增 `bare` 嵌入模式：无卡片外观 / 折叠开关集成进图例 / 行无边框、选中用类别色淡底 + 加粗）、配色 `personmap/siteClassColors.ts` 全部复用人员页那份（见 11 节「站点类别图例」）。GIS 侧只新增两个薄组件：`gismap/SiteClassLegendSection.tsx`（把面板以 `bare` 渲染成图例组内容）与 `gismap/SiteClassSitesLayer.tsx`（选中后的站点圈）。两页的类别名、计数口径（后端 `personnel.py::get_personnel_site_classes` 扫 `master_site_db` 四列）、选中语义因此不会各自漂移。
+- **默认一个都不画**：与人员页同一需求 —— `useSiteClasses` 的 `selected` 初值为空对象，`visibleSites` 为空，地图上零个类别圈。
+- **为什么画外圈而不是实心点**：GIS 底图**已经用颜色表示站点告警状态**，实心类别点会把它盖掉、同一批站点在图上变成两种读法。故圈只描边（类别色）+ 填充约 12%，挂 `siteClassPane`（`zIndex 660`）：高于站点圆点（`sitePane` 650）、低于县名标注（`countyLabelPane` 670）。
+- **圈不接收鼠标**：`components/LeafletMap.tsx` 的 `CircleMarker` 新增可选 `interactive`（仅明确传 `false` 时写进 Leaflet options，不传时行为不变）。实测选中 NORMAL 画出 597 个圈时，圈上点的 `elementFromPoint` 仍是 `leaflet-interactive` 的站点圆点，点站点照常打开下钻抽屉。
+- **⚠️ 承载体仍然只有 `.gis-legend-overlay` 一个**：内容跟着图例走，而图例本来就是门户 `MAP_STRIP_CSS`（`apps/portal/` 下 7 份副本）的白名单元素，所以门户静态壳**不用改**。首版右上角浮层为绕开「卡片 body 直接子元素被刷成通栏白块」曾用 `createPortal` 挂进 Leaflet 容器；改位置后这套壳已删除（原则 10：删除优于兼容）。
+- **只在 `?page=gis`**：`GISMap` 同时服务 `?page=realtime_alarm`（`mode='realtime'`），这块内容与取数都用 `mode === 'all'` 门控。实测实时页没有类别内容、0 次 `/gis/personnel/site-classes` 请求（不会白拉约 100KB）。
+- **复用处的两处小改动**：`useSiteClasses({ enabled })` —— 不取数时把 `loading` 置 `false`，否则这块内容永远停在「正在加载站点类别…」；`SiteClassLegend` 新增 `bare`，`maxHeight` 仍保留给人员页那张独立卡片。
 
 ### 10b. 边界蒙层：大区（Voronoi）与县界（真实行政边界）
 
@@ -1165,16 +1186,25 @@ React 自身驱动（其 cleanup 顺序是「子先父后」，子图层先 remo
 **交互**：点人员 → 选中 + **从右侧滑出下钻抽屉**（压在右列卡片上，不遮地图）；
 **点地图空白处、或点地图之外的任何地方**（右侧卡片 / 下方表格 / 筛选条 / 页面背景）都取消选中并关抽屉。
 后者由 `frontend/src/useClearOnOutsideClick.ts` 负责（2026-10-21 用户要求）—— 此前只有点在地图上才取消，
-点别处选中态一直挂着。该 hook 放行五类点击：`.leaflet-container`（归 Leaflet 自己判）、
+点别处选中态一直挂着。该 hook 放行六类点击：`.leaflet-container`（归 Leaflet 自己判）、
 `.ant-drawer`（抽屉里搜索翻页切页签都正常）、`.ant-table-row`（行本身就是"选中另一个人"的入口，
 React 的 onClick 先跑、document 监听后跑，不排除会刚选中又被清掉）、`.dcm-overlay`
 （`DraggableClickModal` 刻意"点遮罩不关闭"）、`.gis-legend-overlay`（地图图例浮层；
 点它的每一行 = 切换该档显隐，属地图内部正常操作 —— 2026-10-30 加，不放行的话
-点图例会立刻把选中的人清掉、图例跟着消失）。
+点图例会立刻把选中的人清掉、图例跟着消失）、`.ant-select-dropdown`（地图搜索框的下拉结果 ——
+2026-11-23 加：下拉是挂在 body 上的 portal，不排除的话「选中 A 后再搜 B」会被当成点了别处，
+B 选不中、抽屉也不打开）。
 表格行点击与地图选中双向联动（仅**有坐标**的行可点，无坐标的人走「查看工单」按钮）。
 
-**人员针的常驻徽标**（拼装在 `personmap/personPinHtml.ts`，Marker 挂载仍在 `PersonMapView.tsx`）两行：第一行姓名 + 电话；第二行
+**地图搜索的收窄规则**（2026-11-23 用户要求「地图搜索人员的时候不显示其他人员，搜索站点的时候要显示其他站点，但是搜索站点自动居中。跟当前一样」）：
+搜索框选中**人员**后地图只画该人员一个针（`PersonMapView.tsx` 的 `searchPinKey` / `pinsToDraw`），其余人员隐藏；选中**站点**时清空该收窄、照旧 `flyTo` 居中，其他站点圆点照常显示。
+收窄只在「搜索选中人员」时生效 —— 直接点人员针或表格行仍显示全部人员（否则无法对比两个人）；点地图空白、点「取消选中」或改选别人即恢复全部人员。
+搜索框的人员源仍是完整的 `visiblePins`（不随收窄变窄），否则搜过一次就再也搜不到别人。
+⚠ 同日顺带修了 `useClearOnOutsideClick`：antd 的搜索下拉是挂在 body 上的 portal，原先点它会被当成「点了别处」把已有选中清掉 —— 表现为「选中 A 后再搜 B，B 选不中、抽屉不打开」。已把 `.ant-select-dropdown` 加入放行清单（见上方「放行六类点击」）。
+
+**人员针的姓名/电话徽标（默认隐藏、悬停显示）**（拼装在 `personmap/personPinHtml.ts`，Marker 挂载仍在 `PersonMapView.tsx`）两行：第一行姓名 + 电话；第二行
 `负责站点数 | 未关闭 WO 数 | 未关闭 PMT 数`（2026-10-21 用户指定这个顺序）。
+2026-11-23 用户要求「人员的标签默认不显示，当鼠标悬浮的时候显示」：全国视角下 30 个两行徽标常驻会互相叠字、压住站点，现改为默认 `opacity:0 / visibility:hidden`，`.gis-person-marker:hover` 时显示（规则在 `index.css`，前缀 `.person-map-canvas` 限定本页，GIS 页的单行徽标不受影响）。同日「人员的图标能小一点。点击该人员的时候大一点」：未选中尺寸 **26 → 20**、选中 **32 → 36**（`personPinHtml.ts::buildPersonPin`），悬停另有 CSS `scale(1.22)` 的轻放大。徽标显隐是纯 CSS，**不进 `iconKey`/`html`** —— 否则会重现 2026-10-21 的「悬停重建 marker、点人没反应」。
 **电话完整显示**（2026-10-23 用户要求「不要加密，要全部显示」，取代原脱敏）：
 `person.phone` 里 95/136 行是明文，原样返回；25 行**上游入库时就已打成
 `231****7417` 形式**（本库任何地方都没有这几行的完整号码），由 `personnel.py::_display_phone`
@@ -1241,15 +1271,15 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 
 **图层开关浮层**（地图右上角，`personmap/LayerToggles.tsx`，前身 TerritoryToggle 只装一个开关、第二个真实开关出现即更名）—— 两个**独立图层**：
 
-**「人员」开关**（2026-10-24 用户要求「实时人员的信息也弄个开关」，**默认开**）：控制人员针 + 常驻徽标 + 选中者的站点圆点/连线/空态说明条。要点：
+**「人员」开关**（2026-10-24 用户要求「实时人员的信息也弄个开关」，**默认开**）：控制人员针 + 姓名/电话徽标（默认隐藏、悬停显示，2026-11-23）+ 选中者的站点圆点/连线/空态说明条。要点：
 - **关掉时清除选中，但只在针真的看不见时**（`PersonMapView::togglePeople` → `onSelect(null)`，判据 `!v && !showTerritory`）—— 留着选中会出现「抽屉开着、地图上一片空」的自相矛盾画面（与点空白取消选中同一语义）。2026-10-29 加条件：辖区开着时中心标签还在（见下），此时关「人员」不该顺手把用户正在看的抽屉关掉。
 - 搜索框的人员源与图上**实际可见**的针同源（见下方 `visiblePins`，2026-10-29 前是 `showPeople ? pinPersons : []`）—— 针藏起来时，搜索框不该再提供「选中一个看不见的人」的入口；**站点搜索不受影响**，但 `handlePickSite` 在针全藏时（两个开关都关）只定位、**不选中负责人**。
 - **搜索框让位给缩放条**（2026-10-29 用户报「搜索窗挡住了地图+号」）：`MapSearch` 容器左上角定位从 `left: 12` 改 `left: 56`、宽度从 `calc(100% - 24px)` 改 `calc(100% - 68px)`。实测 Leaflet 默认缩放条占容器相对 x 10..44（34×64px，`+` 在 y 123..153），而搜索框原先 x 18..338 / y 123..147 —— 两者在同一横带上完全重叠。改后实测间隙 12px，`elementsFromPoint` 打在「+」中心返回的是该按钮自己的内层 `<span>`（不再被搜索框盖住）。**没有改缩放条位置**：`zoomControl: true` 挂在 `components/LeafletMap.tsx` 的共享 `MapContainer` 上，动它会波及全站所有地图，而 `MapSearch` 只有本页在用。
 - **中心标签属于辖区层**（2026-10-29 用户要求「显示 Default Site 时，中心要显示人员的图标和站点数、电话号码等，跟 People 一样的标签」）：可见针集合 `visiblePins` 三档 —— 人员开 = `pinPersons`（辖区开 30 针 / 辖区关 14 针）；**人员关 + 辖区开 = `territoryPins` 24 个中心标签**；两个都关 = 无针。浏览器实测开关切换：14 → 30 → 24 针，`leaflet-marker-icon` 15 → 39（15 个县名锚点 + 24 个中心针）。
-  ⚠ 这一条**取代**了 2026-10-24 记下的「人员关+辖区开 = 0 针 + 1849 图形元素（纯辖区总览，不被针和徽标遮挡）」形态：现在该组合是 24 针 + 1849 图形，想要无标签的纯辖区底视图已不可能，只能靠缩放/截图。保留的语义是「无辖区连线的人（supervisor 等 6 人）在人员关掉时不出现」，所以用的是 `territoryPins` 而不是 `pinPersons`。
+  ⚠ 这一条**取代**了 2026-10-24 记下的「人员关+辖区开 = 0 针 + 1849 图形元素（纯辖区总览，不被针和徽标遮挡）」形态：现在该组合是 24 针 + 1849 图形。保留的语义是「无辖区连线的人（supervisor 等 6 人）在人员关掉时不出现」，所以用的是 `territoryPins` 而不是 `pinPersons`。另：2026-11-23 起徽标默认隐藏、悬停才显示，所以默认视图本身已是「无标签的纯辖区总览」，不再需要靠缩放/截图得到。
   搜索框人员源同样改喂 `visiblePins`（与图上实际可见的针同源，不再提供「选中一个看不见的人」的入口）；`MapNoSitesNote` 的判据一并从 `showPeople` 换成 `pinsVisible`。
 
-**「默认站点」辖区开关**（2026-10-23 用户要求，**默认关**）：打开后画**全国 FME 辖区总览** —— 每人一色的「质心 → 全部负责站点」放射状连线 + 去重站点小圆点（悬停出站点名/县/负责人），人员针从登记坐标**挪到其站点的几何中心**，且中心带**与 People 完全相同的常驻徽标**（图标 + 姓名 + 电话 + `站点数 | 未关闭 WO | 未关闭 PMT`，2026-10-29 用户要求）。数据来自 `GET /api/gis/personnel/fme-territories`（`personnel.py`，`_fme_site_index` 同源：24 人 / 1010 条人-站对 / 去重 824 站，与单人下钻的站点页签是同一集合）。要点：
+**「默认站点」辖区开关**（2026-10-23 用户要求，**默认关**）：打开后画**全国 FME 辖区总览** —— 每人一色的「质心 → 全部负责站点」放射状连线 + 去重站点小圆点（悬停出站点名/县/负责人），人员针从登记坐标**挪到其站点的几何中心**，且中心带**与 People 完全相同的徽标（默认隐藏、悬停显示）**（图标 + 姓名 + 电话 + `站点数 | 未关闭 WO | 未关闭 PMT`，2026-10-29 用户要求）。数据来自 `GET /api/gis/personnel/fme-territories`（`personnel.py`，`_fme_site_index` 同源：24 人 / 1010 条人-站对 / 去重 824 站，与单人下钻的站点页签是同一集合）。要点：
 - **原生批量建层**（`personmap/TerritoryLayer.tsx`，模式照搬 `gismap/TopologyLayer.tsx`）：1010 条线走 React `<Polyline>` 逐条渲染会单帧阻塞秒级（仓库 844 条线实测卡 1547ms 的教训），原生 `L.layerGroup` 批量建层百毫秒级。线 1.5px/50% 不透明（首版 1px/35% 目检几乎看不见）。
 - **辖区模式下针集合变化**（`useTerritory.ts::pinPersons`）：24 个辖区人员（含**无登记坐标**的人 —— 他们平时根本不上图；person 表没有的显示 `key.title()` 兜底名、统计列显示 `—`，实测 1 人 Julius K. Johnson）+ 6 个有登记坐标但非 FME 的人（supervisor 等，保留原位、无连线）= 30 针。WO/PMT 统计从 `/personnel/stats` 的 `by_person` 按 `name_key` 联合。
 - **选中交互不冲突**：选中某人后**其辖区连线让位**给详细图层（三档配色大圆点 + 从质心起笔的连线 —— 两层同坐标叠画会重影）；聚焦 effect 按质心取景（focusKey 含坐标，开关切换导致同一人位置变化会重新 fit）。
@@ -1269,6 +1299,7 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 - **位置必须放右上角**（与 `LayerToggles` 纵向堆叠成一个浮层列，`PersonMapView.tsx` 里统一绝对定位）：首版放左下角，在门户嵌入（`?embed=1&mwembed=1`）下地图容器被撑到 1122px、底部超出视口约 320px，**实测图例按钮中心 y=982 而视口只有 805 —— 整块落在屏幕外，看不见也点不中**。两个浮层组件自身只负责卡片外观，定位交给调用方。
 - 面板可折叠（标题栏点击）；有选中时标题显示 `已显示 N / 824`。实测：VIP=Y → 50 点、再叠 HUB=Y → 28 点（交集，与 SQL 一致）、COOL → 64 点、四组全选 → 824 点（11 次点击累计约 1.4s，单次最慢 32ms，无需像辖区层那样下沉到原生批量建层）。
 - 守卫：`TMP/cdp_person_legend.mjs`（真实鼠标点击 + 点数与 SQL 对拍）、`TMP/cdp_legend_maponly.mjs`（门户 `?maponly=1` 形态）。
+- **2026-11-24 起 GIS 页（`?page=gis`）也复用了这张面板**（见 10a-5）：GIS 侧把它以 `bare` 模式嵌进图例的「站点等级 / Site Class」组，另加一个「外圈」图层；数据 / 面板 / 配色仍以本节为唯一实现。
 
 **负责站点为 0 的空态说明**（`personmap/NoSitesNote.tsx`，2026-10-21）：有坐标的 24 人里 **6 人 `site_count` 恒为 0**，点他们地图上一片空白，实测就被报成「连线没画出来」。所以选中这样的人时，**地图底部居中**与**抽屉「站点」页签**各给一条同源说明（`pointerEvents:none`，不拦地图点击）。原因分两类，由 `/personnel/stats` 新增的 `supervised_sites` 区分：
 
@@ -1366,6 +1397,45 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 
 **验证**：单测 `tests/test_gis_rca_service.py`（13 个：最深祖先归属/两级故障不互吞/范围外根因标注/10 分钟窗切割/impact 混合分隔符解析/POWER 优先级/降级路径）；对拍用 python `link_path.split('>')` 集合比对（**不要用 SQL LIKE**——`407` 会误配 `4070`）。
 
+## 11b. 位置分析（`?page=location`，2026-11-23 新增）
+
+以「一个经纬度」为视角的现场页：位置点在中心，周围最近的一圈站点、最近的 MW / 光纤链路一眼看全，再往下可以看某个订阅者在这片区域内的网络轨迹。
+
+- **坐标四个入口**（互不覆盖）：
+  - URL `?lat=&lon=`：问答助手答案里的链接、同事分享的地址直接可达；页面自身在改坐标时也会写回 URL（`location/geo.ts`、`pages/LocationMap.tsx`）。
+  - 手动输入纬度 / 经度后点「应用坐标」。
+  - 浏览器定位（`navigator.geolocation`，需 https 或 localhost）；权限拒绝 / 超时分别给出不同提示。
+  - 「问问答助手」：向 `POST /api/portal-qa/ask` 提问，再从**答案文字**里解析经纬度（`parseLatLon` 支持 `6.29, -10.78`、`lat: … lng: …`、`6.29 N, 10.78 W` 等写法）。答案原样显示在输入框下方；解析不到坐标时如实提示，**不猜点**。
+- **页面结构（2026-11-23 用户要求，11-25 调整）**：地图在上、控制条在下。地图右上角是「查询订阅者」手机号搜索窗；右下角原有的「按经纬度定位」坐标搜索窗 **2026-11-25 起不再显示**（用户要求，右下角留给图层图例；组件 `location/CoordinateSearchOverlay.tsx` 保留，`LocationMapCard` 的 `coord` 参数改为可选，要恢复只需把它加回 canvas）。经纬度、半径、站点数、问答助手等完整控制条在**页面最下面**，按坐标定位走这里的「应用坐标」。订阅者轨迹结果表放在控制条之后；**标题与口径说明卡放在页面最下面一行**（页脚式收尾，用户 2026-11-23 要求）。
+- **底图与 `?page=gis` 完全同源**：本机自托管 PMTiles 离线瓦片（nginx `/tiles/liberia.pmtiles`），不依赖公网；默认**关闭地名注记与道路**（瓦片自带 1.7 万个地名，全开会糊住站点），地图左上角「图层」浮层可分别打开。右下角 attribution 里的 `© OpenStreetMap contributors` 是**瓦片数据的署名要求**（数据本身由 OSM 衍生），不代表浏览器在请求在线 OSM。
+- **Find subscriber 的时间窗**：默认查**最近 3 小时**（与 VMAX 页同一默认）；地图搜索窗下方有起止时间选择器，可改开始/结束时间，最多回看 **24 小时**（VMAX 上游保留期），点「查询」后生效。轨迹卡顶部显示的是**已执行**的那次窗口；当前选择器里的未执行时间不会冒充已查询窗口。
+- **最近一圈站点**：`ringOf()`（`pages/location/geo.ts`）先按所选半径筛，再按 haversine 距离升序取前 N 个；半径内不足 3 个时自动扩到第 3 个最近站点，地图虚线圈与列表同步改用扩后半径，控制条下方用 `loc.warn.widened` 写明原因与数字。
+- **站点配色与下钻与 GIS 完全同源**：
+  - 分区规则抽到 `pages/gismap/types.ts::siteLegendKey()`（GISMap 同一次改动改为调用它），颜色仍走 `colorFor()` / `LEGEND_COLORS`；
+  - 点站点打开的是 `pages/gismap/SiteDrilldownDrawer.tsx` 同一组件，接口仍是 `GET /api/gis/drilldown/{site_id}` 与 `…/analytics?days=7`。
+- **MW 链路**：画图用 `GET /api/gis/topology?with_util=1`（与 GIS 页同一份 KML 链路、同一 15 分钟利用率槽位），按「位置点到线段」距离排序取最近 6 条、最近一条加粗；点击打开 `location/MwLinkDrawer.tsx`，字段与 `?page=mwRealTime` 的链路抽屉一一对应（状态 / 总容量 / 两端站点与 Node IP / 接口 / TX-RX 吞吐与利用率 / 24H 趋势 / 端口明细），明细数据懒加载 `GET /api/mw-ume/realtime` 并做模块级缓存。
+  - 两套数据主键不同（KML 用站名、KPI 用节点 IP），实测仅约一半能匹配；匹配不上时抽屉如实写「无 KPI 明细」并保留 GIS 侧结构信息（`loc.mw.noKpiHint`），不拿别的链路冒充。
+- **光纤链路**：取 `public/olib/olib-fiber-links.json` + `olib-site-geo.json` 拼出的 OLIB PDF 站点对（`useLocationData.ts::joinFiberLinks`），点击只展示端点、图例类型与距离；文案明确写「示意图、无实时指标」。
+- **订阅者轨迹与右侧抽屉**：
+  - 输入 MSISDN 后调用 `pages/useVmaxDiagnosis.ts`（与 `?page=vmax_user_query` / `vmax_user_cca` 同源），一次查询同时取四源诊断与 CCA；
+  - 地图按 CCA `usertrack/query_cell` 的返回顺序标出驻留小区（只画有坐标的，缺坐标的数量单独写出来）；**usertrack 是倒序的，第 1 条即最新小区**，人形符号标第 1 条，列表第一行用 👤 对应；
+  - usertrack **本身没有时间字段**，所以地图只画点、不画连线（连线会被读成「按时间走过」）；拿到轨迹后地图自动 fit 到这些点，输了号码就能直接看到人；
+  - **时间信息**：卡片顶部显示本次查询时间窗（诊断窗口优先）；表格「最新出现」列按小区匹配 VMAX 1100/1300/1301 记录的 `start_time` 取最后一次，匹配不到显示 `—`（只代表该窗口内没有对应记录，不代表没去过）；
+  - 点小区圆点或列表行打开 `location/SubscriberDrawer.tsx`：复用 `VmaxCcaCards`（Subscriber Info / Terminal Info / User Track Cells / CCA 根因）、`VmaxWorkspaceAnalysis`（Fault analysis，内嵌 Evidence timeline）、`VmaxWorkspaceVerdict`（Root cause & recommendations），KPI / 根因明细沿用 `DraggableClickModal`。
+- **NGI 网络图层（2026-11-24 / 11-25 新增）**：「图层」浮层里在地名注记、道路之后多了三项 —— 覆盖 RSRP / LTE 小区 / 5G NR 小区，**默认全关、勾选后才取数**，不影响首屏。三层都用 Canvas `L.GridLayer` 按 256 px 瓦片绘制，**不为每个要素建 Leaflet 对象或 React 组件**（17.8 万格点 / 8 千扇面若逐个 `<Polygon>` 会卡死主线程，评估见 `location/coverageGrid.ts` 文件头）。tilePane 叠放顺序：覆盖 5 < LTE 6 < NR 7，均在站点 / 链路（overlayPane）之下；图例统一进右下角停靠区（`location/mapDock.ts`），自动上下排开、可折叠。
+  - **覆盖 RSRP**：数据 `app.ngi_coverage_grid`（NGI 覆盖评估 50 m 网格，一轮约 17.8 万格点）。`GET /api/ngi-coverage/meta`（各 kpi 行数 / run_id / 范围 / 档位 RSRP 统计）+ `GET /api/ngi-coverage/grid?kpi=`（`NGC1` 紧凑二进制：只含中心经纬度 float32 + 档位 uint8，**不传 `polygon` 列**，约 1.6 MB、gzip 后约 0.4 MB）。后端按 `run_id` 缓存打包结果，响应带弱 ETag + `Cache-Control: no-cache`，同一轮同步内浏览器只做 304 协商。7 档配色按每档实测 RSRP 均值从好到差排，不假设档位编号顺序。点格点调 `GET /api/ngi-coverage/point`（kpi + 经纬度小框，索引 `ix_ngi_grid_geo`）取 RSRP / 好点率 / 采样点 / 覆盖小区（回查 LTE 工参小区名）/ PCI。代码：`services/ngi_data/ngi_coverage_api.py`、`location/coverageGrid.ts`、`location/CoverageGridLayer.tsx`；二进制格式两边各有单测（`tests/test_ngi_coverage_api.py`、`location/__tests__/coverageGrid.test.ts`）。
+  - **LTE / 5G NR 小区**：数据 `app.ngi_lte_cell_param`（约 8 227 小区）/ `app.ngi_nr_cell_param`（约 101 小区）。`GET /api/ngi-coverage/lte-cells` / `nr-cells` 下发全量列式 JSON；**两张表输出同一套列名**（NR 的 `gnb_*` / `ssb_arfcn` / `freq_band_index` / `dl_bandwidth` 在 SQL 里别名，没有的 `sector_id` / `tac` / `active` 给 NULL，见 `services/ngi_data/ngi_cell_api.py` 的 `NR_SELECT`，单测校验每个引用列都真实存在）。同样按「行数 + max(fetched_at)」缓存 + 弱 ETag。前端一个组件 `location/LteCellLayer.tsx`（`kind="lte" | "nr"`）、一份画法 `location/lteCells.ts` 两层共用。
+    - 扇面固定 **65°**，以方位角为中线；方位角为空或室分（`cover_type` 含 indoor）画小圆点，不猜方向。坐标优先 `cell_lat/lon`，缺失退回站点坐标；都缺的不画，图例里写出跳过数量。
+    - **频点决定颜色与半径**：频点从低到高排序，依次取色（LTE / NR 各一组调色板），半径比例从 1.0 线性降到 0.5（低频大、高频小）；先画大后画小，同站多载波层层可见。只有一个频点时比例取 1。
+    - **半径按站间距自适应**（2026-11-25 用户反馈「固定米数在密集区叠成一片」）：每站取「到最近邻站的距离 × `SITE_R_RATIO`（0.45）」作为最外层扇面的地面半径，夹在 50 m ~ 1.5 km；相距 < 30 m 视为共站址（同铁塔不同 eNB），不算邻站。半径是地面米数，缩放时与站间距同比例变化，相邻两站在 13~18 级都不会互相压住（有单测）。像素再夹在下限 `MIN_PX_BY_ZOOM`（全国视图 7~9 px，保证看得见；高频至少保留 80%）与上限 `MAX_PX`（160）之间；12 级以下填充加深、描边加粗。
+    - **5G NR 的区别**：另一组颜色 + **虚线描边**，画在 LTE 之上；站间距按「NR + LTE 全部站点」算（NR 站稀疏，只看自己会顶到上限、盖住周围 LTE 站），所以打开 NR 时会顺带取一次 LTE 工参（与 LTE 图层共用同一份前端缓存）；整体半径再乘 `NR_SCALE`（0.8），LTE 外环仍露在外面。NR 工参没有扇区号，同扇区按方位角 ±3° 分组；弹窗里频点号显示为 SSB-ARFCN，Band 写成 `n78`。
+    - **悬浮**：站点名 / 站点 ID / 扇区（或方位角）/ 本扇区全部载波（频点、Band、PCI、小区名），当前载波加粗；mousemove 用 requestAnimationFrame 节流，拖动中、压在站点 / 链路 / 浮层上时不出提示。**点击**：弹窗显示站点、Cell ID、扇区、PCI/TAC、频点 / EARFCN（NR 为 SSB-ARFCN）/ Band / 带宽、方位角、挂高、下倾、覆盖类型、状态 / 厂家，并高亮该扇面轮廓。图例每个频点一行，可逐个勾选显隐（隐藏的既不画也点不中）。
+    - **多层点击仲裁**：命中判断放在 Leaflet `preclick`，结果挂在原生事件上（`mapDock.CELL_HIT_KEY`）；NR 与 LTE 都命中时 prio 高的 NR 留下，「覆盖 RSRP」看到标记就让路 —— 点扇面只弹小区、点空白处才弹格点，**与监听器注册顺序无关**。悬浮同理（`CELL_HOVER_KEY`）。
+    - **可调参数**（都在 `location/lteCells.ts`）：`SITE_R_RATIO`（扇面相对站间距的大小，0.35 更疏 / 0.5 更大）、`MIN_PX_BY_ZOOM`（缩小时的最小尺寸，`[缩放级别, 像素]`）、`NR_SCALE`、`FREQ_OVERRIDES` / `NR_FREQ_OVERRIDES`（按频点固定颜色或半径比例，键为保留 1 位小数的频点，如 `'1815.1'`）。
+  - **数据新鲜度**：三层都来自每周日 02:00 的 `ngi_param_coverage_sync`（见 `04-task-system.md`）；后端缓存最多 60 s 后自动发现新一轮数据，无需重启。前端在同一次页面会话内只下载、建索引一次（关掉再开不重下），刷新页面后靠 ETag 协商。
+- **刷新**：本页登记在 `AR_PAGE_DEFAULTS`（300 秒）且进 `AR_INPLACE_REFRESH_PAGES`，收到 `myapp-refresh` 后只静默重取三层数据与订阅者数据，地图不重挂载。
+
+
 ## 12. 告警管理看板（`?page=alarmManagement`）— iframe
 
 `AlarmManagement.tsx:6` → `public/alarm-management.html`，其 `<title>` 是 **Site Outages Monitor Dashboard · Alarm Management**，即**宕站（Site Outage）监控看板**。菜单名"告警管理"容易和第 3 页混，区别是：
@@ -1376,6 +1446,14 @@ PMT 取不到时显示 `—` 而不是 0（AGENTS.md 三.6），所以 `pmt_open
 | 与任务的关系 | 消费 `eflow_active_alarm` 数据 | 被 `site_outage_screenshot`（每天 01:00）截图，截图再由 `whatsapp_send`（03:00）发到 WhatsApp 群 |
 
 `site_outage_screenshot` 的截图对象正是本看板的 **ERA / Regular / ALL 三个视图**（`task_registry.py:95-99`）。**改这个 iframe 页的 DOM 会连带影响自动截图任务**——改前先确认截图选择器还找得到。界面能力以该 HTML 自身为准。
+
+- **数据来源与快照年龄（2026-11-23 重塑）**：本页原来的 2.1MB `const FMS_REAL` 数据**写死在内联脚本里**，是 2026-08-13 11:37:06 从 FMS 实时接口抓取后冻结的一份快照。页面只有一行小字「示例快照 · 未连接」，用户看到的数字与实时数据长得一模一样 —— 实测到 2026-11-23 已经用它顶了 **102 天**。
+  现在拆成三段，各说各的：
+  - `public/alarm-management-snapshot.js` 单独存放快照数据体与 `window.ALARM_MGMT_SNAPSHOT_AS_OF`（HTML 从 2.2MB 降到 147KB，换数据不必再改页面）；
+  - 页头 `#snapBanner` **常驻横幅**按 as_of 算出年龄：≤24h 黄色、>24h 转红并写明「不是当前状态」（这是「数据过期」的异常，按工作区 `AGENTS.md` 四.10 必须常驻可见，不做可关闭）；
+  - 快照文件缺失时渲染最小骨架并直接报错，不再静默半渲染。
+  另：**KPI 卡（宕站数 / 恢复 / MTTR / 可用率）来自 my_app 后端** `/api/alarm-dashboard/alarm-overview`（`backend/routers/alarm_dashboard.py:911`），表格 / 趋势 / 地图 / 域卡片才来自 FMS（经 `/api/realtime-proxy/fms`）。打开实时开关并拿到数据后，横幅降级为「部分面板已接入实时」，**不会**整条消失 —— 因为 KPI 与其余面板来源不同。
+  **六个域卡片（RAN/CN/TRM_MW/VAS/TRM/POWER）没有实时接口**，FMS 侧未提供 URL，每张卡上直接标「无实时接口 · 快照」，不再让卡片看起来像实时结果。
 
 ## 13. 丢包看板（`?page=packet_loss`）
 
@@ -5424,6 +5502,18 @@ TONE/TC/RTP、Used/Authorized、2G/3G/4G/5G、RG 组等维度**全部拆成独�
   **SUM** 后 /1e9 换算 GB；用户数、占用信道数这类 gauge 先按时刻把网元加起来，
   再对桶内采样取平均（`SUM(值)/COUNT(DISTINCT "Begin Time")`），不把 3 个采样
   重复相加；Voice 的 `Seized Traffic(Erl)` 是话务强度，取平均。
+- **流量（SUM）桶必须采满才画**（2026-11-23 用户报「RG / 4G FDD 最后一个粒度总是
+  掉一大截」后加）：5 分钟档按 15 分钟桶相加时，D0 最新那个桶通常只有 2 个采样
+  （上游 + 采集链路约滞后半小时），SUM 出来只有真实值的 2/3，图上就是一个**假下跌**
+  —— 实测 2026-11-23 09:15 桶 RG-6 `1.357`（满桶约 `2.0`）、4G FDD `1553`（满桶约
+  `2285`），都正好 2/3。所以 RG-6/11/12/30 与 4G FDD 的 SQL 要求桶内的
+  **有效数值采样数**达到应有数量（3；空串 / `-` 不算采样），**没采满的桶整桶不画**，
+  下一轮采满后自然出现；AVG / gauge 卡（CPU、License、用户数、DNS）的均值对采样
+  个数不敏感，仍画到最末；原生 15 分钟档（3G FDD）一桶一条，不加这道条件。
+  实现见 `backend\services\cn\cn_kpi_15mins_widgets.py` 的 `_full_bucket_sql()` /
+  `expect_samples` 参数（必须写成「内层算 `COUNT(DISTINCT ...) AS n`、外层
+  `WHERE n = 3` 的子查询」：PG 读通道会把 `HAVING` 折叠成外层 `WHERE`，
+  `HAVING COUNT(...)` 在 PG 上会退回远端 SQLite）。
 - **D0 的末端比 D1/D7 短是正常的**：15 分钟 / 5 分钟链路约滞后半小时；小时源由
   `cn_hourly_kpi_sync` **每小时 :05 增量同步**（2 天窗口、5 个模板并行，约 3 分钟），D0 通常滞后 1~2 小时（上游每小时数据本身约 1 小时时延）——
   这是采集时延，不是缺数。D7 能否画出取决于库里已攒几天，缺哪天就少哪条线、不补零。
@@ -5752,6 +5842,14 @@ eFlow 里 FE 处理完后大量 WO 停在 `WaitConfirm`（待 NOC 确认关闭�
   寻呼、超时失败、QCI=1 承载逐项计数 + 回落链明细 + 回落耗时（>2s 标黄）。
   窗口内有 CSFB 活动但 **SGs 为 0 条**时给明确预警（`noSgs`），
   因为那通常意味着 SGs 接口没上报，而不是「没发生回落」。
+  这里的回落耗时是 **ESR 到 context release 的过程耗时**（通常几毫秒），
+  不是人离开 4G 的时长。
+- `analyzeCallDrop`（`pages/vmaxCallDrop.ts`，两页诊断结论都渲染
+  `VmaxCallDropReport`）：把每次原因含 CS Fallback Triggered 的 UE context release
+  配上 3 分钟内的下一次 TAU，输出离开小区、回到小区、离开秒数、被叫/主叫、
+  返回时承载修改原因；另外列出 Inter-RAT Redirection 簇、用户面制式、
+  有没有 QCI=1、DPI 有没有标出 WhatsApp，以及 CCA 的非 4G 驻留小区和
+  OTT 小区质差。全部投诉 / 语音 / OTT 常显，其它投诉类型只有发生了回落才显。
 - `analyzeOtt`：STUN / 长连接识别 + 抖动对比基线。**能力边界必须显式告知**：
   本平台无 SIP/RTP 信令（实测 XDR `protocol ∈ {SIP, RTP}` 恒为 0 条），
   只能答「有没有通话」+「通话期间网络质量」，**不能答「对方拒接 / 未拨通」**。
@@ -6399,3 +6497,66 @@ VMAX 数仓 GBase（10.123.255.12:5258/zxvmax，只读）
 - 台账是**快照**，不落库：历史对比（某台上次换板、某站上季度机龄分布）本页不提供。需要趋势时另立任务按日落 PG，而不是在这里加隐式写入。
 - 只有 `hw/sw/opt` 三类；上游的 `/api/rncmoaction/v1/rnc/<uuid>` 详情接口含 `OMM FTP` 明文口令，**刻意不采集**（见 `RANElementManagement/ran_element_management_service.py` 顶部说明）。
 - 882 个网元的明细一次性下发约 450 KB（含逐网元的型号矩阵），页面一次取回；不按网元分页拉取，是因为台账表本身就要全量排序与筛选。
+
+## 42c. 站点 KPI 实时查询（`?page=site_kpi_rt`，2026-11-24 新增）
+
+投诉排查专用：输入站点名称或 eNodeB ID，**实时直查 RAN UME** 小区级明细，按「扇区 × 载波」画出最近 1~14 天的 KPI 曲线，用来判断该站是「一直这样」还是「忙时才这样」。**不落库**——结果只放服务进程内存（TTL 600s、最多 6 份，`SITE_KPI_RT_CACHE_TTL` / `SITE_KPI_RT_CACHE_MAX` 可调），进程重启即全清，换站点也不残留。
+
+- **服务端按网元过滤（2026-11-25 修正此前的错误结论）**：UME 支持把历史查询限定到单个站点，但**只有唯一一种组合**生效——`filterlayer="me"` 配 `uilocations=[{"haslogicmoc": false, "id": "<网元 GUID>", "moc": "ITBBU", "model": "ranme"}]`。只写其中一个（例如 `uilocations` 配 `filterlayer=all`、或配 `filterlayer=group`）会被 UME **静默忽略**并照旧回全网，HTTP 200 不报错——2026-11-24 据此误判「UME 不支持按站点过滤」，实际是组合没凑对。实测同一时间片（`5300` 单站单日 15 分钟粒度）：全网 `totalcount=662,661 / 54.7s`，单网元 `totalcount=1,152 / 3.9s`。
+- **网元 GUID 来源**：`GET /api/res/v1/ranmes?queryDn=model:subnetwork` 返回的 `id`，由每日 23:00 的同步任务落到 PG `app.ran_element_management`。4G 的映射是**两级**：先按 `nbi_id == enodeb_id` 精确匹配（942 个工参站点里 806 个命中），匹配不到再按**站名兜底**（忽略大小写、唯一命中、且 `moc='ITBBU'`，再覆盖 52 个）——因为两者并非在所有站点上都相等：`16th Street` 工参是 `4245`、网元只有 `nbi_id=5245` 的 ITBBU，而用该网元过滤回的正是 4245 的 12 个小区（8 天 8880 行 / **8.7s**）。只按编号匹配时这类站点每次查询都退回全网，8 天要 **270s**（2026-11-25 用户体感「原来 8 秒，现在被弄坏了」）。同名 SDR/MRNC/MEC 是 2G/3G 网元，兜底时 SQL 直接排除。实现在 `backend/services/ran/ran_ume_ne_filter.py`。
+- **两条取数路径（4G / 5G 都适用）**：命中网元映射 → 一次查完整个窗口且**全程 15 分钟粒度**，实测 4G 1 天 6.9s / 8 天 7.3s（8844 行、12 小区、737 点/曲线）、5G 1 天 6.4s（195 行、3 小区、65 点）/ 8 天 6.8s（2166 行、3 小区、722 点）；查不到映射（新开站、网元表同步滞后、5G 重名站）或查询失败 → 回退拉全网 + 本地过滤（4G 按 `eNodeBId`、5G 按网元名忽略大小写），按天切片（`CHUNK_DAYS=1`），`gran=auto` 为近 24 小时 15 分钟 / 更早 1 小时。返回体的 `server_filtered` 字段标明实际走的是哪条。
+- **5G 也已启用（2026-11-25）**：同样用 `filterlayer=me` + `uilocations`，实测 3 小时窗口从 419 行（全网）降到 12 行。但网元映射不能照抄 4G：`nbi_id` 与工参 `gnb_id` 不是同一套编号（工参 `6245` → 网元 `5245`、`6004` → `4004`，差值无规律），只能按**网元名忽略大小写精确匹配**（UME 写 `Liscr`、工参写 `LISCR`）。重名站（`Orange` 同时命中 `Orange` / `Orange Tower` / `Qcell Orange`）不猜，回退全网。
+- **5G 是小区级（2026-11-25 第二次修正）**：小区维度的正确组合是 `grouplayer="me,NRRadioInfrastructure,NRPhysicalCellDU"` + `basemotid="NRPhysicalCellDU"`，**两者同时给**。只写 `grouplayer="me"` 时 UME 不报错、静默按网元级返回（同站同窗口 288 行 → 3351 行全网）；只下沉 `NRCellDU` 又只回 11 个时间片 —— 这两条都曾让人误判"5G 只能到网元级"。实测单站单日 288 行 = 96 时间片 × 3 小区，每小区一条完整曲线。
+- **5G 小区 ↔ 工参的映射键**：UME 返回 `NRPhysicalCellDU-1/2/3`，工参是 `站名-S0/S1/S2`，不能按顺序猜。用 `masterOperatorId`（形如 `61807-4004-50`）的**尾号 = 工参 `cell_id`** 映射（Vai Town 50/51/52、Orange 21/22/23 两站实测吻合），映射不到才退回 UME 原始标签并进 `warnings`。
+- **5G 的 payload 必须模板驱动**：5G 模板的 24 项指标之间存在派生依赖，只发本页需要的 9 项会被 UME **HTTP 499 `0001619999` 即时拒绝**（0.0s，不是超时）。因此 5G 每轮先 `GET /api/pm-model/v1/templates/detail?id=1638004472759` 拿模板，用模板的 items / position / position1 / motid / nfctid / indexfillingtype 原样构造（进程内缓存 10 分钟），构造逻辑在 `backend/services/ran/ran_ume_pm_template.py`。**不要**给 5G 硬编码指标清单。
+- **模板驱动的两个反直觉点**：① `showbusinesscolumn` 必须**强制 True**，不能跟随模板（模板返回 False）—— 关掉后 UME 不返回 `masterOperatorId` / `nrCarrierGroupId` 等小区维列，映射只能退化成 `NRPhysicalCellDU-1/2/3`；② `relative` 用 **-7**，-1 时 UME 只回窗口第一个时间片（看起来像"5G 没有历史数据"）。
+- **扇区与载波（5G 同样适用）**：4G 扇区号取 `app.ngi_lte_cell_param.sector_id`，5G 取 `app.ngi_nr_cell_param.sector_id`（该字段确实存在，此前代码误写 `NULL AS sector_id` 导致 5G 永远扇区 0，2026-11-25 已修）。一个扇区可挂多个频点小区（Wood Camp2 Sector 1 有 801 / 1815.1 / 1832.2 / 2310 / 2670 五个），载波按 `dl_center_freq` 区分，一条曲线一个小区，颜色按频点固定。实测约 13% 的 UME 小区不在工参里（928/6950），这类小区按名称后缀推断扇区并在 `warnings` 中显式列出。
+- **指标**：`1638004469342` DL PRB、`1638004469343` UL PRB、`1638004469330` DL 业务量、`1638004469331` UL 业务量、`1638004469332` DL IP 吞吐、`1638004469785` UL IP 吞吐、`C373384373` 活跃用户数；单用户速率 = 吞吐 ÷ 活跃用户（网络侧估算）。注意 `C373384373` 在日粒度会被 UME 静默丢列，15 分钟/小时粒度正常返回，服务端会校验列存在性，缺列直接报错而不是当空数据。
+- **接口**：`GET /api/site-kpi-rt/sites`（站点搜索）、`POST /api/site-kpi-rt/query`（起异步任务，返回 `job_id`）、`GET /api/site-kpi-rt/jobs/{job_id}`（轮询进度/结果）、`POST /api/site-kpi-rt/cache/clear`、`GET /api/site-kpi-rt/health`。仍用异步：单网元路径约 8s，但回退全网时 8 天窗口可达数分钟，超过前端 axios 的 120s 超时。
+- **按页刷新**：`App.tsx` 的 `AR_PAGE_DEFAULTS` 登记 `site_kpi_rt: 300`，并进 `AR_INPLACE_REFRESH_PAGES`（图多，整页重挂载会闪白）。
+
+## 42b. PRTG 核心链路健康度看板（`?page=prtg_links`，2026-11-24 新增）
+
+**一句话**：把 PRTG（GRAPHER-ISP）25 个传感器（24 个 SNMP Traffic 64bit + 1 个 Ping）的链路状态、流量、错误 / 丢弃、可用率与容量利用率放到一张表里，点任意链路看该链路的时序与状态事件。数据只读，KPI 是时点快照，趋势 / 详情时序随上方时间范围变化。
+
+### 42b.1 数据链路
+
+| 环节 | 位置 |
+| --- | --- |
+| 上游 | PRTG API（只读账号；传感器目录 / 通道采样 / 状态事件） |
+| 采集 | `backend/services/prtg/runner.py` + `collector.py`，线程 **60 秒**一轮；原始采样保留 90 天 |
+| 聚合 | `backend/services/prtg/collector.py` 的 `aggregate()`：60 秒 → 5 分钟 → 1 小时，供 24h / 7d / 30d 使用 |
+| 查询 | `backend/services/prtg/dashboard.py` |
+| 路由 | `backend/routers/prtg.py`：`/api/prtg/overview`、`/api/prtg/links`、`/api/prtg/links/{sensor_id}`、`/api/prtg/collector/status` |
+| 前端 | `frontend/src/pages/PrtgLinkHealth.tsx` + `pages/prtg/`（模型 / 图表 / 详情） |
+
+时间范围与底层表：`5m` 读 60 秒原始表（近 5 分钟、1 分钟桶）、`24h` 读 5 分钟聚合、`7d` / `30d` 读小时聚合（聚合同时读实时与回填历史）（`backend/services/prtg/dashboard.py` 的 `WINDOWS`）。
+
+### 42b.2 口径（页面「数据口径说明」逐条对应）
+
+1. **流量**：`Traffic In / Out / Total` 原始单位是 byte/s，后端按 `×8÷1e6` 换算为 Mbps 后下发（`total_mbps` / `in_mbps` / `out_mbps`）；前端只格式化，不重算。字典实测 `Total = In + Out`，但 Total 列直接展示接口值，不由前端相加。
+2. **Errors / Discards / Unicast**：PRTG 给的是**区间速率**（count/s），不是累计计数器，**不做差分**（`docs/workspace/prtg-channel-dictionary.md` 第 3 节）。
+3. **利用率**：只在有 `capacity_mbps` 时计算，按 `max(In / Cin, Out / Cout) × 100`；**不用 Total / 容量**（会翻倍）。容量缺失时接口返回 null，界面显示「—」。
+4. **容量**：PRTG 不提供容量，`network_link_capacity.capacity_source` 只允许 `snmp_ifspeed` / `manual`；缺失时容量列显示「待补全」，且不参与利用率。
+5. **状态**：`Up / Unusual / Down / Unknown` 是 PRTG 的时点快照；Unknown 表示未给出可识别状态，不代表正常。
+6. **可用率**：取传感器详情的累计 `uptime_pct`，不是按所选时间窗重算。
+7. **数据新鲜度**：`data_age_seconds = 当前时间 − collector.last_success_at`；超过 **5 分钟**页面顶部常驻过期告警（这是异常，不是可收起的口径解释）。
+8. **缺失值**：接口返回 null 的字段一律显示「—」，**不补 0** —— 0 表示确实是 0，null 表示取不到。
+9. **时间**：所有时间戳为 **UTC**（接口带 `Z`），页面用 `frontend/src/datetime.ts` 统一格式化。
+
+### 42b.3 页面构成
+
+- **筛选条**：时间范围（5 分钟 / 24 小时 / 7 天 / 30 天）+ 刷新 + 数据新鲜度标签 + 生成时间。
+- **KPI 卡（6 张）**：传感器总数 / Up / Unusual / Down / 平均可用率 / 异常链路数。标题旁 `ExplainIcon` 讲这一张卡，数字本身由 `StatCard.explainText` 挂 `ExplainPopover`。
+- **趋势图**：`overview.trend[].total_mbps` 自绘 SVG 折线（`pages/prtg/PrtgCharts.tsx`），不嵌 `chart.png`、不引入图表依赖；图例中英随 `t()` 切换。
+- **链路表（25 行）**：状态 / 设备·传感器 / 站点 / In / Out / Total (Mbps) / Unicast / Errors / Discards / 可用率 / Last Down / 容量 / 利用率。列头统一 `ExplainIcon`，每个数字 / 时间单元格 `ExplainPopover`，气泡只引用接口字段（采样时间、样本年龄、capacity_source、match_status 等）。
+- **详情弹窗**：点行打开 `DraggableClickModal`，展示传感器基础信息、全部站点映射、最近 20 条状态事件，以及 `series` 的 `-1 / 0 / 1` 三条时序（原始 byte/s 在图上换算为 Mbps，仅单位换算）。
+- **口径说明**：`CalcChainNote`，默认收起（`AGENTS.md` 三.3b）。
+- **按页刷新**：`App.tsx` 的 `AR_PAGE_DEFAULTS` 登记 `prtg_links: 60`，与采集节拍一致。
+
+### 43.4 已知边界
+
+- 只有 25 个传感器；Ping 传感器的通道集与 SNMP Traffic 不同，本页不把它当流量链路解读。
+- `series` 只取 `-1 / 0 / 1` 三条通道画图；Unicast / Errors / Discards 的时序在详情接口里已返回，但本页只做当前值展示（避免图上多量纲混画）。
+- 异常链路数取「未结束的异常事件涉及的去重传感器数」，与「状态为 Down 的传感器数」不是同一口径，两者不必相等。
+- 采集器失败时页面保留上一轮数据并在顶部常驻报错 / 过期提示，不伪造 0 值。

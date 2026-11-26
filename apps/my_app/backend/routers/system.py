@@ -22,9 +22,17 @@ router = APIRouter(tags=["system"])
 
 @router.get("/api/health")
 def health_check():
-    """健康检查：PG 模式直接报告 postgresql，避免 sqlite 文件存在性造成误导。"""
+    """健康检查：PG 模式直接报告 postgresql，避免 sqlite 文件存在性造成误导。
+
+    2026-11-23：附带数据库熔断器状态（只读内存快照，**不访问数据库**）。数据库不可用时
+    status 为 "degraded"，但 HTTP 仍返回 200 —— portal-ctl 的 status 与看门狗类探活
+    只关心进程是否在服务；若返回 5xx，数据库一抖就会触发后端重启，反而扩大故障。
+    """
     if DB_MODE == "pg":
-        return {"status": "ok", "db_mode": "pg", "database": "postgresql", "db_exists": True}
+        from backend.db_guard import breaker as _pg_breaker
+        db = _pg_breaker.snapshot()
+        return {"status": "ok" if db["state"] == "closed" else "degraded",
+                "db_mode": "pg", "database": "postgresql", "db_exists": True, "db": db}
     return {"status": "ok", "db_mode": "sqlite", "database": str(DB_PATH), "db_exists": DB_PATH.exists()}
 
 

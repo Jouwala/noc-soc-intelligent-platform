@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-22.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-26.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -10,7 +10,7 @@
 
 - [1. Platform Overview](#1-platform-overview)
 - [2. General Usage](#2-general-usage)
-- [3. Task Manager Deep Dive (87 tasks)](#3-task-manager-deep-dive)
+- [3. Task Manager Deep Dive (88 tasks)](#3-task-manager-deep-dive)
 - [4. Pages Guide](#4-pages-guide)
 - [5. Ops & Troubleshooting](#5-ops-troubleshooting)
 - [6. FAQ](#6-faq)
@@ -70,7 +70,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 
 | Group | Why grouped |
 | --- | --- |
-| **u** | RAN UME single-account session; tasks run serially (parallel runs kick the session). Added 2026-11-07: ran_element_management_sync at 23:00 (RNM element table into PG), sharing the zte_ume session with ran_ume_daily at 02:00 |
+| **u** | RAN UME single-account session; tasks run serially (parallel runs kick the session). Added 2026-11-07: ran_element_management_sync at 23:00 (RNM element table into PG), sharing the zte_ume session with ran_ume_daily at 02:00. Added 2026-11-24: ngi_param_coverage_sync on Sundays 02:00 (NGI parameters and coverage grid into PG; own host and own ngi credential, no UME session involved) |
 | **n** | NMS / eFlow API / remote systems: independent but conservatively grouped |
 | **v** | VMAX portal (local 8790 single-session proxy): the three tasks share one session and must serialize; split out of group n on 2026-09-18 so long tasks no longer block them |
 | **m** | Housekeeping tasks: EWS mail session + screenshot/WhatsApp file dependencies |
@@ -83,7 +83,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 
 > ⚠️ **New tasks MUST also be registered in `GROUP_TASK_MAP` in worker_watchdog.py** — declaring them only in TASK_SPECS leaves them pending forever. This accident happened four times (finebi_report_sync / whatsapp_send_ext / sp_email_details / the olib_soc and vmax_multi_data_sync tasks found on 2026-09-18).
 
-### 3.3 Full task catalog (87 tasks)
+### 3.3 Full task catalog (88 tasks)
 
 | Task | task_id | Default cron | Group | Workflow script |
 | --- | --- | --- | --- | --- |
@@ -174,6 +174,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | IPT Site Power Collect | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN Element Management Sync | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
 | RAN KPI 15-Min Sync | `ran_kpi_15mins_sync` | `6,21,36,51 * * * *` | u | `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync` |
+| NGI Parameter & Coverage Sync | `ngi_param_coverage_sync` | `0 2 * * sun` | u | `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync` |
 
 Workflow & maintenance notes per task:
 
@@ -369,8 +370,9 @@ Workflow & maintenance notes per task:
 - Assign delay of 15 minutes: the alarm must have been alive for at least 15 minutes before it is assigned and notified to WhatsApp (business rule: "assign only after the alarm has lasted more than 15 minutes") — it is NOT dispatched the moment it raises; the delay lets short transient breaks clear by themselves. Set it to 0 to restore immediate dispatch
 - Dry-run (dry_run) by default: match + record only, no real assign; turn it off on the Task Config page once verified
 - When the 99933 correlation cannot be determined (fiber only has an ME-derived site name that differs from cmdb, e.g. luogan/luogon) the alarm is treated as "no correlation" and still assigned, with the count logged under correlation_undetermined — never let a name mismatch silently block assignment indefinitely
-- When site resolution fails (site absent from cmdb, e.g. Tokadeh) the TT cannot be created automatically: record N and post a "manual handling required in eFlow" notice to the group, once per alarm (suppressed via send_status) so nothing is silently dropped
+- When site resolution fails (site absent from cmdb, e.g. Tokadeh) the TT cannot be created automatically: record N and post a "manual handling required in eFlow" notice to the group, at most once per alarm per 6 hours (time-boxed suppression via notified_recently; a re-raised alarm under a reused key is reported again) so nothing is silently dropped
 - A site resolution failure means the site is missing from cmdb (the ME / site name is not found there), which is a cmdb gap, NOT a task error (2026-11-17): when every failure in a round is of this kind AND the cmdb index itself loaded fine, the result is recorded as pending_cmdb (success=true, the notice stays in message) and Run History shows an amber "Needs cmdb" notice instead of a red Error; fixing the site/ME mapping in cmdb restores assignment on the next round. An empty cmdb index (fetch failed) or any assign failure still counts as a real failure
+- Upstream created no TT (2026-11-25): the assign API returns success but the ttid is still empty (including the no-TT cases caused by an abnormal eFlow ttstatus) — this is an eFlow-side dispatch problem, unrelated to this task script. When every failure in a round is of this kind the result is recorded as upstream_no_tt (success=true, no error), Run History shows an amber No-TT-upstream notice instead of a red Error, and one WhatsApp notice per alarm asks for a manual TT in eFlow (at most once per 6 hours); the next round retries automatically. A real API error (HTTP 5xx / timeout / ok=false) or a mix with real failures still counts as failed
 - Fiber assign must carry the numeric site ID + site name; passing only the ME name makes the API return success without creating a TT (measured lesson)
 - Fiber assign is intermittent, so it retries and only treats success as confirmed when ttid is found (never trusts status:true)
 - Skip alarms whose upstream ttid is already set: eFlow's own assign rule may have created the TT first, otherwise duplicate TTs are created (measured: two Zardun alarms)
@@ -1838,6 +1840,30 @@ Workflow & maintenance notes per task:
 - WARNING: an export with 0 rows is treated as an empty state and skipped, not failed (same convention as cnn_kpi_sync_5mins)
 - The only consumer is ?page=ran_kpi_15mins (routers/ran_kpi_15mins.py + the read side of services/ran_kpi_assurance/ran_kpi_15mins_service.py)
 
+#### NGI Parameter & Coverage Sync（`ngi_param_coverage_sync`）
+
+- Default cron: `0 2 * * sun`　|　worker group: **u**
+- Workflow script: `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync`
+
+**What it does**: Sundays at 02:00, export two datasets from the NGI planning platform (10.100.29.17:28001) into PostgreSQL: LTE/NR engineering parameters (8,227 + 101 cells) and the 50 m coverage grid (178,370 cells)
+
+**Workflow & data flow**:
+
+1. Log into the NGI planning platform: auth_manager.get_auth with the ngi credential group (a different server from RAN UME; accounts are not interchangeable). Login uses the same uportal/oauth2 RSA password + Z-AUTH-CODE flow
+1. Parameters: GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 returns ProjectData.zip. The workbook has a 3-row header (Chinese notes / English notes / field names): drop the first two rows, use row 3 as the header, data starts at row 4
+1. SectorID generation: cells sharing a site and a center frequency are numbered by Azimuth ascending. LTE fills blanks only (7,054 measured) and keeps existing values; the NR parameter file has no such column, so it is generated from scratch per gNodeBID + DLCenterFrequency; sector_source records file / derived
+1. Coverage: GET taskmanager/gettasklogbytaskid?taskid=1647 for the latest evaluation taskLogId -> POST commonGis/getLayerFiles for the layer hash and legend -> POST MapServerService/exportMap(CSV) -> poll exportMapChecking -> downloadExportMapFile for CSV.zip
+1. Persist (explicit BEGIN/COMMIT transactions): upsert parameters by cell_uid into app.ngi_lte_cell_param / app.ngi_nr_cell_param and prune cells missing from this run; delete-then-insert the grid per kpi into app.ngi_coverage_grid; one app.ngi_sync_log row per stage
+
+**Maintenance**:
+
+- WARNING: exportMap MUST echo back the legend returned by getLayerFiles (name/showtitle/range, seven bands). With only taskID + renderType + layerName + colDes the server still returns a token but the job stays in processing forever (measured 2026-11-24: four jobs still processing after 30 minutes); with the legend it finishes in four polls (~15 s)
+- WARNING: download goes through downloadExportMapFile (form {mapType, params: token}), not exportMapChecking; the file name is always CSV.zip, matching saveFile() in the portal gis3d.js
+- WARNING: minimum rows: NGI_MIN_LTE_ROWS=5000 / NGI_MIN_NR_ROWS=50 / NGI_MIN_GRID_ROWS=50000. Below that the run fails without writing, so a partial upstream response cannot replace last week good data
+- WARNING: belongs to group u (RAN-side data collection), queued with ran_ume_daily at 02:00; it uses its own host and credential group, so it shares no session with UME and cannot kick it. A new task MUST also be registered in GROUP_TASK_MAP (worker_watchdog.py)
+- The schema is created idempotently by DDL inside the service (CREATE TABLE IF NOT EXISTS) - no Alembic needed. When changing ngi_store.FIELDS, update the DDL and indexes too; tests/test_ngi_param.py compares both sides
+- Troubleshooting order: check app.ngi_sync_log first (status / message / detail; the coverage row also carries task_log_id and run_id), then the task execution log; for session issues test the ngi credential in Settings -> Credentials
+
 ### 3.4 Reliability mechanisms (timeout / retry / self-healing)
 
 | Mechanism | Description |
@@ -2425,6 +2451,17 @@ LTE packet loss board (RAN UME SDR / IPRAN IPPD): last 7 complete calendar days 
 - This page used to carry two hand-written popovers (their own copy button, theme colours and emphasis rendering); both were deleted in favour of `components/MetricExplain`. The drill "N rows" bubble now states that it is the count after the search-box filter and that the API truncates at a cap
 - **Site-type filter (2026-11-17)**: the dropdown on the right of the Packet Loss Status bar filters by the master-data site type (ERA / COOL / NORMAL, from `eflow_site.site_type`; what you call `COOLI` is stored as `COOL`) and **every number on the page follows** — total sites, Affected Sites, the six status cards, the pie, region bars, daily trend, Top sites, map dots and legend, and the drill-down detail all switch to the selected grade. **It opens on NORMAL** (the user caliber); pick `All` for the whole network. The two numbers in brackets are "sites covered by packet-loss monitoring / sites in the master data", always the full distribution (unchanged when you switch): ERA `197/216`, NORMAL `520/600`, COOL `0/64` as measured. **COOLI being 0 is not a missing feature**: all 64 COOL sites are in the UME inventory, but packet loss comes only from the `SDR_IPPD` / `ITRAN_IPPD` IP-transport templates and those sites have no reading at all in the source table `packet_loss_data` (0 hits by code and by fuzzy name), so the grade is greyed out. Sites that cannot be matched in eflow_site by code or name fall under "Unmapped site" (4), keeping 197 + 0 + 520 + 4 = 721 consistent with "All"
 
+#### prtg_links（`prtg_links`）
+
+PRTG core link health board: reads the 25 PRTG sensors (24 SNMP Traffic 64bit + 1 Ping) in GRAPHER-ISP and shows link status, traffic, errors / discards, uptime and capacity utilization for the selected window. Click any link for sensor details, site mappings, recent status events and the In/Out/Total series.
+
+- The KPI row is a point-in-time snapshot: total sensors / Up / Unusual / Down, average uptime (arithmetic mean over sensors that have an uptime sample) and links with anomalies. Freshness comes from the last successful collection of the collector; anything older than 5 minutes raises a persistent stale banner
+- Time range: 5 minutes / 24 hours / 7 days / 30 days. 5 minutes reads 60-second raw samples, 24 hours reads 5-minute aggregates, 7 / 30 days read hourly aggregates; the range only affects the trend and detail series — the KPIs do not move with it
+- In / Out / Total are Mbps (converted from raw byte/s by the backend). Errors / Discards / Unicast are PRTG interval rates (#/s), not cumulative counters, so the frontend does not difference them
+- Capacity comes from snmp_ifspeed / manual and shows "To be completed" when missing. Utilization is max(In/Cin, Out/Cout), never Total/capacity, and shows "—" when capacity is missing
+- **Every column header has an ⓘ explaining the column, and hovering a number shows the API fields and sample time of that cell** (2026-11-24). Unavailable values show "—", never 0; all times are UTC
+- The suggested per-page refresh interval is 60 seconds (matching the PRTG collection cadence) and can be turned on or off from the top bar
+
 #### Battery Dashboard（`battery`）
 
 Site battery health / SOC / charge-discharge status and alarm details.
@@ -2525,6 +2562,7 @@ PS CN KPI 15-minute board: **UME only**, overlaying D0/D1/D7 on a 15-minute axis
 - Every card plots exactly one metric (Used/Authorized, 2G/3G/4G/5G and each RG group get their own card) with three lines: D0 today, D1 yesterday and D7 seven days ago; colour and line style both identify the day (D0 green solid / D1 blue dashed / D7 cyan dotted)
 - The card badge states the source granularity: xGW CPU, xGW License and 3G FDD are **native 15-minute**; Data Subscribers, 4G FDD and RG are 5-minute data aggregated into 15-minute buckets; xGW throughput/session capacity and DNS are **hourly source** (points only on the hour)
 - Ratios and percentages use the arithmetic mean within the bucket (not weighted, not peak); traffic bytes are summed per bucket and /1e9 to GB; gauges such as subscriber counts sum network elements per timestamp first and then average the samples in the bucket
+- Traffic cards (RG-6/11/12/30, 4G FDD) are drawn only when the 15-minute bucket holds **all three 5-minute samples**: upstream lags about half an hour, so the newest bucket usually has only two of three samples and drawn as-is it looks like "the last point fell by a third" (measured 2026-11-23: RG-6 1.357 vs about 2.0 for a full bucket). Incomplete buckets are not drawn at all and appear once the next sync fills them, so these cards ending one slot earlier than the mean-based cards is expected
 - D0 ends at the latest collection time, so a shorter tail than D1/D7 is collection lag, not missing data; D7 appears only after eight days of accumulated history
 - "Data caliber notes" is collapsed by default (click to expand); "Export Excel" expands one sheet per widget by clock time
 
@@ -2556,6 +2594,8 @@ Site map: alarm/ticket distribution, topology lines, region polygons and multi-d
 
 - Region dropdown + layer tags to filter; click a legend item to hide that layer; time supports segments and custom range
 - The top-left "Layers" panel has three checkboxes — Place labels / Roads / Personnel — all **off by default**: place labels (17k names in the tiles) would bury the sites, and personnel are registered positions (not live GPS), so turn them on only when needed
+- In the bottom-left legend's "Site Class" group, under the VIP / Normal dot rows, there is a "Site Classes ▸" row (2026-11-24): expanding it shows the same class list as the Person Location Map (Site Category / VIP Site / Hub Site / TRM Type, values and counts read from the database). **Nothing is selected by default**; click a class to ring those sites on the map (union within a group, intersection across groups), click again to unselect, and "Clear" returns to nothing shown. It starts collapsed so the legend does not cover the top-left Layers panel or the county ranking (while expanded the ranking is hidden and comes back when you collapse the legend)
+- Class rings are outline-only with an almost transparent fill, so they **do not hide the sites' alarm colors**, and they do not block clicking a site to open the drawer (clicks pass through to the site dot)
 - The first cell of the "Advanced Filter" panel is a "Site Name" input: fuzzy match on a name fragment (case-insensitive); the rest are dropdowns for region/grade/form/FME etc.
 - Statistics follow the filter: site total and the ERA/COOL/NORMAL grades, the map legend, the county block colors and county labels, and the "MAINTENANCE ALERTS" county ranking panel are all recomputed from the filtered sites instead of showing the full-set numbers;
 - Click a site to open the right drawer: four tabs, searchable, exportable to Excel
@@ -2566,6 +2606,27 @@ Site map: alarm/ticket distribution, topology lines, region polygons and multi-d
 - Each of the "2G KPI / 3G KPI / 4G KPI" tabs now shows **two charts**: network quality (availability, setup and handover success rates — ratios sharing one % axis) and **traffic volume trend** (CS traffic in Erl, data volume in GB, throughput in Mbps, 4G RRC users, outage minutes — **one y-axis per unit**). Each chart has its own metric picker, and the volume chart already plots 3 series by default instead of hiding them in a dropdown
 - The volume chart follows the drawer's "Statistics range" (since 2026-11-04). Before that the KPI series was fixed at 60 days and ignored the 7/30/90/180 switch — now fixed
 - When a site sits under several BSC/RNC the upstream writes one row per ID per day: the API folds them by calendar day, **summing traffic** into the site total and **averaging ratios**. The ⓘ on each chart title, the table column headers and every number in the daily table are hover-explainable, and the text comes from API fields — nothing is recalculated in the browser
+
+#### location（`location`）
+
+Location analysis: centre the map on a coordinate, inspect the nearest ring of sites and the nearest MW / fiber links, and query a subscriber number to see its network track and VMAX diagnosis.
+
+- Four coordinate entry points: URL lat / lon (a link in a QA answer opens the page directly), manual input, browser geolocation (https only), and Ask the assistant — POST /api/portal-qa/ask and parse the coordinate from the answer text
+- The basemap is the same self-hosted PMTiles offline archive as ?page=gis (/tiles/liberia.pmtiles), with no public-internet dependency. Place labels and roads are off by default and can be enabled in the Layers panel at the top left. The © OpenStreetMap credit at the bottom right is the required attribution for the tile data, not an online request
+- Find subscriber sits at the top right of the map: enter a phone number to see its track. Searches default to the **last 3 hours**; the start/end time can be changed under the search box (up to 24 hours back) and applies when you click Search. To locate by coordinates use the full control bar at the **bottom of the page** (coordinates, radius, site count, QA assistant) — the coordinate box that used to sit at the bottom right of the map was removed on 2026-11-25 to make room for the layer legends. The title and methodology card is the last row of the page
+- The Layers panel also has three network layers: Coverage RSRP / LTE cells / 5G NR cells. They are **all off by default and downloaded only when turned on**, so the page still opens fast; each has its own legend at the bottom right of the map (click the title to collapse it)
+- Coverage RSRP: the NGI coverage evaluation 50 m grid (about 178k bins), coloured in 7 RSRP classes (green = good, red = poor, ordered by the measured average of each class). Zoom to 13+ to see individual bins; click a bin for RSRP, good ratio, samples, serving cells and PCI. "Zoom to coverage area" in the legend fits the map to the covered area
+- LTE cells / 5G NR cells: each cell from the NGI parameter export is drawn as a **65° sector** pointing along its azimuth; **each frequency has its own colour**, and on the same site low bands are drawn larger and high bands smaller so every layer stays visible. Indoor cells and cells without an azimuth are drawn as small dots. Sector size **adapts to site spacing**: small in dense urban areas, larger in rural areas, so neighbouring sites never overlap at any zoom level; at country view a minimum visible size is kept
+- Hover a sector to see the site name, site ID, sector and every carrier in that sector (frequency / band / PCI / cell name); click it for the cell details (PCI, TAC, frequency / EARFCN, height, downtilt, cover type and more) with the sector outlined. Each frequency in the legend can be shown or hidden on its own, or use All / None
+- 5G NR uses a different colour set with a **dashed outline**, is drawn above LTE and is one size smaller than the LTE sectors of the same site; with both layers on, hovering or clicking where they overlap shows the 5G cell only. With a cell layer on, clicking a sector opens the cell and clicking empty map opens the coverage bin
+- All three network layers come from the weekly NGI sync (ngi_param_coverage_sync, Sundays 02:00); the browser downloads each only once per week, and a page refresh after a new sync shows the new data
+- The nearest ring takes the sites inside the chosen radius sorted by distance and keeps the first N. When fewer than three fall inside, the radius is widened to the third nearest site; the dashed circle and the list use the widened radius and a note states it below the controls
+- Site colours use exactly the same rule and values as ?page=gis (real-time alarm / history / VIP / normal). Clicking a site opens the same drill-down drawer as the GIS page (basic info + KPI charts + detail tabs)
+- MW links come from the same KML links as the GIS page sorted by point-to-segment distance; the nearest one is thicker. Clicking a link opens the "link details" drawer with the same fields as clicking a link on ?page=mwRealTime (capacity / node IP / interface / TX-RX throughput and utilization / 24H trend / interface details)
+- The two MW datasets (KML and live KPI) only partly overlap: when a link cannot be matched the drawer says "no KPI details" and keeps the GIS-side structure — it never substitutes another link, and never paints "unknown" green
+- Fiber links are the site pairs digitised from OLIB topology PDF page 1; they are connection schematics with no live metric, so clicking one only shows endpoints, type and distance
+- Entering a subscriber number runs the same VMAX diagnosis as ?page=vmax_user_query; the map plots dwelling cells that have coordinates in the **reversed** CCA usertrack order, marks the **first row (latest) with a person icon** (the first table row shows 👤), and auto-fits the map to the track. The card shows the query window, and the Last seen column comes from start_time in the VMAX 1100/1300/1301 records (— when nothing matches). Clicking a cell or a table row opens the right drawer with Subscriber Info / Terminal Info / User Track Cells / Evidence timeline / Fault analysis / Root cause & recommendations
+- The top-bar per-page refresh works in place on this page: the map is not remounted, only sites / MW / fiber / subscriber data are refetched quietly
 
 #### Realtime Alarm Map（`realtime_alarm`）
 
@@ -2584,7 +2645,8 @@ Person Location Map: the registered position of field staff (map pins) + the dis
 
 - Two-column layout: map on the left, KPI 2x2 + two charts on the right; `?maponly=1` leaves the map alone
 - Click a person to select them and slide open the drill-down drawer from the right; clicking blank map area or anywhere outside cancels the selection (search / paging / tab switches inside the drawer do not close it accidentally)
-- The persistent pin badge has two lines: name + phone on the first, "sites handled | open WOs | open PMTs" on the second
+- The map search box finds people and sites alike: picking a person narrows the map to that person only (other people are hidden); picking a site centres the map on it and keeps other sites visible
+- The name/phone badge on each pin is hidden by default and appears on hover (two lines: name + phone on the first, "sites handled | open WOs | open PMTs" on the second); pins are small by default and enlarge when selected so the current selection is obvious
 - Phone numbers are shown in full (not masked); some upstream records were already stored as `231****7417`, and the backend restores them uniquely by "same name + same last 4 digits" from the site master — the ones it cannot restore stay masked, which is a data fact
 - Site coloring is fully aligned with `?page=realtime_alarm` (same color source and same grading): both pages look at the same sites from the same snapshot
 - PMT shows — rather than 0 when unavailable; the per-person badge sum is not the full set (see the filter-bar info note for the caliber)
@@ -2725,6 +2787,7 @@ VMAX complaint diagnosis: enter a subscriber number and time window to answer "w
 - **Complaint-type tabs** (not a dropdown) come first: All / Voice / OTT voice & video / Video / Game / Slow data. Switching them **does not re-query** — it only changes the weighting and which chain gets judged, so switching is instant
 - The three-line layout is deliberate: query bar → complaint-type tabs (what the user is complaining about) → view tabs (diagnosis / traffic / connection / radio). The hint under the complaint tabs always states which chain is being judged right now
 - The "Voice" tab judges **CSFB and VoLTE**. The 1100 SGs interface records are the evidence source: SGs location update count, CS Fallback Triggered, Extended Service Request, paging, timeout/failure and QCI=1 bearers are all counted, plus the fallback chain (S1-MME / SGs interleaved by time) and the fallback duration
+- The diagnosis view also has a "Data call dropped by a circuit-switched call" card. It pairs each CS Fallback Triggered release with the next TAU and lists the cell left, the cell returned to, the seconds away, mobile-terminated or not, and the bearer cause on return. The fallback duration on the voice card is the signaling procedure itself (usually a few milliseconds), not how long the phone was off 4G. The card is shown for All / Voice / OTT, and for other complaint types only when a fallback actually happened
 - CSFB fallback time over 2 s is flagged; when the window has CSFB activity but **zero SGs records**, the card raises an explicit warning instead of quietly reporting success — that usually means the SGs interface is not reporting
 - The "Game" tab is kept on purpose: XDR bills really do carry app names such as egame / E-GAME. Game detection is keyword-based (so new titles can be added without code changes), and **app stores are blacklisted** (palmplaystore / googleplay / app store / huawei_appgallery) — otherwise "opened the store" would be counted as "played a game"
 - **Capability boundary — OTT voice/video (WeChat, WhatsApp) cannot be judged at the application layer**: this platform has no SIP/RTP signaling. The OTT card therefore answers only "was there a call" and "how good was the network during the call" (duration, downlink RTT, RTT jitter, retransmission) and **cannot answer "the other side rejected me / my call failed to connect"**. That banner is rendered above the conclusion on purpose — please do not read the OTT card as a call-failure verdict
@@ -2754,6 +2817,7 @@ VMAX Intelligent Diagnosis Workspace: complaint-driven single-page narrative —
 
 - Use the full number with the 231 prefix (e.g. 231777777322), digits only; the local 9-digit format is not matched upstream
 - Complaint type defaults to "All", switching only re-weights and reorders — it never hides cross-module evidence
+- Zone 2 opens with "Data call dropped by a circuit-switched call": the same card as the user-query page. It builds the leave-4G-until-next-TAU timeline from the 1100/1300/32 rows already fetched, and adds non-4G dwelling cells plus cell-level OTT findings from CCA. "Copy conclusion" copies that text
 - Chain node status takes the worst of its metrics: no data shows "no data to judge", never "normal"
 - Every metric answers five parts: why it matters / what was observed / when it occurred / possible impact / what needs verification
 - Raw XDR / remote radio records / TCP load only when "View evidence" is clicked

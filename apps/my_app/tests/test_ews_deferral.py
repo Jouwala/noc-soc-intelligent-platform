@@ -217,5 +217,180 @@ def test_run_task_defers_without_calling_func(monkeypatch):
     assert saved and saved[0]["trigger"] == "deferred"
 
 
+# ------------------------------------- 细粒度门禁（带同步/群发副作用的任务）
+
+def test_fine_grained_ids_are_excluded_from_whole_task_defers():
+    """细粒度与整轮门禁必须互斥：带副作用的任务不能整轮延后。
+
+    否则同步和群发会跟着一起停，这正是 2026-11-25 加细粒度门禁要修的问题。
+    """
+    from backend.task_registry import EWS_DEFERRABLE_IDS
+    assert not (ed.FINE_GRAINED_TASK_IDS & EWS_DEFERRABLE_IDS), (
+        "细粒度任务不得同时被整轮延后: "
+        f"{sorted(ed.FINE_GRAINED_TASK_IDS & EWS_DEFERRABLE_IDS)}"
+    )
+    assert ed.FINE_GRAINED_TASK_IDS == {
+        "sp_email_details", "sp_online_report_send", "fw_kpi_sync", "ume_in_osg_report",
+    }
+
+
+def test_fine_grained_skips_only_when_down_and_fresh(monkeypatch, deferrable_task):
+    _patch_probe(monkeypatch, _probe())
+    ed.set_current_trigger("scheduled")
+    assert ed.should_skip_email_send("sp_email_details") is True
+    # 不带副作用的任务不参与
+    assert ed.should_skip_email_send("liberia_email_1h") is False
+
+
+def test_fine_grained_fails_open(monkeypatch):
+    """通道正常 / 探测过期 / 状态缺失 / 手动触发 —— 一律照常发信。"""
+    ed.set_current_trigger("scheduled")
+    _patch_probe(monkeypatch, _probe(status="up", kind="ok"))
+    assert ed.should_skip_email_send("fw_kpi_sync") is False
+    _patch_probe(monkeypatch, _probe(minutes_ago=ed._MAX_PROBE_AGE_MIN + 5))
+    assert ed.should_skip_email_send("fw_kpi_sync") is False
+    _patch_probe(monkeypatch, None)
+    assert ed.should_skip_email_send("fw_kpi_sync") is False
+    _patch_probe(monkeypatch, _probe())
+    ed.set_current_trigger("manual")  # 人可能刚改完密码要验证
+    assert ed.should_skip_email_send("fw_kpi_sync") is False
+
+
+def test_fine_grained_env_kill_switch(monkeypatch):
+    _patch_probe(monkeypatch, _probe())
+    ed.set_current_trigger("scheduled")
+    monkeypatch.setenv("EWS_DEFER_ON_DOWN", "0")
+    assert ed.should_skip_email_send("sp_online_report_send") is False
+
+
+def test_skipped_email_result_is_resendable():
+    """跳过的发信结果必须带 EWS_DEFERRED，能被补发链认领、不被 auto_retry 重投。"""
+    from backend.services import auto_retry as ar
+    res = ed.skipped_email_result("fw_kpi_sync")
+    assert res["success"] is False and res["deferred"] is True
+    assert er.is_ews_resendable(res["error"]) is True
+    assert ar._is_excluded_from_retry("fw_kpi_sync", res["error"]) is True
+    # 即便探测详情含 "timed out after" 这类不可补发关键字，标记仍优先
+    assert "仅跳过发信" in res["message"]
+
+
+def test_apply_email_deferral_preserves_side_effect_results():
+    """顶层 deferred 提升后，同步/群发的真实结果必须原样保留。"""
+    email_res = ed.skipped_email_result("sp_email_details")
+    result = {
+        "success": False,
+        "email": email_res,
+        "whatsapp": {"success": True, "groups_sent": 1},
+        "merged_file": "SP Details Report x.xlsx",
+        "row_counts": {"Inventory": 42},
+    }
+    assert ed.apply_email_deferral(result, email_res, "sp_email_details") is True
+    assert result["deferred"] is True
+    assert result["success"] is False
+    assert ed.DEFERRED_MARKER in result["error"]
+    assert result["whatsapp"]["success"] is True       # 群发结果没被冲掉
+    assert result["merged_file"] and result["row_counts"]  # 同步产物没被冲掉
+
+
+def test_apply_email_deferral_noop_for_real_failure():
+    result = {"success": False, "error": "Email: returncode=3"}
+    assert ed.apply_email_deferral(result, {"success": False, "error": "x"}, "fw_kpi_sync") is False
+    assert result.get("deferred") is None
+
+
+def test_fw_defaults_to_local_write():
+    """2026-11-25：FW 模块默认 REMOTE_WRITE=False，全部本地写入。"""
+    import importlib
+    mod = importlib.import_module("backend.services.fw_kpi.fw_kpi_services")
+    # 生产 backend/.env 未设 FW_REMOTE_WRITE 时必须是 False；即便设了，
+    # 源码默认值也应是关闭远端（用 importlib.reload 的解析逻辑做静态校验）。
+    assert mod.REMOTE_WRITE in (True, False)
+    src = (ROOT / "backend" / "services" / "fw_kpi" / "fw_kpi_services.py").read_text(encoding="utf-8")
+    assert '"FW_REMOTE_WRITE", "0"' in src, "FW 远端写入默认必须关闭"
+
+
+def test_service_skips_email_but_keeps_whatsapp_and_merge(monkeypatch, tmp_path):
+    """端到端接线：通道 down 时 run_sp_details_email 跳过发信，但合并 + 群发照常。
+
+    这是细粒度门禁的核心承诺——不能因为跳过发信就把副作用一起停掉，
+    那正是整轮门禁被排除在这四个任务之外的原因。
+    """
+    from backend.services.email import kpi_email_report as ker
+    from backend.services.email import email_recipient_store as ers
+
+    monkeypatch.setattr(ers, "get_email_recipients", lambda *a, **k: ("a@x.com", "c@x.com"))
+    monkeypatch.setattr(ker, "_SP_DETAILS_DATA", tmp_path)
+    monkeypatch.setattr(ker, "_merge_sp_details_workbook", lambda p: ({"Inventory": 7}, None))
+    monkeypatch.setattr(ker, "_prune_sp_details_reports", lambda **k: 0)
+
+    calls = {"run_script": 0, "whatsapp": 0}
+    def _fail_if_called(*a, **k):
+        calls["run_script"] += 1
+        raise AssertionError("通道 down 时不应真去调邮件脚本")
+    def _wa(path):
+        calls["whatsapp"] += 1
+        return {"success": True, "groups_sent": 1}
+
+    monkeypatch.setattr(ker, "_run_script", _fail_if_called)
+    monkeypatch.setattr(ker, "_send_sp_details_to_whatsapp", _wa)
+    _patch_probe(monkeypatch, _probe())
+    ed.set_current_trigger("scheduled")
+
+    res = ker.run_sp_details_email()
+
+    assert calls["run_script"] == 0, "发信必须被跳过"
+    assert calls["whatsapp"] == 1, "WhatsApp 群发必须照常执行"
+    assert res["row_counts"] == {"Inventory": 7}, "合并产物必须保留"
+    assert res["whatsapp"]["success"] is True
+    assert res["deferred"] is True and res["success"] is False
+    assert ed.DEFERRED_MARKER in res["error"]
+    assert er.is_ews_resendable(res["error"]) is True
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_auto_retry_is_deferred_too(monkeypatch, deferrable_task):
+    """auto_retry 重投也必须延后（2026-11-25）。
+
+    案例：liberia_email_1h 在通道故障期超时 300s 记失败 → auto_retry 重投 →
+    门禁只认 scheduled，于是又完整空跑 300s。通道已确认不可用时，重投除了占住
+    m 组 worker 没有任何产出。manual 仍不拦（人可能刚改完密码）。
+    """
+    _patch_probe(monkeypatch, _probe(kind="server_down"))
+    res = ed.maybe_defer(deferrable_task, "auto_retry")
+    assert res is not None and res["deferred"] is True
+
+
+def test_fw_kpi_run_promotes_email_deferral(monkeypatch):
+    """#298 第 1 项：FW 日报通道 down 时，顶层必须带 deferred + EWS_DEFERRED。
+
+    场景是数据同步**已成功**、按设计只跳过发信：若延后标记没提升到顶层，
+    ``task_runner`` 会当普通失败报红并立刻发告警，``email_recovery`` 也认不到
+    「恢复后要补」这条失败链。这里用 skipped_email_result 驱动 ``run()`` 的接线，
+    并确认同步结果（rows_written / devices）没有被延后吞掉。
+    """
+    from backend.services.fw_kpi import fw_kpi_services as fw
+
+    monkeypatch.setattr(fw, "Session", lambda: object())
+    monkeypatch.setattr(fw, "login", lambda sess: None)
+    monkeypatch.setattr(fw, "DEVICE_IDS", ["37781505"])
+    monkeypatch.setattr(fw, "fetch_throughput_html", lambda *a, **k: "<html/>")
+    monkeypatch.setattr(fw, "parse_throughput",
+                        lambda *a, **k: [("2026-11-25 00:00", 1, 2)])
+    monkeypatch.setattr(fw, "write_to_local_db", lambda rows, device_id: len(rows))
+    monkeypatch.setattr(fw, "ENABLE_CHART_EMAIL", True)
+    monkeypatch.setattr(fw, "generate_chart_and_send_email",
+                        lambda rows: dict(ed.skipped_email_result("fw_kpi_sync")))
+
+    result = fw.run()
+
+    assert result["deferred"] is True
+    assert result["success"] is False
+    assert ed.DEFERRED_MARKER in result["error"]
+    assert er.is_ews_resendable(result["error"]) is True
+    assert "仅跳过发信" in result["error"]
+    # 同步产物不能被延后标记吞掉
+    assert result["rows_written"] == 1
+    assert result["devices"] == ["37781505"]

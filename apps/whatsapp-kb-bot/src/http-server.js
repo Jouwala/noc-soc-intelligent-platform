@@ -64,6 +64,15 @@
  * `QA_FALLBACK_MODEL`（默认 `qwen2.5:7b-instruct`）：**降质但可用**，这是刻意的取舍。
  * 兜底持续 QA_OWU_COOLDOWN_MS（默认 5 分钟）后再试 OWU，避免每问一次先白等一次 403。
  *
+ * ## 2026-11-23：本地模式（LOCAL_CHAT=1）
+ *
+ * 用户决定群机器人与网页助手**都只用** .27 Ollama 上的本地模型（config.json 的
+ * localChat.model，当前 qwen2.5:7b-instruct），**严格本地、不回退云端**：
+ *   · 开关与群机器人共用 .env 的 LOCAL_CHAT（见 src/config.js 的 LOCAL_CHAT）；
+ *   · 打开后不再 pin OWU、不再试 8443，所有提问直接走本地；失败就如实报错；
+ *   · 模型与群机器人用同一个名字 —— .27 只常驻一份，避免两条链路来回换载。
+ * 关掉（LOCAL_CHAT=0）即恢复下面「OWU 优先、本地兜底」的原逻辑。
+ *
  * ## 启动
  *
  *   node --env-file-if-exists=.env src/http-server.js
@@ -100,6 +109,9 @@ const QA_MODEL = process.env.QA_CHAT_MODEL || 'mimo-v2.6-flash';
  * `qwen2.5:7b-instruct` —— 质量不同，但「OWU 抽风时网页还能答」这个目标保住了。
  */
 const FALLBACK_MODEL = process.env.QA_FALLBACK_MODEL || 'qwen2.5:7b-instruct';
+/** 本地模式（LOCAL_CHAT=1）：严格只走 Ollama，模型与群机器人相同。 */
+const LOCAL_ONLY = CONFIG.localChat?.enabled === true;
+const LOCAL_MODEL = LOCAL_ONLY ? CONFIG.localChat.model : FALLBACK_MODEL;
 /** OWU 失败后多久内直接走本地兜底（毫秒）。 */
 const OWU_COOLDOWN_MS = Number(process.env.QA_OWU_COOLDOWN_MS || 5 * 60 * 1000);
 /**
@@ -128,7 +140,7 @@ function pinLocalFallback() {
   // 换成 Ollama 直连（绕过 OWU）。模型必须用 FALLBACK_MODEL：
   // QA_MODEL 是 OWU 上的云端代理模型，Ollama 那边没有这个权重。
   RUNTIME_CONFIG.chatProvider = 'ollama';
-  RUNTIME_CONFIG.chatModel = FALLBACK_MODEL;
+  RUNTIME_CONFIG.chatModel = LOCAL_MODEL;
   RUNTIME_CONFIG.chatTimeoutMs = QA_CHAT_TIMEOUT_MS;
   // provider 不同源时 llm.js 才回退；置成 ollama 即彻底关闭它（我们的兜底已在上层）。
   FALLBACK_CONFIG.chatProvider = 'ollama';
@@ -146,6 +158,7 @@ function activeChannel() {
  * 会让探测方看到「永远在兜底」的假象。
  */
 function nextChannel() {
+  if (LOCAL_ONLY) return 'ollama';
   return Date.now() < owuDownUntil ? 'ollama' : 'openwebui';
 }
 
@@ -311,6 +324,12 @@ function ensureIndex() {
  * @returns {Promise<{result:object, via:string, fallbackReason?:string}>}
  */
 async function runAnswer(question, index, opts) {
+  // 本地模式：只走 Ollama，不试 OWU，也不做任何云端兜底 —— 失败直接抛给上层如实报错。
+  if (LOCAL_ONLY) {
+    pinLocalFallback();
+    const result = await routeAnswer(question, index, opts);
+    return { result, via: 'ollama' };
+  }
   const useLocalFirst = Date.now() < owuDownUntil;
   if (useLocalFirst) {
     pinLocalFallback();
@@ -325,7 +344,7 @@ async function runAnswer(question, index, opts) {
     if (activeChannel() !== 'openwebui' || !isChannelError(e)) throw e;
     const reason = String(e.message).split('\n')[0];
     owuDownUntil = Date.now() + OWU_COOLDOWN_MS;
-    console.warn(`[qa-http] OWU 通道失败（${reason}），切换本地 Ollama 兜底 ${FALLBACK_MODEL}，${Math.round(OWU_COOLDOWN_MS / 1000)}s 内不再试 OWU`);
+    console.warn(`[qa-http] OWU 通道失败（${reason}），切换本地 Ollama 兜底 ${LOCAL_MODEL}，${Math.round(OWU_COOLDOWN_MS / 1000)}s 内不再试 OWU`);
     pinLocalFallback();
     const result = await routeAnswer(question, index, opts);
     return { result, via: 'ollama-fallback', fallbackReason: reason };
@@ -349,9 +368,10 @@ const server = createServer(async (req, res) => {
       channel: nextChannel(),
       // model 报「下一次提问实际会用的那个」—— 两条通道的模型名已经不同了，
       // 只报 QA_MODEL 会让兜底期间的健康检查看起来在说谎。
-      model: nextChannel() === 'ollama' ? FALLBACK_MODEL : QA_MODEL,
-      primaryModel: QA_MODEL,
-      fallbackModel: FALLBACK_MODEL,
+      model: nextChannel() === 'ollama' ? LOCAL_MODEL : QA_MODEL,
+      primaryModel: LOCAL_ONLY ? LOCAL_MODEL : QA_MODEL,
+      fallbackModel: LOCAL_ONLY ? null : LOCAL_MODEL,
+      localOnly: LOCAL_ONLY,
       owuBase: OWU_BASE,
       owuCooldownMs: Math.max(0, owuDownUntil - Date.now()),
       ollama: h ? { ok: h.embedModelPresent } : { ok: false },
@@ -379,6 +399,9 @@ const server = createServer(async (req, res) => {
     // （src/answer.js 的 detectLang，与群里同一套口径）。
     const lang = payload.lang === 'en' ? 'en' : payload.lang === 'zh' ? 'zh' : undefined;
     const clientId = String(payload.clientId || '').trim() || 'anonymous';
+    // 登录用户名：由 my_app 后端（routers/portal_qa.py）按会话填，浏览器改不了 ——
+    // 本服务只绑回环，只有同机后端能调。号码查询鉴权用（src/phoneAcl.js）。
+    const user = String(payload.user || '').trim();
 
     await acquire();
     const t0 = Date.now();
@@ -387,6 +410,7 @@ const server = createServer(async (req, res) => {
       const { result, via, fallbackReason } = await runAnswer(question, index, {
         lang,
         history: getTurns(clientId),
+        caller: { channel: 'web', user },
         // 查不到时那句「去网页版问」是给群里的人看的；在这个网页挂件里说「去网页版」
         // 只会让人困惑（而且它指的是另一套 Open WebUI）。
         webHint: false,
@@ -406,7 +430,7 @@ const server = createServer(async (req, res) => {
         pushTurn(clientId, question, result.text);
       }
 
-      console.log(`[qa-http] client=${clientId} channel=${via} tool=${result.tool || '-'} ${Date.now() - t0}ms`);
+      console.log(`[qa-http] client=${clientId} channel=${via} tool=${result.tool || '-'}${result.denied ? ' DENIED' : ''} ${Date.now() - t0}ms`);
 
       sendJson(res, 200, {
         ok: true,
@@ -415,7 +439,9 @@ const server = createServer(async (req, res) => {
         channel: result.channel || 'kb',
         tool: result.tool || null,
         via: result.via || via,
-        model: via === 'ollama-fallback' ? FALLBACK_MODEL : QA_MODEL,
+        // 本地模式下 via='ollama'，报本地模型名（原来这里会误报成 mimo）
+        model: LOCAL_ONLY || via === 'ollama-fallback' ? LOCAL_MODEL : QA_MODEL,
+        denied: !!result.denied,
         fallbackReason: fallbackReason || null,
         ms: Date.now() - t0,
       });
@@ -451,18 +477,25 @@ async function main() {
   console.log('=== 网页问答服务（whatsapp-kb-bot）===\n');
 
   // 先把通道钉死，后面的自检与提问都按这个来（见文件头「对话模型」一节）。
-  pinOwu();
+  if (LOCAL_ONLY) {
+    pinLocalFallback();
+    console.log(`✓ 对话 provider：本地 Ollama ${LOCAL_MODEL} @ ${CONFIG.ollamaUrl}（LOCAL_CHAT=1，严格本地，不回退云端）`);
+  } else {
+    pinOwu();
+  }
 
   // provider 自检：缺 key 就明说，但**不退出** —— 与 src/index.js 同取舍：
   // 问答不可用不该让进程起不来，health 会如实报状态。
-  const v = validateProvider();
-  if (!v.ok) {
+  const v = LOCAL_ONLY ? { ok: true, skip: true } : validateProvider();
+  if (v.skip) {
+    // 本地模式没有 key / 云端可言，上面已打印通道
+  } else if (!v.ok) {
     console.error(`✗ ${v.message}`);
-    console.error(`  （RAG 会回退到本地 Ollama ${QA_MODEL} @ ${CONFIG.ollamaUrl}）`);
+    console.error(`  （RAG 会回退到本地 Ollama ${LOCAL_MODEL} @ ${CONFIG.ollamaUrl}）`);
   } else {
     const info = providerInfo();
     console.log(`✓ 对话 provider：[${info.provider}] ${info.model} @ ${info.baseUrl}（key 来源：${info.keySource}）`);
-    console.log(`  兜底通道：本地 Ollama ${QA_MODEL} @ ${CONFIG.ollamaUrl}（OWU 通道级失败时启用，冷却 ${Math.round(OWU_COOLDOWN_MS / 1000)}s）`);
+    console.log(`  兜底通道：本地 Ollama ${LOCAL_MODEL} @ ${CONFIG.ollamaUrl}（OWU 通道级失败时启用，冷却 ${Math.round(OWU_COOLDOWN_MS / 1000)}s）`);
   }
 
   // Ollama 自检：同样只标记、不退出。

@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "web_users": [
+    "admin"
+  ],
+  "whatsapp_numbers": [
+    "+8615638281623",
+    "+231772360781"
+  ],
+  "deny_text_zh": "你无权查询该信息，请找admin/zeeshan进行查询",
+  "deny_text_en": "You are not authorized to query this information. Please contact admin/zeeshan."
+}

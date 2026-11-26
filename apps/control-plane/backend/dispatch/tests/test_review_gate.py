@@ -245,3 +245,176 @@ def test_fetch_comment_bodies_stops_after_100_pages(monkeypatch) -> None:
     with pytest.raises(RuntimeError, match="超过 100 页"):
         review_gate.fetch_comment_bodies("Jouwala/repo", 123, "tok")
     assert calls["n"] == 100
+
+
+# ------------------------------------------- 低风险免审（2026-11-24 流程提速批）
+from dispatch.review_gate import (  # noqa: E402 - 本节新增，放在文件尾部便于阅读
+    WAIVER_MAX_FILES,
+    WAIVER_MAX_LINES,
+    is_protected_path,
+    waiver_decision,
+)
+
+
+def test_waiver_allows_small_business_change() -> None:
+    ok, why = waiver_decision(
+        ["apps/my_app/backend/services/prtg/mapping.py", "apps/portal/src/pages/Location.tsx"],
+        additions=40,
+        deletions=8,
+        labels=["agent:muse-2"],
+    )
+    assert ok is True
+    assert "低风险" in why
+
+
+def test_waiver_blocks_risk_high() -> None:
+    ok, why = waiver_decision(["apps/portal/src/pages/Location.tsx"], 5, 1, ["risk:high"])
+    assert ok is False
+    assert "risk:high" in why
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".github/workflows/quality.yml",
+        ".githooks/pre-commit",
+        "ops/deploy/smoke-watcher.ps1",
+        "apps/control-plane/backend/dispatch/review_gate.py",
+        "apps/agent-worker/worker.py",
+        "apps/my_app/alembic/versions/0009_x.py",
+        "apps/my_app/backend/main.py",
+        "apps/my_app/backend/services/auth_service.py",
+        "apps/my_app/backend/routers/phone_query_acl.py",
+        "apps/my_app/backend/routers/vmax_cca_query.py",
+        "apps/my_app/backend/services/phone_query_acl.py",
+        "apps/my_app/backend/database.py",
+        "apps/portal/package-lock.json",
+        "apps/my_app/requirements.txt",
+        "apps/my_app/frontend/.env.local",
+        "AGENTS.md",
+        "docs/workspace/agent-protocol.md",
+    ],
+)
+def test_waiver_blocks_protected_paths(path: str) -> None:
+    ok, why = waiver_decision([path], 1, 0, [])
+    assert ok is False
+    assert "受保护路径" in why
+
+
+def test_waiver_blocks_too_many_files() -> None:
+    paths = [f"apps/my_app/frontend/src/pages/Page{i}.tsx" for i in range(WAIVER_MAX_FILES + 1)]
+    ok, why = waiver_decision(paths, 10, 10, [])
+    assert ok is False
+    assert "文件" in why
+
+
+def test_waiver_blocks_too_many_lines() -> None:
+    ok, why = waiver_decision(
+        ["apps/my_app/backend/services/prtg/mapping.py"],
+        additions=WAIVER_MAX_LINES,
+        deletions=1,
+        labels=[],
+    )
+    assert ok is False
+    assert "行" in why
+
+
+def test_waiver_requires_paths() -> None:
+    ok, why = waiver_decision([], 0, 0, [])
+    assert ok is False
+    assert "取不到" in why
+
+
+def test_is_protected_path_normalizes_separators() -> None:
+    assert is_protected_path(".github\\workflows\\quality.yml") is True
+    assert is_protected_path("./apps/my_app/backend/services/prtg/mapping.py") is False
+    assert is_protected_path("") is True
+
+
+def test_fetch_pr_risk_returns_none_on_error(monkeypatch) -> None:
+    import urllib.request as _request
+
+    from dispatch import review_gate
+
+    def _boom(request, timeout=30):
+        raise OSError("network down")
+
+    monkeypatch.setattr(_request, "urlopen", _boom)
+    assert review_gate.fetch_pr_risk("Jouwala/repo", 1, "tok") is None
+
+
+def test_cli_waives_low_risk_without_review_history(monkeypatch, capsys) -> None:
+    """低风险 PR 且没有审核历史：免审放行，打印 REVIEW_TIER=waived。
+
+    免审仍会读评论（用于发现已有的 changes-requested / blocked），
+    只是「没有历史」不构成阻断。
+    """
+    from dispatch import review_gate
+
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setattr(
+        review_gate,
+        "fetch_pr_risk",
+        lambda repo, pr, token: {
+            "paths": ["apps/portal/src/pages/Location.tsx"],
+            "additions": 3,
+            "deletions": 1,
+            "labels": [],
+        },
+    )
+    monkeypatch.setattr(review_gate, "fetch_comment_bodies", lambda repo, pr, token: [])
+    code = review_gate.main(["--repo", "Jouwala/repo", "--pr", "1", "--head-sha", SHA_A])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert f"REVIEW_TIER=waived sha={SHA_A}" in out
+
+
+@pytest.mark.parametrize("verdict", ["changes-requested", "blocked"])
+def test_cli_waiver_blocked_by_last_negative_verdict(monkeypatch, capsys, verdict: str) -> None:
+    """审核者改判后，低风险免审不得绕过复审（Muse 1 审核第 1 项阻塞）。"""
+    from dispatch import review_gate
+
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setattr(
+        review_gate,
+        "fetch_pr_risk",
+        lambda repo, pr, token: {
+            "paths": ["apps/portal/src/pages/Location.tsx"],
+            "additions": 3,
+            "deletions": 1,
+            "labels": [],
+        },
+    )
+    marker = _marker(pr=1, sha=SHA_A, verdict=verdict)
+    monkeypatch.setattr(
+        review_gate, "fetch_comment_bodies", lambda repo, pr, token: [marker]
+    )
+    code = review_gate.main(["--repo", "Jouwala/repo", "--pr", "1", "--head-sha", SHA_A])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "不得免审放行" in out
+    assert "REVIEW_TIER=waived" not in out
+
+
+def test_cli_strict_still_requires_review(monkeypatch, capsys) -> None:
+    """--strict 回到旧口径：低风险也必须有一致 head 的审核记录。"""
+    from dispatch import review_gate
+
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setattr(
+        review_gate,
+        "fetch_pr_risk",
+        lambda repo, pr, token: {
+            "paths": ["apps/portal/src/pages/Location.tsx"],
+            "additions": 3,
+            "deletions": 1,
+            "labels": [],
+        },
+    )
+    monkeypatch.setattr(review_gate, "fetch_comment_bodies", lambda repo, pr, token: [])
+    code = review_gate.main(
+        ["--repo", "Jouwala/repo", "--pr", "1", "--head-sha", SHA_A, "--strict"]
+    )
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "不通过" in out

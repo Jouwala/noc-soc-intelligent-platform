@@ -156,6 +156,7 @@ const T = {
       site_class: '站点分类',
       victims: '影响用户数',
       fme_name: '维护负责人',
+      coords: '坐标',
     },
     notFound: (site, candidates) => {
       let t = `站点库里查不到「${site}」。请核对站名拼写（用站表里的正式英文名）。`;
@@ -192,6 +193,7 @@ const T = {
       site_class: 'site class',
       victims: 'affected subscribers',
       fme_name: 'maintenance owner',
+      coords: 'coordinates',
     },
     notFound: (site, candidates) => {
       let t = `No site named "${site}" in the site database. Please double-check the spelling (use the official English name).`;
@@ -258,6 +260,18 @@ export function renderSiteAttribute(d, lang = 'zh', degraded = false) {
     const v = d[key];
     if (v === null || v === undefined || v === '') continue;
     lines.push(`- ${t.labels[key] || key}：${v}`);
+  }
+
+  /* 坐标：2026-11-23 新增 —— 位置页（?page=location）的「问问答助手取位置」需要
+     从答案里解析经纬度。两个都有效才输出；缺一个就整行不写（半截坐标没有意义）。
+     格式固定 `lat, lon`（6 位小数），与 my_app GIS 站点坐标精度一致，且是
+     location/geo.ts::parseLatLon 能直接识别的写法。 */
+  const lat = Number(d.latitude);
+  const lon = Number(d.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lon)
+      && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+      && !(lat === 0 && lon === 0)) {
+    lines.push(`- ${t.labels.coords}：${lat.toFixed(6)}, ${lon.toFixed(6)}`);
   }
 
   // 枢纽站

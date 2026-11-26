@@ -6,6 +6,19 @@ from sqlalchemy import create_engine, text, inspect, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 from pathlib import Path
 
+# 2026-11-23：PG 建连短超时 + 熔断（见 backend/db_guard.py 与
+# docs/incidents/2026-11-23-backend-outage.md）。兼容以 backend 为根的导入方式。
+try:
+    from backend.db_guard import (
+        PG_CONNECT_TIMEOUT, PG_KEEPALIVE_PARAMS, DatabaseUnavailable,
+        breaker as _pg_breaker, effective_connect_timeout, guarded_connect, is_connection_error,
+    )
+except ImportError:  # pragma: no cover
+    from db_guard import (  # type: ignore
+        PG_CONNECT_TIMEOUT, PG_KEEPALIVE_PARAMS, DatabaseUnavailable,
+        breaker as _pg_breaker, effective_connect_timeout, guarded_connect, is_connection_error,
+    )
+
 try:
     from dotenv import load_dotenv
     # 显式读取 backend/.env（DATABASE_URL / MY_APP_DB_MODE）；
@@ -57,13 +70,25 @@ def _build_engine():
     if DB_MODE == "pg":
         if not PG_DATABASE_URL:
             raise RuntimeError("DB_MODE=pg 但环境变量 DATABASE_URL 未设置")
-        return create_engine(
+        pg_engine = create_engine(
             DATABASE_URL,
             pool_size=int(os.environ.get("PG_POOL_SIZE", "20")),
             max_overflow=int(os.environ.get("PG_MAX_OVERFLOW", "10")),
+            # 池满时最多等这么久就报错（默认 30s 太长：数据库卡住时请求会堆在这里）
+            pool_timeout=int(os.environ.get("PG_POOL_TIMEOUT", "10")),
             pool_pre_ping=True,
+            # 不设 connect_timeout 时 libpq 会一直等到 OS 的 TCP 超时（Windows 约 21s+）
+            connect_args={"connect_timeout": PG_CONNECT_TIMEOUT, **PG_KEEPALIVE_PARAMS},
             echo=False,
         )
+
+        @event.listens_for(pg_engine, "do_connect")
+        def _pg_guarded_do_connect(dialect, conn_rec, cargs, cparams):
+            # ORM 引擎与 get_raw_connection 共用同一个熔断器：任何一侧发现数据库
+            # 连不上，另一侧也立刻快速失败，而不是各自再等一轮超时。
+            return guarded_connect(dialect.connect, *cargs, **cparams)
+
+        return pg_engine
     # sqlite（默认）：与迁移前完全一致
     return create_engine(
         DATABASE_URL,
@@ -418,8 +443,11 @@ class _PsycopgRaw:
     def executescript(self, sql_script):
         """多语句 DDL 脚本执行：与 sqlite3.Connection.executescript 对齐。
 
-        PG 无参数多语句串可直接发送（libpq 依次执行）；autocommit 模式下
-        每条语句独立事务，与 sqlite 脚本语义一致。无参数路径不做 %% 转义
+        PG 无参数多语句串可直接发送：整串是**一条 simple query**，libpq 顺序执行；
+        脚本里显式写了 `BEGIN; ... COMMIT;` 时，这些语句处在同一个事务里——所以
+        「DROP 旧表 + RENAME 新表」这类换表脚本是原子的。**不要把脚本里的
+        BEGIN/COMMIT 去掉**，也不要把一条 executescript 拆成多次 execute：那样每条
+        语句各自提交，读者会短暂看到「表不存在」。无参数路径不做 %% 转义
         （psycopg2 无参数时不格式化，列名含 % 原样发给 PG）。
 
         并发容错：两个执行者同时建表时，CREATE TABLE IF NOT EXISTS 存在
@@ -491,8 +519,25 @@ def _pg_raw_connection(db_path, logical_name=None, timeout=30):
     target_schema = logical_name if logical_name else _resolve_pg_schema(db_path)
     rest = [s for s in _PsycopgRaw._SEARCH_PATH.split(",") if s != target_schema]
     search_path = ",".join([target_schema] + rest)
-    conn = psycopg2.connect(PG_DATABASE_URL, connect_timeout=int(timeout))
-    return _PsycopgRaw(conn, search_path=search_path)
+    # 2026-11-23：timeout 历来是 sqlite 的 busy 等待语义（调用方普遍传 30），
+    # 这里只把它收紧到 PG_CONNECT_TIMEOUT（默认 5s），并经熔断器快速失败。
+    conn = guarded_connect(
+        psycopg2.connect,
+        PG_DATABASE_URL,
+        connect_timeout=effective_connect_timeout(timeout),
+        **PG_KEEPALIVE_PARAMS,
+    )
+    try:
+        return _PsycopgRaw(conn, search_path=search_path)
+    except Exception as exc:  # noqa: BLE001
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+        if is_connection_error(exc):
+            _pg_breaker.record_failure(exc)
+            raise DatabaseUnavailable(f"PostgreSQL 连接建立后立即中断：{exc}") from exc
+        raise
 
 
 def list_tables():

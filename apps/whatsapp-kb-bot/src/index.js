@@ -126,7 +126,7 @@ async function main() {
       console.log('    排查：npm run diag   （打印云端返回的完整响应结构）');
     }
   } else {
-    console.log('✓ 对话 provider：本地 Ollama');
+    console.log(`✓ 对话 provider：本地 Ollama（${info.model} @ ${info.baseUrl}）${CONFIG.localChat?.enabled ? '—— 严格本地，不回退云端' : ''}`);
   }
 
   // 2. Ollama 自检（嵌入始终走 Ollama；.20 那台没有本地 Ollama，配置指向内网 .27）
@@ -175,9 +175,10 @@ async function main() {
           : `✓ 对话走云端，本地仅需嵌入模型（${gb(w.residentBytes)} GB），无模型互挤问题`
       );
     } else {
-      console.log('! 本地两个模型无法同时常驻 —— 每次提问都要重载模型，实测每次多花 3~5 秒');
+      console.log('! 本地两个模型无法同时常驻 —— 每次提问都要重载模型（2026-11-23 实测每次多 4~28 秒）');
       console.log(`  已常驻：${w.loaded.map((m) => m.name).join(', ') || '（无）'}`);
-      console.log('  修复：给 Ollama 服务设置环境变量 OLLAMA_MAX_LOADED_MODELS=2 后重启 Ollama');
+      console.log('  修复：config.json 的 embedNumGpu=0（嵌入只用 CPU，显存留给对话模型）；');
+      console.log('        仍不行再给 .27 的 Ollama 设 OLLAMA_MAX_LOADED_MODELS=2 并重启');
     }
   } catch (err) {
     console.log(`! 预热失败（不影响运行）：${err.message}`);
@@ -295,9 +296,17 @@ async function main() {
       if (info.provider === 'openai') {
         lines.push('对话走云端，本地无模型互挤，响应通常 1–3 秒');
       } else if (w) {
+        // w 是 loadedModels() 的数组，不是 warmup() 的结果 —— 原来读 w.bothResident 恒为 undefined，
+        // 于是永远显示「仅 1 个」。按名字逐个找，顺带报 GPU 占比（A400 4GB，判断有没有被挤）。
+        const short = (n) => String(n).split(':')[0];
+        const find = (name) => w.find((m) => short(m.name) === short(name));
+        const pct = (m) => (m && m.totalBytes ? Math.round((100 * m.vramBytes) / m.totalBytes) : 0);
+        const c = find(info.model);
+        const e = find(CONFIG.embedModel);
         lines.push(
-          w.bothResident ? '本地模型常驻：两个都在内存，响应约 1 秒' : '本地模型常驻：仅 1 个，响应约 8–12 秒'
+          `本地常驻：对话 ${c ? `在（GPU ${pct(c)}%）` : '未加载（首问要多等 15–30 秒）'} · 嵌入 ${e ? `在（GPU ${pct(e)}%）` : '未加载'}`
         );
+        lines.push('对话走内网 Ollama，不出内网；知识库回答约 15–25 秒');
       }
       // 运行时长 + 代码新鲜度。
       // 「改了代码没生效」是这里最容易踩的坑（改文件 + 重启才生效，忘了重启
@@ -341,7 +350,7 @@ async function main() {
 
   await startWhatsApp({
     builtins,
-    onQuestion: async (question, { lang, onRetry, onLive, history } = {}) => {
+    onQuestion: async (question, { lang, onRetry, onLive, history, sender, senderPn } = {}) => {
       const t0 = Date.now();
 
       // 嵌入不可用时**不再整条短路**：2026-10-08 修正。
@@ -369,6 +378,8 @@ async function main() {
         // 群里却走成了知识库、32 秒后答「资料未包含…流程」。
         // 传参链任何一环断了，前后两处单看都"没问题"，只有端到端才暴露。
         history,
+        // 提问人身份：号码查询（TEL）只对名单里的号码放行（src/phoneAcl.js）
+        caller: { channel: 'whatsapp', jid: sender || '', pn: senderPn || '' },
         // 工单通道失败自动重试前，先把垫话发出去（透传到接入层）
         onRetry,
         // 本地库查不到、要去 eFlow 实时查之前，同样先垫一句

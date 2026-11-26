@@ -291,6 +291,14 @@ python -m backend.services.db.pg_mirror --db ran_kpi_daily.sqlite3 --table ran_k
 
 **约定：动态 eFlow 表不进 migration**（`0001_baseline.py:13-15`）。这类表由采集任务在运行时按上游字段自行建表，因此 `alembic upgrade head` 之后表数量少于页面上看到的表数量是**正常现象**，不是迁移失败。
 
+同一条约定也适用于其它「任务独占、运行期自建」的表：`app.ran_element_management*`
+（`services/RANElementManagement`）与 NGI 的四张表 `app.ngi_lte_cell_param` /
+`app.ngi_nr_cell_param` / `app.ngi_coverage_grid` / `app.ngi_sync_log`
+（`services/ngi_data/ngi_store.py` 的 `DDL`，`CREATE TABLE IF NOT EXISTS` 幂等）。
+它们的幂等靠主键：前者 `ne_id` / `(snapshot_date, ne_id)`，后者 `cell_uid` /
+`(kpi, earthid, offsetx, offsety)`。改字段映射时 DDL 与映射必须同步改，
+`tests/test_ngi_param.py` 会比对两边。
+
 ### ⚠️ 动态表的唯一约束从哪来（upsert 的隐含前提）
 
 `dialect_helpers.upsert` 的 PG 分支生成 `INSERT ... ON CONFLICT (cols) DO UPDATE`，

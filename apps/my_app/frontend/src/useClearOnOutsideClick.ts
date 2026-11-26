@@ -6,7 +6,7 @@
  *   都不会取消，选中的人一直高亮着、站点圈和连线一直画着。用户的直觉是
  *   「我点了别的地方就该取消」。
  *
- * **四类点击必须放行，否则这个监听会自己打断自己的 handler**：
+ * **六类点击必须放行，否则这个监听会自己打断自己的 handler**：
  *   · `.leaflet-container` —— 地图内部的取消归 Leaflet 的 `map.on('click')` 管
  *     （它还要区分「点人 / 点站点圆点 / 点空白」，两套逻辑并存会打架）；
  *   · `.ant-drawer` —— 下钻抽屉里搜索、翻页、切页签、导出都是正常操作，
@@ -23,6 +23,11 @@
  *     里（是 Leaflet 容器 `inner` 的兄弟节点，不在 `.leaflet-container` 之内），
  *     所以它同时会被 Leaflet 的 `map.on('click')` 与本监听同时看到 ——
  *     实测 2026-10-30：人员页点图例某一行会立刻把选中的人清掉、图例跟着消失。
+ *   · `.ant-select-dropdown` —— **地图搜索框的下拉结果**（`personmap/MapSearch.tsx`）。
+ *     antd 把下拉渲染成挂在 body 上的 portal，不在 `.leaflet-container` 内；
+ *     不排除的话，已选中一个人时再从搜索框选另一个，这一下会被当成「点了别处」
+ *     而清掉刚做的选中（2026-11-23 实测：选中 A 后搜 B，B 选不中、抽屉不打开）。
+ *     下拉属于搜索控件本身，同样不该算「点了别处」。
  *
  * **两类必须放过的事件**（2026-10-21 实测，缺一个就是「抽屉闪一下就消失」）：
  *   · **目标已脱离文档**（`!el.isConnected`）—— 选中人员会把该人员的地图针**重建**，
@@ -44,6 +49,7 @@ const KEEP_SELECTORS = [
   '.ant-table-row',
   '.dcm-overlay',
   '.gis-legend-overlay',
+  '.ant-select-dropdown',
 ]
 
 export function useClearOnOutsideClick(active: boolean, clear: () => void) {

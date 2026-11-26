@@ -48,11 +48,16 @@ export function buildPersonPin(
     : unknown ? '#8c93a8'
     : (p.open || 0) === 0 ? '#1a7f37'
     : (isDark ? '#4fc3f7' : '#1890ff')
-  const size = selected ? 32 : 26
+  /* 图标尺寸（2026-11-23 用户要求「人员的图标能小一点。点击该人员的时候大一点」）：
+     未选中 26 → **20**（默认状态更小，减少全国视角下的互相遮挡）；选中 32 → **36**
+     （点击后明显放大，比原先的 1.23 倍更容易看出「当前选中了谁」）。
+     徽标字号/位置不随尺寸走，见 index.css 的 .gis-person-badge（top:6px 固定在针身上部）。 */
+  const size = selected ? 36 : 20
   const iconH = size * 1.5
   const phone = (p.phone || '').trim()
-  // 常驻徽标已含姓名+电话，悬停气泡不再重复渲染同样的内容 ——
-  // 只在常驻徽标之外没有信息时（即无）保留为空，避免两层气泡叠在一起。
+  // 姓名/电话徽标（默认隐藏、悬停显示，见 index.css 的 .person-map-canvas 规则）
+  // 已含姓名+电话，悬停气泡不再重复渲染同样的内容 ——
+  // 只在徽标之外没有信息时（即无）保留为空，避免两层气泡叠在一起。
   const tip = ''
   const openCnt = p.open || 0
   const sitesCnt = p.site_count || 0
@@ -67,9 +72,11 @@ export function buildPersonPin(
     `<div class="gis-person-anchor">` +
       tip +
       personIconSvg(color, size, selected) +
-      /* 常驻徽标（2026-10-19 用户要求，2026-10-21 加 PMT 一项）：
-           第一行 = 姓名 + 电话；
-           第二行 = 负责站点数 | 未关闭 WO 数 | 未关闭 PMT 数。
+      /* 姓名/电话徽标（2026-10-19 用户要求，2026-10-21 加 PMT 一项；
+            2026-11-23 起**默认隐藏、悬停才显示**，显隐规则在 index.css 的
+            `.person-map-canvas .gis-person-badge`）：
+            第一行 = 姓名 + 电话；
+            第二行 = 负责站点数 | 未关闭 WO 数 | 未关闭 PMT 数。
          三项的顺序是用户 2026-10-21 指定的。
          ⚠ PMT 那一项**不跟随页面 30 天窗口**（是「此刻还没关闭」的状态数），
          与旁边两项口径不同 —— 后端 personnel.py::_pmt_open_index 有完整理由，

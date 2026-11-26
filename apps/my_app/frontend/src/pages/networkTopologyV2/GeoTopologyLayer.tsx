@@ -19,7 +19,7 @@ import L from 'leaflet'
 import { isMapAlive, useMap } from '../../components/LeafletMap'
 import type { CoreLinkType } from '../networkTopology/topologyData'
 import { siteKind } from './geoData'
-import { FIBER_STYLES } from './fiberMeta'
+import { FIBER_STYLES, type FiberStyle } from './fiberMeta'
 import type { FiberLink, GeoLink, GeoSite } from './types'
 
 const esc = (s: string) => s
@@ -42,6 +42,55 @@ function bucketSizeOf(zoom: number): number {
   return 0
 }
 
+/** 线宽随地图缩放**连续**自适应（不是分档跳变）。
+ *  Leaflet 的 weight 是屏幕像素、本身不随缩放变化，所以这里按 zoom 换算一个系数：
+ *  以全国视图 LB_ZOOM=8 为基准 1.0（此时的线宽已按「全国视图看得清」定好），
+ *  每放大一级 ×1.15、每缩小一级 ÷1.15，夹在 [0.7, 2.0]：
+ *    z6 ≈ 0.76 · z7 ≈ 0.87 · z8 = 1 · z9 ≈ 1.15 · z10 ≈ 1.32 · z11 ≈ 1.52 · z12 ≈ 1.75 · z13+ = 2
+ *  放大后线跟着变粗、缩小后变细，但不会细到看不见，也不会粗到糊成一片。 */
+const LINE_BASE_ZOOM = 8
+function zoomScale(zoom: number): number {
+  return Math.min(2, Math.max(0.7, Math.pow(1.15, zoom - LINE_BASE_ZOOM)))
+}
+
+/** 全国视图（系数 1.0）下各图层的基准线宽倍数：fiberMeta 里的 weight 是按「放大后」
+ *  定的细线值（图例也用它），全国视图需要再放大才看得清。 */
+const FIBER_NATIONAL = 1.5
+const FIBER_BASE_NATIONAL = 1.3
+const BACKBONE_NATIONAL_WEIGHT = 3.2
+
+/** 缩放过程中每帧最多重算一次（滚轮/触控板/捏合会连续触发 zoom 事件），
+ *  zoomend 再兜底算一次，保证停下来时一定是最终线宽。 */
+function onZoomChange(map: L.Map, fn: () => void): () => void {
+  let raf = 0
+  const tick = () => {
+    if (raf) return
+    raf = requestAnimationFrame(() => { raf = 0; fn() })
+  }
+  map.on('zoom', tick)
+  map.on('zoomend', fn)
+  return () => {
+    if (raf) cancelAnimationFrame(raf)
+    map.off('zoom', tick)
+    map.off('zoomend', fn)
+  }
+}
+
+/** 同端点多条骨干的平行偏移按**屏幕像素**算（原来按 0.004° 算，全国视图下不到 1px，几条线完全叠在一起）。 */
+function offsetEnds(map: L.Map, link: GeoLink, zoom: number, weight: number): L.LatLng[] {
+  const a = L.latLng(link.a.lat as number, link.a.lng as number)
+  const b = L.latLng(link.b.lat as number, link.b.lng as number)
+  if (!link.offset) return [a, b]
+  const pa = map.project(a, zoom)
+  const pb = map.project(b, zoom)
+  const dx = pb.x - pa.x
+  const dy = pb.y - pa.y
+  const len = Math.hypot(dx, dy) || 1
+  const step = (weight + 1.5) * link.offset
+  const o = L.point((-dy / len) * step, (dx / len) * step)
+  return [map.unproject(pa.add(o), zoom), map.unproject(pb.add(o), zoom)]
+}
+
 export interface GeoTopologyLayerProps {
   sites: GeoSite[]
   links: GeoLink[]
@@ -53,10 +102,13 @@ export interface GeoTopologyLayerProps {
   typeLabel: (site: GeoSite) => string
   clusterLabel: (count: number) => string
   linkTypeLabel: (type: CoreLinkType) => string
+  /** 深色主题：决定线条描边（halo）颜色 */
+  isDark?: boolean
 }
 
 export default function GeoTopologyLayer({
   sites, links, fiberLinks, selected, focus, onSelect, typeLabel, clusterLabel, linkTypeLabel,
+  isDark = false,
 }: GeoTopologyLayerProps) {
   const map = useMap()
 
@@ -69,28 +121,61 @@ export default function GeoTopologyLayer({
       const pane = map.createPane('olibFiberPane')
       pane.style.zIndex = '390'
     }
-    const group = L.layerGroup().addTo(map)
+    /* 两个 group：所有描边先画、所有彩线后画，避免后画的描边在交叉处把先画的彩线"切断" */
+    const casingGroup = L.layerGroup().addTo(map)
+    const lineGroup = L.layerGroup().addTo(map)
+    const halo = isDark ? '#0a1428' : '#ffffff'
+    const items: { line: L.Polyline; casing: L.Polyline | null; style: FiberStyle; isBase: boolean }[] = []
     for (const link of fiberLinks) {
+      const isBase = !FIBER_STYLES[link.group] || link.group === 'base'
       const style = FIBER_STYLES[link.group] ?? FIBER_STYLES.base
-      const line = L.polyline(
-        [[link.a.lat as number, link.a.lng as number], [link.b.lat as number, link.b.lng as number]],
-        {
-          pane: 'olibFiberPane',
-          color: style.color,
-          weight: style.weight,
-          opacity: style.opacity,
-          dashArray: link.dash ? (style.dash ?? '6 5') : undefined,
-          lineCap: 'round',
-        },
-      )
+      const latlngs: L.LatLngExpression[] = [
+        [link.a.lat as number, link.a.lng as number],
+        [link.b.lat as number, link.b.lng as number],
+      ]
+      /* 基础链路数量多且密，不加描边，否则蒙罗维亚一带会糊成一片白 */
+      const casing = isBase ? null : L.polyline(latlngs, {
+        pane: 'olibFiberPane', color: halo, weight: style.weight + 2, opacity: 0,
+        lineCap: 'round', interactive: false,
+      })
+      casing?.addTo(casingGroup)
+      const line = L.polyline(latlngs, {
+        pane: 'olibFiberPane',
+        color: style.color,
+        weight: style.weight,
+        opacity: style.opacity,
+        dashArray: link.dash ? (style.dash ?? '6 5') : undefined,
+        lineCap: 'round',
+      })
       line.bindTooltip(
         `<strong>${esc(link.a.name)}</strong> ↔ <strong>${esc(link.b.name)}</strong><br/>${esc(link.type)}`,
         { sticky: true, className: 'olibv2-tip', opacity: 0.96 },
       )
-      line.addTo(group)
+      line.addTo(lineGroup)
+      items.push({ line, casing, style, isBase })
     }
-    return () => { group.remove() }
-  }, [map, fiberLinks])
+
+    /* 线宽 = 全国基准 × zoomScale(zoom)，随缩放连续变化。
+       基础链路颜色加深（#64748b → #475569），否则灰线压在灰色道路底图上分不出来。 */
+    const restyle = () => {
+      if (!isMapAlive(map)) return
+      const k = zoomScale(map.getZoom())
+      for (const it of items) {
+        const { style } = it
+        const weight = style.weight * (it.isBase ? FIBER_BASE_NATIONAL : FIBER_NATIONAL) * k
+        const opacity = it.isBase ? Math.max(style.opacity, 0.65) : Math.max(style.opacity, 0.92)
+        it.line.setStyle(it.isBase ? { weight, opacity, color: '#475569' } : { weight, opacity })
+        it.casing?.setStyle({ weight: weight + 2 * Math.max(1, k), opacity: 0.75 })
+      }
+    }
+    restyle()
+    const offZoom = onZoomChange(map, restyle)
+    return () => {
+      offZoom()
+      lineGroup.remove()
+      casingGroup.remove()
+    }
+  }, [map, fiberLinks, isDark])
 
   /* ---------- 站点 + 聚合 ---------- */
   useEffect(() => {
@@ -189,30 +274,21 @@ export default function GeoTopologyLayer({
   /* ---------- 骨干链路（示意直线） ---------- */
   useEffect(() => {
     if (!isMapAlive(map)) return
-    const group = L.layerGroup().addTo(map)
+    const casingGroup = L.layerGroup().addTo(map)
+    const lineGroup = L.layerGroup().addTo(map)
+    const halo = isDark ? '#0a1428' : '#ffffff'
+    const items: { link: GeoLink; line: L.Polyline; casing: L.Polyline }[] = []
 
     for (const link of links) {
-      const aLat = link.a.lat as number
-      const aLng = link.a.lng as number
-      const bLat = link.b.lat as number
-      const bLng = link.b.lng as number
-      let a: [number, number] = [aLat, aLng]
-      let b: [number, number] = [bLat, bLng]
-      if (link.offset) {
-        const dLat = bLat - aLat
-        const dLng = bLng - aLng
-        const len = Math.hypot(dLat, dLng) || 1
-        const step = 0.004 * link.offset
-        const oLat = (-dLng / len) * step
-        const oLng = (dLat / len) * step
-        a = [aLat + oLat, aLng + oLng]
-        b = [bLat + oLat, bLng + oLng]
-      }
+      const ends = offsetEnds(map, link, map.getZoom(), BACKBONE_NATIONAL_WEIGHT)
       const label = linkTypeLabel(link.type)
-      const line = L.polyline([a, b], {
+      const casing = L.polyline(ends, {
+        color: halo, weight: BACKBONE_NATIONAL_WEIGHT + 2.6, opacity: 0.8, lineCap: 'round', interactive: false,
+      })
+      const line = L.polyline(ends, {
         color: link.color,
-        weight: 2.2,
-        opacity: 0.78,
+        weight: BACKBONE_NATIONAL_WEIGHT,
+        opacity: 0.95,
         dashArray: DASH[link.type],
         lineCap: 'round',
       })
@@ -224,11 +300,33 @@ export default function GeoTopologyLayer({
         `<div class="olibv2-link-pop"><strong>${esc(link.a.name)}</strong> ↔ `
         + `<strong>${esc(link.b.name)}</strong><br/>${esc(label)}</div>`,
       )
-      line.addTo(group)
+      casing.addTo(casingGroup)
+      line.addTo(lineGroup)
+      items.push({ link, line, casing })
     }
 
-    return () => { group.remove() }
-  }, [map, links, linkTypeLabel])
+    /* 线宽 = 3.2px × zoomScale(zoom)，随缩放连续变化（z6≈2.4px · z8=3.2px · z10≈4.2px · z12≈5.6px）；
+       同端点多条骨干的像素偏移跟着线宽一起重算，任何缩放级别都不叠线。 */
+    const restyle = () => {
+      if (!isMapAlive(map)) return
+      const zoom = map.getZoom()
+      const weight = BACKBONE_NATIONAL_WEIGHT * zoomScale(zoom)
+      for (const it of items) {
+        const ends = offsetEnds(map, it.link, zoom, weight)
+        it.casing.setLatLngs(ends)
+        it.casing.setStyle({ weight: weight + 2.6, opacity: 0.8 })
+        it.line.setLatLngs(ends)
+        it.line.setStyle({ weight, opacity: 0.95 })
+      }
+    }
+    restyle()
+    const offZoom = onZoomChange(map, restyle)
+    return () => {
+      offZoom()
+      lineGroup.remove()
+      casingGroup.remove()
+    }
+  }, [map, links, linkTypeLabel, isDark])
 
   /* ---------- 外部定位（搜索结果 / 详情按钮） ---------- */
   useEffect(() => {

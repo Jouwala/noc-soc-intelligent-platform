@@ -8,7 +8,7 @@
 
 | 项目 | 组件位置 | 数量 | 技术 |
 | --- | --- | --- | --- |
-| 统一门户 | `apps\portal\src\components\` | 32 个 `.tsx` | React 19 + Tailwind v4 + lucide-react |
+| 统一门户 | `apps\portal\src\components\` | 34 个 `.tsx` | React 19 + Tailwind v4 + lucide-react |
 | 门户页面级 | `...\src\App.tsx` | 状态中枢 | 非组件化，状态与持久化都在这 |
 | my_app 前端 | `apps\my_app\frontend\src\` | 见 my_app 索引 | React + Vite |
 | 门户静态页 | `...\MsPortal\` | `index.html` / `viewer.html` | 原生 HTML（复刻参考与查看器） |
@@ -59,7 +59,7 @@
 
 | 组件 | 职责 |
 | --- | --- |
-| `TaskSyncWidget.tsx` | **实时任务调度部件**：每 60s 拉任务状态，接口离线降级为静态快照 |
+| `TaskSyncWidget.tsx` | **实时任务调度部件**：每 60s 拉任务状态；接口离线时不再用兜底数组（旧 `FALLBACK_TASKS` 已于 2026-11-23 删除），只有本次会话拉到过数据才显示，并标「离线 · 最后更新」 |
 | `WhatsAppTasksView.tsx` | WhatsApp 任务视图 |
 
 ### Agent 控制台（`components\agent\`，TASK-08）

@@ -313,7 +313,14 @@ GROUP_TASK_MAP = {
         # ran_kpi_15mins_sync 2026-11-22 注册：RAN UME 2G/3G/4G/5G 15 分钟 KPI 同步。
         # 归 u 组：与 ran_ume_daily / main_kpi_sync 共用 zte_ume 单账号会话，
         # 15 分钟节拍，必须与其它 RAN UME 任务串行，不能并发登录互踢。
-        "ran_element_management_sync,ran_kpi_15mins_sync"),
+        "ran_element_management_sync,ran_kpi_15mins_sync,"
+        # ngi_param_coverage_sync 2026-11-24 注册：NGI 规划平台(10.100.29.17:28001)
+        # 工参 + 覆盖网格导出，每周日 02:00 落 PG app.ngi_* 四张表。
+        # 归 u 组的理由：属 RAN 侧取数域，与 02:00 的 ran_ume_daily 同档排队；
+        # 它用**独立主机 + 独立凭据组（ngi）**，与 UME 的 zte_ume 会话无交集，
+        # 因此不需要独立的串行道，也不存在互相踢会话的风险。
+        # ⚠ 新任务漏登记本表 → 队列 pending 无人认领直到 300s 超时（本组已踩过多次）。
+        "ngi_param_coverage_sync"),
     "n": (  # eFlow API / config-center 同源会话组（2026-09-27 收窄：s/w 两组已拆出）
         # 【2026-09-27 拆组背景】本组原先 17 项，实测近 24h 单 worker 串行占用：
         #   sp_data_sync 347min + eflow_sync 236min + eflow_active_alarm 103min = 686min/天，
