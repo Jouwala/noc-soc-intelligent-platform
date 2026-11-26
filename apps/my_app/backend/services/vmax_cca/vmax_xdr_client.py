@@ -38,9 +38,14 @@ vmax_xdr_client.py —— Talon XDR 信令详单查询客户端
 
 | serviceType | 业务名 | 域 | 时间字段 | 保留 | 合并查询 | 列数 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1100 | 5G Session | 5gsa | start_time | 72h | OK（12530 条） | 59 |
-| 1300 | 信令面 | 5gsa | start_time | 72h | OK（40 条） | 88 |
-| 1301 | User Plane Services | 5gsa | start_time | 72h | OK（6 条） | 88 |
+| 1100 | 控制面信令（S1-MME/S11/S6a/SGs/Gn） | 5gsa | start_time | 72h | OK（12530 条） | 59 |
+| 1300 | 用户面话单（FLOW/HTTP/DNS…） | 5gsa | start_time | 72h | OK（40 条） | 88 |
+| 1301 | 用户面业务（视频/网页/APP） | 5gsa | start_time | 72h | OK（6 条） | 88 |
+
+2026-11-26 改名：此前 1100 叫「5G 会话」、1300 叫「信令面」，与表清单正好相反
+（1100 下是 fact_pscp_* 控制面表，1300 下是 fact_5gsa_psup_* 用户面表），
+用户选「信令面」实际查的是用户面，号码没有 5G SA 业务时必然为空。
+现按表内容命名，与 vmax_diagnosis 的 _LABELS 口径一致。
 | 32 | RAN 无线侧 | ran_service | btime | **24h** | OK（2651 条） | 46 |
 
 ⚠️ **保留期之外返回 `3100100202`，那是「该时段无数据」，不是故障也不是参数错**
@@ -98,16 +103,17 @@ DOMAIN_RAN = "ran_service"
 #   · 32 的抓包窗口（前一天同一时刻起）已查不到，近 24h 有 2577 条 → 取 24h；
 #   · 1100/1300/1301 之前能回溯数天（抓包里 10-25 的窗口当时可查），保留 72h 上限。
 XDR_SERVICES: List[Dict[str, Any]] = [
-    {"id": "1100", "name": "5G Session", "name_zh": "5G 会话",
+    # 名称按该类型下的表内容取（2026-11-26，见模块头「改名」说明）
+    {"id": "1100", "name": "Control plane (1100)", "name_zh": "控制面信令 (1100)",
      "domain": DOMAIN_5GSA, "time_field": "start_time", "retention_hours": 72},
-    {"id": "1300", "name": "Signaling Plane", "name_zh": "信令面",
+    {"id": "1300", "name": "User-plane CDR (1300)", "name_zh": "用户面话单 (1300)",
      "domain": DOMAIN_5GSA, "time_field": "start_time", "retention_hours": 72},
-    {"id": "1301", "name": "User Plane Services", "name_zh": "用户面业务",
+    {"id": "1301", "name": "User-plane services (1301)", "name_zh": "用户面业务 (1301)",
      "domain": DOMAIN_5GSA, "time_field": "start_time", "retention_hours": 72},
     # RAN 侧（2026-10-26 接入）：时间字段是 btime，号码字段名是 "User Number"。
     # 实测 2651 条，含 RSRP/SINR 等无线测量列，是排障时看空口质量的关键数据。
     # 热存储只留约 24 小时，窗口上限必须跟着收窄。
-    {"id": "32", "name": "RAN XDR", "name_zh": "RAN 无线侧",
+    {"id": "32", "name": "RAN XDR (32)", "name_zh": "RAN 无线侧 (32)",
      "domain": DOMAIN_RAN, "time_field": "btime", "retention_hours": 24},
 ]
 _SERVICE_BY_ID = {s["id"]: s for s in XDR_SERVICES}
@@ -182,6 +188,11 @@ _table_cache: Dict[str, Any] = {}          # service_type -> (expire_ts, tables)
 # 2026-11-01 P0'-2：诊断 6 页 × 4 源原来最多打 24 次列头，现在每表只打 1 次。
 _HEADER_CACHE_TTL = 600.0
 _header_cache: Dict[str, Any] = {}        # key -> (expire_ts, cols)
+
+# MSISDN -> IMSI 映射缓存（2026-11-26）：手动查 RAN(32) 时要先解析 IMSI，
+# 翻页/导出会反复打同一号码，映射本身稳定，只缓存命中结果 30 分钟。
+_IMSI_CACHE_TTL = 1800.0
+_imsi_cache: Dict[str, Any] = {}          # msisdn -> (expire_ts, imsi)
 
 
 class VmaxXdrError(VmaxCcaError):
@@ -412,6 +423,21 @@ class VmaxXdrClient:
         status = payload.get("status")
         if status != 0:
             msg = str(payload.get("errMsg") or payload.get("msg") or "")
+            # 2026-11-26：3100100202 = 该窗口无记录（或超出保留期），与分表
+            # query_table 同口径当 0 条返回 —— 此前合并表把它抛成错误，界面显示红色
+            # 「查询失败」，同一种情况两个面板一红一灰。
+            if "3100100202" in msg:
+                try:
+                    cols = self.fetch_headers(service_type, condition, domain=domain)
+                except VmaxCcaError:
+                    cols = {"field": [], "header": []}
+                return {
+                    "msisdn": msisdn, "service_type": service_type,
+                    "window": {"starttime": starttime, "endtime": endtime},
+                    "page": page, "page_size": page_size, "total_pages": 0,
+                    "records": 0, "field": cols["field"], "header": cols["header"],
+                    "rows": [], "empty_reason": "no_data",
+                }
             # 只抛上游原文（含 operation code），由 router 决定怎么给用户看
             raise VmaxXdrError(msg or "上游返回 status=%s" % status)
 
@@ -429,6 +455,42 @@ class VmaxXdrClient:
             "header": cols["header"],
             "rows": [_row_to_dict(r, cols) for r in (rows or []) if isinstance(r, dict)],
         }
+
+    # ---------- MSISDN -> IMSI（RAN 域手动查询用） ----------
+    def resolve_imsi(self, msisdn: str, starttime: str, endtime: str) -> str:
+        """从 1300 / 1100 的记录里解析该号码的 IMSI（RAN 表只带 IMSI，号码列为空）。
+
+        与 VmaxDiagnosisService._pick_imsi 同口径：1300 优先，再看 1100；
+        只取 imsi 一列、每表 1 页，代价是最多 2 次轻量查询。先用调用方的窗口，
+        找不到再放宽到最近 24 小时（映射关系稳定，放宽窗口不会张冠李戴）。
+        找不到返回空串，由调用方明确提示「无 IMSI 映射」，不能当成「无数据」。
+        """
+        now = time.time()
+        hit = _imsi_cache.get(msisdn)
+        if hit and hit[0] > now:
+            return hit[1]
+        sec_fmt = "%Y-%m-%d %H:%M:%S"
+        windows = [(starttime, endtime)]
+        wide = (time.strftime(sec_fmt, time.localtime(now - 24 * 3600)) + ".000",
+                time.strftime(sec_fmt, time.localtime(now)) + ".000")
+        if wide != (starttime, endtime):
+            windows.append(wide)
+        for s, e in windows:
+            for sid, table in (("1300", "fact_5gsa_psup_flow"), ("1100", "fact_pscp_s1mme")):
+                try:
+                    res = self.query_table(msisdn, sid, table, s, e,
+                                           page=1, page_size=20, columns=["imsi"])
+                except VmaxCcaUnavailable:
+                    raise
+                except VmaxCcaError as exc:
+                    logger.info("[vmax_xdr] 解析 IMSI 时 %s/%s 失败（跳过）: %s", sid, table, exc)
+                    continue
+                for r in res.get("rows") or []:
+                    v = str(r.get("imsi") or "").strip()
+                    if v and v not in ("-", "--") and len(v) >= 10:
+                        _imsi_cache[msisdn] = (now + _IMSI_CACHE_TTL, v)
+                        return v
+        return ""
 
     # ---------- 分表查询（XDR Records：UEMR_XDR 等） ----------
     def query_table(self, msisdn: str, service_type: str, table: str,

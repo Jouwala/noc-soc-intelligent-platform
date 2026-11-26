@@ -237,9 +237,25 @@ def query_records(
     window = {"starttime": start_dt.strftime(fmt), "endtime": end_dt.strftime(fmt)}
     t0 = time.monotonic()
     try:
-        result = get_xdr_client().query_table(
+        client = get_xdr_client()
+        # RAN 域（32：UEMR/UU/X2）必须按 IMSI 查（2026-11-26）：此前手动面板只传号码，
+        # 号码列在 RAN 表里全是空串，于是永远 0 条，还提示「业务正常」。
+        imsi = None
+        if spec.get("domain") == "ran_service":
+            imsi = client.resolve_imsi(normalized, window["starttime"], window["endtime"]) or None
+            if not imsi:
+                _write_log(user.get("username", ""), normalized, service_type, table,
+                           window, 0, page, int((time.monotonic() - t0) * 1000), "ok", "no_imsi")
+                return {
+                    "msisdn": normalized, "service_type": service_type,
+                    "table": table, "table_label": table, "window": window,
+                    "page": page, "page_size": page_size, "total_pages": 0,
+                    "records": 0, "field": [], "header": [], "rows": [],
+                    "empty_reason": "no_imsi",
+                }
+        result = client.query_table(
             normalized, service_type, table, window["starttime"], window["endtime"],
-            page=page, page_size=page_size)
+            page=page, page_size=page_size, imsi=imsi)
     except VmaxXdrUnsupported as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except VmaxCcaNotConfigured as exc:

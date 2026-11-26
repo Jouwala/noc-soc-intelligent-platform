@@ -92,10 +92,25 @@ def query_xdr(
 
     # 上游要求毫秒边界（与 CCA 的秒级窗口不同，见 vmax_xdr_client 头注释）
     fmt = "%Y-%m-%d %H:%M:%S.000"
+    s_txt, e_txt = start_dt.strftime(fmt), end_dt.strftime(fmt)
     try:
-        result = get_xdr_client().query(
-            normalized, service_type, start_dt.strftime(fmt), end_dt.strftime(fmt),
-            page=page, page_size=page_size)
+        client = get_xdr_client()
+        # RAN 域（32）的表号码列为空、只带 IMSI（见 vmax_xdr_client._build_condition）：
+        # 先解析 IMSI 再查；解析不到时明确返回 no_imsi，不能让「查询条件错」看起来像「无数据」。
+        imsi = None
+        if spec.get("domain") == "ran_service":
+            imsi = client.resolve_imsi(normalized, s_txt, e_txt) or None
+            if not imsi:
+                return {
+                    "msisdn": normalized, "service_type": service_type,
+                    "window": {"starttime": s_txt, "endtime": e_txt},
+                    "page": page, "page_size": page_size, "total_pages": 0,
+                    "records": 0, "field": [], "header": [], "rows": [],
+                    "empty_reason": "no_imsi",
+                }
+        result = client.query(
+            normalized, service_type, s_txt, e_txt,
+            page=page, page_size=page_size, imsi=imsi)
     except VmaxXdrUnsupported as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except VmaxCcaNotConfigured as exc:

@@ -8,10 +8,17 @@
  * 不再绕道证据抽屉；并新增 ccaError / ccaLoading —— CCA 查询失败常驻红条
  * （AGENTS.md 第四节第 10 条：说「这次算不全」→ 常驻），与「未发现根因」
  * 这两种空表含义严格分开，用户不会再把失败读成「没问题」。
+ *
+ * 2026-11-26（整改 P1-4/P1-5）：
+ *   - 「规则引擎假设」与「CCA 根因候选」合进同一张根因卡的两个页签，
+ *     此前是上下两张卡各讲一遍「根因是什么」；两者仍各自独立计算、互不篡改。
+ *   - 假设表也遵守「取数未齐不出结论」，与 CCA 排行同一闸门。
+ *   - 底部证据按钮 4 → 2：原始信令 XDR（合并表/分表两页签）+ 无线质量专项。
+ *     流量明细已内嵌在区域 2；CCA 画像改为根因卡右上角的入口。
  * ========================================================================== */
 
 import { useState } from 'react'
-import { Alert, Button, Space, Table, Typography } from 'antd'
+import { Alert, Button, Space, Table, Tabs, Typography } from 'antd'
 
 import { useI18n } from '../../i18n'
 import { renderI18n } from '../../renderI18n'
@@ -112,20 +119,14 @@ export default function VmaxWorkspaceVerdict({
           ))}
         />
       )}
-      {/* P0-4 假设排序：规则引擎的根因假设（与 CCA 排行并列，不互相篡改） */}
-      {hypotheses && hypotheses.length > 0 && (
-        <CardBase title={t('vmaxq.ws.hyp.title')}>
-          <Table
-            size="small"
-            rowKey="id"
-            columns={hypColumns}
-            dataSource={hypotheses}
-            pagination={false}
-            scroll={{ x: 700 }}
-          />
-        </CardBase>
-      )}
-      <CardBase title={t('vmaxq.ws.zone3.title')}>
+      <CardBase
+        title={t('vmaxq.ws.zone3.title')}
+        extra={(
+          <Button size="small" type="link" onClick={() => onOpenEvidence('cca')}>
+            {t('vmaxq.ws.evidence.cca')}
+          </Button>
+        )}
+      >
         {/* CCA 查询失败：常驻可见（不是口径解释，是「这次没算出来」） */}
         {!!ccaError && (
           <Alert
@@ -136,20 +137,48 @@ export default function VmaxWorkspaceVerdict({
         )}
         {diagLoading ? (
           <Text type="secondary">{diagProgress}</Text>
-        ) : rankedCauses.length ? (
-          <Table
-            size="small"
-            rowKey="id"
-            loading={ccaLoading}
-            columns={causeColumns}
-            dataSource={rankedCauses}
-            pagination={false}
-            scroll={{ x: 600 }}
-          />
         ) : (
-          <Text type="secondary">
-            {ccaLoading ? t('vmaxq.ws.cause.loading') : t('vmaxq.ws.cause.empty')}
-          </Text>
+          <Tabs
+            size="small"
+            defaultActiveKey={hypotheses && hypotheses.length ? 'hyp' : 'cca'}
+            items={[
+              {
+                key: 'hyp',
+                label: `${t('vmaxq.ws.cause.tabHyp')} (${hypotheses?.length ?? 0})`,
+                children: hypotheses && hypotheses.length ? (
+                  <Table
+                    size="small"
+                    rowKey="id"
+                    columns={hypColumns}
+                    dataSource={hypotheses}
+                    pagination={false}
+                    scroll={{ x: 700 }}
+                  />
+                ) : (
+                  <Text type="secondary">{t('vmaxq.ws.cause.hypEmpty')}</Text>
+                ),
+              },
+              {
+                key: 'cca',
+                label: `${t('vmaxq.ws.cause.tabCca')} (${rankedCauses.length})`,
+                children: rankedCauses.length ? (
+                  <Table
+                    size="small"
+                    rowKey="id"
+                    loading={ccaLoading}
+                    columns={causeColumns}
+                    dataSource={rankedCauses}
+                    pagination={false}
+                    scroll={{ x: 600 }}
+                  />
+                ) : (
+                  <Text type="secondary">
+                    {ccaLoading ? t('vmaxq.ws.cause.loading') : t('vmaxq.ws.cause.empty')}
+                  </Text>
+                ),
+              },
+            ]}
+          />
         )}
       </CardBase>
 
@@ -174,9 +203,7 @@ export default function VmaxWorkspaceVerdict({
         )}
         <Space size={6} wrap>
           <Button size="small" onClick={() => onOpenEvidence('xdr')}>{t('vmaxq.ws.evidence.xdr')}</Button>
-          <Button size="small" onClick={() => onOpenEvidence('records')}>{t('vmaxq.ws.evidence.radio')}</Button>
-          <Button size="small" onClick={() => onOpenEvidence('flow')}>{t('vmaxq.ws.evidence.tcp')}</Button>
-          <Button size="small" onClick={() => onOpenEvidence('cca')}>{t('vmaxq.ws.evidence.cca')}</Button>
+          <Button size="small" onClick={() => onOpenEvidence('radio')}>{t('vmaxq.ws.evidence.radio')}</Button>
         </Space>
       </CardBase>
 
