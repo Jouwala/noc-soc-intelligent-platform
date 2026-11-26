@@ -913,3 +913,31 @@ def bot_data_health():
         return {"ok": False, "error": str(e), "tables": {}}
     out["datasets"] = len(DATASETS)
     return out
+
+
+@router.get("/prtg")
+def get_prtg_status():
+    """PRTG 核心链路实时健康度（日报口径），供 WhatsApp 机器人查询。
+
+    返回带 `generated_at` 与 `source`，机器人原样渲染、不得改数字。
+    """
+    from backend.services.prtg import reports
+
+    daily = reports.daily_report()
+    monthly = reports.monthly_report()
+    return {
+        "ok": True,
+        "domain": "prtg",
+        "source": "live",
+        "generated_at": daily["generated_at"],
+        "data_age_seconds": daily.get("data_age_seconds"),
+        "kpi": daily["kpi"],
+        "traffic": daily["traffic"],
+        "anomalies": daily["anomalies"]["items"][:10],
+        "capacity": daily["capacity"],
+        "sla": {
+            "month": monthly["month"],
+            "summary": monthly["sla"]["summary"],
+        },
+        "data_source": reports.SOURCE,
+    }

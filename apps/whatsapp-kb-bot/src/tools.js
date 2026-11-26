@@ -249,6 +249,16 @@ const TOOL_SPEC = [
     args: '{"task_id":"","days":7,"limit":20}',
   },
   {
+    name: 'query_prtg_status',
+    desc:
+      '查 **PRTG 核心链路实时健康度**：25 个传感器状态（Up / Unusual / Down）、平均可用率、' +
+      '异常链路（低于基线/流量归零/超基线/Errors 增长，含 Ping 抖动状态机）、全网峰值与均值、' +
+      '当月 SLA（平均可用率/低于目标条数/故障时长）与容量登记数。' +
+      '用于「PRTG 现在怎么样」「核心链路有没有异常」「链路可用率多少」「容量登记了吗」这类问题。' +
+      '⚠️ 数字来自 my_app 的 PRTG 采集服务，回答必须带时间戳与来源，不要把该值套到站点可用率上。',
+    args: '{}',
+  },
+  {
     name: 'query_data',
     desc:
       '通用**数据库查询**（NL2SQL）：把自然语言问题翻译成只读 SQL 去查生产库。' +
@@ -1655,6 +1665,30 @@ export async function runTool(call, index, lang, opts = {}) {
         source: r.data?.source || 'http',
       },
       routeArgs: { domain: 'task-stats', ...params },
+    };
+  }
+
+  if (call.tool === 'query_prtg_status') {
+    // PRTG 是**网络链路**实时健康度，与站点级数据域无关；固定口径、秒级返回。
+    const r = await queryDataDomain('prtg', {});
+    if (!r.ok) {
+      return {
+        answered: false,
+        channel: 'datadomain',
+        text:
+          lang === 'en'
+            ? `I couldn't retrieve the PRTG link status${r.error ? `: ${r.error}` : ''}. Please try again later.`
+            : `暂时查不到 PRTG 链路状态${r.error ? `：${r.error}` : ''}。稍后再试试～`,
+        stats: { totalMs: Date.now() - t0 },
+        routeArgs: { domain: 'prtg' },
+      };
+    }
+    return {
+      answered: true,
+      channel: 'datadomain',
+      text: renderDataDomain('prtg', r.data, lang),
+      stats: { ...(r.stats || {}), totalMs: Date.now() - t0, degraded: false, source: r.data?.data_source || 'http' },
+      routeArgs: { domain: 'prtg' },
     };
   }
 

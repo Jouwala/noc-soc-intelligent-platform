@@ -9,17 +9,20 @@
  *   - 流量分类与证据时间线直接内嵌（同一批 rows，不重取）。
  * ========================================================================== */
 
+import { useMemo } from 'react'
 import { Collapse, Space, Tag, Typography } from 'antd'
 
 import { useI18n } from '../../i18n'
 import { CardBase } from '../cards'
 import { CHAIN_NODE_KEY, type ChainStatus, type EvidenceKind, type ExplainMetric, type Level } from '../../lib/vmaxWorkspaceRules'
-import type { ComplaintKey, DimensionScore, GameResult, OttResult, RadioAnalysis, TimelineRow, VoiceResult } from '../../pages/vmaxDiagnosisRules'
+import type { ComplaintKey, DimensionScore, GameResult, OttResult, RadioAnalysis, SourceResult, TimelineRow, VoiceResult } from '../../pages/vmaxDiagnosisRules'
+import { analyzeCallDrop } from '../../pages/vmaxCallDrop'
 import type { CcaResult } from '../VmaxCcaCards'
 import type { FlowData } from '../VmaxFlowCategoryTabs'
 import ExplainableMetric from './ExplainableMetric'
 import VmaxCrossCheck from './VmaxCrossCheck'
 import VmaxVoiceCard from '../VmaxVoiceCard'
+import VmaxCallDropReport from '../VmaxCallDropReport'
 import VmaxOttCard from '../VmaxOttCard'
 import VmaxGameCard from '../VmaxGameCard'
 import VmaxFlowCategoryTabs from '../VmaxFlowCategoryTabs'
@@ -34,7 +37,7 @@ const LEVEL_TAG: Record<Level, string> = {
 export default function VmaxWorkspaceAnalysis({
   metrics, chain, complaint,
   voice, ott, game, timeline, flowXdr,
-  radio, cca,
+  radio, cca, sources,
   loading,
   onOpenEvidence,
 }: {
@@ -46,6 +49,7 @@ export default function VmaxWorkspaceAnalysis({
   game: GameResult | null
   timeline: TimelineRow[]
   radio: RadioAnalysis | null
+  sources: SourceResult[]
   flowXdr: FlowData | null
   scores: DimensionScore[]
   cca: CcaResult | null
@@ -53,6 +57,13 @@ export default function VmaxWorkspaceAnalysis({
   onOpenEvidence: (kind: EvidenceKind) => void
 }) {
   const { t } = useI18n()
+  const callDrop = useMemo(() => (sources.length ? analyzeCallDrop(sources, {
+    cells: cca?.cells?.cells,
+    causes: cca?.causes,
+  }) : null), [sources, cca])
+  const showCallDrop = !!callDrop && (
+    callDrop.hasActivity || complaint === 'all' || complaint === 'voice' || complaint === 'ott'
+  )
 
   const primaryCard = complaint === 'voice' ? 'voice'
     : complaint === 'ott' ? 'ott'
@@ -78,6 +89,7 @@ export default function VmaxWorkspaceAnalysis({
         </div>
       </CardBase>
 
+      {showCallDrop && callDrop && <VmaxCallDropReport report={callDrop} />}
       {voice && primaryCard === 'voice' && <VmaxVoiceCard voice={voice} />}
       {ott && primaryCard === 'ott' && <VmaxOttCard ott={ott} />}
       {game && primaryCard === 'game' && <VmaxGameCard game={game} />}

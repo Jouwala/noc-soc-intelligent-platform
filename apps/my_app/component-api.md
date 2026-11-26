@@ -8,8 +8,8 @@
 
 | 端 | 位置 | 规模 |
 | --- | --- | --- |
-| **前端页面** | `frontend\src\pages\` | 88 个 `.tsx`（不含 `_` 前缀的模板与 `*_bak_*` 备份） |
-| **前端通用组件** | `frontend\src\components\` | 30 个 `.tsx` + `cards\` 子目录（卡片统一入口） |
+| **前端页面** | `frontend\src\pages\` | 90 个 `.tsx`（不含 `_` 前缀的模板与 `*_bak_*` 备份） |
+| **前端通用组件** | `frontend\src\components\` | 31 个 `.tsx` + `cards\` 子目录（卡片统一入口） |
 | **前端基础设施** | `frontend\src\*.ts(x)` | `api.ts`、`theme.ts`、`i18n.tsx`、`TaskStatusContext.tsx`、`cache.ts`、`datetime.ts`、`useDataTimestamps.ts`、`helpMarkdown.ts` |
 | **后端服务** | `backend\services\` | 业务服务层（各数据源采集与计算） |
 | **后端路由** | `backend\routers\` | API 端点 |
@@ -75,6 +75,7 @@ import { CardBase, StatCard } from '../components/cards'
 | `LegacyToolFrame.tsx` | 遗留工具页容器框架（iframe 包装旧工具） |
 | `MapWheelZoomOnClick.tsx` | 「点击后才启用地图滚轮缩放」的行为包装 —— 解决地图嵌在长页面里时滚轮被地图吃掉的问题 |
 | `MetricExplain.tsx` | 指标口径解释（悬浮 ⓘ 气泡，带复制按钮）。四个导出：`ExplainPopover`（**底层**，把任意节点包成悬浮气泡，数字本身要用它）、`ExplainIcon`（ⓘ 图标，自带 `stopPropagation`，挂在可下钻的卡片标题上不会顺带开弹窗）、`ExplainCorner`（卡片右上角绝对定位）、`ExplainLabel`（文字 + 内联 ⓘ）。一句话级别的本指标说明用它；多段全局口径仍走 `CalcChainNote`（AGENTS.md 三.3b） |
+| `VmaxCallDropReport.tsx` | **电路域来电打断数据通话（2026-11-26）**。`analyzeCallDrop` 的结果卡：离开 4G 的时刻、小区、回来时刻、离开秒数、被叫/主叫、回来时的承载原因。用户查询页与 CCA 页共用。语音卡上的「回落时长」是信令过程毫秒数，不是离开 4G 的秒数 |
 | `SearchableExportTable.tsx` | 可搜索 + 可导出的表格（导出遵循 `docs\EXCEL_EXPORT_STANDARD.md`） |
 | `StatCard.tsx` | 统计卡片（大数字 + 标题 + 副行） |
 

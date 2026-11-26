@@ -73,6 +73,63 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+#: 自动构建的 agent 任务书相对 worktree 的位置（TMP 已被 gitignore）。
+AGENT_PROMPT_REL = Path("TMP") / "agent-task.md"
+
+
+def render_task_prompt(issue) -> str:
+    """把 Issue 渲染成给 coding agent 的任务书（纯函数，可单测）。"""
+    labels = "、".join(getattr(issue, "labels", ()) or ()) or "（无）"
+    body = (getattr(issue, "body", "") or "").strip() or "（正文为空）"
+    title = (getattr(issue, "title", "") or "").strip() or f"Issue #{issue.number}"
+    return (
+        f"# Issue #{issue.number}：{title}\n\n"
+        f"- 标签：{labels}\n"
+        f"- 分支：当前 worktree 的分支（不要切分支，不要直接推 main）\n\n"
+        "## 任务正文（GitHub Issue 原文）\n\n"
+        f"{body}\n\n"
+        "## 执行要求（常驻 Worker 自动派发）\n\n"
+        "1. 先读仓库根 `AGENTS.md` 与相关子系统手册，按其约束执行。\n"
+        "2. 只改 Issue「文件修改范围」声明的文件；超出范围先停下来写阻塞说明。\n"
+        "3. 完成后把改动提交到当前分支，推送并创建/更新 PR；**不要合并 PR**。\n"
+        "4. 缺凭据、需要业务口径决定、需要改 VMAX 数仓时不要猜，写清阻塞原因后退出。\n"
+    )
+
+
+def write_task_prompt(worktree: Path, issue) -> Path:
+    """把任务书写进 worktree 的 `TMP/agent-task.md`，返回路径。"""
+    target = Path(worktree) / AGENT_PROMPT_REL
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # 固定文件名（不按 Issue 分）：worktree 是一任务一个，同名不会互相覆盖。
+    target.write_text(render_task_prompt(issue), encoding="utf-8")
+    return target
+
+
+def build_agent_argv(
+    template: tuple[str, ...] | list[str],
+    issue_number: int,
+    prompt_file: Path,
+    worktree: Path,
+    branch: str,
+) -> list[str]:
+    """按占位符展开 agent 命令模板（纯函数，可单测）。
+
+    占位符只认这四个；未知 `{...}` 原样保留，交给被调用方处理。
+    """
+    mapping = {
+        "{issue}": str(issue_number),
+        "{prompt_file}": str(Path(prompt_file)),
+        "{worktree}": str(Path(worktree)),
+        "{branch}": branch,
+    }
+    argv: list[str] = []
+    for part in template or ():
+        for key, value in mapping.items():
+            part = part.replace(key, value)
+        argv.append(part)
+    return argv
+
+
 _scheduler_cache = None
 
 
@@ -114,6 +171,13 @@ class WorkerConfig:
     lease_renew_interval_s: float = 150.0  # 执行期续租间隔（< TTL）
     drain_limit: int = 100
     capabilities: tuple[str, ...] = field(default_factory=lambda: _hostinfo.capabilities())
+    #: 只处理带齐这些标签的 Issue（空 = 不限制）。常驻 Worker 用
+    #: `worker:auto` 做显式 opt-in，见 `AgentWorker._eligible`。
+    require_labels: tuple[str, ...] = ()
+    #: Issue 没写「执行命令」时使用的 agent argv 模板（占位符
+    #: `{issue}` / `{prompt_file}` / `{worktree}` / `{branch}`）。
+    #: 空 = 保持旧行为（阻塞在 blocked-no-command）。
+    agent_command: tuple[str, ...] = ()
 
 
 class AgentWorker:
@@ -203,6 +267,48 @@ class AgentWorker:
     def _command_from_issue(body: str) -> Optional[list[str]]:
         return _command_parse.extract_command(body)
 
+    def _eligible(self, issues: list) -> list:
+        """只保留带齐 `require_labels` 的 Issue（空配置 = 不过滤，兼容旧行为）。
+
+        2026-11-24 流程提速批：常驻 Worker 只接显式打了 `worker:auto` 的
+        任务，避免把「等人来做」的 Issue 也自动跑掉；带 `risk:high` 的
+        一律跳过（生产库/数仓/nginx/发布必须有人确认）。
+        """
+        required = set(self.config.require_labels)
+        if not required:
+            return issues
+        out = []
+        for issue in issues:
+            labels = set(getattr(issue, "labels", ()) or ())
+            if not required.issubset(labels):
+                continue
+            # risk:high（生产库/数仓/nginx/发布）绝不允许无人值守自动执行，
+            # 与标签怎么打无关——代码层再兜一道（2026-11-24 Muse 1 审核）。
+            if "risk:high" in labels:
+                self.log(
+                    f"[worker] Issue #{getattr(issue, 'number', '?')} 带 risk:high，"
+                    "常驻 Worker 不认领"
+                )
+                continue
+            out.append(issue)
+        return out
+
+    def _auto_agent_command(
+        self, active: ActiveTask, issue
+    ) -> Optional[list[str]]:
+        """按 `agent_command` 模板生成 argv；没配置或没 worktree 时返回 None。"""
+        template = self.config.agent_command
+        if not template or active.worktree is None:
+            return None
+        prompt_file = write_task_prompt(active.worktree, issue)
+        return build_agent_argv(
+            template,
+            issue.number,
+            prompt_file,
+            active.worktree,
+            f"agent/{active.slug}",
+        )
+
     # -- 主流程 ---------------------------------------------------------------------
     def run_once(self) -> str:
         """一个轮询周期：本地心跳线程 + 拉取可认领任务 + 最多处理一个任务。
@@ -221,6 +327,7 @@ class AgentWorker:
             except TransportError as exc:
                 self.log(f"[worker] 拉取任务失败（疑似断网）：{exc}")
                 return "offline"
+            claimable = self._eligible(claimable)
             if not claimable:
                 try:
                     self.scheduler.heartbeat_worker(
@@ -313,8 +420,14 @@ class AgentWorker:
                 outcome = "aborted-reassigned" if active.aborted else "blocked-scope"
                 return outcome
 
-            # 4) 执行命令（结构化 JSON argv 优先，平台感知 shlex 兜底）
-            command = self.runner or self._command_from_issue(issue.body)
+            # 4) 执行命令（结构化 JSON argv 优先，平台感知 shlex 兜底）；
+            #    Issue 没写「执行命令」时，若配置了 agent 模板（常驻 Worker），
+            #    自动生成任务书并交给 coding agent 执行（2026-11-24）。
+            command = (
+                self.runner
+                or self._command_from_issue(issue.body)
+                or self._auto_agent_command(active, issue)
+            )
             if command is None:
                 self.lifecycle.mark_blocked(
                     active,
@@ -486,10 +599,35 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument("--registry-issue", type=int, default=None)
     parser.add_argument("--once", action="store_true", help="只跑一个轮询周期")
+    parser.add_argument(
+        "--agent-cmd",
+        default=os.environ.get("MUSE_AGENT_CMD", ""),
+        help=(
+            "Issue 未写「执行命令」时的 agent 命令模板（如 claude -p ...）；"
+            "占位符 {issue} / {prompt_file} / {worktree} / {branch}"
+        ),
+    )
+    parser.add_argument(
+        "--require-labels",
+        default=os.environ.get("MUSE_REQUIRE_LABELS", ""),
+        help="只处理带齐这些标签的 Issue（逗号分隔，常驻 Worker 用 worker:auto）",
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo_root).resolve()
-    config = WorkerConfig(agent_id=args.agent, repo=f"{args.owner}/{args.repo}")
+    agent_cmd_text = (args.agent_cmd or "").strip()
+    agent_command = (
+        tuple(_command_parse.split_command(agent_cmd_text)) if agent_cmd_text else ()
+    )
+    require_labels = tuple(
+        part.strip() for part in (args.require_labels or "").split(",") if part.strip()
+    )
+    config = WorkerConfig(
+        agent_id=args.agent,
+        repo=f"{args.owner}/{args.repo}",
+        require_labels=require_labels,
+        agent_command=agent_command,
+    )
     # ADR-7 §零：GitHub refs 是唯一权威。先建 GitHub 传输层，再交给工厂组装
     # GitHubRefScheduler；PR-5 起不再有 SQLite 回退分支（回滚靠 revert PR）。
     transport = RestGitHubTransport(args.owner, args.repo)

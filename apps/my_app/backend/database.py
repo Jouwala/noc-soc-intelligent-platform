@@ -443,8 +443,11 @@ class _PsycopgRaw:
     def executescript(self, sql_script):
         """多语句 DDL 脚本执行：与 sqlite3.Connection.executescript 对齐。
 
-        PG 无参数多语句串可直接发送（libpq 依次执行）；autocommit 模式下
-        每条语句独立事务，与 sqlite 脚本语义一致。无参数路径不做 %% 转义
+        PG 无参数多语句串可直接发送：整串是**一条 simple query**，libpq 顺序执行；
+        脚本里显式写了 `BEGIN; ... COMMIT;` 时，这些语句处在同一个事务里——所以
+        「DROP 旧表 + RENAME 新表」这类换表脚本是原子的。**不要把脚本里的
+        BEGIN/COMMIT 去掉**，也不要把一条 executescript 拆成多次 execute：那样每条
+        语句各自提交，读者会短暂看到「表不存在」。无参数路径不做 %% 转义
         （psycopg2 无参数时不格式化，列名含 % 原样发给 PG）。
 
         并发容错：两个执行者同时建表时，CREATE TABLE IF NOT EXISTS 存在

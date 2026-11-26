@@ -45,6 +45,34 @@ python apps\agent-worker\worker.py --agent muse-2 --repo-root D:\02_olbr_portal 
 python apps\agent-worker\watchdog.py --agent muse-2 --repo-root D:\02_olbr_portal          # 常驻（看门狗托管）
 ```
 
+### 常驻 + 自动执行（2026-11-24 流程提速批）
+
+`ops\deploy\install-agent-worker.ps1` 把 watchdog 装成登录时启动的计划任务，
+并给 Worker 配两个能力：
+
+| 参数 / 环境变量 | 作用 |
+| --- | --- |
+| `--require-labels` / `MUSE_REQUIRE_LABELS` | 只处理带齐这些标签的 Issue。常驻 Worker 用 `worker:auto` 做**显式 opt-in**，没打标签的任务不会被自动跑掉 |
+| `--agent-cmd` / `MUSE_AGENT_CMD` | Issue 未写「执行命令」时的 agent 命令模板；占位符 `{issue}` / `{prompt_file}` / `{worktree}` / `{branch}` |
+
+流程：Issue 打上 `agent:muse-2` + `state:todo` + `worker:auto` → Worker 认领、
+建 worktree、把 Issue 正文渲染成任务书写进 `<worktree>\TMP\agent-task.md` →
+按模板拉起 coding agent（默认 `claude -p --permission-mode acceptEdits`）→
+agent 在分支上改代码、跑验证、推送并开 PR → Worker 只提交范围内文件、回写状态。
+PR 的合并仍由 `auto-merge.yml` 的双门禁裁决，Worker 不合并。
+
+```powershell
+# 安装（写 TMP\agent-worker-<agent>.json + 注册计划任务，登录时启动）
+powershell -NoProfile -File ops\deploy\install-agent-worker.ps1 -Action Install -Agent muse-2
+# 看状态 / 最近日志
+powershell -NoProfile -File ops\deploy\install-agent-worker.ps1 -Action Status -Agent muse-2
+# 卸载
+powershell -NoProfile -File ops\deploy\install-agent-worker.ps1 -Action Uninstall -Agent muse-2
+```
+
+- 令牌不落盘：任务每次启动用 `gh auth token` 取当前登录态写进进程环境变量。
+- 默认**不启动**任何非 opt-in 任务；`risk:high` 任务不要打 `worker:auto`。
+
 ## 权威层与多 VM 语义（ADR-7）
 
 **GitHub refs 是唯一权威**（ADR-7 §零）：认领/租约/fencing/范围锁/完成幂等的状态

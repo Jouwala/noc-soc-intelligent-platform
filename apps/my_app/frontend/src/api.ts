@@ -1352,3 +1352,47 @@ export function getRanInventoryLedger(refresh = false) {
 export function getRanInventoryNe(neId: string) {
   return api.get(`/ran-inventory/ne/${encodeURIComponent(neId)}`)
 }
+
+// ========== PRTG 核心链路健康度看板（?page=prtg_links，Issue #228）==========
+// 后端 routers/prtg.py（只读）。取不到数据时后端返回 null / 空数组，
+// 页面按「—」展示，不补 0。
+export function getPrtgOverview(params?: { window?: string }) {
+  return api.get('/prtg/overview', { params })
+}
+
+export function getPrtgLinks(params?: { window?: string }) {
+  return api.get('/prtg/links', { params })
+}
+
+/** 单链路详情：基础信息 + 映射 + 最近事件 + 通道时序（series.value 为原始 byte/s）。 */
+export function getPrtgLinkDetail(sensorId: number, params?: { window?: string }) {
+  return api.get(`/prtg/links/${sensorId}`, { params })
+}
+
+// ========== PRTG SLA 与容量（?page=prtg_links 的 SLA 页签，Issue #231）==========
+export function getPrtgSla(params?: { month?: string; target?: number }) {
+  return api.get('/prtg/sla', { params })
+}
+
+export function getPrtgCapacity() {
+  return api.get('/prtg/capacity')
+}
+
+// ========== 站点 KPI 实时查询（?page=site_kpi_rt，投诉排查）==========
+// 直查 RAN UME 小区级 15 分钟明细，后端按站点过滤，结果只放内存不落库。
+// 因单次取数常超过 axios 的 120s 超时，query 只起任务，前端轮询 jobs。
+export function siteKpiRtSites(params?: { q?: string; limit?: number; tech?: string }) {
+  return api.get('/site-kpi-rt/sites', { params })
+}
+
+export function siteKpiRtQuery(payload: { site: string; days?: number; gran?: string; force?: boolean; tech?: string }) {
+  return api.post('/site-kpi-rt/query', payload)
+}
+
+export function siteKpiRtJob(jobId: string) {
+  return api.get(`/site-kpi-rt/jobs/${jobId}`)
+}
+
+export function siteKpiRtCacheClear() {
+  return api.post('/site-kpi-rt/cache/clear')
+}

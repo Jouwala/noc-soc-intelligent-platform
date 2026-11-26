@@ -27,7 +27,10 @@ def test_auto_merge_calls_review_gate_after_smoke_binding() -> None:
     assert "--repo" in text and "--pr" in text and "--head-sha" in text
     smoke_pos = text.index("smoke-passed 已绑定当前 head")
     # 以实际调用行为准（不是头注释 / checkout 步骤里提到的文件名）。
-    gate_pos = text.index("if ! python3 apps/control-plane/backend/dispatch/review_gate.py")
+    # 2026-11-24 起调用结果存进 GATE_OUT，供低风险免审分支落审计评论。
+    gate_pos = text.index(
+        'GATE_OUT="$(python3 apps/control-plane/backend/dispatch/review_gate.py'
+    )
     merge_pos = text.index("条件满足，合并 PR")
     assert smoke_pos < gate_pos < merge_pos
 
@@ -35,8 +38,20 @@ def test_auto_merge_calls_review_gate_after_smoke_binding() -> None:
 def test_auto_merge_review_gate_fails_closed() -> None:
     """门禁脚本返回非零就跳过（不合入），不是只记日志继续走。"""
     text = _read(AUTO_MERGE)
-    assert 'if ! python3 apps/control-plane/backend/dispatch/review_gate.py' in text
+    assert (
+        'if ! GATE_OUT="$(python3 apps/control-plane/backend/dispatch/review_gate.py'
+        in text
+    )
     assert "独立审核门禁未通过，跳过" in text
+
+
+def test_auto_merge_waiver_path_is_wired_and_audited() -> None:
+    """低风险免审必须接线：读到 REVIEW_TIER=waived 才写审计评论，不是静默放行。"""
+    text = _read(AUTO_MERGE)
+    assert "REVIEW_TIER=waived" in text
+    assert "review-waived: pr-" in text
+    # 免审评论同样绑定 head SHA，事后可复核是哪个 head 免的审
+    assert "sha-$HEAD_SHA" in text
 
 
 def test_auto_merge_checks_out_main_for_gate_script() -> None:
