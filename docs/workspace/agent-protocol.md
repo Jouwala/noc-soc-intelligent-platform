@@ -122,7 +122,11 @@ state:todo ──(TASK_ACCEPTED [人/Agent])──▶ state:claimed ──(TASK_
 - 一任务一分支：`agent/<任务>`（如 `agent/task-12-data-access`）；一任务一 Worktree：`.agent-worktrees/<任务>`。
 - Muse 1 拆分时做文件范围查重：重叠文件范围的任务串行化，高冲突文件强制串行，不并行。
 - 禁直接推 `main`：所有代码走分支 + PR + CI + QA，`auto-merge.yml` 只在 `smoke-passed` + CI 全绿时合并。
-- 分支落后时自动更新分支（`PUT /pulls/{n}/update-branch`），冲突由开发 Agent 自己 rebase 解决，不自动合冲突 PR。
+- 分支落后时**不再自动更新**（2026-11-24 流程提速批）：分支保护未要求
+  「必须最新」，落后分支可直接合并；有冲突时由开发 Agent 自己 rebase，
+  或手动调 `PUT /pulls/{n}/update-branch` 更新一次。原「main 前进就批量
+  update-branch」的做法会让每个在途 PR 换 head，CI、冒烟、审核记录全部
+  作废重跑（实测 PR #242 三小时重跑三遍），已停用。
 
 ## 七、自动化实现（TASK-07，2026-11-14）
 
@@ -134,8 +138,13 @@ state:todo ──(TASK_ACCEPTED [人/Agent])──▶ state:claimed ──(TASK_
   PR 后发，自动化只做脚手架并在 Issue 下留普通评论，不冒充 Agent 消息。
 - CI（quality）失败自动通知 builder（`ci-failure-notify.yml`）——第五节
   轮询规则的自动补位，只通知、不打标签。
-- main 前进时自动更新落后的 `agent/*` 分支（`auto-merge.yml` 的
-  `update-branches` 作业）——落实第六节的自动更新分支。
+- ~~main 前进时自动更新落后的 `agent/*` 分支（`auto-merge.yml` 的
+  `update-branches` 作业）~~——**2026-11-24 起停用**，只在人工
+  `workflow_dispatch` 且勾选 `update_branches=true` 时批量更新；原因见
+  第六节最后一条。
+- 卡死运行自动兜底（2026-11-24 新增 `run-watchdog.yml`）：`quality`
+  运行 `queued`/`in_progress` 超 30 分钟自动 cancel、`completed+failure`
+  且 0 个 job 自动 rerun（最多 2 次尝试），避免一次异常把 PR 卡几小时。
 - PR 合并后自动回写任务状态：第 12 类 PR_MERGED 评论由
   `pr-merged-writeback.yml` 发出（机器可读头 `from: github-actions`），
   同时打 `state:merged` 并关闭 Issue；Muse 1 只做最终汇总。

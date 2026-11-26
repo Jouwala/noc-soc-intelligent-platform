@@ -258,7 +258,7 @@ def build_stale_message(items: List[Dict[str, Any]], window_minutes: int) -> str
     ## 为什么汇总成一条
 
     超窗告警往往一次好几条（实测 6 条）。逐条推会刷屏，且它们本质是同一类问题。
-    汇总后一轮只发一条，且同一告警只提醒一次（调用方按状态表 `send_status` 抑制）。
+    汇总后一轮只发一条，且同一告警 6 小时内只提醒一次（调用方按 `notified_recently` 抑制）。
 
     ⚠ 正文一律英文（与其它群通报一致，2026-10-27 如意要求）。
     """
@@ -279,13 +279,16 @@ def build_stale_message(items: List[Dict[str, Any]], window_minutes: int) -> str
 
 
 def build_manual_message(alarm: Dict[str, Any], reason: str,
-                         hint_lines: Optional[List[str]] = None) -> str:
+                         hint_lines: Optional[List[str]] = None,
+                         headline: Optional[str] = None) -> str:
     """自动派单失败时的「需人工处理」通报（2026-10-27 业务要求：不能静默漏派）。
 
     ⚠ **群通报正文一律英文**（2026-10-27 如意要求「通报默认使用英文」）：
-    `reason` / `hint_lines` 必须由调用方传入英文；中文原因走 `last_error` 落状态表。
+    `reason` / `hint_lines` / `headline` 必须由调用方传入英文；中文原因走
+    `last_error` 落状态表。
     """
-    return engine.render_manual_message(CTX, alarm, reason, hint_lines=hint_lines)
+    return engine.render_manual_message(CTX, alarm, reason, hint_lines=hint_lines,
+                                        headline=headline)
 
 
 # 任务 result 里最多保留多少条失败原因（避免 result_json 膨胀；
@@ -296,6 +299,37 @@ FAIL_REASON_CAP = 5
 # 取 0.5 的理由：现场那次是 479/517 = 92.6%，必须判失败；
 # 而零星几条站点缺档（如 Tokadeh 不在 cmdb）属于数据待补，判 partial 即可。
 FAIL_RATIO_FAIL = 0.5
+
+# 同一条告警（同一个 alarm_key）的群通报**最短重发间隔**（小时）。
+# 2026-11-25 实测：alarm_key 是 (uuid,restype,code)，eFlow 会复用同一个 key 反复
+# 升起告警（实测 08:20 新断纤与 10-29 那次是同一 key）。旧规则「send_status=Y 就
+# 永不重发」把今天的新告警整条压掉了 —— 群里一条通报都没收到，等于静默漏派。
+# 改成「距上次确认送达不足 N 小时才抑制」：既不会每 5 分钟刷屏（含 flapping），
+# 又保证新出现的故障能被通报出去，长期修不好的告警每 N 小时还会再提醒一次。
+NOTIFY_REPEAT_HOURS = 6
+
+
+def _parse_dt(text: Any) -> Optional[datetime]:
+    """解析状态表里的 `YYYY-MM-DD HH:MM:SS`；空值/脏数据一律返回 None。"""
+    try:
+        return datetime.strptime(str(text), "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return None
+
+
+def notified_recently(rec: Dict[str, Any], now: Optional[datetime] = None) -> bool:
+    """这条告警最近是否已确认通报过（→ 本轮不再通报）？
+
+    判据：`send_status=='Y'` 且 `send_time` 在 `NOTIFY_REPEAT_HOURS` 小时内。
+    `send_time` 缺失/无法解析时按「没通报过」处理 —— 宁可多报一条，也不能静默。
+    """
+    if engine.s(rec.get("send_status")) != "Y":
+        return False
+    sent = _parse_dt(rec.get("send_time"))
+    if sent is None:
+        return False
+    now = now or datetime.now()
+    return (now - sent).total_seconds() < NOTIFY_REPEAT_HOURS * 3600
 
 
 def apply_outcome(out: Dict[str, Any]) -> Dict[str, Any]:
@@ -311,8 +345,8 @@ def apply_outcome(out: Dict[str, Any]) -> Dict[str, Any]:
 
     四态规则（依次判定）：
       errors 非空                       → failed（有硬异常，如拉不到数据）
-      失败全部是 cmdb 站点缺档          → pending_cmdb（success 仍 True，见下段）
-        （且 cmdb 索引本身拉到了）
+      失败全部是「非任务故障」          → pending_cmdb / upstream_no_tt
+        （cmdb 站点缺档 / 上游未建单，success 仍 True，见下两段）
       due>0 且 handled==0 且 failed>0   → failed（本轮该派的全都派不出去）
       failed/due >= FAIL_RATIO_FAIL     → failed（大面积失败，如现场 92.6%）
       failed>0 但未达阈值               → partial（success 仍 True，靠 warnings
@@ -329,6 +363,19 @@ def apply_outcome(out: Dict[str, Any]) -> Dict[str, Any]:
       * 混有建单失败（eFlow 侧真失败）→ 仍按下面的规则判 failed / partial；
       * cmdb 索引为空（cmdb 没拉到）→ 仍判 failed：那是系统故障而不是站点缺档，
         否则 cmdb 一挂整个任务就全绿了。
+
+    **upstream_no_tt（2026-11-25 如意要求）**：`assign API returned success but no
+    TT was created` 是 **eFlow 上游侧的问题**（接口接单了、TT 没建出来，时灵时不灵），
+    跟本任务脚本无关。把它记成红色「Error」既没意义（我们这侧无从修复）又把真正的
+    故障淹掉 —— 按业务事实在 WhatsApp 群通报一条、让一线去 eFlow 手工建单即可。
+    所以当「本轮所有失败都是上游未建单」时判 `upstream_no_tt`：`success=True`、
+    不写 `error`，提示文案留在 `message` 里，Run History 按橙色提示展示
+    （前端读 `result_json.status`，与 pending_cmdb 同款处理）。
+    `ttstatus` 异常（ME 未绑站点）导致的未建单**也算这一类** —— 那同样是 eFlow 侧
+    数据/配置问题，不是本任务故障（缓派机制不变，6 小时内不重复试派/通报）。
+    仍保留两条护栏，防止「上游整体挂掉」被吞成绿色：
+      * 接口真报错（HTTP 5xx / 超时 / ok=false）不归这一类，仍按 failed / partial 判；
+      * 混有站点解析失败且 cmdb 索引为空 → 仍判 failed。
 
     handled 只算真正产生了结果的：assigned（建出 TT）+ merged（并入组长 TT）。
     skipped / waiting / expired / pending_manual 是**有意不派**，不算失败、
@@ -350,15 +397,24 @@ def apply_outcome(out: Dict[str, Any]) -> Dict[str, Any]:
         if not out.get("error"):
             out["error"] = "；".join(str(e) for e in out["errors"] if e)
         return out
-    # cmdb 站点缺档：本轮所有失败都是「ME/站名在 cmdb 里找不到站点」，且 cmdb 索引
-    # 本身是健康拉到的（条数 > 0）→ 这不是任务错误，是 cmdb 配置待补
-    # （2026-11-17 如意要求：提示要保留，但不能报错）。明细已进 message / fail_reasons。
-    if (out["failed"] > 0
-            and out["failed"] == out.get("failed_site_unresolved", 0)
-            and (out.get("cmdb_site_count") or 0) > 0):
-        out["status"] = "pending_cmdb"
-        out["success"] = True
-        return out
+    # 「非任务故障」的两类失败（cmdb 站点缺档 / 上游未建单）。它们不写 error，
+    # 但都要让 Task Manager 与 message 里看得见，不许变成静默失败。
+    site_gap = out.get("failed_site_unresolved", 0)
+    upstream_no_tt = out.get("failed_upstream_no_tt", 0)
+    if out["failed"] > 0 and out["failed"] == site_gap + upstream_no_tt:
+        if site_gap and (out.get("cmdb_site_count") or 0) <= 0:
+            # cmdb 索引 0 条 = cmdb 没拉到，是系统故障而不是站点缺档 → 落到下面判 failed
+            pass
+        elif site_gap:
+            # cmdb 站点缺档：ME/站名在 cmdb 里找不到站点，是 cmdb 配置待补
+            # （2026-11-17 如意要求：提示要保留，但不能报错）。明细已进 message / fail_reasons。
+            out["status"] = "pending_cmdb"
+            out["success"] = True
+            return out
+        else:
+            out["status"] = "upstream_no_tt"
+            out["success"] = True
+            return out
     if due > 0 and handled == 0 and out["failed"] > 0:
         out["status"] = "failed"
         out["success"] = False
@@ -435,10 +491,15 @@ def run_fiber_assign() -> Dict[str, Any]:
         # 前者是 cmdb 数据缺档（配置问题），全部失败都是这一类时本轮判
         # pending_cmdb 而不是 failed（2026-11-17 如意要求，见 apply_outcome）。
         "failed_site_unresolved": 0,
+        # 建单失败的另一种：派单接口回 success 但回查 ttid 仍为空 —— **eFlow 上游侧问题**
+        # （2026-11-25 如意要求：不算任务失败，只在群里按业务事实通报）。
+        # 本轮失败全部是这一类时，apply_outcome 判 upstream_no_tt（success=True）。
+        "failed_upstream_no_tt": 0,
         # 本轮 cmdb 站点索引条数。0 = cmdb 没拉到 → 站点解析失败属系统故障，
         # 不能归成「站点缺档」，apply_outcome 因此仍判 failed。
         "cmdb_site_count": 0,
-        # 四态结论：ok / partial / failed / pending_cmdb（见 apply_outcome 的判据）
+        # 四态结论：ok / partial / failed / pending_cmdb / upstream_no_tt
+        # （见 apply_outcome 的判据）
         "status": None,
     }
 
@@ -612,9 +673,9 @@ def run_fiber_assign() -> Dict[str, Any]:
                     base["site_name"] = _st_sname
                 base.update({"assign_status": "S", "skip_reason": reason})
                 store.upsert_record(conn, base)
-                # 超窗告警 → 汇总提醒人工（同一告警只提醒一次，靠 send_status 抑制）。
+                # 超窗告警 → 汇总提醒人工（同一告警 6 小时内只提醒一次，见 notified_recently）。
                 # 不写 warnings：那会触发微信通知，而群里已收到汇总，不必双通道打扰。
-                if _verdict == engine.DUE_TOO_OLD and engine.s(rec.get("send_status")) != "Y":
+                if _verdict == engine.DUE_TOO_OLD and not notified_recently(rec):
                     _occ = engine.occur_ms(a)
                     pending_stale.append({
                         "alarm_key": akey,
@@ -647,7 +708,7 @@ def run_fiber_assign() -> Dict[str, Any]:
                                akey, tt_status)
 
             # ---------- 已知派不出 + 已通报人工 → 本轮缓派（2026-11-08 根治） ----------
-            # 上一轮真试过且失败（N）、群里已确认通报过人工（send_status=Y）、
+            # 上一轮真试过且失败（N）、群里已确认通报过人工（**且还在通报时效内**）、
             # 本轮实时拉到的 ttstatus 仍可疑 → 不再空试派单接口。
             # 背景：这类告警（ME 未在 eFlow 绑定站点）接口回 succeed 却永远建不出
             # TT，旧实现每 5 分钟重试一遍，本轮 due 全是它们时整轮判 failed ——
@@ -656,7 +717,10 @@ def run_fiber_assign() -> Dict[str, Any]:
             # ttstatus 每轮实时重取，eFlow 修好绑定（转 0）即自动恢复派单。
             # 判定唯一真相源：engine.is_manual_pending（首次见到的告警不受影响，
             # 仍按 2026-10-27 业务要求先试一次、失败再通报）。
-            if engine.is_manual_pending(prev, engine.s(rec.get("send_status")),
+            # ⚠ 2026-11-25：`send_status` 换成 `notified_recently` 的结论 —— 超过
+            #   `NOTIFY_REPEAT_HOURS` 就重新试派一次并重新通报（长期没修的绑定需要
+            #   再提醒一次），否则缓派会变成永久不再尝试。
+            if engine.is_manual_pending(prev, "Y" if notified_recently(rec) else "",
                                         status_suspect):
                 out["pending_manual"] += 1
                 if len(out["pending_manual_samples"]) < SAMPLE_LIMIT:
@@ -763,9 +827,10 @@ def run_fiber_assign() -> Dict[str, Any]:
                 store.upsert_record(conn, base)
                 if first_sight:
                     out["warnings"].append(f"{akey} 站点解析失败，未派单：{reason}")
-                # 自动派不了，但不能静默：同一条只往群里通报一次（send_status 抑制），
-                # 否则每 5 分钟刷一条同样的失败消息（2026-10-27 如意要求）。
-                if engine.s(rec.get("send_status")) != "Y":
+                # 自动派不了，但不能静默：同一条只往群里通报一次（`notified_recently`
+                # 抑制），否则每 5 分钟刷一条同样的失败消息（2026-10-27 如意要求）。
+                # 2026-11-25 改成限时抑制：alarm_key 复用下，旧规则会把今天的告警压掉。
+                if not notified_recently(rec):
                     pending_manual.append({"alarm_key": akey, "alarm": a,
                                            "reason": reason_en})
                 continue
@@ -837,6 +902,20 @@ def run_fiber_assign() -> Dict[str, Any]:
                 out["failed"] += 1
                 reason = last_err
                 reason_en = last_err
+                # 只区分「上游接单了但没建单」（`engine.is_upstream_no_tt`）：
+                # 这是 eFlow 侧问题，2026-11-25 如意要求不许记成任务失败，只按业务
+                # 事实在群里通报一次。接口真报错（HTTP 5xx / 超时 / ok=false）不走这里。
+                # ⚠ ttstatus 可疑（ME 未绑站点）导致的未建单**也算这一类** —— 那是 eFlow
+                #   侧数据/配置问题，跟 08:38 那批 `assign API returned success but no TT`
+                #   是同一个事实（上游没建单）。缓派机制不变（notified_recently 时效内
+                #   不重复试派/通报），只是不再记成红色失败。
+                upstream_no_tt = engine.is_upstream_no_tt(last_err)
+                if upstream_no_tt:
+                    out["failed_upstream_no_tt"] += 1
+                    reason = (f"上游未建单：派单接口回 success 但 ttid 仍为空"
+                              f"（已尝试 {max_attempts} 次），需在 eFlow 手工建单")
+                    reason_en = (f"eFlow accepted the assign request but created no TT "
+                                 f"after {max_attempts} attempt(s) (ttid still empty)")
                 # ttstatus 可疑 = eFlow 侧 ME 未关联站点（数据问题，不是 payload 问题）。
                 if status_suspect:
                     # 代码改不动它，只能让人去 eFlow 修 —— 故写清原因并通报一次。
@@ -852,9 +931,10 @@ def run_fiber_assign() -> Dict[str, Any]:
                 if first_sight:
                     out["warnings"].append(
                         f"{akey} 派单失败（尝试 {max_attempts} 次）：{reason}")
-                logger.warning("[Fiber] 派单失败 %s：%s", akey, reason)
-                if status_suspect and engine.s(rec.get("send_status")) != "Y":
-                    # 同一条只通报一次（send_status 抑制），否则每 5 分钟刷一条
+                logger.warning("[Fiber] 派单%s %s：%s",
+                               "未建单（上游）" if upstream_no_tt else "失败", akey, reason)
+                if status_suspect and not notified_recently(rec):
+                    # 同一条 6 小时内只通报一次（notified_recently 抑制），否则每 5 分钟刷一条
                     pending_manual.append({
                         "alarm_key": akey, "alarm": a,
                         "reason": reason_en,
@@ -864,6 +944,23 @@ def run_fiber_assign() -> Dict[str, Any]:
                                  "      Please bind the ME to a numeric site in eFlow,",
                                  "      or assign the TT manually. Once the binding is",
                                  "      fixed, this task retries automatically."],
+                    })
+                elif upstream_no_tt and not notified_recently(rec):
+                    # 上游接单却没建单：也要让人看到（漏派不能静默），但措辞讲清
+                    # 「接口是成功的，TT 没落地 —— eFlow 侧问题」。同一条 6 小时内只
+                    # 通报一次（notified_recently）；下一轮仍会重试（时灵时不灵）。
+                    pending_manual.append({
+                        "alarm_key": akey, "alarm": a,
+                        "reason": reason_en,
+                        "headline": ("⚠ Auto assign accepted by eFlow but no TT was "
+                                     "created — manual action required in eFlow"),
+                        "hint": ["Note: eFlow returned success for the assign request but",
+                                 "      the alarm still has no TT (ttid empty), so nothing",
+                                 "      has been dispatched yet.",
+                                 "      Please create the TT manually in eFlow, or check the",
+                                 "      eFlow dispatch service on the upstream side.",
+                                 "      This task keeps retrying every round and will report",
+                                 "      automatically once a TT appears."],
                     })
 
         out["merged"] = merged
@@ -887,12 +984,13 @@ def run_fiber_assign() -> Dict[str, Any]:
             messages.append({
                 "tt_no": p["alarm_key"],
                 "text": build_manual_message(p["alarm"], p["reason"],
-                                             hint_lines=p.get("hint")),
+                                             hint_lines=p.get("hint"),
+                                             headline=p.get("headline")),
             })
 
         # ③ 超窗（长期未清除）告警的**汇总**提醒 —— 一轮只发一条，列出全部待提醒的告警。
         # 为什么不逐条：实测一次 6 条，逐条会刷屏；且它们本质是同一类问题（长期未清除），
-        # 合并后人工一眼能看完。同一告警只提醒一次，靠状态表 send_status 抑制。
+        # 合并后人工一眼能看完。同一告警 6 小时内只提醒一次，见 notified_recently。
         STALE_MSG_KEY = "__STALE_SUMMARY__"
         if pending_stale:
             messages.append({
@@ -946,6 +1044,15 @@ def run_fiber_assign() -> Dict[str, Any]:
             detail = "；".join((out.get("fail_reasons") or [])[:FAIL_REASON_CAP])
             summary += ("｜cmdb 站点缺档：{n} 条待派告警未能自动派单".format(n=out["failed"])
                         + "（不是任务错误，属 cmdb 配置待补；补齐站点/ME 映射后下一轮自动恢复）"
+                        + (f"：{detail}" if detail else ""))
+        elif out["status"] == "upstream_no_tt":
+            # 上游接单却没建单（2026-11-25 如意要求）：不算任务错误，通报已发群里，
+            # 由一线去 eFlow 手工建单；Run History 按橙色提示渲染，不显示成 Error。
+            detail = "；".join((out.get("fail_reasons") or [])[:FAIL_REASON_CAP])
+            summary += ("｜上游未建单：{n} 条待派告警 eFlow 未建出 TT".format(
+                            n=out.get("failed_upstream_no_tt") or out["failed"])
+                        + "（不是任务错误，属 eFlow 侧派单问题；已按条在 WhatsApp 群通报，"
+                          "待人工在 eFlow 建单，下一轮自动重试）"
                         + (f"：{detail}" if detail else ""))
         out["message"] = summary
         return _finish()

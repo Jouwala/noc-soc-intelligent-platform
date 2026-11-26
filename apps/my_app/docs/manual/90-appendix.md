@@ -2,7 +2,7 @@
 
 ## A. 后端接口前缀速查
 
-注册在 `backend/main.py`（实测 88 处 `include_router`）。前端 `baseURL` 是 `/api`（`frontend/src/api.ts:4`）。
+注册在 `backend/main.py`（实测 91 处 `include_router`）。前端 `baseURL` 是 `/api`（`frontend/src/api.ts:4`）。
 
 **带 prefix 的 router**
 
@@ -21,6 +21,7 @@
 | `/api/nur` | NUR 看板（`/overview`、`/options`、`/detail`） |
 | `/api/mw-ume` | MW 微波拓扑（`/topology` 日粒度）、MW 微波实时（`/realtime` 15 分钟槽位） |
 | `/api/ipran-topo` | IP RAN 光纤拓扑（`/graph`，8 次 UME 调用聚合成一次响应，缓存 120s，`refresh=1` 绕缓存） |
+| `/api/ngi-coverage` | 位置页 NGI 网络图层（只读）：`/meta`、`/grid?kpi=`（覆盖网格 `NGC1` 二进制）、`/point`（单格点详情）、`/lte-cells`、`/nr-cells`（工参全量列式 JSON）；均带弱 ETag，见 `11-feature-guide.md` §11b |
 | `/api/incident-overview` | 事件总览（iframe 内页调用） |
 | `/api/ip-trace` | IP 链路探测（iframe 内页调用：`/trace`、`/status`、`/stop`、`/analyze`） |
 | `/api/portals` | 门户一键登录（`/`、`/login`、`/login/status`、`/close`） |
@@ -40,7 +41,8 @@
 | `routers/portal_qa.py` | 门户问答挂件：`/api/portal-qa/ask`、`/api/portal-qa/session/clear`、`/api/portal-qa/health`（转发到本机 9269，见 `13-operations.md`） |
 | `routers/cm_flows.py:21-46` | CM 小区配置流程 |
 | `routers/task_configs.py:48-82` | 任务参数配置（系统设置 → 任务配置页签） |
-| `routers/prtg.py:20-57` | PRTG 链路健康度看板：`/api/prtg/overview|links|links/{id}|anomalies|collector/status`（只读，#227/#228/#229） |
+| `routers/prtg.py:20-57` | PRTG 链路健康度看板：`/api/prtg/overview|links|links/{id}|anomalies|sla|capacity|report|collector/status`（只读，#227/#228/#229/#231/#232） |
+| `routers/network_topology.py` | 门户流量拓扑（#230）：`/api/network-topology/traffic|nodes|links|links/{id}/history|layout|mappings` |
 
 **受 Token 保护的只有 4 个 router**：`tasks`、`upload`、`task_configs`、`cm_flows`（共 18 处装饰器）。原因与风险见 `05-security-and-credentials.md`。
 

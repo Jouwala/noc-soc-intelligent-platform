@@ -45,12 +45,54 @@ def prtg_anomalies(
     return dashboard.anomalies(window, open_only=open_only, limit=limit)
 
 
+@router.get("/sla")
+def prtg_sla(
+    month: str | None = Query(None, description="YYYY-MM，默认当月"),
+    target: float = Query(99.5, ge=0, le=100, description="可用率目标 %"),
+):
+    """月度 SLA：可用率、故障时长、Down 次数、区域排名、低于目标清单、容量利用率。"""
+    from backend.services.prtg import sla
+
+    import re
+
+    if month is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
+        raise HTTPException(status_code=400, detail="month 格式应为 YYYY-MM")
+    try:
+        return sla.month_report(month, target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"month 非法：{exc}") from exc
+
+
+@router.get("/capacity")
+def prtg_capacity():
+    """链路容量登记与利用率（无容量的链路 utilization 为 null）。"""
+    from backend.services.prtg import sla
+
+    return {"generated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+            "capacity": sla.capacity_list()}
+
+
+@router.get("/report")
+def prtg_report(
+    kind: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
+    month: str | None = Query(None, description="月报月份 YYYY-MM"),
+):
+    """日 / 周 / 月报（#232）：返回结构化 JSON + Markdown，数字与看板同源。"""
+    from backend.services.prtg import reports
+
+    try:
+        report = reports.build_report(kind, month)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"report": report, "markdown": reports.render_markdown(report)}
+
+
 @router.get("/collector/status")
 def prtg_collector_status():
     """采集各作业的同步状态与最近错误（不含任何凭证）。"""
     from backend.services.prtg import store
 
-    keys = ("catalog", "live", "backfill", "aggregate", "anomaly", "history_import", "prune")
+    keys = ("catalog", "live", "backfill", "aggregate", "anomaly", "history_import", "sla", "prune")
     states = []
     for key in keys:
         state = store.get_state(key)

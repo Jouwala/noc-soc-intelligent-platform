@@ -5,8 +5,8 @@
 
 > **本文是入口页，不重复手册内容。** 详细说明以手册为权威：
 > - 项目定位、能力边界、术语表 → `docs\manual\01-overview.md`
-> - 97 个功能页逐个说明（按导航顺序）→ `docs\manual\11-feature-guide.md`
-> - 面向使用者的一站式帮助（87 个任务工作流、80 个页面指南、FAQ）→ `docs\manual\15-user-help.md`（英文版 `15-user-help-en.md`）
+> - 98 个功能页逐个说明（按导航顺序）→ `docs\manual\11-feature-guide.md`
+> - 面向使用者的一站式帮助（88 个任务工作流、81 个页面指南、FAQ）→ `docs\manual\15-user-help.md`（英文版 `15-user-help-en.md`）
 
 ## 一、项目定位
 

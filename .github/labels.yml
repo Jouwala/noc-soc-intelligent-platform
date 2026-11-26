@@ -91,6 +91,9 @@ labels:
   - name: risk:high
     color: "b60205"
     description: "重大风险：生产环境、数据库结构、VMAX、nginx、生产服务重启等，须用户明确批准"
+  - name: worker:auto
+    color: "5319e7"
+    description: "常驻 Worker 自动执行 opt-in 标记：打了才会被 Worker 认领并拉 coding agent，risk:high 任务不要打"
   - name: needs-replan
     color: "b60205"
     description: "需重新规划：自动修复已达 3 次上限，由 Muse 1 重新规划，不再自动重派"

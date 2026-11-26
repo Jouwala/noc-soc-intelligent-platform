@@ -304,28 +304,29 @@ def _decode_chunked(data):
     return bytes(result)
 
 
-def _chunked_complete(buf, start):
-    """严格增量判断 chunked 响应体是否已收完（避免把数据内容误判为终止块）。
+def _chunked_advance(buf, pos):
+    """从 pos 起按 chunk 边界向前推进，返回 (是否已收到终止块, 下次续扫位置)。
 
     按 chunk 边界逐个推进：`<hex-size>\r\n<data>\r\n` ... `0\r\n\r\n`。
-    只有走到 size==0 且后面还有结尾 CRLF 才算完整，遇到半包返回 False。
+    只前进不回头：调用方保存返回的位置，下次 recv 接着推进。
+    若每轮都从响应体开头重扫（旧写法），20MB 响应会退化成 O(n²)。
+    `pos` 必须指向某个 chunk 头的起始位置。
     """
-    pos, n = start, len(buf)
+    n = len(buf)
     while True:
         eol = buf.find(b"\r\n", pos)
         if eol == -1:
-            return False
+            return False, pos          # chunk 头都没收全，下次从原处继续
         try:
             size = int(buf[pos:eol].split(b";")[0].strip(), 16)
         except ValueError:
-            return False
-        pos = eol + 2
+            return False, pos
+        nxt = eol + 2
         if size == 0:
-            # 终止块，后面至少还要有结尾 CRLF（trailer 场景此处先按 CRLF 判定）
-            return n >= pos + 2
-        if n < pos + size + 2:
-            return False
-        pos += size + 2
+            return n >= nxt + 2, pos   # 终止块：还要结尾 CRLF 才算完整
+        if n < nxt + size + 2:
+            return False, pos          # 数据或尾部 CRLF 未到齐
+        pos = nxt + size + 2
 
 
 def _http_request(method, path, headers_extra=None, body=None, retry=0,
@@ -389,6 +390,7 @@ def _http_request(method, path, headers_extra=None, body=None, retry=0,
     header_end_found = False
     header_end_pos = 0
     is_chunked = False
+    chunked_scan_pos = -1  # chunked 增量扫描游标（-1 = 未初始化）
 
     while True:
         try:
@@ -421,7 +423,10 @@ def _http_request(method, path, headers_extra=None, body=None, retry=0,
         # chunked 响应没有 Content-Length：按 chunk 边界判断是否已收完，
         # 避免一直 recv 到读超时（此前每个 chunked 请求都要空等 HTTP_READ_TIMEOUT 秒）。
         if header_end_found and content_length is None and is_chunked:
-            if _chunked_complete(response_data, header_end_pos + 4):
+            if chunked_scan_pos < 0:
+                chunked_scan_pos = header_end_pos + 4
+            _ck_done, chunked_scan_pos = _chunked_advance(response_data, chunked_scan_pos)
+            if _ck_done:
                 break
 
         # 如果已知 Content-Length 且已收满，提前退出

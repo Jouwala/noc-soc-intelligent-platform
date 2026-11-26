@@ -66,6 +66,14 @@ CORRELATION_HIT = "hit"
 CORRELATION_NONE = "none"
 CORRELATION_UNDETERMINED = "undetermined"
 
+# 「派单接口回 success、但回查 ttid 仍为空」——**这是上游 eFlow 侧的问题，不是本任务的故障**
+# （2026-11-25 如意要求：这种不该记成任务失败，只在 WhatsApp 群按业务事实通报）。
+# eFlow 派单时灵时不灵，同一告警同一 payload 有时建单有时不建（2026-10-26 实测），
+# 重试预算用完仍为空时用它作 last_err；调用方用 is_upstream_no_tt 归类，
+# 见 fiber_assign_service.apply_outcome 的 upstream_no_tt 分支。
+# 抽成常量而不是各处比字符串：文案改一次就漏判一处。
+NO_TT_ERROR = "assign API returned success but no TT was created (ttid still empty)"
+
 _SITE_PLACEHOLDERS = ("--", "-", "empty", "none", "null")
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       re.IGNORECASE)
@@ -303,6 +311,16 @@ def is_manual_pending(prev_status: str, send_status: str, status_suspect: bool) 
     return prev_status == "N" and send_status == "Y" and bool(status_suspect)
 
 
+def is_upstream_no_tt(last_err: Any) -> bool:
+    """这次失败是不是「上游接单了、但没建出 TT」？只有这一类不算任务故障。
+
+    判定只用 `assign_with_retry` 写的哨兵值 `NO_TT_ERROR`，不做关键字模糊匹配 ——
+    接口真报错（`HTTP 500 ...`、超时、`ok=false`）**不能**被误归成这一类，
+    否则上游真挂掉时任务会全绿（2026-11-06 静默失败事故的同类风险）。
+    """
+    return str(last_err or "").strip() == NO_TT_ERROR
+
+
 def is_clean_ttstatus(ttstatus: Any) -> bool:
     """eFlow 侧 `ttstatus` 是否处于「正常可派」状态（`0` = UnAssigned；字段缺失按正常）。
 
@@ -526,7 +544,7 @@ def assign_with_retry(ctx: AssignContext, alarm: Dict[str, Any],
         tt_no = verify_tt(alarm_key, alarm, max_tries=verify_tries, sleep_fn=sleep_fn)
         if tt_no:
             return tt_no, ""
-        last_err = "assign API returned success but no TT was created (ttid still empty)"
+        last_err = NO_TT_ERROR
         logger.info("[%s] 第 %d/%d 次派单未建出 TT（%s），稍后重试",
                     ctx.tag, attempt, max_attempts, alarm_key)
         if attempt < max_attempts:

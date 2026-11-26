@@ -44,6 +44,15 @@
 
 ### P1 —— 数据正确性与稳定性
 
+- [ ] **协作流程提速批（2026-11-24，用户定 B 档）。** 已落地：验收模式分级
+      （`AGENTS.md` 1b 的 A/B/C + 批次预授权）、低风险免审（`review_gate.py`
+      的 `REVIEW_TIER=waived` + 审计评论）、停掉自动 `update-branches`、
+      `quality` 加超时并新增 `run-watchdog`、常驻 worker 安装器
+      （`ops\deploy\install-agent-worker.ps1`，`worker:auto` 显式 opt-in）。
+      **待做**：拿 1 批真实任务跑通「批次 → 一个 PR → CI+冒烟 → 自动合并」，
+      记录实际耗时；观察两周后决定是否收紧或回滚（回滚 = revert 本批提交）。
+      分支：`fastlane-protocol`。
+
 - [x] **iPRAN 账号反复被锁：隔离副本用旧口令撞生产上游（2026-11-21 已止血，留两项收尾）。**
       事故链：11-20 15:00 UME 报 `code=2 密码即将到期` → 17:19 生产改密 → `.smoke` 副本
       `credentials.ipran_ume` 仍是 2026-09-24 的旧口令且 `ipran_kpi_sync` 每小时启用 →
@@ -161,6 +170,16 @@
       nginx 日志无该端点 504。**边界**：只读链路，不改远端库；改动集中在 `cn_kpi_service.py`（+ 可选一个预热/预聚合任务）与前端错误态。
 
 ### P2 —— 体验与工程规范
+
+- [ ] **`ran_site_kpi_rt_service.py` 拆分（2026-11-25 立）。**
+      站点 KPI 实时查询的服务层已 **942 行**，超过 `AGENTS.md` 三.2 的 500 行上限（2026-11-24 新建时
+      已 780 行，后续修「小区名被写成站点 ID」、补大小写归一化、接入服务端单网元过滤与 5G 模板驱动
+      继续增长）。可拆的边界：工参读取与站点解析（`search_sites` / `load_site_cells` / `_resolve_site`）、
+      UME 取数与分页（`_build_payload` / `fetch_chunk` / `_post` / `_get` 与重试）、曲线组装
+      （`build_cells` / `collect_series`）、缓存与异步任务（`start_job` / `get_job` / `_jobs`）。
+      不要求一次性拆完，但下次改这个文件前先拆出至少一块，不要继续在单文件里加逻辑
+      （网元过滤与 5G 模板构造已按此原则独立到 `ran_ume_ne_filter.py` 150 行、
+      `ran_ume_pm_template.py` 93 行）。
 
 - [ ] **看板「打开慢」治理（2026-11-24 立；Muse 接手 AWS Quick 会话「本地项目快照方案推广规划」里的「提升网页速度」任务）。**
       已完成两项（分支 `muse-pl-warmup-qc-singleflight`，依据是 11-19 切生产 ~ 11-23 的 nginx access.log 实测）：

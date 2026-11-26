@@ -67,9 +67,16 @@ function readLayer(): LayerKey {
   return isLayerKey(l) ? l : 'ipran'
 }
 
-function readGranularity(): boolean {
-  return readParam('gran') === 'rt'
+/** URL 里显式给了粒度才返回 true/false；没给返回 null（交给「按视图默认」） */
+function readGranularity(): boolean | null {
+  const g = readParam('gran')
+  if (g === 'rt') return true
+  if (g === 'day') return false
+  return null
 }
+
+/** 用户没手动选过粒度时：流量视图默认 15 分钟（值班看的是「现在」），其余视图默认日粒度 */
+const defaultRealtime = (v: NocView) => v === 'traffic'
 
 /** 画布卡片标题：显式 switch，避免动态拼 i18n key（check:i18n 会拦） */
 function canvasTitleKey(view: NocView): string {
@@ -84,10 +91,20 @@ function canvasTitleKey(view: NocView): string {
 export default function NocTopologyCenter() {
   const { t } = useI18n()
 
+  const [initialGran] = useState(readGranularity)
   const [view, setView] = useState<NocView>(readView)
   const [source, setSource] = useState<SourceFilter>(readSource)
   const [layer, setLayer] = useState<LayerKey>(readLayer)
-  const [mwRealtime, setMwRealtime] = useState<boolean>(readGranularity)
+  /** 用户是否明确选过粒度（URL 带 gran，或点过粒度切换）。选过就不再随视图自动切 */
+  const [granTouched, setGranTouched] = useState(initialGran !== null)
+  const [mwRealtime, setMwRealtime] = useState<boolean>(() => initialGran ?? defaultRealtime(readView()))
+  const onMwGranularity = useCallback((rt: boolean) => {
+    setGranTouched(true)
+    setMwRealtime(rt)
+  }, [])
+  useEffect(() => {
+    if (!granTouched) setMwRealtime(defaultRealtime(view))
+  }, [view, granTouched])
 
   const [query, setQuery] = useState('')
   const [showLabels, setShowLabels] = useState(false)
@@ -117,11 +134,12 @@ export default function NocTopologyCenter() {
       sp.set('view', view)
       sp.set('source', source)
       sp.set('layer', layer)
-      if (mwRealtime) sp.set('gran', 'rt')
+      // 只有用户明确选过才写进 URL；否则留空，打开链接时仍按视图走默认
+      if (granTouched) sp.set('gran', mwRealtime ? 'rt' : 'day')
       else sp.delete('gran')
       window.history.replaceState(null, '', `${window.location.pathname}?${sp.toString()}`)
     } catch { /* 隐私模式/禁用 history 时静默降级 */ }
-  }, [view, source, layer, mwRealtime])
+  }, [view, source, layer, mwRealtime, granTouched])
 
   const filtered = useMemo(
     () => filterModel(sources.model, { source, query, trafficOnly, problemsOnly }),
@@ -184,6 +202,10 @@ export default function NocTopologyCenter() {
   const loading = sources.loading && sources.model.nodes.length === 0
   const empty = filtered.nodes.length === 0
 
+  /* 只看 MW 时，「严重」= 利用率 > 80%（MW 原生四级，见数据契约 §3.2），是负载高不是故障。
+     沿用「严重链路」字样会被读成 26 条链路坏了，所以换成「高负载链路」并用警示色。 */
+  const mwOnly = source === 'mw'
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)',
@@ -194,7 +216,7 @@ export default function NocTopologyCenter() {
           view={view} onView={setView}
           source={source} onSource={setSource}
           layer={layer} onLayer={setLayer}
-          mwRealtime={mwRealtime} onMwGranularity={setMwRealtime}
+          mwRealtime={mwRealtime} onMwGranularity={onMwGranularity}
           query={query} onQuery={(q) => { setQuery(q); setSearchMiss(false) }} onLocate={onLocate}
           showLabels={showLabels} onShowLabels={setShowLabels}
           trafficOnly={trafficOnly} onTrafficOnly={setTrafficOnly}
@@ -232,11 +254,16 @@ export default function NocTopologyCenter() {
           onClick={() => setListKind('edge')}
         />
         <StatCard
-          title={<span>{t('nocTopo.kpi.critical')} <ExplainIcon text={t('nocTopo.kpi.criticalExplain')} /></span>}
+          title={(
+            <span>
+              {t(mwOnly ? 'nocTopo.kpi.criticalMw' : 'nocTopo.kpi.critical')}{' '}
+              <ExplainIcon text={t(mwOnly ? 'nocTopo.kpi.criticalMwExplain' : 'nocTopo.kpi.criticalExplain')} />
+            </span>
+          )}
           value={summary.criticalLinks}
-          explainText={t('nocTopo.kpi.criticalExplain')}
-          subText={t('nocTopo.kpi.criticalSub', { n: summary.downLinks })}
-          accentColor={summary.criticalLinks > 0 ? WH.danger : WH.ok}
+          explainText={t(mwOnly ? 'nocTopo.kpi.criticalMwExplain' : 'nocTopo.kpi.criticalExplain')}
+          subText={mwOnly ? t('nocTopo.kpi.criticalMwSub') : t('nocTopo.kpi.criticalSub', { n: summary.downLinks })}
+          accentColor={summary.criticalLinks > 0 ? (mwOnly ? WH.warn : WH.danger) : WH.ok}
           onClick={() => setProblemsOnly((v) => !v)}
         />
         <StatCard

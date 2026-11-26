@@ -1,0 +1,158 @@
+/* 电路域打断报告的表与复制按钮。
+ * 表：语义 table + sticky 表头 + 容器查询窄宽时改成按行堆叠。
+ * 复制：按钮在被复制正文之外，反馈气泡是 role=status，用透明度显隐。
+ */
+
+.vmax-calldrop-copy {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.vmax-calldrop-copy button {
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vmax-calldrop-copy [data-copied] .ico-copy,
+.vmax-calldrop-copy [data-failed] .ico-copy {
+  display: none;
+}
+
+.vmax-calldrop-copy .ico-ok,
+.vmax-calldrop-copy .ico-bad {
+  display: none;
+}
+
+.vmax-calldrop-copy [data-copied] .ico-ok,
+.vmax-calldrop-copy [data-failed] .ico-bad {
+  display: inline-flex;
+}
+
+.vmax-calldrop-tip {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: calc(100% + 4px);
+  z-index: 2;
+  opacity: 0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--wh-bg-elevated, Canvas);
+  color: var(--wh-text, CanvasText);
+  border: 1px solid var(--wh-border, rgba(127, 127, 127, 0.35));
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.vmax-calldrop-copy:has([data-copied]) .vmax-calldrop-tip,
+.vmax-calldrop-copy:has([data-failed]) .vmax-calldrop-tip {
+  opacity: 1;
+  transition: opacity 0.15s;
+}
+
+.vmax-calldrop-wrap {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(420px, 70vh);
+  container-type: inline-size;
+}
+
+.vmax-calldrop-wrap:focus-visible {
+  outline: 2px solid var(--wh-primary, #1677ff);
+  outline-offset: 2px;
+}
+
+.vmax-calldrop-wrap table {
+  border-collapse: separate;
+  border-spacing: 0;
+  inline-size: 100%;
+  font-size: 12px;
+}
+
+.vmax-calldrop-wrap caption {
+  caption-side: top;
+  text-align: start;
+  font-weight: 600;
+  padding-block-end: 6px;
+}
+
+.vmax-calldrop-wrap thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  background: var(--wh-bg-elevated, Canvas);
+}
+
+.vmax-calldrop-wrap th,
+.vmax-calldrop-wrap td {
+  text-align: start;
+  padding: 6px 8px;
+  border-block-end: 1px solid var(--wh-border, rgba(127, 127, 127, 0.28));
+  white-space: nowrap;
+}
+
+.vmax-calldrop-wrap tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--wh-bg-elevated, Canvas);
+}
+
+.vmax-calldrop-notes {
+  margin: 8px 0 0;
+  padding-inline-start: 1.2em;
+}
+
+.vmax-calldrop-notes li + li {
+  margin-block-start: 4px;
+}
+
+@container (width < 720px) {
+  .vmax-calldrop-wrap table,
+  .vmax-calldrop-wrap thead,
+  .vmax-calldrop-wrap tbody,
+  .vmax-calldrop-wrap tr,
+  .vmax-calldrop-wrap th,
+  .vmax-calldrop-wrap td {
+    display: block;
+  }
+
+  .vmax-calldrop-wrap thead {
+    display: none;
+  }
+
+  .vmax-calldrop-wrap tr {
+    margin-block-end: 12px;
+    border: 1px solid var(--wh-border, rgba(127, 127, 127, 0.35));
+  }
+
+  .vmax-calldrop-wrap tbody th,
+  .vmax-calldrop-wrap td {
+    white-space: normal;
+    position: static;
+  }
+
+  .vmax-calldrop-wrap tbody th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: var(--wh-fill-secondary, #eee);
+  }
+
+  .vmax-calldrop-wrap td:nth-child(2)::before { content: var(--cd-2) ": "; }
+  .vmax-calldrop-wrap td:nth-child(3)::before { content: var(--cd-3) ": "; }
+  .vmax-calldrop-wrap td:nth-child(4)::before { content: var(--cd-4) ": "; }
+  .vmax-calldrop-wrap td:nth-child(5)::before { content: var(--cd-5) ": "; }
+  .vmax-calldrop-wrap td:nth-child(6)::before { content: var(--cd-6) ": "; }
+  .vmax-calldrop-wrap td:nth-child(7)::before { content: var(--cd-7) ": "; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vmax-calldrop-tip {
+    transition: none;
+  }
+}

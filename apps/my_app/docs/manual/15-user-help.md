@@ -1,6 +1,6 @@
 # my_app 使用帮助
 
-> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-24。
+> 面向使用者的平台功能与操作指南。本文件由「使用帮助」页面同源生成（frontend/src/helpMarkdown.ts），内容依据 docs/manual/ 各章与 backend/task_registry.py 整理。生成日期：2026-11-26。
 
 > 站内入口：侧边栏「使用帮助」，或直链 `http://<host>/myapp/?page=help`。
 
@@ -10,7 +10,7 @@
 
 - [1. 平台简介](#1-平台简介)
 - [2. 通用操作](#2-通用操作)
-- [3. 任务管理详解（87 个任务）](#3-任务管理详解)
+- [3. 任务管理详解（88 个任务）](#3-任务管理详解)
 - [4. 页面指南](#4-页面指南)
 - [5. 运维与排障](#5-运维与排障)
 - [6. 常见问题](#6-常见问题)
@@ -70,7 +70,7 @@
 
 | 组 | 约束原因 |
 | --- | --- |
-| **u** | RAN UME 单账号会话，组内必须串行（并发会被踢会话）；2026-11-07 新增 23:00 的 ran_element_management_sync（RNM 网元管理表格落 PG），与 02:00 的 ran_ume_daily 共用 zte_ume 会话 |
+| **u** | RAN UME 单账号会话，组内必须串行（并发会被踢会话）；2026-11-07 新增 23:00 的 ran_element_management_sync（RNM 网元管理表格落 PG），与 02:00 的 ran_ume_daily 共用 zte_ume 会话；2026-11-24 新增周日 02:00 的 ngi_param_coverage_sync（NGI 工参与覆盖网格落 PG，独立主机 + 独立 ngi 凭据，不占 UME 会话） |
 | **n** | 网管 / eFlow API / 远程系统：彼此独立但保守同组 |
 | **v** | VMAX 门户（本机 8790 单会话代理）：三个任务共用同一会话必须串行；2026-09-18 从 n 组拆出，不再被 1.5~2h 长任务堵住 |
 | **m** | 内务轻任务：EWS 邮件会话 + 截图/WhatsApp 文件依赖 |
@@ -83,7 +83,7 @@
 
 > ⚠️ **新增任务必须同时登记进 `worker_watchdog.py` 的 `GROUP_TASK_MAP`** —— 只写 `TASK_SPECS` 不分组 = 任务入队后永远 pending。这是本项目已发生过四次的事故模式（finebi_report_sync / whatsapp_send_ext / sp_email_details / 2026-09-18 的 olib_soc 与 vmax_multi_data_sync）。
 
-### 3.3 全量任务清单（87 个）
+### 3.3 全量任务清单（88 个）
 
 | 任务 | task_id | 默认 cron | 组 | 工作流脚本 |
 | --- | --- | --- | --- | --- |
@@ -174,6 +174,7 @@
 | IPT 站点电源采集 | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN 网元管理表同步 | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
 | RAN KPI 15分钟同步 | `ran_kpi_15mins_sync` | `6,21,36,51 * * * *` | u | `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync` |
+| NGI 工参与覆盖数据同步 | `ngi_param_coverage_sync` | `0 2 * * sun` | u | `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync` |
 
 每个任务的工作流与维护要点：
 
@@ -369,8 +370,9 @@
 - 派单等待时长 15 分钟：告警升起后要先存在满 15 分钟才派单并发 WhatsApp（业务口径「告警发生到选择超过 15 分钟才派」）——不是一升起就派，留这段时间让短时闪断自然清除；配 0 可恢复立即派单
 - 默认 dry_run 演练（只匹配记录不真派单），核对无误后到「任务配置」关掉
 - 关联 99933 无法判定时（fiber 只有 ME 推导站名、与 cmdb 写法不同，如 luogan/luogon）按「没有关联」继续派单并记 correlation_undetermined 留痕——不能因为站名匹配不到就长期漏派
-- 站点解析失败（cmdb 无此站点，如实测 Tokadeh）时自动派不了：记 N 并在群里发一条「需人工在 eFlow 处理」通报，同一条只发一次（send_status 抑制），不静默漏派
+- 站点解析失败（cmdb 无此站点，如实测 Tokadeh）时自动派不了：记 N 并在群里发一条「需人工在 eFlow 处理」通报，同一告警 6 小时内只发一次（notified_recently 按时效抑制；alarm_key 被复用时跨天的新告警仍会通报），不静默漏派
 - 站点解析失败是 cmdb 缺档（ME/站名在 cmdb 里找不到站点），不是任务错误（2026-11-17）：本轮失败全是这一类、且 cmdb 索引本身拉到了时，结果记 pending_cmdb（success=true，提示文案留在 message），执行历史显示橙色「待补 cmdb」提示而不是红色 Error；补齐 cmdb 站点/ME 命名后下一轮自动派单。cmdb 索引为空（没拉到）或混有建单失败时仍判 failed
+- 上游未建单（2026-11-25）：派单接口回 success 但回查 ttid 仍为空（含 eFlow 侧 ttstatus 异常导致的不建单）—— 这是 eFlow 上游侧派单问题，跟本任务脚本无关；本轮失败全是这一类时结果记 upstream_no_tt（success=true，不写 error），执行历史显示橙色「上游未建单」提示而不是红色 Error，同时在 WhatsApp 群按条通报一次「请人工在 eFlow 建单」（同一告警 6 小时内只通报一次），下一轮自动重试；接口真报错（HTTP 5xx / 超时 / ok=false）或与真失败混在同一轮时仍判 failed
 - Fiber 派单必须带数字站点 ID + 站点名，只传 ME 名接口回 success 却不建 TT（实测教训）
 - Fiber 派单时灵时不灵，故内置重试，且以回查到 ttid 才判成功（不信接口的 status:true）
 - 告警上游已有 ttid 时直接跳过：eFlow 自己的派单规则会先建 TT，不跳过就会重复建单（实测 Zardun 两条）
@@ -1839,6 +1841,30 @@
 - ⚠ 导出 0 行视为空态跳过、不计失败（与 cnn_kpi_sync_5mins 同约定）
 - 页面消费方：?page=ran_kpi_15mins（routers/ran_kpi_15mins.py + services/ran_kpi_assurance/ran_kpi_15mins_service.py 读取侧）
 
+#### NGI 工参与覆盖数据同步（`ngi_param_coverage_sync`）
+
+- 默认 cron: `0 2 * * sun`　|　worker 组: **u**
+- 工作流脚本: `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync`
+
+**功能**: 每周日 02:00 从 NGI 规划平台（10.100.29.17:28001）导出两类数据写入 PostgreSQL：LTE/NR 工参（8 227 + 101 个小区）与覆盖评估的 50 m 网格（178 370 个格点）
+
+**工作流与数据流**:
+
+1. 登录 NGI 规划平台：auth_manager.get_auth + credential_store 的 ngi 凭据组（与 RAN UME 的 zte_ume 是两台设备、账号不通用），登录协议同为 uportal/oauth2 的 RSA 口令 + Z-AUTH-CODE
+1. 工参：GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 取 ProjectData.zip；工作簿表头是 3 行（中文说明 / 英文说明 / 字段名），丢弃前两行、第 3 行作表头，数据从第 4 行起
+1. SectorID 生成：同一站点 + 同一中心频点的小区按 Azimuth 升序编号。LTE 只补空值（实测 7 054 行）、已有值原样保留；NR 工参没有这一列，按 gNodeBID + DLCenterFrequency 整列生成；sector_source 记 file / derived
+1. 覆盖：GET taskmanager/gettasklogbytaskid?taskid=1647 取最新一次评估任务的 taskLogId → POST commonGis/getLayerFiles 拿图层 hash 与 legend → POST MapServerService/exportMap(CSV) → exportMapChecking 轮询 → downloadExportMapFile 下载 CSV.zip
+1. 落库（显式 BEGIN/COMMIT 事务）：工参按 cell_uid upsert 进 app.ngi_lte_cell_param / app.ngi_nr_cell_param 并清理本轮未出现的旧小区；网格按 kpi 先删后插进 app.ngi_coverage_grid；两阶段各写一条 app.ngi_sync_log
+
+**维护要点**:
+
+- ⚠ 覆盖导出的 exportMap 必须原样回传 getLayerFiles 返回的 legend（name/showtitle/range 七段）。只给 taskID + renderType + layerName + colDes 时服务端照样返回令牌，但作业永远停在 processing（2026-11-24 实测 4 个作业 30 分钟未完成）；带上 legend 后 4 次轮询约 15 秒完成
+- ⚠ 下载走 downloadExportMapFile（表单 {mapType, params: 令牌}），不是 exportMapChecking；文件名固定 CSV.zip，前端 gis3d.js 的 saveFile() 里就是这么调用的
+- ⚠ 行数下限：NGI_MIN_LTE_ROWS=5000 / NGI_MIN_NR_ROWS=50 / NGI_MIN_GRID_ROWS=50000，低于下限直接判失败且不写库，避免上游残片整表覆盖上一周的好数据
+- ⚠ 归 u 组：属 RAN 侧取数域，与 02:00 的 ran_ume_daily 同档排队；本任务用独立主机与独立凭据组，与 UME 会话无交集，不会互踢。新增任务必须同时在 worker_watchdog.py 的 GROUP_TASK_MAP 登记
+- 表结构由服务内 DDL 幂等创建（CREATE TABLE IF NOT EXISTS），无需 Alembic；改 ngi_store.FIELDS 映射时要同步改 DDL 与索引，tests/test_ngi_param.py 会比对两边
+- 排障顺序：先看 app.ngi_sync_log（status / message / detail，覆盖那条还带 task_log_id 与 run_id），再看任务执行日志；会话问题到「设置 → 凭据」测 ngi 分组
+
 ### 3.4 可靠性机制（超时 / 重试 / 自愈）
 
 | 机制 | 说明 |
@@ -2588,7 +2614,13 @@ UME iMonitor 大屏（guard-imonitor-iui，screen_id=1）：把 UME 门户（172
 
 - 坐标有四个入口：URL 的 lat / lon（问答助手答案里的链接直接可达）、手动输入、浏览器定位（需 https）、以及「问问答助手」——向 /api/portal-qa/ask 提问后从答案文字里解析坐标
 - 底图与 ?page=gis 共用本机自托管的 PMTiles 离线瓦片（/tiles/liberia.pmtiles），不依赖公网；默认关闭地名注记与道路，地图左上角「图层」浮层可分别打开。右下角 © OpenStreetMap 是瓦片数据的署名要求，不是在线请求
-- 地图上有两个搜索窗：右上角「查询订阅者」输手机号查轨迹，右下角「按经纬度定位」输纬度/经度直接定位；经纬度、半径、站点数、问答助手等完整控制条在**页面最下面**，与地图坐标窗共用同一份经纬度状态。手机号搜索默认查**最近 3 小时**，搜索窗下方可改起止时间（最多回看 24 小时），点「查询」生效；标题与口径说明卡放在整个页面的最下面一行
+- 地图右上角是「查询订阅者」搜索窗：输手机号查轨迹，默认查**最近 3 小时**，搜索窗下方可改起止时间（最多回看 24 小时），点「查询」生效。按经纬度定位请用**页面最下面**的完整控制条（经纬度、半径、站点数、问答助手）—— 地图右下角原来的坐标搜索窗已去掉（2026-11-25），位置留给图层图例。标题与口径说明卡放在整个页面的最下面一行
+- 「图层」浮层里还有三个网络图层：覆盖 RSRP / LTE 小区 / 5G NR 小区，**默认全关、勾选后才下载**，不影响页面打开速度；各自的图例在地图右下角，点标题可折叠
+- 「覆盖 RSRP」：NGI 覆盖评估的 50 m 网格（约 17.8 万格点），按 RSRP 分 7 档着色（绿 = 好、红 = 差，按每档实测均值排序）；放大到 13 级以上能看清单个格点，点格点看 RSRP、好点率、采样点、覆盖小区与 PCI；图例里「定位到覆盖区」一键缩放到覆盖范围
+- 「LTE 小区」/「5G NR 小区」：按 NGI 工参在站点位置画 **65° 扇面**，朝向即方位角；**不同频点不同颜色**，同站低频扇面大、高频扇面小，叠在一起几层都看得见；室分或缺方位角的小区画成小圆点。扇面大小**按站间距自适应**：站密的城区画得小、郊区画得大，任何缩放级别下相邻站都不会压在一起；缩到全国视图时仍保留一个看得见的最小尺寸
+- 鼠标悬停在扇面上显示站点名、站点 ID、扇区与本扇区全部载波（频点 / Band / PCI / 小区名）；点击弹出小区详情（PCI、TAC、频点 / EARFCN、挂高、下倾、覆盖类型等）并高亮该扇面。图例里每个频点可单独勾选显示 / 隐藏，也可「全选 / 全不选」
+- 5G NR 用另一组颜色 + **虚线描边**，画在 LTE 之上，扇面比同站 LTE 小一圈；两层同时打开时，重叠处悬停 / 点击只出 5G 的内容。打开小区图层时点扇面只弹小区、点空白处才弹覆盖格点
+- 三个网络图层的数据都来自每周日 02:00 的 NGI 同步任务（ngi_param_coverage_sync），同一周内浏览器只下载一次；新一轮同步后刷新页面即可看到
 - 「最近的一圈站点」按所选半径筛站点、按距离升序取前 N 个；半径内不足 3 个时自动扩到第 3 个最近站点，地图虚线圈与列表同步改用扩后半径，并在控制条下方提示
 - 站点颜色与 ?page=gis 完全同一套规则与色值（实时告警 / 历史 / VIP / 普通）；点站点打开的是 GIS 页同一个下钻抽屉（基本信息 + KPI 图表 + 明细页签）
 - MW 链路取 GIS 页同一份 KML 链路并按点到线段距离排序，最近一条加粗；点链路打开「链路详情」抽屉，字段与 ?page=mwRealTime 点链路一致（容量 / Node IP / 接口 / TX-RX 吞吐与利用率 / 24H 趋势 / 端口明细）
@@ -2756,6 +2788,7 @@ VMAX 投诉诊断：输入号码与时间窗，一次并发取回四路 Talon XD
 - **投诉类型做成页签**（不是下拉）：全部投诉 / 语音 / OTT 语音视频 / 视频 / 游戏 / 上网慢。切换页签**不重新取数**，只换判据权重与优先判定的那条链，所以切起来是秒切
 - 页面三行骨架是刻意设计的：查询条 → 投诉类型页签（用户投诉什么）→ 视图页签（诊断结论 / 业务流量 / 连接过程 / 无线质量）。投诉类型下面那行说明会一直告诉你「这次按哪条链在判」
 - 「语音」页签判 **CSFB 与 VoLTE**。判定用 **1100 的 SGs 接口记录**：SGs 位置更新数、CS Fallback Triggered、Extended Service Request、寻呼、超时失败、QCI=1 承载逐项计数，另有回落链明细（S1-MME / SGs 按时间交织）与回落耗时
+- 诊断结论里另有一张「数据通话被电路域来电打断」：把每次 CS Fallback Triggered 的释放配上下一次 TAU，写出离开小区、回到小区、离开秒数、被叫/主叫、返回时的承载原因。语音卡上的回落耗时是信令过程本身（通常几毫秒），不是人离开 4G 的时长。全部投诉 / 语音 / OTT 都会显示这张卡；其它投诉类型只有真的发生了回落才显示
 - 回落耗时超过 2 秒会标黄；若窗口内有 CSFB 活动但 **SGs 记录为 0 条**，卡片会给明确预警而不是安静地报「正常」——这通常意味着 SGs 接口没上报
 - 「游戏」页签不能删：XDR 话单里确实会出现 egame / E-GAME 这类应用名。识别走关键词（加新游戏不用改代码），并且**排除应用商店**（palmplaystore / googleplay / app store / huawei_appgallery）——否则「开了下商店」会被算成「打了游戏」
 - **能力边界 —— OTT 语音视频（微信 / WhatsApp）在应用层判不了**：本平台没有 SIP/RTP 信令。所以 OTT 卡只能回答「有没有通话」和「通话期间网络质量如何」（时长、下行 RTT、RTT 抖动、重传率），**不能回答「对方拒接 / 我没拨通」**。这张卡的能力边界横幅刻意放在结论之上，请不要把它读成通话失败结论
@@ -2784,6 +2817,7 @@ VMAX 智能诊断工作台（Intelligent Diagnosis Workspace）：投诉驱动�
 
 - 必须用 231 开头的完整号码（如 231777777322），纯数字；本地 9 位格式上游查不到
 - 投诉类型默认「全部投诉」，切换只换判据权重、不重取数；具体类型只重排/强调、不隐藏跨模块证据
+- 区域 2 顶部有「数据通话被电路域来电打断」：同用户查询页，用已取回的 1100/1300/32 配出每次离开 4G 到下一次 TAU 的时间线，并带上 CCA 里非 4G 驻留小区和 OTT 小区质差。点「复制结论」得到这段文字
 - 链路条状态取五段指标的最差值：无数据写「无数据可判」，绝不写「正常」
 - 每个指标回答五段：为什么重要 / 观测到什么 / 何时发生 / 可能影响 / 需要验证
 - 原始 XDR / 无线原始 / TCP 只在点「查看证据」时加载，点前无明细请求

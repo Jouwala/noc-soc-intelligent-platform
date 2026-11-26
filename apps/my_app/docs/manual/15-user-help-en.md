@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-24.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-26.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -10,7 +10,7 @@
 
 - [1. Platform Overview](#1-platform-overview)
 - [2. General Usage](#2-general-usage)
-- [3. Task Manager Deep Dive (87 tasks)](#3-task-manager-deep-dive)
+- [3. Task Manager Deep Dive (88 tasks)](#3-task-manager-deep-dive)
 - [4. Pages Guide](#4-pages-guide)
 - [5. Ops & Troubleshooting](#5-ops-troubleshooting)
 - [6. FAQ](#6-faq)
@@ -70,7 +70,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 
 | Group | Why grouped |
 | --- | --- |
-| **u** | RAN UME single-account session; tasks run serially (parallel runs kick the session). Added 2026-11-07: ran_element_management_sync at 23:00 (RNM element table into PG), sharing the zte_ume session with ran_ume_daily at 02:00 |
+| **u** | RAN UME single-account session; tasks run serially (parallel runs kick the session). Added 2026-11-07: ran_element_management_sync at 23:00 (RNM element table into PG), sharing the zte_ume session with ran_ume_daily at 02:00. Added 2026-11-24: ngi_param_coverage_sync on Sundays 02:00 (NGI parameters and coverage grid into PG; own host and own ngi credential, no UME session involved) |
 | **n** | NMS / eFlow API / remote systems: independent but conservatively grouped |
 | **v** | VMAX portal (local 8790 single-session proxy): the three tasks share one session and must serialize; split out of group n on 2026-09-18 so long tasks no longer block them |
 | **m** | Housekeeping tasks: EWS mail session + screenshot/WhatsApp file dependencies |
@@ -83,7 +83,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 
 > ⚠️ **New tasks MUST also be registered in `GROUP_TASK_MAP` in worker_watchdog.py** — declaring them only in TASK_SPECS leaves them pending forever. This accident happened four times (finebi_report_sync / whatsapp_send_ext / sp_email_details / the olib_soc and vmax_multi_data_sync tasks found on 2026-09-18).
 
-### 3.3 Full task catalog (87 tasks)
+### 3.3 Full task catalog (88 tasks)
 
 | Task | task_id | Default cron | Group | Workflow script |
 | --- | --- | --- | --- | --- |
@@ -174,6 +174,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | IPT Site Power Collect | `ipt_power_collect` | `*/5 * * * *` | m | `services/ipt_data/ipt_power_collector.py → run_ipt_power_collect` |
 | RAN Element Management Sync | `ran_element_management_sync` | `0 23 * * *` | u | `services/RANElementManagement/ran_element_management_service.py → run_ran_element_management_sync` |
 | RAN KPI 15-Min Sync | `ran_kpi_15mins_sync` | `6,21,36,51 * * * *` | u | `services/ran_kpi_assurance/ran_kpi_15mins_service.py → run_ran_kpi_15mins_sync` |
+| NGI Parameter & Coverage Sync | `ngi_param_coverage_sync` | `0 2 * * sun` | u | `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync` |
 
 Workflow & maintenance notes per task:
 
@@ -369,8 +370,9 @@ Workflow & maintenance notes per task:
 - Assign delay of 15 minutes: the alarm must have been alive for at least 15 minutes before it is assigned and notified to WhatsApp (business rule: "assign only after the alarm has lasted more than 15 minutes") — it is NOT dispatched the moment it raises; the delay lets short transient breaks clear by themselves. Set it to 0 to restore immediate dispatch
 - Dry-run (dry_run) by default: match + record only, no real assign; turn it off on the Task Config page once verified
 - When the 99933 correlation cannot be determined (fiber only has an ME-derived site name that differs from cmdb, e.g. luogan/luogon) the alarm is treated as "no correlation" and still assigned, with the count logged under correlation_undetermined — never let a name mismatch silently block assignment indefinitely
-- When site resolution fails (site absent from cmdb, e.g. Tokadeh) the TT cannot be created automatically: record N and post a "manual handling required in eFlow" notice to the group, once per alarm (suppressed via send_status) so nothing is silently dropped
+- When site resolution fails (site absent from cmdb, e.g. Tokadeh) the TT cannot be created automatically: record N and post a "manual handling required in eFlow" notice to the group, at most once per alarm per 6 hours (time-boxed suppression via notified_recently; a re-raised alarm under a reused key is reported again) so nothing is silently dropped
 - A site resolution failure means the site is missing from cmdb (the ME / site name is not found there), which is a cmdb gap, NOT a task error (2026-11-17): when every failure in a round is of this kind AND the cmdb index itself loaded fine, the result is recorded as pending_cmdb (success=true, the notice stays in message) and Run History shows an amber "Needs cmdb" notice instead of a red Error; fixing the site/ME mapping in cmdb restores assignment on the next round. An empty cmdb index (fetch failed) or any assign failure still counts as a real failure
+- Upstream created no TT (2026-11-25): the assign API returns success but the ttid is still empty (including the no-TT cases caused by an abnormal eFlow ttstatus) — this is an eFlow-side dispatch problem, unrelated to this task script. When every failure in a round is of this kind the result is recorded as upstream_no_tt (success=true, no error), Run History shows an amber No-TT-upstream notice instead of a red Error, and one WhatsApp notice per alarm asks for a manual TT in eFlow (at most once per 6 hours); the next round retries automatically. A real API error (HTTP 5xx / timeout / ok=false) or a mix with real failures still counts as failed
 - Fiber assign must carry the numeric site ID + site name; passing only the ME name makes the API return success without creating a TT (measured lesson)
 - Fiber assign is intermittent, so it retries and only treats success as confirmed when ttid is found (never trusts status:true)
 - Skip alarms whose upstream ttid is already set: eFlow's own assign rule may have created the TT first, otherwise duplicate TTs are created (measured: two Zardun alarms)
@@ -1838,6 +1840,30 @@ Workflow & maintenance notes per task:
 - WARNING: an export with 0 rows is treated as an empty state and skipped, not failed (same convention as cnn_kpi_sync_5mins)
 - The only consumer is ?page=ran_kpi_15mins (routers/ran_kpi_15mins.py + the read side of services/ran_kpi_assurance/ran_kpi_15mins_service.py)
 
+#### NGI Parameter & Coverage Sync（`ngi_param_coverage_sync`）
+
+- Default cron: `0 2 * * sun`　|　worker group: **u**
+- Workflow script: `services/ngi_data/ngi_sync_service.py → run_ngi_param_coverage_sync`
+
+**What it does**: Sundays at 02:00, export two datasets from the NGI planning platform (10.100.29.17:28001) into PostgreSQL: LTE/NR engineering parameters (8,227 + 101 cells) and the 50 m coverage grid (178,370 cells)
+
+**Workflow & data flow**:
+
+1. Log into the NGI planning platform: auth_manager.get_auth with the ngi credential group (a different server from RAN UME; accounts are not interchangeable). Login uses the same uportal/oauth2 RSA password + Z-AUTH-CODE flow
+1. Parameters: GET /api/ngi-common-service-ms/v1/projectParamFiles?exportType=1,0 returns ProjectData.zip. The workbook has a 3-row header (Chinese notes / English notes / field names): drop the first two rows, use row 3 as the header, data starts at row 4
+1. SectorID generation: cells sharing a site and a center frequency are numbered by Azimuth ascending. LTE fills blanks only (7,054 measured) and keeps existing values; the NR parameter file has no such column, so it is generated from scratch per gNodeBID + DLCenterFrequency; sector_source records file / derived
+1. Coverage: GET taskmanager/gettasklogbytaskid?taskid=1647 for the latest evaluation taskLogId -> POST commonGis/getLayerFiles for the layer hash and legend -> POST MapServerService/exportMap(CSV) -> poll exportMapChecking -> downloadExportMapFile for CSV.zip
+1. Persist (explicit BEGIN/COMMIT transactions): upsert parameters by cell_uid into app.ngi_lte_cell_param / app.ngi_nr_cell_param and prune cells missing from this run; delete-then-insert the grid per kpi into app.ngi_coverage_grid; one app.ngi_sync_log row per stage
+
+**Maintenance**:
+
+- WARNING: exportMap MUST echo back the legend returned by getLayerFiles (name/showtitle/range, seven bands). With only taskID + renderType + layerName + colDes the server still returns a token but the job stays in processing forever (measured 2026-11-24: four jobs still processing after 30 minutes); with the legend it finishes in four polls (~15 s)
+- WARNING: download goes through downloadExportMapFile (form {mapType, params: token}), not exportMapChecking; the file name is always CSV.zip, matching saveFile() in the portal gis3d.js
+- WARNING: minimum rows: NGI_MIN_LTE_ROWS=5000 / NGI_MIN_NR_ROWS=50 / NGI_MIN_GRID_ROWS=50000. Below that the run fails without writing, so a partial upstream response cannot replace last week good data
+- WARNING: belongs to group u (RAN-side data collection), queued with ran_ume_daily at 02:00; it uses its own host and credential group, so it shares no session with UME and cannot kick it. A new task MUST also be registered in GROUP_TASK_MAP (worker_watchdog.py)
+- The schema is created idempotently by DDL inside the service (CREATE TABLE IF NOT EXISTS) - no Alembic needed. When changing ngi_store.FIELDS, update the DDL and indexes too; tests/test_ngi_param.py compares both sides
+- Troubleshooting order: check app.ngi_sync_log first (status / message / detail; the coverage row also carries task_log_id and run_id), then the task execution log; for session issues test the ngi credential in Settings -> Credentials
+
 ### 3.4 Reliability mechanisms (timeout / retry / self-healing)
 
 | Mechanism | Description |
@@ -2587,7 +2613,13 @@ Location analysis: centre the map on a coordinate, inspect the nearest ring of s
 
 - Four coordinate entry points: URL lat / lon (a link in a QA answer opens the page directly), manual input, browser geolocation (https only), and Ask the assistant — POST /api/portal-qa/ask and parse the coordinate from the answer text
 - The basemap is the same self-hosted PMTiles offline archive as ?page=gis (/tiles/liberia.pmtiles), with no public-internet dependency. Place labels and roads are off by default and can be enabled in the Layers panel at the top left. The © OpenStreetMap credit at the bottom right is the required attribution for the tile data, not an online request
-- The map has two search windows: Find subscriber (phone number, top right) and Locate by coordinates (latitude/longitude, bottom right). The full control bar — coordinates, radius, site count and the QA assistant — sits at the **bottom of the page**, sharing the same coordinate state as the map window. Subscriber searches default to the **last 3 hours**; the start/end time can be changed under the search box (up to 24 hours back) and applies when you click Search; the title and methodology card is the last row of the page
+- Find subscriber sits at the top right of the map: enter a phone number to see its track. Searches default to the **last 3 hours**; the start/end time can be changed under the search box (up to 24 hours back) and applies when you click Search. To locate by coordinates use the full control bar at the **bottom of the page** (coordinates, radius, site count, QA assistant) — the coordinate box that used to sit at the bottom right of the map was removed on 2026-11-25 to make room for the layer legends. The title and methodology card is the last row of the page
+- The Layers panel also has three network layers: Coverage RSRP / LTE cells / 5G NR cells. They are **all off by default and downloaded only when turned on**, so the page still opens fast; each has its own legend at the bottom right of the map (click the title to collapse it)
+- Coverage RSRP: the NGI coverage evaluation 50 m grid (about 178k bins), coloured in 7 RSRP classes (green = good, red = poor, ordered by the measured average of each class). Zoom to 13+ to see individual bins; click a bin for RSRP, good ratio, samples, serving cells and PCI. "Zoom to coverage area" in the legend fits the map to the covered area
+- LTE cells / 5G NR cells: each cell from the NGI parameter export is drawn as a **65° sector** pointing along its azimuth; **each frequency has its own colour**, and on the same site low bands are drawn larger and high bands smaller so every layer stays visible. Indoor cells and cells without an azimuth are drawn as small dots. Sector size **adapts to site spacing**: small in dense urban areas, larger in rural areas, so neighbouring sites never overlap at any zoom level; at country view a minimum visible size is kept
+- Hover a sector to see the site name, site ID, sector and every carrier in that sector (frequency / band / PCI / cell name); click it for the cell details (PCI, TAC, frequency / EARFCN, height, downtilt, cover type and more) with the sector outlined. Each frequency in the legend can be shown or hidden on its own, or use All / None
+- 5G NR uses a different colour set with a **dashed outline**, is drawn above LTE and is one size smaller than the LTE sectors of the same site; with both layers on, hovering or clicking where they overlap shows the 5G cell only. With a cell layer on, clicking a sector opens the cell and clicking empty map opens the coverage bin
+- All three network layers come from the weekly NGI sync (ngi_param_coverage_sync, Sundays 02:00); the browser downloads each only once per week, and a page refresh after a new sync shows the new data
 - The nearest ring takes the sites inside the chosen radius sorted by distance and keeps the first N. When fewer than three fall inside, the radius is widened to the third nearest site; the dashed circle and the list use the widened radius and a note states it below the controls
 - Site colours use exactly the same rule and values as ?page=gis (real-time alarm / history / VIP / normal). Clicking a site opens the same drill-down drawer as the GIS page (basic info + KPI charts + detail tabs)
 - MW links come from the same KML links as the GIS page sorted by point-to-segment distance; the nearest one is thicker. Clicking a link opens the "link details" drawer with the same fields as clicking a link on ?page=mwRealTime (capacity / node IP / interface / TX-RX throughput and utilization / 24H trend / interface details)
@@ -2755,6 +2787,7 @@ VMAX complaint diagnosis: enter a subscriber number and time window to answer "w
 - **Complaint-type tabs** (not a dropdown) come first: All / Voice / OTT voice & video / Video / Game / Slow data. Switching them **does not re-query** — it only changes the weighting and which chain gets judged, so switching is instant
 - The three-line layout is deliberate: query bar → complaint-type tabs (what the user is complaining about) → view tabs (diagnosis / traffic / connection / radio). The hint under the complaint tabs always states which chain is being judged right now
 - The "Voice" tab judges **CSFB and VoLTE**. The 1100 SGs interface records are the evidence source: SGs location update count, CS Fallback Triggered, Extended Service Request, paging, timeout/failure and QCI=1 bearers are all counted, plus the fallback chain (S1-MME / SGs interleaved by time) and the fallback duration
+- The diagnosis view also has a "Data call dropped by a circuit-switched call" card. It pairs each CS Fallback Triggered release with the next TAU and lists the cell left, the cell returned to, the seconds away, mobile-terminated or not, and the bearer cause on return. The fallback duration on the voice card is the signaling procedure itself (usually a few milliseconds), not how long the phone was off 4G. The card is shown for All / Voice / OTT, and for other complaint types only when a fallback actually happened
 - CSFB fallback time over 2 s is flagged; when the window has CSFB activity but **zero SGs records**, the card raises an explicit warning instead of quietly reporting success — that usually means the SGs interface is not reporting
 - The "Game" tab is kept on purpose: XDR bills really do carry app names such as egame / E-GAME. Game detection is keyword-based (so new titles can be added without code changes), and **app stores are blacklisted** (palmplaystore / googleplay / app store / huawei_appgallery) — otherwise "opened the store" would be counted as "played a game"
 - **Capability boundary — OTT voice/video (WeChat, WhatsApp) cannot be judged at the application layer**: this platform has no SIP/RTP signaling. The OTT card therefore answers only "was there a call" and "how good was the network during the call" (duration, downlink RTT, RTT jitter, retransmission) and **cannot answer "the other side rejected me / my call failed to connect"**. That banner is rendered above the conclusion on purpose — please do not read the OTT card as a call-failure verdict
@@ -2784,6 +2817,7 @@ VMAX Intelligent Diagnosis Workspace: complaint-driven single-page narrative —
 
 - Use the full number with the 231 prefix (e.g. 231777777322), digits only; the local 9-digit format is not matched upstream
 - Complaint type defaults to "All", switching only re-weights and reorders — it never hides cross-module evidence
+- Zone 2 opens with "Data call dropped by a circuit-switched call": the same card as the user-query page. It builds the leave-4G-until-next-TAU timeline from the 1100/1300/32 rows already fetched, and adds non-4G dwelling cells plus cell-level OTT findings from CCA. "Copy conclusion" copies that text
 - Chain node status takes the worst of its metrics: no data shows "no data to judge", never "normal"
 - Every metric answers five parts: why it matters / what was observed / when it occurred / possible impact / what needs verification
 - Raw XDR / remote radio records / TCP load only when "View evidence" is clicked

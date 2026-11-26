@@ -306,3 +306,64 @@ export function explainSite(link: PrtgLink, t: TFn): string {
     match: t(matchLabelKey(link.match_status)),
   })
 }
+
+
+/* ---------------- SLA 与容量（Issue #231） ---------------- */
+
+export interface PrtgSlaLink {
+  sensor_id: number
+  sensor_name: string
+  device_name?: string | null
+  status?: string | null
+  site_id?: string | null
+  region?: string | null
+  availability_pct?: number | null
+  uptime_pct_all_time?: number | null
+  downtime_hours_month?: number | null
+  downtime_hours_covered?: number | null
+  downtime_hours_unknown_coverage?: number | null
+  unknown_coverage_days?: number | null
+  coverage_hours_month?: number | null
+  down_count?: number | null
+  last_down?: string | null
+  uptime_days?: number | null
+  target_pct?: number | null
+  below_target?: boolean
+  basis?: string | null
+}
+
+export interface PrtgSlaReport {
+  generated_at?: string
+  month: string
+  target_pct: number
+  summary: {
+    links: number
+    below_target: number
+    avg_availability_pct?: number | null
+    total_downtime_hours_month?: number | null
+    capacity_known: number
+    capacity_total: number
+    sla_days_recorded: number
+  }
+  method?: Record<string, string>
+  links: PrtgSlaLink[]
+  below_target: PrtgSlaLink[]
+  region_ranking: Array<{ region: string; links: number; avg_availability_pct: number; below_target: number }>
+}
+
+export interface PrtgCapacityRow {
+  sensor_id: number
+  sensor_name?: string | null
+  device_name?: string | null
+  capacity_mbps?: number | null
+  capacity_source?: string | null
+  capacity_known: boolean
+  peak_24h_in_mbps?: number | null
+  peak_24h_out_mbps?: number | null
+  peak_7d_in_mbps?: number | null
+  peak_7d_out_mbps?: number | null
+  p95_30d_in_mbps?: number | null
+  p95_30d_out_mbps?: number | null
+  utilization_pct?: number | null
+  level?: string
+}

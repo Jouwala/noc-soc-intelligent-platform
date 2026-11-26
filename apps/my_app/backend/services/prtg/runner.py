@@ -12,10 +12,11 @@ import logging
 import threading
 import time
 
-from backend.services.prtg import anomaly, store
+from backend.services.prtg import anomaly, sla, store
 from backend.services.prtg.collector import (
     AGGREGATE_INTERVAL_SECONDS,
     ANOMALY_INTERVAL_SECONDS,
+    SLA_INTERVAL_SECONDS,
     CATALOG_INTERVAL_SECONDS,
     DETAIL_INTERVAL_SECONDS,
     LOOP_TICK_SECONDS,
@@ -36,6 +37,7 @@ def run_forever(collector: PrtgCollector, stop_event: threading.Event | None = N
     next_detail = tick + DETAIL_INTERVAL_SECONDS
     next_aggregate = tick + AGGREGATE_INTERVAL_SECONDS
     next_anomaly = tick + 60
+    next_sla = tick + 90
     next_prune = tick + 30
     logger.info("PRTG 采集循环启动：每 %s 秒轮询", collector.settings.poll_seconds)
     while not stop.is_set():
@@ -60,6 +62,9 @@ def run_forever(collector: PrtgCollector, stop_event: threading.Event | None = N
             if tick >= next_anomaly:
                 _safe(collector, "anomaly", anomaly.evaluate_all)
                 next_anomaly = tick + ANOMALY_INTERVAL_SECONDS
+            if tick >= next_sla:
+                _safe(collector, "sla", sla.snapshot_day)
+                next_sla = tick + SLA_INTERVAL_SECONDS
             if tick >= next_prune:
                 _safe(collector, "prune", collector.prune)
                 next_prune = tick + PRUNE_INTERVAL_SECONDS

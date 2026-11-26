@@ -104,20 +104,27 @@ def render_message(ctx, alarm: Dict[str, Any],
 
 
 def render_manual_message(ctx, alarm: Dict[str, Any], reason: str,
-                          hint_lines: Optional[List[str]] = None) -> str:
+                          hint_lines: Optional[List[str]] = None,
+                          headline: Optional[str] = None) -> str:
     """自动派单失败时的「需人工处理」通报（2026-10-27 业务要求：不能静默漏派）。
 
-    两类失败都会走它：
+    三类失败都会走它：
       1. **站点解析失败** —— 拿不到数字站号，eFlow 对只带 ME 名的 payload 会回
          `manual assign succeed.` 却不建 TT（实测）；
       2. **eFlow 侧 ttstatus 非 0**（ME 未关联站点）—— 仍会尝试派单，但接口回
-         succeed 也不建 TT，必须让人去 eFlow 修站点绑定。
+         succeed 也不建 TT，必须让人去 eFlow 修站点绑定；
+      3. **上游未建单**（2026-11-25）—— 接口回 success、回查 ttid 仍为空，
+         接口真收下了但 TT 没落地；这不是任务故障，但仍要人手工建单。
 
     共同点：自动派不了，**但必须让群里看到**，否则等于漏派且无人知晓。
-    同一条告警只通知一次，由状态表 `send_status` 抑制（见主流程）。
+    同一条告警 6 小时内只通知一次，由 `notified_recently` 抑制（见主流程）——
+    alarm_key 会被 eFlow 复用，永久抑制会把新升起的告警整条压掉（2026-11-25）。
 
-    ⚠ **群通报正文一律英文**：`reason` / `hint_lines` 必须由调用方传入英文；
-    中文原因走 `last_error` 落状态表。
+    `headline` 断言式首行：默认「Auto assign failed」，上游未建单这类要更准确地
+    说是「上游收下了但没建单」，由调用方传入英文文案。
+
+    ⚠ **群通报正文一律英文**：`reason` / `hint_lines` / `headline` 必须由调用方
+    传入英文；中文原因走 `last_error` 落状态表。
     """
     code = norm_code(_val(alarm.get("alarmcode")))
     code_name = _s(_val(alarm.get("codename")) or _val(alarm.get("alarm_title")))
@@ -126,7 +133,7 @@ def render_manual_message(ctx, alarm: Dict[str, Any], reason: str,
     me_name = _s(_val(alarm.get("mename")) or _val(alarm.get("site")))
 
     lines = [ctx.push_title, ""]
-    lines.append("⚠ Auto assign failed — manual action required in eFlow")
+    lines.append(headline or "⚠ Auto assign failed — manual action required in eFlow")
     lines.append(f"ME       : {me_name or '-'}")
     lines.append(f"Alarm    : {code} {code_name}".rstrip())
     lines.append(f"Occurred : {occ_txt}")
