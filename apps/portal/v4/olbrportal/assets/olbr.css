@@ -3606,3 +3606,52 @@ html.dark {
 
 /* ---- QC 下钻弹窗头：tone-1（qcDrill.css 后加载，用更高特异性覆盖） ---- */
 html body .qc-head { background: var(--tone-1); }
+
+/* ============================================================================
+   关键业务行 #keybiz（2026-11-23 加）
+   ----------------------------------------------------------------------------
+   结构复用富卡片（.qc-card--rich / .qc-ttl / .qc-val / .qc-asof / .qc-chips /
+   .qc-ext），这里只补三件富卡片没有的事：
+     · 波动徽章要比普通 .qc-chip 更醒目（它是这一行的判断结果，不是附注）；
+     · 「超过 ±5%」的红是**波动超阈**，与 .qc-chip.down 的「指标变差」不是同一
+       语义，故单开 is-hot / is-ok 两支，共用 --crit / --ok 令牌；
+     · 占位卡不可点，必须去掉 .qc-card 默认的 pointer 与 hover 抬升，
+       否则「长得可点、点下去没反应」比不显示更糟。
+   ============================================================================ */
+.kb-chip { font-size: var(--fs-xs); font-weight: 700; letter-spacing: .1px; }
+.qc-chip.is-hot {
+  border-color: color-mix(in srgb, var(--crit) 55%, transparent);
+  color: var(--crit); background: var(--crit-tint);
+}
+.qc-chip.is-ok {
+  border-color: color-mix(in srgb, var(--ok) 55%, transparent);
+  color: var(--ok); background: var(--ok-tint);
+}
+/* VIP 告警 > 0 时大数字标红。特异性压过 .qc-val span 的 --t1，
+   不写 !important（同文件既有写法一致）。 */
+.qc-card--rich .qc-val span.kb-crit { color: var(--crit); }
+/* 占位卡（VIP 链路容量 / VIP FTTH）：没有下钻，不做可点手势。 */
+.qc-card.is-static { cursor: default; }
+.qc-card.is-static:hover {
+  transform: none;
+  box-shadow: inset 0 0 14px color-mix(in srgb, var(--qc-accent) 12%, transparent);
+}
+
+/* 窄屏（.qc-grid 收到 2 列）：标题允许折行、页脚从三格收成两格。
+   ⚠️ 不折行就会出省略号：390px 视口下卡宽约 170px，「VIP 链路的容量利用率」
+      与英文 "Data Subscribers · 4G" 都会被 .qc-ttl b 的 nowrap + ellipsis 切掉；
+      三格页脚每格只有约 50px，数字（1,120,206）与「超阈标红」同样放不下。
+   取舍：保留「昨日同时 / 波动阈值」，隐藏「7 天前同时」；VIP 卡隐藏
+   「统计口径」，保留「告警站点 / 下钻」。被隐藏的是**背景信息**，
+   判断所需的最新值、波动、对比时刻、阈值全部还在卡上。 */
+@media (max-width: 760px) {
+  #keybiz .qc-ttl { align-items: flex-start; }
+  /* 单位在标题右侧与数值右侧各出现一次；窄屏去掉标题那份，把宽度让给卡名，
+     避免「VIP 链路的容量利用率」被折成孤零零的一个「率」字。 */
+  #keybiz .qc-ttl i { display: none; }
+  #keybiz .qc-ttl b { white-space: normal; overflow: visible; min-width: 0; }
+  #keybiz .qc-ext { flex-wrap: wrap; }
+  #keybiz .qc-ext > div { flex: 1 1 calc(50% - 4px); }
+  #keybiz .kb-d7, #keybiz .kb-scope { display: none; }
+}
+
