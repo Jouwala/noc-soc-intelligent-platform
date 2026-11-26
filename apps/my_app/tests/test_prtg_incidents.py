@@ -146,3 +146,37 @@ def test_correlate_is_idempotent(db_session):
     summary = incidents.summary(now)
     assert summary["total"] == 1 and summary["open"] == 0
     assert summary["by_kind"][incidents.KIND_DEVICE_UNREACHABLE] == 1
+
+
+def test_query_incidents_sensor_filter_applies_before_limit(db_session):
+    """带 sensor_id 时 limit 必须作用在过滤之后（否则会被更新的无关事件挤掉）。"""
+    import json
+
+    base = datetime(2026, 11, 20, 12, 0, 0)
+    with db_session() as session:
+        # 1 条匹配事件（较旧）
+        session.add(PrtgIncident(
+            device_name="MATCH-DEV", device_objid=1,
+            started_at=base, ended_at=base + timedelta(minutes=5),
+            kind=incidents.KIND_SINGLE_LINK, sensor_count=1, duration_seconds=300,
+            sensors_json=json.dumps([{"sensor_objid": 9999, "sensor_name": "x",
+                                      "sensor_type": SNMP, "down_at": None, "up_at": None}]),
+            evidence_json="{}", created_at=base, updated_at=base,
+        ))
+        # 5 条更新的无关事件（旧实现先 limit=2 再过滤 → 空结果）
+        for i in range(5):
+            t = base + timedelta(hours=i + 1)
+            session.add(PrtgIncident(
+                device_name=f"OTHER-{i}", device_objid=100 + i,
+                started_at=t, ended_at=t + timedelta(minutes=1),
+                kind=incidents.KIND_SINGLE_LINK, sensor_count=1, duration_seconds=60,
+                sensors_json=json.dumps([{"sensor_objid": 1000 + i, "sensor_name": "o",
+                                          "sensor_type": SNMP, "down_at": None, "up_at": None}]),
+                evidence_json="{}", created_at=t, updated_at=t,
+            ))
+        session.commit()
+
+    got = incidents.query_incidents(base - timedelta(days=1), sensor_id=9999, limit=2)
+    assert len(got) == 1
+    assert got[0]["device_name"] == "MATCH-DEV"
+    assert {s["sensor_id"] for s in got[0]["sensors"]} == {9999}

@@ -311,6 +311,13 @@ def incident_to_dict(row: PrtgIncident) -> dict[str, Any]:
 
 def query_incidents(since: datetime, *, device_name: str | None = None,
                     sensor_id: int | None = None, limit: int = 200) -> list[dict[str, Any]]:
+    """按 started_at 新→旧取事件。
+
+    ``sensor_id`` 落在 ``sensors_json`` 里，SQL 不便精确过滤：有该条件时先取
+    时间窗内全部行（窗 ≤30 天、事件量小），内存过滤后再 ``limit``；无该条件
+    时直接在 SQL 侧 ``limit``，避免无谓全表扫描。
+    """
+    cap = max(1, min(int(limit), 1000))
     stmt = (
         select(PrtgIncident)
         .where(PrtgIncident.started_at >= since)
@@ -319,10 +326,17 @@ def query_incidents(since: datetime, *, device_name: str | None = None,
     if device_name:
         stmt = stmt.where(PrtgIncident.device_name == device_name)
     with store.SessionLocal() as session:
-        rows = session.execute(stmt.limit(max(1, min(int(limit), 1000)))).scalars().all()
-    items = [incident_to_dict(r) for r in rows]
-    if sensor_id is not None:
-        items = [i for i in items if any(s["sensor_id"] == sensor_id for s in i["sensors"])]
+        if sensor_id is None:
+            rows = session.execute(stmt.limit(cap)).scalars().all()
+            return [incident_to_dict(r) for r in rows]
+        rows = session.execute(stmt).scalars().all()
+    items: list[dict[str, Any]] = []
+    for r in rows:
+        item = incident_to_dict(r)
+        if any(s.get("sensor_id") == sensor_id for s in item["sensors"]):
+            items.append(item)
+            if len(items) >= cap:
+                break
     return items
 
 

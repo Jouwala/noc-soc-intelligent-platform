@@ -192,6 +192,42 @@ def dash_session(db_session, monkeypatch):
     return db_session
 
 
+def test_upsert_sensors_mixed_batch_preserves_last_message(db_session):
+    """混批：无 message 的行不得清空已有 last_message（审核 #302）。"""
+    from backend.models.prtg_collector import PrtgSensor
+
+    now = datetime(2026, 11, 26, 10, 0, 0)
+    store.upsert_sensors([
+        {"objid": 2724, "group": "G", "device": "D", "sensor": "PING",
+         "type": "Ping", "status": "Unusual", "status_raw": 10,
+         "message": "Request timed out (ICMP error # 11010)"},
+        {"objid": 2721, "group": "G", "device": "D2", "sensor": "LAN",
+         "type": "SNMP Traffic 64bit", "status": "Up", "status_raw": 3},
+    ], now)
+    with db_session() as session:
+        ping = session.execute(select(PrtgSensor).where(PrtgSensor.objid == 2724)).scalar_one()
+        assert "Request timed out" in (ping.last_message or "")
+        assert ping.last_message_at == now
+
+    later = now + timedelta(minutes=5)
+    # 混批：2724 不带 message（目录同步形态），2721 带新 message
+    store.upsert_sensors([
+        {"objid": 2724, "group": "G", "device": "D", "sensor": "PING",
+         "type": "Ping", "status": "Up", "status_raw": 3},
+        {"objid": 2721, "group": "G", "device": "D2", "sensor": "LAN",
+         "type": "SNMP Traffic 64bit", "status": "Warning", "status_raw": 4,
+         "message": "No response (SNMP error # -2003)"},
+    ], later)
+    with db_session() as session:
+        ping = session.execute(select(PrtgSensor).where(PrtgSensor.objid == 2724)).scalar_one()
+        lan = session.execute(select(PrtgSensor).where(PrtgSensor.objid == 2721)).scalar_one()
+        assert "Request timed out" in (ping.last_message or "")  # 仍是旧文案
+        assert ping.last_message_at == now  # 时间戳也不被冲掉
+        assert ping.status == "Up"  # 其它列照常更新
+        assert "No response" in (lan.last_message or "")
+        assert lan.last_message_at == later
+
+
 def test_links_fields_null_before_sync_then_counted(dash_session, monkeypatch):
     from backend.models.prtg_collector import PrtgSensor
     from backend.services.prtg import dashboard

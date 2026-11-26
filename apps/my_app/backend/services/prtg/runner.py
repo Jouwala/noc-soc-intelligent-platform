@@ -40,6 +40,8 @@ def run_forever(collector: PrtgCollector, stop_event: threading.Event | None = N
     next_sla = tick + 90
     next_prune = tick + 30
     next_messages = tick + 20  # 日志采集与设备事件合并（P0）：启动 20 秒后首跑，之后每 5 分钟
+    # PRTG_MESSAGES_SYNC_ENABLED 来自 backend/.env（进程启动加载）；这里只读一次，
+    # 改环境变量后必须重启 backend 才生效，不做热切换。
     messages_on = logs.sync_enabled()
     logger.info("PRTG 采集循环启动：每 %s 秒轮询", collector.settings.poll_seconds)
     while not stop.is_set():

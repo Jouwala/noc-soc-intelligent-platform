@@ -21,7 +21,8 @@
 - 本地保留 ``PRTG_LOG_RETENTION_DAYS``（默认 730 天），**不跟随** 90 天原始采样清理。
 
 开关：``PRTG_MESSAGES_SYNC_ENABLED``（默认 1）；置 0 后 runner 不再拉日志、不再合并事件，
-其余采集不受影响。
+其余采集不受影响。该变量读自 ``backend/.env``（进程启动时加载），**改后需重启 backend**
+才会生效（runner 在 ``run_forever`` 入口读一次，不热切换）。
 """
 import hashlib
 import html
