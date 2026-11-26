@@ -358,3 +358,20 @@ def test_alarm_overview_snapshot_has_same_keys_as_live(monkeypatch):
     assert set(published["payload"]) == set(live), (
         f"快照与现算字段不一致: only_snapshot={set(published['payload']) - set(live)}, "
         f"only_live={set(live) - set(published['payload'])}")
+
+
+def test_network_missing_file_warns_only_once(monkeypatch, tmp_path, caplog):
+    """xlsx 不存在时只警告一次（开发副本/首次部署本来就没这个文件）。"""
+    import logging
+
+    monkeypatch.setattr(ad, "_net_missing_warned", False)
+    monkeypatch.setattr(ad, "_NETWORK_KPI_XLSX", tmp_path / "absent.xlsx")
+
+    with caplog.at_level(logging.DEBUG, logger=ad.__name__):
+        ad._cache.pop("network_availability", None)
+        ad._network_availability()
+        ad._cache.pop("network_availability", None)
+        ad._network_availability()
+
+    levels = [r.levelname for r in caplog.records if "network KPI xlsx" in r.getMessage()]
+    assert levels[:2] == ["WARNING", "DEBUG"], f"警告没有限频: {levels}"

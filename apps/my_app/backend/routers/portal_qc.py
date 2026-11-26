@@ -123,8 +123,11 @@ def _refresh_cached_async(cache: dict, collect, label: str, token: int) -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("[portal-qc] 后台刷新失败（旧值停止兜底）%s: %s", label, exc, exc_info=True)
         with _summary_lock:
+            # 迟到的失败不能给「用户强刷已成功」的新缓存贴失败标记（gen 变了说明有人
+            # 已经写过新值），否则会白多一次同步重算。
+            if cache["gen"] == token:
+                cache["failed_at"] = time.time()
             cache["refreshing"] = False
-            cache["failed_at"] = time.time()
         return
     with _summary_lock:
         if cache["gen"] == token:

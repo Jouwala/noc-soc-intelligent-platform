@@ -245,3 +245,31 @@ def test_thread_start_failure_falls_back_to_sync(monkeypatch):
     res = portal_qc._serve_cached(cache, lambda: _payload("new"), refresh=False, label="test")
     assert res["generated_at"] == "new"              # 退回同步算
     assert cache["refreshing"] is False
+
+
+def test_late_background_failure_does_not_mark_newer_cache():
+    """迟到的后台失败不能给「用户强刷已成功」的新缓存贴失败标记。"""
+    cache = _new_cache()
+    cache["payload"] = _payload("old")
+    cache["at"] = time.time() - 120
+
+    release = threading.Event()
+
+    def slow_fail():
+        release.wait(5)
+        raise RuntimeError("late failure")
+
+    portal_qc._serve_cached(cache, slow_fail, refresh=False, label="test")   # 触发后台
+    assert _wait_until(lambda: cache["refreshing"])
+
+    # 用户点刷新：同步算并推进 gen
+    portal_qc._serve_cached(cache, lambda: _payload("user"), refresh=True, label="test")
+    assert cache["payload"]["generated_at"] == "user"
+
+    release.set()
+    # 必须等后台线程真的抛出后再断言：同步强刷已把 refreshing 置 False，
+    # 用「等 refreshing 变 False」会立即返回、断言早于失败发生（审核实测的空转测试）。
+    for t in threading.enumerate():
+        if t.name == "qc-refresh-test":
+            t.join(5)
+    assert cache["failed_at"] is None, "迟到的失败污染了新缓存"
