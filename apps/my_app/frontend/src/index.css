@@ -517,8 +517,19 @@ body {
 @media (max-width: 767.98px) {
   /* 手机上顶栏只有约 33px 高（2.33rem × 14.3px 根字号），左侧目录按钮 + 右侧
      头像把标题区挤到 200px 以内：凹槽放不下，居中后必然压在目录按钮上。
-     这里退回普通标题 —— 不画凹槽，标题仍走省略号，不会撑破顶栏。 */
+     这里退回普通标题 —— 不画凹槽，标题仍走省略号，不会撑破顶栏。
+
+     ⚠️ 容器只能用 display: contents，不能用 display: none（#320）：2026-11-27 #318
+     把 h1 从凹槽的兄弟节点改成了它的子节点，`display: none` 会把包着标题的容器
+     整个藏掉，手机上标题随之消失。contents 让容器不生成盒子、h1 直通变成标题槽的
+     flex 子项，装饰性的两道外翻弧再单独藏掉。 */
   .spatial-navbar .wh-header-title-notch {
+    display: contents;
+  }
+
+  /* 外翻弧是凹槽的装饰，手机退回普通标题时一并藏掉（否则会在标题两侧留下两道弧线） */
+  .spatial-navbar .wh-header-title-notch::before,
+  .spatial-navbar .wh-header-title-notch::after {
     display: none;
   }
 
