@@ -322,14 +322,14 @@
       "sensor_name": "AML _TOKADEH_PING",
       "interface_no": null,
       "peer_name": null,
-      "site_id": "Unknown",
-      "region": null,
+      "site_id": "Tokadi(ISP)",
+      "region": "nimba",
       "link_type": null,
       "capacity_mbps": null,
       "capacity_source": null,
       "criticality": null,
       "enabled": true,
-      "match_status": "unknown"
+      "match_status": "verified"
     },
     {
       "sensor_id": 2725,
@@ -337,14 +337,14 @@
       "sensor_name": "AML_TOKADEH_LAN",
       "interface_no": null,
       "peer_name": null,
-      "site_id": "Unknown",
-      "region": null,
+      "site_id": "Tokadi(ISP)",
+      "region": "nimba",
       "link_type": null,
       "capacity_mbps": null,
       "capacity_source": null,
       "criticality": null,
       "enabled": true,
-      "match_status": "unknown"
+      "match_status": "verified"
     },
     {
       "sensor_id": 2790,
@@ -352,14 +352,14 @@
       "sensor_name": "AML_TOKADEH_IPRAN LINK",
       "interface_no": null,
       "peer_name": null,
-      "site_id": "Unknown",
-      "region": null,
+      "site_id": "Tokadi(ISP)",
+      "region": "nimba",
       "link_type": null,
       "capacity_mbps": null,
       "capacity_source": null,
       "criticality": null,
       "enabled": true,
-      "match_status": "unknown"
+      "match_status": "verified"
     },
     {
       "sensor_id": 2791,
@@ -367,14 +367,14 @@
       "sensor_name": "(002) AML_TOKADEH_ISP Link",
       "interface_no": null,
       "peer_name": null,
-      "site_id": "Unknown",
-      "region": null,
+      "site_id": "Tokadi(ISP)",
+      "region": "nimba",
       "link_type": null,
       "capacity_mbps": null,
       "capacity_source": null,
       "criticality": null,
       "enabled": true,
-      "match_status": "unknown"
+      "match_status": "verified"
     }
   ],
   "blindspots": [
