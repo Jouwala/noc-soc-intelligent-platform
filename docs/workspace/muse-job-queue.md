@@ -21,6 +21,9 @@ D:\02_olbr_portal\TMP\muse-jobs\
 ```
 
 `done\` / `failed\` / `results\` 各保留最新 100 条，超出的每轮自动清理。
+`claimed\` 里的子进程日志（`<id>.out.log.stdout` / `.stderr`，restart 任务还有
+`.out.log.stop` / `.out.log.start` 两段）保留 1 天，超期的每轮清理（#313）；
+清理过滤器必须带尾随通配符 `*.out.log*`，只写 `*.out.log` 匹配不到这些文件名。
 
 ## 任务格式
 
