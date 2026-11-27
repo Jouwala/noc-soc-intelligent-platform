@@ -2266,39 +2266,9 @@ function AppContent() {
             />
             )}
 
-            {/* 左侧装饰箭头（▶▶，即「展开目录」的视觉提示）。
-                siderLocked 时一并隐藏 —— 目录不存在时这个箭头是误导性的死装饰。
-                注意它与右侧的 ◀（收起提示）成对出现，只藏一半会失衡，故两侧同藏。 */}
-            {!siderLocked && (
-            <div className="wh-hide-mobile" aria-hidden="true" style={{
-              position: 'absolute',
-              left: '3.25rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--wh-decor)',
-              fontSize: '1.125rem',
-              letterSpacing: '0.25rem',
-              userSelect: 'none',
-            }}>
-              ▶▶
-            </div>
-            )}
-
-            {/* 右侧装饰箭头（◀，收侧栏的视觉提示）—— 同上，目录被锁时一并隐藏。 */}
-            {!siderLocked && (
-            <div className="wh-hide-mobile" aria-hidden="true" style={{
-              position: 'absolute',
-              right: '10rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--wh-decor)',
-              fontSize: '1.125rem',
-              letterSpacing: '0.25rem',
-              userSelect: 'none',
-            }}>
-              ◀
-            </div>
-            )}
+            {/* 2026-11-27：原来这里还挂了两组纯装饰箭头（左侧 ▶▶、右侧 ◀），
+                用户反馈「白色三角小方块」没有意义，已整体删除（连同 --wh-decor 令牌）。
+                目录的展开/收起只保留左侧汉堡按钮这一处入口。 */}
 
             {/* 居中标题：site_kpi_rt 使用「上开口、开口外翻」的凹槽标题，其余页面保持原样。
                 凹槽由 index.css 的 .wh-header-title-notch（本体）+ 它的 ::before/::after
