@@ -16,10 +16,11 @@
 ## 2. 口径
 
 - **时间**：`datetime_raw`（Excel 序列日）→ naive UTC，四舍五入到秒；PRTG 服务器时钟 = UTC（getstatus `Clock` 与本机 UTC 一致）。
-- **去重**：`sha1(objid | datetime_raw | status_raw | message)` 唯一；重叠翻页、重复运行都幂等。
-- **增量**：新→旧翻页，页大小 2000；停在「本页最老 < 已入库最新 − 10 分钟」/ 空页 / 不满页 / 10 页硬上限。首次运行没有游标，一直翻到空页（= 一次存下 PRTG 现存的约 30 天）。
-- **原因分类**（`logs.classify_message`，命中即停）：`icmp_timeout`（ICMP error / Request timed out）→ `snmp_no_response`（SNMP error / No response）→ `unusual_low` → `unusual_high` → `paused` → `value`（数字 + msec/kbit/s/%）→ `other`。PRTG 改文案时只改这里。
-- **派生指标**（`logs.compute_sensor_stats`）：`down_count_24h`、`icmp_timeouts_24h`（Ping 只有延迟通道，用它代替丢包）、`mttr_minutes_7d`（Down → 同传感器下一次 Up 的平均分钟数；没有完整 Down→Up 对时为 null）。日志采集从未成功时三项都返回 null，不是 0。
+- **message vs message_raw**（2026-11-27 修复）：PRTG 14 `content=messages` 两列都有。错误行 `message_raw` 是代码（如 `#M11010` / `#N-2003`），**正文只在 `message`（HTML）**。展示与 `reason` 分类优先 `strip_html(message)`，空时才回落 `message_raw`。`store.upsert_sensors` / `collector.poll_once` 事件文案同序。
+- **去重兼容**：`dedup_key = sha1(objid | datetime_raw | status_raw | legacy_text)`，其中 `legacy_text` **必须**仍用旧顺序 `strip_html(message_raw or message)`（见 `legacy_text_for_dedup`），与 11-26 首次入库字节一致，否则重采会造重复行。已存在键就地更新 `message` / `reason` / `value_*`，不插新行。
+- **增量 / 全量**：新→旧翻页，页大小 2000。增量停在「本页最老 < 已入库最新 − 10 分钟」/ 空页 / 不满页 / 10 页硬上限。`full=True` 忽略游标，上限 20 页（进程首跑与 `python -m backend.services.prtg.logs --resync`）。
+- **原因分类**（`logs.classify_message`，命中即停）：`icmp_timeout` → `snmp_no_response` → `unusual_low` → `unusual_high` → `paused` → `value` → 代码图（`MESSAGE_CODE_REASON`：`#M11010`/`#M11013`→icmp，`#N-2003`→snmp）→ `other`。生产摸底三码无歧义；PRTG 滚动窗外旧行靠代码图 + `reclassify_legacy_codes` 修 reason（不改 message 原文）。
+- **派生指标**（`logs.compute_sensor_stats`）：`down_count_24h`、`icmp_timeouts_24h`、`mttr_minutes_7d`；日志采集从未成功时三项都返回 null，不是 0。
 - **保留**：`PRTG_LOG_RETENTION_DAYS`，默认 730 天；不跟随 90 天原始采样清理。
 
 ## 3. 设备事件合并（`incidents.build_incidents`）
@@ -34,9 +35,10 @@
 
 ## 4. 运行
 
-- runner：启动 20 秒后首跑，之后每 300 秒 `sync_messages` → 成功才 `correlate`；状态键 `messages` / `incidents`（`/api/prtg/collector/status` 可见）。
+- runner：启动 20 秒后**首跑** `sync_messages(full=True)` → `reclassify_legacy_codes` → `correlate`；之后每 300 秒增量 `sync_messages` → 成功才 `correlate`。状态键 `messages` / `incidents`（`/api/prtg/collector/status` 可见）。首跑全量会就地修好仍在 PRTG 窗口内的正文；代码图修好已滚出窗口的 `#` 行。
+- 运维手动全量：`cd apps/my_app` 后 `python -m backend.services.prtg.logs --resync`（与首跑同路径：全量翻页 + reclassify + correlate）。只读 PRTG，最多约 20 次 GET。
 - 开关：`PRTG_MESSAGES_SYNC_ENABLED=0` 关闭日志采集与合并（需重启 backend），其余采集不受影响。
-- 兜底快照：`TMP/prtg_survey/out/prtg_messages_20261126_0910.csv`（摸底时导出的 30 天）。上线时 PRTG 里还在的部分由首跑拿全，**不提供 CSV 导入**（不做第二入口）。
+- 兜底快照：`TMP/prtg_survey/out/prtg_messages_20261126_0910.csv`（摸底时导出的 30 天）。**不提供 CSV 导入**。
 
 ## 5. 接口
 

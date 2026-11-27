@@ -148,6 +148,55 @@ def test_correlate_is_idempotent(db_session):
     assert summary["by_kind"][incidents.KIND_DEVICE_UNREACHABLE] == 1
 
 
+def test_reclassify_then_correlate_sets_device_unreachable(db_session):
+    """旧 bug：ICMP/SNMP 行 message 只剩 # 代码、reason=other → kind 错成 snmp_mgmt；
+    reclassify 后 correlate 幂等改写成 device_unreachable。"""
+    from backend.services.prtg import logs
+
+    a = datetime(2026, 11, 25, 18, 36, 41)
+    # 与 _aml_events 同时间线，但 reason 全错成 other（模拟 message_raw 误入库）
+    broken = [
+        LogEvent(1, 2725, "LAN", "AML TOKADEH1", SNMP, a, "Warning", "other"),
+        LogEvent(2, 2724, "PING", "AML TOKADEH1", "Ping", a + timedelta(seconds=4), "Warning", "other"),
+        LogEvent(3, 2724, "PING", "AML TOKADEH1", "Ping", a + timedelta(seconds=9), "Down", "other"),
+        LogEvent(4, 2791, "ISP", "AML TOKADEH1", SNMP, a + timedelta(seconds=15), "Down", "other"),
+        LogEvent(5, 2790, "IPRAN", "AML TOKADEH1", SNMP, a + timedelta(seconds=20), "Down", "other"),
+        LogEvent(6, 2725, "LAN", "AML TOKADEH1", SNMP, a + timedelta(seconds=25), "Down", "other"),
+        LogEvent(7, 2724, "PING", "AML TOKADEH1", "Ping", a + timedelta(seconds=60), "Up", "value"),
+        LogEvent(8, 2791, "ISP", "AML TOKADEH1", SNMP, a + timedelta(seconds=105), "Up", "value"),
+        LogEvent(9, 2790, "IPRAN", "AML TOKADEH1", SNMP, a + timedelta(seconds=110), "Up", "value"),
+        LogEvent(10, 2725, "LAN", "AML TOKADEH1", SNMP, a + timedelta(seconds=115), "Up", "value"),
+    ]
+    with db_session() as session:
+        for e in broken:
+            # Ping Down/Warning 存 #M11010，SNMP 存 #N-2003（与生产一致）
+            if e.sensor_type == "Ping" and e.status in ("Down", "Warning"):
+                msg = "#M11010"
+            elif e.sensor_type == SNMP and e.status in ("Down", "Warning"):
+                msg = "#N-2003"
+            else:
+                msg = "6 msec"
+            session.add(PrtgLogMessage(
+                sensor_objid=e.sensor_objid, device_name=e.device_name, sensor_name=e.sensor_name,
+                sensor_type=e.sensor_type, happened_at=e.happened_at, status=e.status,
+                reason=e.reason or "other", message=msg, dedup_key=f"k{e.id}",
+                collected_at=e.happened_at,
+            ))
+        session.commit()
+
+    now = datetime(2026, 11, 26, 9, 0, 0)
+    before = incidents.correlate(now)
+    assert before["incidents"] == 1
+    items = incidents.query_incidents(now - timedelta(days=7))
+    # 无 icmp_timeout 佐证时：有 Ping 传感器仍可能判 device_unreachable，或退化——以 reclassify 后为准
+    logs.reclassify_legacy_codes(now)
+    after = incidents.correlate(now)
+    assert after["incidents"] == 1
+    items = incidents.query_incidents(now - timedelta(days=7))
+    assert items[0]["kind"] == incidents.KIND_DEVICE_UNREACHABLE
+    assert items[0]["evidence"]["icmp_timeouts"] >= 2
+
+
 def test_query_incidents_sensor_filter_applies_before_limit(db_session):
     """带 sensor_id 时 limit 必须作用在过滤之后（否则会被更新的无关事件挤掉）。"""
     import json

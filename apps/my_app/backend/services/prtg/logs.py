@@ -15,25 +15,32 @@
   ``parent`` 是设备名，``name`` 是传感器名；
 - 时间取 ``datetime_raw``（Excel 序列日）。PRTG 服务器时钟实测为 UTC
   （getstatus ``Clock`` 与本机 UTC 一致），入库 **naive UTC**，接口层补 ``Z``；
-- 去重键 ``sha1(objid | datetime_raw | status_raw | message)``：重叠翻页、重复运行都幂等；
+- 去重键 ``sha1(objid | datetime_raw | status_raw | legacy_message)``：重叠翻页、重复运行都幂等；
+  ``legacy_message`` 必须用旧顺序 ``message_raw or message``（见 ``legacy_text_for_dedup``），
+  否则重采会把已入库行当成新行。
+- 展示/分类优先取 ``message``（HTML 正文），空时才回落 ``message_raw``（错误代码如 ``#M11010``）。
 - 分类 ``reason`` 是纯文本规则（``classify_message``），规则与样例见
-  ``docs/workspace/prtg-logs.md``；PRTG 换版本改文案时只改这里。
+  ``docs/workspace/prtg-logs.md``；PRTG 换版本改文案时只改这里。仅剩 ``#`` 代码时走
+  ``MESSAGE_CODE_REASON`` 兜底图（2026-11-27 生产摸底：``#M11010`` / ``#N-2003`` / ``#M11013`` 均无歧义）。
 - 本地保留 ``PRTG_LOG_RETENTION_DAYS``（默认 730 天），**不跟随** 90 天原始采样清理。
 
 开关：``PRTG_MESSAGES_SYNC_ENABLED``（默认 1）；置 0 后 runner 不再拉日志、不再合并事件，
 其余采集不受影响。该变量读自 ``backend/.env``（进程启动时加载），**改后需重启 backend**
 才会生效（runner 在 ``run_forever`` 入口读一次，不热切换）。
 """
+import argparse
 import hashlib
 import html
 import json
+import logging
 import os
 import re
+import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
 from backend.models.prtg_logs import PrtgLogMessage
 from backend.services.prtg import store
@@ -44,12 +51,15 @@ from backend.services.prtg.parsing import excel_serial_to_datetime
 LOG_COLUMNS = ("objid", "datetime", "parent", "type", "name", "status", "message")
 PAGE_SIZE = 2000
 MAX_PAGES = 10  # treesize 是假总数，必须有硬上限
+MAX_PAGES_FULL = 20  # 首跑 / --resync 全量翻页上限
 OVERLAP_MINUTES = 10  # 增量翻页与已入库最新时间的重叠区，靠 dedup_key 去重
 MESSAGES_INTERVAL_SECONDS = 300
 
 ENV_ENABLED = "PRTG_MESSAGES_SYNC_ENABLED"
 ENV_RETENTION_DAYS = "PRTG_LOG_RETENTION_DAYS"
 DEFAULT_RETENTION_DAYS = 730
+
+logger = logging.getLogger(__name__)
 
 # ---------------- 原因分类 ----------------
 
@@ -64,6 +74,14 @@ REASONS = (
     REASON_ICMP_TIMEOUT, REASON_SNMP_NO_RESPONSE, REASON_UNUSUAL_LOW,
     REASON_UNUSUAL_HIGH, REASON_PAUSED, REASON_VALUE, REASON_OTHER,
 )
+
+# 2026-11-27 生产只读摸底：message_raw 以 # 开头的代码 → 正文唯一，无歧义。
+# PRTG 约 30 天滚动窗外的旧行只能靠这张表修 reason，不能再从 API 取回正文。
+MESSAGE_CODE_REASON: dict[str, str] = {
+    "#M11010": REASON_ICMP_TIMEOUT,       # Request timed out (ICMP error # 11010)
+    "#N-2003": REASON_SNMP_NO_RESPONSE,   # No response … (SNMP error # -2003)
+    "#M11013": REASON_ICMP_TIMEOUT,       # TTL expired in transit (ICMP error # 11013)
+}
 
 _TAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"\s+")
@@ -100,8 +118,12 @@ def strip_html(text: Any) -> str:
 
 
 def classify_message(message: str | None) -> str:
-    """日志原文 → reason。顺序即优先级，命中即停（摸底样例见单测）。"""
-    m = (message or "").lower()
+    """日志原文 → reason。顺序即优先级，命中即停（摸底样例见单测）。
+
+    若正文只剩 ``#M…`` / ``#N…`` 错误代码（旧 bug 入库形态），走 ``MESSAGE_CODE_REASON``。
+    """
+    raw = (message or "").strip()
+    m = raw.lower()
     if "icmp error" in m or "request timed out" in m:
         return REASON_ICMP_TIMEOUT
     if "snmp error" in m or "no response" in m:
@@ -114,7 +136,23 @@ def classify_message(message: str | None) -> str:
         return REASON_PAUSED
     if _VALUE.search(m):
         return REASON_VALUE
+    if raw in MESSAGE_CODE_REASON:
+        return MESSAGE_CODE_REASON[raw]
     return REASON_OTHER
+
+
+def legacy_text_for_dedup(row: dict[str, Any]) -> str:
+    """旧版取文案顺序：``message_raw or message``（去 HTML）。
+
+    去重键必须与 2026-11-26 首次入库的字节一致，否则重采会造重复行。
+    展示/分类请用 ``prefer_message_text``，不要用本函数。
+    """
+    return strip_html(row.get("message_raw") or row.get("message"))
+
+
+def prefer_message_text(row: dict[str, Any]) -> str:
+    """展示与分类用：优先 ``message``（HTML 正文），空时才回落 ``message_raw``（错误代码）。"""
+    return strip_html(row.get("message")) or strip_html(row.get("message_raw"))
 
 
 def _number(text: str) -> float | None:
@@ -179,17 +217,21 @@ def serial_to_utc(serial: float) -> datetime:
 
 
 def normalize_row(row: dict[str, Any], collected_at: datetime) -> dict[str, Any] | None:
-    """PRTG messages 一行 → prtg_log_messages 一行；没有可解析时间的行丢弃（返回 None）。"""
+    """PRTG messages 一行 → prtg_log_messages 一行；没有可解析时间的行丢弃（返回 None）。
+
+    ``message`` / ``reason`` / value_* 用正文；``dedup_key`` 用旧顺序文案（兼容已入库行）。
+    """
     try:
         serial = float(row.get("datetime_raw"))
     except (TypeError, ValueError):
         return None
-    message = strip_html(row.get("message_raw") or row.get("message"))
+    text = prefer_message_text(row)
+    legacy = legacy_text_for_dedup(row)
     status = (str(row.get("status") or "").strip()) or None
     status_raw = _to_int(row.get("status_raw"))
     sensor_objid = _to_int(row.get("objid"))
-    reason = classify_message(message)
-    value_num, value_unit = parse_value(message) if reason == REASON_VALUE else (None, None)
+    reason = classify_message(text)
+    value_num, value_unit = parse_value(text) if reason == REASON_VALUE else (None, None)
     return {
         "sensor_objid": sensor_objid,
         "device_name": (str(row.get("parent") or "").strip()) or None,
@@ -199,11 +241,11 @@ def normalize_row(row: dict[str, Any], collected_at: datetime) -> dict[str, Any]
         "datetime_raw": serial,
         "status": status,
         "status_raw": status_raw,
-        "message": message,
+        "message": text,
         "reason": reason,
         "value_num": value_num,
         "value_unit": value_unit,
-        "dedup_key": make_dedup_key(sensor_objid, serial, status_raw, message),
+        "dedup_key": make_dedup_key(sensor_objid, serial, status_raw, legacy),
         "collected_at": collected_at,
     }
 
@@ -229,13 +271,18 @@ def fetch_page(client, start: int, count: int = PAGE_SIZE) -> list[dict[str, Any
     return rows
 
 
-def insert_rows(rows: Iterable[dict[str, Any]]) -> int:
-    """按 dedup_key 幂等写入，返回**真正新增**的行数。"""
+def insert_rows(rows: Iterable[dict[str, Any]]) -> tuple[int, int]:
+    """按 dedup_key 幂等写入。
+
+    新键插入；已存在键**就地更新** ``message`` / ``reason`` / ``value_num`` / ``value_unit``
+    （修复旧 bug 把错误代码写成 message 的行），不改 dedup_key / happened_at。
+    返回 ``(inserted, updated)``。
+    """
     unique: dict[str, dict[str, Any]] = {}
     for row in rows:
         unique.setdefault(row["dedup_key"], row)
     if not unique:
-        return 0
+        return 0, 0
     keys = list(unique)
     with store.SessionLocal() as session:
         existing: set[str] = set()
@@ -247,10 +294,20 @@ def insert_rows(rows: Iterable[dict[str, Any]]) -> int:
                 ).all()
             )
         fresh = [unique[k] for k in keys if k not in existing]
+        stale = [unique[k] for k in keys if k in existing]
         if fresh:
             store.upsert(session, PrtgLogMessage, fresh, ["dedup_key"])
+        updated = 0
+        if stale:
+            # 冲突时只改展示/分类字段，不动时间与 dedup_key
+            store.upsert(
+                session, PrtgLogMessage, stale, ["dedup_key"],
+                ["message", "reason", "value_num", "value_unit", "collected_at",
+                 "status", "status_raw", "device_name", "sensor_name", "sensor_type"],
+            )
+            updated = len(stale)
         session.commit()
-    return len(fresh)
+    return len(fresh), updated
 
 
 def latest_happened_at() -> datetime | None:
@@ -258,18 +315,21 @@ def latest_happened_at() -> datetime | None:
         return session.execute(select(func.max(PrtgLogMessage.happened_at))).scalar()
 
 
-def sync_messages(client, now: datetime, *, max_pages: int = MAX_PAGES,
-                  page_size: int = PAGE_SIZE, overlap_minutes: int = OVERLAP_MINUTES) -> dict[str, Any]:
-    """增量拉日志（新→旧翻页）。
+def sync_messages(client, now: datetime, *, max_pages: int | None = None,
+                  page_size: int = PAGE_SIZE, overlap_minutes: int = OVERLAP_MINUTES,
+                  full: bool = False) -> dict[str, Any]:
+    """拉日志（新→旧翻页）。
 
-    停止条件（任一）：空页 / 不满一页 / 本页最老一行早于「已入库最新 − 重叠区」/ 达到 max_pages。
-    首次运行库里为空，没有游标，会一直翻到空页 —— 即一次性存下 PRTG 现存的约 30 天。
+    - 增量（默认）：停在「本页最老 < 已入库最新 − 重叠区」/ 空页 / 不满页 / max_pages。
+    - ``full=True``：忽略游标，翻到空页/末页或 ``MAX_PAGES_FULL``；用于进程首跑与
+      ``--resync``，配合 ``insert_rows`` 的就地更新把错误代码行修好。
     """
-    latest = latest_happened_at()
+    pages_cap = max_pages if max_pages is not None else (MAX_PAGES_FULL if full else MAX_PAGES)
+    latest = None if full else latest_happened_at()
     stop_before = latest - timedelta(minutes=overlap_minutes) if latest else None
-    pages = fetched = inserted = 0
+    pages = fetched = inserted = updated = 0
     stop_reason = "max_pages"
-    for page in range(max_pages):
+    for page in range(pages_cap):
         rows = fetch_page(client, page * page_size, page_size)
         pages += 1
         if not rows:
@@ -277,7 +337,9 @@ def sync_messages(client, now: datetime, *, max_pages: int = MAX_PAGES,
             break
         fetched += len(rows)
         normalized = [r for r in (normalize_row(x, now) for x in rows) if r is not None]
-        inserted += insert_rows(normalized)
+        ins, upd = insert_rows(normalized)
+        inserted += ins
+        updated += upd
         oldest = min((r["happened_at"] for r in normalized), default=None)
         if stop_before is not None and oldest is not None and oldest < stop_before:
             stop_reason = "cursor"
@@ -285,11 +347,39 @@ def sync_messages(client, now: datetime, *, max_pages: int = MAX_PAGES,
         if len(rows) < page_size:
             stop_reason = "last_page"
             break
-    summary = {"pages": pages, "fetched": fetched, "inserted": inserted, "stop": stop_reason}
+    summary = {
+        "pages": pages, "fetched": fetched, "inserted": inserted,
+        "updated": updated, "stop": stop_reason, "full": int(full),
+    }
     store.set_state(
         "messages", status="ok", last_run_at=now, last_success_at=now, error="",
         detail=" ".join(f"{k}={v}" for k, v in summary.items()),
     )
+    return summary
+
+
+def reclassify_legacy_codes(now: datetime | None = None) -> dict[str, Any]:
+    """把库里 ``message`` 仍是 ``#`` 代码的行改成正确 reason（不改 message 原文）。
+
+    用于 PRTG 已滚出窗口、API 再也给不回正文的旧行；与全量 resync 互补。
+    """
+    del now  # 预留审计时间戳；当前只改 reason
+    total = 0
+    by_code: dict[str, int] = {}
+    with store.SessionLocal() as session:
+        for code, reason in MESSAGE_CODE_REASON.items():
+            result = session.execute(
+                update(PrtgLogMessage)
+                .where(PrtgLogMessage.message == code)
+                .where(PrtgLogMessage.reason != reason)
+                .values(reason=reason)
+            )
+            n = result.rowcount or 0
+            by_code[code] = n
+            total += n
+        session.commit()
+    summary = {"updated": total, "by_code": by_code}
+    logger.info("PRTG reclassify_legacy_codes：%s", summary)
     return summary
 
 
@@ -428,3 +518,40 @@ def top_noisy_device(now: datetime, days: int = 7) -> dict[str, Any] | None:
         "share_pct": round(int(row[1]) * 100.0 / total, 1),
         "days": days,
     }
+
+
+def _cli_resync() -> int:
+    """运维入口：全量翻页 + 代码图回填 + 事件重算（与进程首跑同路径）。"""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    from backend.services.prtg.client import PrtgClient
+    from backend.services.prtg import incidents
+    from backend.services.prtg.settings import load_settings
+
+    settings = load_settings()
+    client = PrtgClient(settings)
+    now = datetime.utcnow()
+    summary = sync_messages(client, now, full=True)
+    logger.info("resync sync_messages：%s", summary)
+    reclass = reclassify_legacy_codes(now)
+    logger.info("resync reclassify_legacy_codes：%s", reclass)
+    corr = incidents.correlate(now)
+    logger.info("resync correlate：%s", corr)
+    print(json.dumps({"sync": summary, "reclassify": reclass, "correlate": corr}, ensure_ascii=False))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="PRTG 日志采集运维 CLI")
+    parser.add_argument(
+        "--resync", action="store_true",
+        help="全量翻页（忽略游标）+ reclassify_legacy_codes + incidents.correlate",
+    )
+    args = parser.parse_args(argv)
+    if args.resync:
+        return _cli_resync()
+    parser.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
