@@ -373,6 +373,19 @@ function Convert-SmokeResultToReport {
     if ($passLine -eq 'PASS') { $Results['结论'] = '通过' }
     else { $Results['结论'] = '失败' }
 
+    # #303：smoke.ps1 在报告末行写 FAILURE_CLASS=...，这里把它抬到报告头部与失败项，
+    # 不再让人从 exit=1 里翻日志猜是「迁移链发散」还是「启动探测超时」。
+    $failureClass = ''
+    if ($txt -match '(?m)^FAILURE_CLASS=(\S+)') { $failureClass = $Matches[1] }
+    if ($failureClass -and $failureClass -ne 'none') {
+        $Results['失败分类'] = $failureClass
+        if ($failureClass -eq 'alembic-diverged') {
+            $script:FailItems += @{ Check = '失败分类：alembic 迁移链发散'; Detail = '分支缺少共享 pgdata 已在的迁移版本（如 0013）；把分支 rebase 到最新 platform/main 后重跑，不要手工 alembic stamp。' }
+        } elseif ($failureClass -eq 'startup-timeout' -or $failureClass -eq 'start-all-timeout') {
+            $script:FailItems += @{ Check = "失败分类：$failureClass"; Detail = '启动探测超时（资源争用）；冒烟已放宽窗口并空载重试一次，仍失败先让机器空闲再重跑。' }
+        }
+    }
+
     $noteBlock = $false
     foreach ($ln in ($txt -split "`r?`n")) {
         if ($ln -match '^## 备注') { $noteBlock = $true; continue }
@@ -395,6 +408,7 @@ function Write-SmokeReport {
     $report += ''
     $report += "- 测试提交：``$HeadSha``"
     $report += "- 由本地冒烟脚本运行（$ScriptVersion），实际检查委托 ops\smoke\smoke.ps1（-Pytest）；无 LLM 参与"
+    if ($Results.ContainsKey('失败分类') -and $Results['失败分类']) { $report += "- 失败分类：$($Results['失败分类'])" }
     $report += "- 运行时间：$($StartedAt.ToString('yyyy-MM-dd HH:mm:ss'))–$($EndedAt.ToString('HH:mm:ss'))（Atlantic/Reykjavik，UTC+0），合计 $Duration 秒"
     if ($IssueNumber -gt 0) { $report += "- 关联 Issue：#$IssueNumber" }
     $report += ''
