@@ -55,6 +55,10 @@ class RepairRow:
     new_value: float
     new_volume: float | None
     action: str  # repair | skip_matched | skip_no_hist | skip_factor
+    live_max_value: float | None = None
+    new_max_value: float | None = None
+    live_max_volume: float | None = None
+    new_max_volume: float | None = None
 
 
 def _parse_until(value: str) -> datetime:
@@ -72,6 +76,11 @@ def _as_dt(value) -> datetime:
         return datetime.fromisoformat(text_v)
     except ValueError:
         return datetime.strptime(text_v[:19], "%Y-%m-%d %H:%M:%S")
+
+
+def _ts_key(ts: str) -> str:
+    """统一成 'YYYY-MM-DD HH:MM:SS'，兼容 SQLite 文本桶时间与 PG timestamp。"""
+    return _as_dt(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _hist_avg_for_bucket(session, sensor_id: int, channel_id: int,
@@ -94,11 +103,25 @@ def _hist_avg_for_bucket(session, sensor_id: int, channel_id: int,
     return float(row.v) if row.v is not None else None
 
 
+def _row5(
+    sid: int, cid: int, ts: str, live: float, hist: float, factor: float,
+    vol: float | None, new_v: float, new_vol: float | None, action: str,
+    live_max: float | None, new_max: float | None,
+    live_max_vol: float | None, new_max_vol: float | None,
+) -> RepairRow:
+    return RepairRow(
+        "5m", sid, cid, ts, live, hist, factor, vol, new_v, new_vol, action,
+        live_max_value=live_max, new_max_value=new_max,
+        live_max_volume=live_max_vol, new_max_volume=new_max_vol,
+    )
+
+
 def plan_5m_repairs(session, until: datetime) -> list[RepairRow]:
     rows = session.execute(
         text(
             """
-            SELECT sensor_objid, channel_objid, bucket_time, avg_value, avg_volume,
+            SELECT sensor_objid, channel_objid, bucket_time,
+                   avg_value, avg_volume, max_value, max_volume,
                    CASE WHEN avg_value > 0 THEN avg_volume / avg_value END AS sec
             FROM prtg_channel_samples_5m
             WHERE channel_objid IN (-1, 0, 1)
@@ -117,30 +140,35 @@ def plan_5m_repairs(session, until: datetime) -> list[RepairRow]:
         hist = _hist_avg_for_bucket(session, int(r.sensor_objid), int(r.channel_objid), r.bucket_time)
         live = float(r.avg_value)
         vol = float(r.avg_volume) if r.avg_volume is not None else None
+        live_max = float(r.max_value) if r.max_value is not None else None
+        live_max_vol = float(r.max_volume) if r.max_volume is not None else None
+        sid, cid = int(r.sensor_objid), int(r.channel_objid)
         if hist is None or hist <= 0:
-            out.append(RepairRow(
-                "5m", int(r.sensor_objid), int(r.channel_objid), ts,
-                live, 0.0, 0.0, vol, live, vol, "skip_no_hist",
+            out.append(_row5(
+                sid, cid, ts, live, 0.0, 0.0, vol, live, vol, "skip_no_hist",
+                live_max, live_max, live_max_vol, live_max_vol,
             ))
             continue
         if abs(live - hist) / hist <= MATCH_TOLERANCE:
-            out.append(RepairRow(
-                "5m", int(r.sensor_objid), int(r.channel_objid), ts,
-                live, hist, hist / live, vol, live, vol, "skip_matched",
+            out.append(_row5(
+                sid, cid, ts, live, hist, hist / live, vol, live, vol, "skip_matched",
+                live_max, live_max, live_max_vol, live_max_vol,
             ))
             continue
         factor = hist / live
         if not (MIN_FACTOR <= factor <= MAX_FACTOR):
-            out.append(RepairRow(
-                "5m", int(r.sensor_objid), int(r.channel_objid), ts,
-                live, hist, factor, vol, live, vol, "skip_factor",
+            out.append(_row5(
+                sid, cid, ts, live, hist, factor, vol, live, vol, "skip_factor",
+                live_max, live_max, live_max_vol, live_max_vol,
             ))
             continue
         new_v = live * factor
         new_vol = (vol * factor) if vol is not None else None
-        out.append(RepairRow(
-            "5m", int(r.sensor_objid), int(r.channel_objid), ts,
-            live, hist, factor, vol, new_v, new_vol, "repair",
+        new_max = (live_max * factor) if live_max is not None else None
+        new_max_vol = (live_max_vol * factor) if live_max_vol is not None else None
+        out.append(_row5(
+            sid, cid, ts, live, hist, factor, vol, new_v, new_vol, "repair",
+            live_max, new_max, live_max_vol, new_max_vol,
         ))
     return out
 
@@ -215,6 +243,7 @@ def write_backup(path: Path, five: list[RepairRow], raw: list[RepairRow],
         w = csv.DictWriter(fh, fieldnames=list(asdict(five[0]).keys()) if five else [
             "table", "sensor_objid", "channel_objid", "ts", "live_value", "hist_value",
             "factor", "live_volume", "new_value", "new_volume", "action",
+            "live_max_value", "new_max_value", "live_max_volume", "new_max_volume",
         ])
         w.writeheader()
         for r in five:
@@ -223,6 +252,7 @@ def write_backup(path: Path, five: list[RepairRow], raw: list[RepairRow],
         w = csv.DictWriter(fh, fieldnames=list(asdict(raw[0]).keys()) if raw else [
             "table", "sensor_objid", "channel_objid", "ts", "live_value", "hist_value",
             "factor", "live_volume", "new_value", "new_volume", "action",
+            "live_max_value", "new_max_value", "live_max_volume", "new_max_volume",
         ])
         w.writeheader()
         for r in raw:
@@ -253,17 +283,20 @@ def apply_repairs(session, five: list[RepairRow], raw: list[RepairRow], now: dat
             text(
                 """
                 UPDATE prtg_channel_samples_5m
-                   SET avg_value = :v, max_value = :v,
+                   SET avg_value = :v,
+                       max_value = COALESCE(:max_v, max_value),
                        avg_volume = COALESCE(:vol, avg_volume),
-                       max_volume = COALESCE(:vol, max_volume),
+                       max_volume = COALESCE(:max_vol, max_volume),
                        updated_at = :now
                  WHERE sensor_objid = :sid AND channel_objid = :cid
-                   AND bucket_time = :ts
+                   AND substr(replace(CAST(bucket_time AS TEXT), 'T', ' '), 1, 19) = :ts
                 """
             ),
-            {"v": r.new_value, "vol": r.new_volume, "now": now,
+            {"v": r.new_value, "vol": r.new_volume,
+             "max_v": r.new_max_value, "max_vol": r.new_max_volume,
+             "now": now,
              "sid": r.sensor_objid, "cid": r.channel_objid,
-             "ts": datetime.fromisoformat(r.ts)},
+             "ts": _ts_key(r.ts)},
         )
         n5 += 1
     for r in raw:
@@ -275,12 +308,12 @@ def apply_repairs(session, five: list[RepairRow], raw: list[RepairRow], now: dat
                 UPDATE prtg_channel_samples
                    SET value_num = :v, volume_num = COALESCE(:vol, volume_num)
                  WHERE sensor_objid = :sid AND channel_objid = :cid
-                   AND sample_time = :ts
+                   AND substr(replace(CAST(sample_time AS TEXT), 'T', ' '), 1, 19) = :ts
                 """
             ),
             {"v": r.new_value, "vol": r.new_volume,
              "sid": r.sensor_objid, "cid": r.channel_objid,
-             "ts": datetime.fromisoformat(r.ts)},
+             "ts": _ts_key(r.ts)},
         )
         nraw += 1
     session.commit()
@@ -388,19 +421,22 @@ def rollback_from_backup(path: Path) -> dict[str, int]:
                         text(
                             """
                             UPDATE prtg_channel_samples_5m
-                               SET avg_value = :v, max_value = :v,
+                               SET avg_value = :v,
+                                   max_value = COALESCE(:max_v, max_value),
                                    avg_volume = COALESCE(:vol, avg_volume),
-                                   max_volume = COALESCE(:vol, max_volume)
+                                   max_volume = COALESCE(:max_vol, max_volume)
                              WHERE sensor_objid = :sid AND channel_objid = :cid
-                               AND bucket_time = :ts
+                               AND substr(replace(CAST(bucket_time AS TEXT), 'T', ' '), 1, 19) = :ts
                             """
                         ),
                         {
                             "v": float(row["live_value"]),
                             "vol": float(row["live_volume"]) if row.get("live_volume") else None,
+                            "max_v": float(row["live_max_value"]) if row.get("live_max_value") not in (None, "") else None,
+                            "max_vol": float(row["live_max_volume"]) if row.get("live_max_volume") not in (None, "") else None,
                             "sid": int(row["sensor_objid"]),
                             "cid": int(row["channel_objid"]),
-                            "ts": datetime.fromisoformat(row["ts"]),
+                            "ts": _ts_key(row["ts"]),
                         },
                     )
                     n5 += 1
@@ -415,7 +451,7 @@ def rollback_from_backup(path: Path) -> dict[str, int]:
                             UPDATE prtg_channel_samples
                                SET value_num = :v, volume_num = COALESCE(:vol, volume_num)
                              WHERE sensor_objid = :sid AND channel_objid = :cid
-                               AND sample_time = :ts
+                               AND substr(replace(CAST(sample_time AS TEXT), 'T', ' '), 1, 19) = :ts
                             """
                         ),
                         {
@@ -423,7 +459,7 @@ def rollback_from_backup(path: Path) -> dict[str, int]:
                             "vol": float(row["live_volume"]) if row.get("live_volume") else None,
                             "sid": int(row["sensor_objid"]),
                             "cid": int(row["channel_objid"]),
-                            "ts": datetime.fromisoformat(row["ts"]),
+                            "ts": _ts_key(row["ts"]),
                         },
                     )
                     nraw += 1

@@ -413,6 +413,7 @@ def parse_channels_xml(text: str) -> list[dict[str, Any]]:
         )
         value_num = rate["value_bps"]
         # 体积与偏高 raw 自洽（≈ rate×60）；速率改用 display 后按同一秒数缩放体积
+        rate_warning = rate["warning"]
         if (
             rate["source"] == "display"
             and value_num is not None
@@ -423,6 +424,11 @@ def parse_channels_xml(text: str) -> list[dict[str, Any]]:
             sec = volume_num / raw_rate
             if 30 <= sec <= 120:
                 volume_num = value_num * sec
+            else:
+                # sec 越界：仍按 display 速率 × 60s 间隔缩放，避免体积留在 ~10× raw
+                volume_num = value_num * 60.0
+                note = f"volume sec={sec:.1f} out of 30–120; scaled as rate×60"
+                rate_warning = f"{rate_warning}; {note}" if rate_warning else note
 
         result.append({
             "channel_objid": channel_id,
@@ -433,7 +439,7 @@ def parse_channels_xml(text: str) -> list[dict[str, Any]]:
             "volume_display": volume_display,
             "unit": rate.get("unit") or unit,
             "rate_source": rate["source"],
-            "rate_warning": rate["warning"],
+            "rate_warning": rate_warning,
         })
     return result
 
