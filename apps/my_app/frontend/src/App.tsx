@@ -2305,37 +2305,68 @@ function AppContent() {
             </div>
             )}
 
-            {/* 居中标题 */}
-            <div style={{
-              flex: 1,
-              textAlign: 'center',
-              position: 'relative',
-              zIndex: 1,
-            }}>
-              <h1 style={{
-                margin: 0,
-                fontSize: isMobile ? '1.125rem' : '1.375rem',
-                fontWeight: 700,
-                color: WH.teal,
-                textShadow: 'var(--wh-title-shadow)',
-                letterSpacing: '0.125rem',
-                lineHeight: 1.2,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                padding: '0 var(--wh-space-sm)',
-              }}>
-                {flatMenuItems.find(m => m.key === currentPage)?.label || t('nav.overview')}
+            {/* 居中标题：site_kpi_rt 使用「顶部凹槽」标题，其余页面保持原样。
+                凹槽本体由 index.css 的 .wh-header-title-slot--notch::before 绘制，
+                只复用现有玻璃令牌（背景 / 描边 / 模糊 / 高光），不改主题配色与网格纹理。
+                标题槽仍保持 flex:1，右侧自动刷新 / 主题 / 语言按钮的布局不受影响。 */}
+            <div
+              className={currentPage === 'site_kpi_rt' ? 'wh-header-title-slot--notch' : undefined}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                textAlign: 'center',
+                position: 'relative',
+                zIndex: 1,
+                // 凹槽页：槽占满顶栏高度，让标题在凹槽里垂直居中；
+                // 其余页面维持原来的「标题 + 发光线」自然高度，不动既有观感。
+                ...(currentPage === 'site_kpi_rt'
+                  ? { height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+                  : {}),
+              }}
+            >
+              <h1
+                className={currentPage === 'site_kpi_rt' ? 'wh-header-title-notch-text' : undefined}
+                style={{
+                  margin: 0,
+                  fontSize: currentPage === 'site_kpi_rt'
+                    ? (isMobile ? '0.9375rem' : '1.125rem')
+                    : (isMobile ? '1.125rem' : '1.375rem'),
+                  fontWeight: 700,
+                  color: WH.teal,
+                  textShadow: 'var(--wh-title-shadow)',
+                  letterSpacing: currentPage === 'site_kpi_rt' ? '0.06em' : '0.125rem',
+                  lineHeight: 1.2,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  padding: '0 var(--wh-space-sm)',
+                }}
+              >
+                {currentPage === 'site_kpi_rt' ? (
+                  <>
+                    {/* 页面图标与标题一起放进凹槽 */}
+                    <span className="wh-header-title-notch-icon" aria-hidden="true">
+                      {PAGE_META[currentPage].icon}
+                    </span>
+                    <span className="wh-header-title-notch-label">
+                      {flatMenuItems.find(m => m.key === currentPage)?.label || t('nav.overview')}
+                    </span>
+                  </>
+                ) : (
+                  flatMenuItems.find(m => m.key === currentPage)?.label || t('nav.overview')
+                )}
               </h1>
-              {/* 底部发光装饰线 */}
-              <div style={{
-                width: '7.5rem',
-                height: 2,
-                margin: 'var(--wh-space-xs) auto 0',
-                background: WH.accentGrad,
-                boxShadow: 'var(--wh-title-rule-glow)',
-                borderRadius: 1,
-              }} />
+              {/* 底部发光装饰线：凹槽页已由凹槽自身收边，不再叠加发光线 */}
+              {currentPage !== 'site_kpi_rt' && (
+                <div style={{
+                  width: '7.5rem',
+                  height: 2,
+                  margin: 'var(--wh-space-xs) auto 0',
+                  background: WH.accentGrad,
+                  boxShadow: 'var(--wh-title-rule-glow)',
+                  borderRadius: 1,
+                }} />
+              )}
             </div>
 
             {/* 右上角操作区：自动刷新 + 主题切换 + 语言切换 */}
