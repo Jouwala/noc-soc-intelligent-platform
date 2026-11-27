@@ -127,7 +127,10 @@ function Invoke-PruneAll {
     Invoke-Prune -Dir $Dirs.Failed -Keep $script:MaxKeep
     Invoke-Prune -Dir $Dirs.Results -Keep $script:MaxKeep
     $cutoff = (Get-Date).AddDays(-1)
-    foreach ($f in @(Get-ChildItem -LiteralPath $Dirs.Claimed -Filter '*.out.log' -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt $cutoff })) {
+    # 子进程日志实际写出的是 <id>.out.log.stdout / <id>.out.log.stderr（restart 任务
+    # 还有 .out.log.stop / .out.log.start 两段）。过滤器必须带尾随通配符 —— 原来的
+    # '*.out.log' 永远匹配不到，claimed 里的日志会无上限堆积（#313）。
+    foreach ($f in @(Get-ChildItem -LiteralPath $Dirs.Claimed -Filter '*.out.log*' -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt $cutoff })) {
         Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue
     }
 }
@@ -248,21 +251,46 @@ function Test-TaskFile {
 function Invoke-ChildScript {
     param([string]$ScriptPath, [string[]]$Arguments, [string]$WorkDir, [int]$TimeoutSec, [string]$OutLogPath)
     $outFile = "$OutLogPath.stdout"; $errFile = "$OutLogPath.stderr"
-    $splat = @{ FilePath = (Get-PowerShellExe)
-        ArgumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ScriptPath) + $Arguments
-        RedirectStandardOutput = $outFile; RedirectStandardError = $errFile; WorkingDirectory = $WorkDir; PassThru = $true }
-    if (Get-OnWindows) { $splat['WindowStyle'] = 'Hidden' }
+    # ⚠️ Windows PowerShell 5.1：Start-Process 一旦带 RedirectStandardOutput/Error，
+    # WaitForExit 之后 $proc.ExitCode 恒为 $null（实测），runner 会把所有任务判成 failed。
+    # 所以不再让 Start-Process 重定向，而是生成一个临时 wrapper（.cmd / .sh），由 shell
+    # 自己做 `> 文件 2> 文件`，父进程只等退出（超时照旧可杀）；shell 的退出码 = 子脚本退出码。
+    $exe = Get-PowerShellExe
+    $quotedArgs = (($Arguments | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' ')
+    $inner = '"' + $exe + '" -NoProfile -ExecutionPolicy Bypass -File "' + $ScriptPath + '" ' + $quotedArgs + ' > "' + $outFile + '" 2> "' + $errFile + '"'
+    $wrapperBase = Join-Path ([System.IO.Path]::GetTempPath()) ("muse-child-" + [Guid]::NewGuid().ToString('N'))
+    if (Get-OnWindows) {
+        $wrapper = "$wrapperBase.cmd"
+        [System.IO.File]::WriteAllText($wrapper, "@echo off`r`n$inner`r`n", (New-Object System.Text.ASCIIEncoding))
+        $splat = @{ FilePath = 'cmd.exe'; ArgumentList = @('/c', "`"$wrapper`"")
+            WorkingDirectory = $WorkDir; PassThru = $true; WindowStyle = 'Hidden' }
+    } else {
+        $wrapper = "$wrapperBase.sh"
+        # exec：让 sh 被 powershell 进程替换，超时 Stop-Process 杀掉的就是脚本本身（无孤儿）
+        [System.IO.File]::WriteAllText($wrapper, "#!/bin/sh`nexec $inner`n", (New-Object System.Text.UTF8Encoding($false)))
+        $splat = @{ FilePath = '/bin/sh'; ArgumentList = @($wrapper); WorkingDirectory = $WorkDir; PassThru = $true }
+    }
     try { $proc = Start-Process @splat }
-    catch { return @{ ExitCode = -1; TimedOut = $false; OutputTail = ''; Error = "启动子进程失败：$($_.Exception.Message)" } }
+    catch { Remove-Item -LiteralPath $wrapper -Force -ErrorAction SilentlyContinue
+        return @{ ExitCode = -1; TimedOut = $false; OutputTail = ''; Error = "启动子进程失败：$($_.Exception.Message)" } }
     $exited = $false
     try { $exited = $proc.WaitForExit($TimeoutSec * 1000) } catch { $exited = $proc.HasExited }
     if (-not $exited) {
+        # ⚠️ 超时必须按进程树杀：Windows 的 wrapper 是 cmd.exe，真正跑脚本的是它的子进程；
+        # 只 Stop-Process wrapper 会留下孤儿继续跑（实测 wrapper 杀掉后子进程存活，#313 同批）。
+        # taskkill /T 连子树一起杀；Linux 侧 wrapper 用 exec，$proc.Id 就是脚本进程。
+        if (Get-OnWindows) {
+            & taskkill.exe /PID $proc.Id /T /F 2>$null | Out-Null
+        }
         try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
         try { $proc.WaitForExit() } catch { }
+        Remove-Item -LiteralPath $wrapper -Force -ErrorAction SilentlyContinue
         return @{ ExitCode = -1; TimedOut = $true; OutputTail = (Get-OutputTail -Files @($outFile, $errFile)); Error = "子进程超时（>${TimeoutSec}s），已杀掉" }
     }
     $code = 0
     try { $code = $proc.ExitCode } catch { $code = -1 }
+    if ($null -eq $code) { $code = -1 }
+    Remove-Item -LiteralPath $wrapper -Force -ErrorAction SilentlyContinue
     return @{ ExitCode = $code; TimedOut = $false; OutputTail = (Get-OutputTail -Files @($outFile, $errFile)); Error = '' }
 }
 
@@ -338,7 +366,10 @@ function Invoke-ReclaimStale {
 # ------------------------------------------------------------------ 主流程
 function Invoke-RunnerOnce {
     param([string]$QueueRootPath, [string]$PowerShellExeParam)
-    if (Get-OnWindows -and ($QueueRootPath -notmatch '^[A-Za-z]:\\')) { throw "QueueRoot 必须是绝对路径：$QueueRootPath" }
+    # PowerShell 把 `Get-OnWindows -and (...)` 解析成「命令 + 参数」而不是布尔表达式，
+    # 函数返回 $true 就直接进 throw —— Windows 上 runner 一律拒绝启动（SelfTest 也起不来）。
+    # 给函数调用加括号，才是真正的 `-and` 表达式。
+    if ((Get-OnWindows) -and ($QueueRootPath -notmatch '^[A-Za-z]:\\')) { throw "QueueRoot 必须是绝对路径：$QueueRootPath" }
     $script:PowerShellExe = $PowerShellExeParam
     $dirs = Get-QueueDirs -Root $QueueRootPath
     $lockPath = Join-Path $QueueRootPath 'runner.lock'
@@ -467,11 +498,21 @@ function Invoke-SelfTest {
         Assert-Test 'results 修剪到 100 条' ((@(Get-ChildItem -LiteralPath $dirs.Results -File)).Count -eq 100)
 
         # 6) 超时：watcher 桩睡 90 秒，任务 timeout 60 秒（允许范围下限）→ timeout 进 failed
-        [System.IO.File]::WriteAllText((Join-Path $scriptDir 'smoke-watcher.ps1'), 'param([int]$OnlyPr = 0, [switch]$Once); Start-Sleep -Seconds 90; exit 0', $utf8)
+        #    桩先把自己的 PID 落盘，超时后据此断言「子进程确已退出」（防孤儿回归）
+        $timeoutPidFile = Join-Path $testRoot 'timeout-child.pid'
+        [System.IO.File]::WriteAllText((Join-Path $scriptDir 'smoke-watcher.ps1'), "param([int]`$OnlyPr = 0, [switch]`$Once); Set-Content -LiteralPath '$timeoutPidFile' -Value `$PID; Start-Sleep -Seconds 90; exit 0", $utf8)
         & $writeTask 't12.json' '{"id":"20261127-test-timeout-1","type":"smoke-rerun","payload":{"pr":287},"created_by":"muse-1","created_at":"2026-11-27T08:00:00Z","timeout_seconds":60}'
         & $run
         Assert-Test '超时任务进 failed' (Test-Path -LiteralPath (Join-Path $dirs.Failed 't12.json'))
         Assert-Test '超时结果 status=timeout' ((Get-ResultStatus -Dirs $dirs -Id '20261127-test-timeout-1') -eq 'timeout')
+        # 超时后子进程必须已退出：wrapper 杀掉但脚本还在跑 = 孤儿
+        $childPid = 0
+        for ($i = 0; $i -lt 20 -and $childPid -le 0; $i++) {
+            try { $childPid = [int](Get-Content -LiteralPath $timeoutPidFile -ErrorAction Stop) } catch { $childPid = 0 }
+            if ($childPid -le 0) { Start-Sleep -Milliseconds 250 }
+        }
+        $aliveChild = if ($childPid -gt 0) { Get-Process -Id $childPid -ErrorAction SilentlyContinue } else { $null }
+        Assert-Test '超时后子进程确已退出（无孤儿）' (($childPid -gt 0) -and ($null -eq $aliveChild))
         [System.IO.File]::WriteAllText((Join-Path $scriptDir 'smoke-watcher.ps1'), $watcherStub, $utf8)
 
         # 7) 单实例锁：锁住活进程 pid → 本轮不认领；释放后正常执行
@@ -483,7 +524,24 @@ function Invoke-SelfTest {
         & $run
         Assert-Test '锁释放后任务正常执行' (Test-Path -LiteralPath (Join-Path $dirs.Done 't13.json'))
 
-        # 8) 审计日志有记录
+        # 8) claimed 里的子进程日志：*.out.log.stdout / *.out.log.stderr（restart 还有
+        #    .out.log.stop / .out.log.start 段）。超 1 天的要被清掉，当天的要保留。
+        #    #313 回归：原过滤器 '*.out.log' 匹配不到这些文件名，日志永久堆积。
+        foreach ($n in @('20261127-log-1.out.log.stdout', '20261127-log-1.out.log.stderr',
+                         '20261127-log-2.out.log.stop.stdout', '20261127-log-2.out.log.start.stderr')) {
+            $p = Join-Path $dirs.Claimed $n
+            [System.IO.File]::WriteAllText($p, 'x', $utf8)
+            (Get-Item -LiteralPath $p).LastWriteTime = (Get-Date).AddDays(-2)
+        }
+        $freshLog = Join-Path $dirs.Claimed '20261127-log-3.out.log.stdout'
+        [System.IO.File]::WriteAllText($freshLog, 'x', $utf8)
+        Invoke-PruneAll -Dirs $dirs
+        Assert-Test 'claimed 里超期的 .out.log.stdout 被清掉' (-not (Test-Path -LiteralPath (Join-Path $dirs.Claimed '20261127-log-1.out.log.stdout')))
+        Assert-Test 'claimed 里超期的 .out.log.stderr 被清掉' (-not (Test-Path -LiteralPath (Join-Path $dirs.Claimed '20261127-log-1.out.log.stderr')))
+        Assert-Test 'claimed 里超期的 restart 段日志被清掉' (-not (Test-Path -LiteralPath (Join-Path $dirs.Claimed '20261127-log-2.out.log.stop.stdout')))
+        Assert-Test 'claimed 里当天的日志保留' (Test-Path -LiteralPath $freshLog)
+
+        # 9) 审计日志有记录
         $audit = if (Test-Path -LiteralPath (Join-Path $queueRoot 'audit.log')) { [System.IO.File]::ReadAllText((Join-Path $queueRoot 'audit.log')) } else { '' }
         Assert-Test 'audit.log 有认领/完成记录' (($audit -match '\[claim\]') -and ($audit -match '\[completed\]'))
     }
