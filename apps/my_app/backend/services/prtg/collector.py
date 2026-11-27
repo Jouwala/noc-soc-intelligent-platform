@@ -182,6 +182,8 @@ class PrtgCollector:
         statuses: list[dict[str, Any]] = []
         events = 0
         samples = 0
+        rate_warnings = 0
+        untrusted_rates = 0
         for sensor in sensors:
             sensor_id = int(sensor["objid"])
             status = (sensor.get("status") or "Unknown").strip()
@@ -214,6 +216,15 @@ class PrtgCollector:
                 events += 1
 
             channel_rows = _select_live_channels(parse_channels_xml(client.channels_xml(sensor_id)))
+            for row in channel_rows:
+                if row.get("rate_warning"):
+                    rate_warnings += 1
+                    logger.warning(
+                        "PRTG live rate check sensor=%s channel=%s: %s",
+                        sensor_id, row.get("channel_objid"), row.get("rate_warning"),
+                    )
+                if row.get("rate_source") == "untrusted":
+                    untrusted_rates += 1
             samples += store.insert_samples(sensor_id, sample_time, channel_rows, collected_at)
 
         if statuses:
@@ -223,10 +234,19 @@ class PrtgCollector:
             "samples": samples,
             "status_changes": events,
             "sample_time": sample_time.isoformat(),
+            "rate_warnings": rate_warnings,
+            "untrusted_rates": untrusted_rates,
         }
+        detail = (
+            f"sensors={len(sensors)} samples={samples} changes={events}"
+            f" rate_warnings={rate_warnings} untrusted_rates={untrusted_rates}"
+        )
+        # 无法信任的 Traffic 速率不得静默：记入 live 状态，便于看板/排障看见
+        live_status = "ok" if untrusted_rates == 0 else "degraded"
         store.set_state(
-            "live", status="ok", last_run_at=collected_at, last_success_at=collected_at,
-            error="", detail=f"sensors={len(sensors)} samples={samples} changes={events}",
+            "live", status=live_status, last_run_at=collected_at, last_success_at=collected_at,
+            error="" if untrusted_rates == 0 else f"untrusted_traffic_rates={untrusted_rates}",
+            detail=detail,
         )
         return summary
 

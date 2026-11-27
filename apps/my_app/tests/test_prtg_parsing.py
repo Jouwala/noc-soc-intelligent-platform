@@ -11,13 +11,16 @@ sensortree 固件是按实测结构（根 <ul class="sensortree">、嵌套 <li>�
 from datetime import datetime
 
 from backend.services.prtg.parsing import (
+    display_rate_to_bps,
     excel_serial_to_datetime,
     group_duplicate_keys,
+    parse_channels_xml,
     parse_historic_row_json,
     parse_historic_row_pairs,
     parse_lastvalue_pair,
     parse_sensortree_html,
     parse_us_datetime,
+    rate_bps_from_prtg_display_and_raw,
 )
 
 
@@ -150,3 +153,71 @@ def test_historic_row_json_keeps_duplicate_keys():
     assert row["channels"][-1]["value"] == "v0"
     assert row["channels"][-1]["rate"] == "r0"
     assert row["channels"][14]["value_raw"] == 9
+
+
+def test_display_rate_to_bps_kbit():
+    bps, unit = display_rate_to_bps("698,872 kbit/s")
+    assert unit == "kbit/s"
+    assert abs(bps - 698872 * 1000 / 8) < 0.01
+
+
+def test_rate_bps_prefers_display_not_hardcoded_divide():
+    # 2026-11-27 实测 2565 Traffic Total：display 正确，raw ≈ 10× display_bps
+    display = "698,872 kbit/s"
+    raw = 873589720.5129
+    expected = 698872 * 1000 / 8
+    got = rate_bps_from_prtg_display_and_raw(display, raw, channel_id=-1)
+    assert got["source"] == "display"
+    assert abs(got["value_bps"] - expected) < 1.0
+    assert got["warning"]  # raw/display 偏离须告警，但不得改用 raw
+
+
+def test_rate_bps_untrusted_without_display():
+    got = rate_bps_from_prtg_display_and_raw(
+        None, 873589720.5129, channel_id=-1, channel_name="Traffic Total",
+    )
+    assert got["value_bps"] is None
+    assert got["source"] == "untrusted"
+    assert got["warning"]
+
+
+def test_rate_bps_ping_channel_keeps_raw():
+    got = rate_bps_from_prtg_display_and_raw(
+        "12 msec", 12.0, channel_id=0, channel_name="Ping Time",
+    )
+    assert got["source"] == "raw"
+    assert got["value_bps"] == 12.0
+
+
+def test_parse_channels_xml_traffic_uses_display_bps():
+    # 精简实测片段（结构同 PRTG 14.2 channels.xml）
+    xml = """<?xml version="1.0" encoding="UTF-8" ?>
+    <channels>
+      <item>
+        <objid>-1</objid><name>Traffic Total</name>
+        <lastvalue>698,872 kbit/s</lastvalue>
+        <lastvalue_raw>0000000873589720.5129</lastvalue_raw>
+        <lastvalue>5,136,605 KByte</lastvalue>
+        <lastvalue_raw>0000052598837350.0000</lastvalue_raw>
+        <lastvalue>5,136,605 KByte</lastvalue>
+        <lastvalue_raw>0000052598837350.0000</lastvalue_raw>
+      </item>
+      <item>
+        <objid>2</objid><name>Unicast In</name>
+        <lastvalue>12 #/s</lastvalue>
+        <lastvalue_raw>12</lastvalue_raw>
+        <lastvalue>12 #</lastvalue>
+        <lastvalue_raw>12</lastvalue_raw>
+      </item>
+    </channels>
+    """
+    rows = {r["channel_objid"]: r for r in parse_channels_xml(xml)}
+    total = rows[-1]
+    assert abs(total["value_num"] - 698872 * 1000 / 8) < 1.0
+    assert total["rate_source"] == "display"
+    # 体积随 display 速率按 raw 的秒数缩放（≈60）
+    assert total["volume_num"] is not None
+    assert abs(total["volume_num"] / total["value_num"] - 60) < 2
+    # 非 Traffic 速率通道仍用 raw
+    assert rows[2]["value_num"] == 12.0
+    assert rows[2]["rate_source"] == "raw"

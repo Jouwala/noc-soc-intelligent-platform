@@ -16,6 +16,7 @@
     python -m backend.services.prtg.history_import --days 14 --sensors 2721,2717
 """
 import argparse
+import json
 import sys
 from datetime import datetime, timedelta
 from typing import Any, Iterable
@@ -84,11 +85,25 @@ def import_history(
         if owns_client:
             client.close()
 
+    from backend.services.prtg.anomaly import IMPORT_PROTECT_SECONDS
+
+    protect_until = (now + timedelta(seconds=IMPORT_PROTECT_SECONDS)).isoformat()
+    # detail：JSON（含 protect_until）+ summary 文本兼容旧「days=… avg=…」可读格式
+    summary = (
+        f"days={days} avg={avg}s sensors={len(sensors)} rows={total_rows} "
+        f"protect_until={protect_until}"
+    )
     store.set_state(
         "history_import", status="ok", last_run_at=now, last_success_at=now, error="",
-        detail=f"days={days} avg={avg}s sensors={len(sensors)} rows={total_rows}",
+        detail=json.dumps({
+            "summary": summary,
+            "days": days, "avg": avg, "sensors": len(sensors), "rows": total_rows,
+            "protect_until": protect_until,
+            "protect_seconds": IMPORT_PROTECT_SECONDS,
+        }, ensure_ascii=False),
     )
-    return {"sensors": len(sensors), "rows": total_rows, "per_sensor": per_sensor}
+    return {"sensors": len(sensors), "rows": total_rows, "per_sensor": per_sensor,
+            "protect_until": protect_until}
 
 
 def main(argv: Iterable[str] | None = None) -> int:

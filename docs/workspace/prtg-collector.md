@@ -121,7 +121,10 @@ my_app 页面 ?page=prtg_links（门户目录卡片 PRTG Link Health）
 | `low_traffic_30min` | 近 30 分钟均值 < 基线 30% | Investigate（info） |
 | `baseline_low_pending_review` | 该链路 7 天 p95 < 10 kbit/s（空闲/未使用） | info，**不转高危** |
 
-- 事件适配：同一 (传感器, 规则) 只保留一条未结束事件（重复命中更新证据），多规则命中再合并成一条 `composite`；不写 `realtime_alarm` / `history_alarm`。条件恢复时自动关闭（`ended_at`）。
+- 事件适配：同一 (传感器, 规则) 只保留一条未结束事件（重复命中更新证据），多规则命中再合并成一条 `composite`；同轮同规则跨传感器 ≥5 条再写一条 `batch_<rule>`（成员行保留，`evidence.members`）。不写 `realtime_alarm` / `history_alarm`。
+- **开/关迟滞**：`above_baseline_200` / `below_baseline_30` 连续 2 个 5m 桶越线才开；连续 2 轮未命中才关（`HYSTERESIS_*_BUCKETS`）。
+- **导入保护期**：`history_import` 成功后 `protect_until`（默认 600s）内只更新证据、不开新告警；基线从 `insufficient`→`ok` 的第一轮同样抑制新开。
+- **KPI `anomaly_links`**：未结束且 severity∈{warning,critical} 的 **composite** 按传感器去重；**不含** `baseline_low_pending_review`（另计 `anomaly_pending_review_links`），不含 `batch_*` 锚点行。条件恢复时自动关闭（`ended_at`）。
 - Ping 状态机：UNKNOWN → OK；连续 2 次失败 SUSPECT、第 3 次 DOWN；1 次成功 RECOVERING、连续 2 次成功回 OK。失败 = 状态非 Up 或无 RTT；**只有状态转换写事件**，AML TOKADEH1 不再每跳一条。
 - 历史回测与 Unusual 分类见 `docs/workspace/prtg-anomaly-backtest.md`（2026-11-24：5 条规则均有命中记录；8 个 Unusual 中 2 个空闲、6 个当前高于 7 天中位数 200%，与 Issue 描述的「流量异常偏低」不完全一致，以实测为准）。
 - 5 分钟历史基线用 `python -m backend.services.prtg.history_import --days 7` 补齐（PRTG `avg=300`，25 次请求）；回测/分类用 `python -m backend.services.prtg.anomaly_backtest`。

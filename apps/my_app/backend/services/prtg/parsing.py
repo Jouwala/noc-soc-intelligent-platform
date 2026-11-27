@@ -207,6 +207,99 @@ def _parse_raw_number(text: str) -> float | None:
         return None
 
 
+# Traffic In/Out/Total：live channels.xml 的 lastvalue_raw 相对 display 换算常偏约 10×
+#（2026-11-27 scale_check：interval 全 60s；有流量样本 raw/display_bps 多恰为 10）。
+# 修法：优先用 display+单位反算 byte/s，**不写死 /10**；无 display 则拒用 raw 做告警。
+TRAFFIC_RATE_CHANNEL_IDS = frozenset({-1, 0, 1})
+_RATE_DISPLAY_RE = re.compile(
+    r"^\s*([\d,]+(?:\.\d+)?)\s*(kbit/s|mbit/s|gbit/s|bit/s)\s*$", re.IGNORECASE
+)
+_BIT_TO_BYTE = {
+    "bit/s": 1.0 / 8.0,
+    "kbit/s": 1000.0 / 8.0,
+    "mbit/s": 1_000_000.0 / 8.0,
+    "gbit/s": 1_000_000_000.0 / 8.0,
+}
+
+
+def display_rate_to_bps(display: str | None) -> tuple[float | None, str | None]:
+    """把 PRTG 速率显示串换成 byte/s；失败返回 (None, None)。单位必须是 bit 系。"""
+    if not display or not str(display).strip():
+        return None, None
+    match = _RATE_DISPLAY_RE.match(str(display).strip())
+    if not match:
+        return None, None
+    value = float(match.group(1).replace(",", ""))
+    unit = match.group(2).lower()
+    factor = _BIT_TO_BYTE.get(unit)
+    if factor is None:
+        return None, None
+    return value * factor, unit
+
+
+def rate_bps_from_prtg_display_and_raw(
+    display: str | None,
+    raw: float | None,
+    *,
+    channel_id: int | None = None,
+    channel_name: str | None = None,
+) -> dict[str, Any]:
+    """速率口径：bit 系 display 优先；Ping/计数等非 bit 显示仍用 raw。
+
+    Traffic（名含 Traffic，或 channel∈{-1,0,1} 且 display 为 bit 系）在
+    **没有**可解析 display 时拒绝 raw（防 10× 误入库）。其它通道回退 raw。
+    """
+    display_bps, unit = display_rate_to_bps(display)
+    raw_bps = float(raw) if raw is not None else None
+    name_l = (channel_name or "").lower()
+    # 以通道名为准：Ping 的 channel_id=0 与 Traffic In 同号，不能靠 id 白名单
+    # （channel_id 仍保留在签名里，供调用方传入与将来扩展）
+    traffic_by_name = "traffic" in name_l
+
+    if display_bps is not None:
+        warning = None
+        if raw_bps is not None and display_bps > 0 and raw_bps > 0:
+            ratio = raw_bps / display_bps
+            if ratio > 1.5 or ratio < 0.67:
+                warning = f"live raw/display_bps={ratio:.3f} (prefer display)"
+        return {
+            "value_bps": display_bps,
+            "source": "display",
+            "warning": warning,
+            "display_bps": display_bps,
+            "raw_bps": raw_bps,
+            "unit": unit,
+        }
+
+    # 无 bit 系 display：仅「Traffic*」名通道拒用 raw；Ping/计数等回退 raw
+    if traffic_by_name:
+        if raw_bps is not None and raw_bps == 0:
+            return {
+                "value_bps": 0.0,
+                "source": "raw_zero",
+                "warning": None,
+                "display_bps": display_bps,
+                "raw_bps": raw_bps,
+                "unit": unit,
+            }
+        return {
+            "value_bps": None,
+            "source": "untrusted",
+            "warning": "traffic rate: no parseable display; refuse raw for alerting",
+            "display_bps": display_bps,
+            "raw_bps": raw_bps,
+            "unit": unit,
+        }
+    return {
+        "value_bps": raw_bps,
+        "source": "raw",
+        "warning": None,
+        "display_bps": display_bps,
+        "raw_bps": raw_bps,
+        "unit": unit,
+    }
+
+
 def parse_historic_csv(
     text: str, channel_order: tuple[int, ...] = HISTORIC_CHANNEL_ORDER
 ) -> list[dict[str, Any]]:
@@ -285,8 +378,12 @@ def parse_channels_xml(text: str) -> list[dict[str, Any]]:
     （速率、体积、体积），JSON 用普通 dict 解析会丢成 1 个。XML 的
     子元素顺序天然保留重复项，所以采集端用 XML 取通道值。
 
+    Traffic In/Out/Total（channel -1/0/1）：``value_num`` 优先取 display 换算的
+    byte/s（见 ``rate_bps_from_prtg_display_and_raw``）；无可靠 display 时
+    ``value_num=None`` 并带 ``rate_warning``，调用方须写入 sync_state，不得静默。
+
     返回：[{"channel_objid", "name", "value_num", "value_display",
-            "volume_num", "volume_display", "unit"}]，无值通道（Downtime）跳过。
+            "volume_num", "volume_display", "unit", "rate_source", "rate_warning"}]
     """
     import xml.etree.ElementTree as ET
 
@@ -302,22 +399,47 @@ def parse_channels_xml(text: str) -> list[dict[str, Any]]:
         raws = [el.text or "" for el in item.findall("lastvalue_raw")]
         if not values or not values[0].strip():
             continue  # Downtime 等无值通道
+        channel_id = int(objid_text)
         value_display = values[0].strip()
-        value_num = _parse_raw_number(raws[0]) if raws else None
+        raw_rate = _parse_raw_number(raws[0]) if raws else None
         volume_display = values[1].strip() if len(values) > 1 else None
         volume_num = _parse_raw_number(raws[1]) if len(raws) > 1 else None
-        # 单位从显示值末尾切出；切不出就留空（不猜）
         unit = None
         if " " in value_display:
             unit = value_display.split()[-1]
+
+        rate = rate_bps_from_prtg_display_and_raw(
+            value_display, raw_rate, channel_id=channel_id, channel_name=name,
+        )
+        value_num = rate["value_bps"]
+        # 体积与偏高 raw 自洽（≈ rate×60）；速率改用 display 后按同一秒数缩放体积
+        rate_warning = rate["warning"]
+        if (
+            rate["source"] == "display"
+            and value_num is not None
+            and raw_rate
+            and raw_rate > 0
+            and volume_num is not None
+        ):
+            sec = volume_num / raw_rate
+            if 30 <= sec <= 120:
+                volume_num = value_num * sec
+            else:
+                # sec 越界：仍按 display 速率 × 60s 间隔缩放，避免体积留在 ~10× raw
+                volume_num = value_num * 60.0
+                note = f"volume sec={sec:.1f} out of 30–120; scaled as rate×60"
+                rate_warning = f"{rate_warning}; {note}" if rate_warning else note
+
         result.append({
-            "channel_objid": int(objid_text),
+            "channel_objid": channel_id,
             "name": name,
             "value_num": value_num,
             "value_display": value_display,
             "volume_num": volume_num,
             "volume_display": volume_display,
-            "unit": unit,
+            "unit": rate.get("unit") or unit,
+            "rate_source": rate["source"],
+            "rate_warning": rate_warning,
         })
     return result
 
