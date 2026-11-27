@@ -107,12 +107,22 @@ const COLUMN_X: Record<LayoutColumn, number> = {
   other: 860,
 }
 
+/**
+ * 已知核心设备簇优先排序（配置化，#319 N4）。
+ * 只影响布局纵向分区，不发明连线。
+ */
+export const KNOWN_DEVICE_CLUSTER_ORDER = [
+  'OLIB-NX-3172-WAN-2',
+  'PTP_SW',
+  'AML TOKADEH1',
+] as const
+
 /** 核心设备簇：按短名匹配（不含猜测连线，只影响纵向分区） */
 export function deviceClusterKey(name?: string | null): string {
   const short = shortDeviceName(name)
   const u = short.toUpperCase()
-  if (u.includes('OLIB-NX-3172') || u.includes('OLIB-NX-3172-WAN-2')) return 'OLIB-NX-3172-WAN-2'
-  if (u.includes('PTP_SW') || u === 'PTP_SW') return 'PTP_SW'
+  if (u.includes('OLIB-NX-3172')) return 'OLIB-NX-3172-WAN-2'
+  if (u.includes('PTP_SW')) return 'PTP_SW'
   if (u.includes('AML') && u.includes('TOKADEH')) return 'AML TOKADEH1'
   return short === '—' ? '__other__' : short
 }
@@ -194,16 +204,15 @@ export function layoutTopoNodes(
     if (!clusterOf.has(n.id)) clusterOf.set(n.id, deviceClusterKey(n.name))
   }
 
-  const clusterOrder = ['OLIB-NX-3172-WAN-2', 'PTP_SW', 'AML TOKADEH1']
+  const knownSet = new Set<string>(KNOWN_DEVICE_CLUSTER_ORDER)
   const present = new Set(clusterOf.values())
-  const extraClusters = [...present].filter(c => !clusterOrder.includes(c)).sort()
+  const extraClusters = [...present].filter(c => !knownSet.has(c)).sort()
   const orderedBands: string[] = [
-    ...clusterOrder.filter(c => present.has(c)),
+    ...KNOWN_DEVICE_CLUSTER_ORDER.filter(c => present.has(c)),
     ...extraClusters,
   ]
   if (orderedBands.length === 0) orderedBands.push('__other__')
 
-  const bandH = TOPO_CANVAS.h / orderedBands.length
   const buckets = new Map<string, TopoNode[]>()
   for (const n of nodes) {
     if (n.pinned) continue
@@ -218,6 +227,28 @@ export function layoutTopoNodes(
     arr.sort((a, b) => shortDeviceName(a.name).localeCompare(shortDeviceName(b.name)))
   }
 
+  // 按未 pinned 节点数比例分配纵带高度，避免簇多时 y1<y0 挤叠（#319 N4）
+  const PAD = 36
+  const usableH = TOPO_CANVAS.h - PAD * 2
+  const bandWeights = orderedBands.map(band => {
+    let n = 0
+    for (const node of nodes) {
+      if (node.pinned) continue
+      if ((clusterOf.get(node.id) || '__other__') === band) n += 1
+    }
+    return Math.max(1, n)
+  })
+  const weightSum = bandWeights.reduce((a, b) => a + b, 0)
+  const bandRanges: Array<{ y0: number; y1: number }> = []
+  let cursor = PAD
+  for (let bi = 0; bi < orderedBands.length; bi++) {
+    const h = (bandWeights[bi] / weightSum) * usableH
+    const y0 = cursor
+    const y1 = cursor + h
+    bandRanges.push({ y0: y0 + 8, y1: y1 - 8 })
+    cursor = y1
+  }
+
   const pos = new Map<number, { x: number; y: number }>()
   for (const n of nodes) {
     if (n.pinned) {
@@ -230,13 +261,13 @@ export function layoutTopoNodes(
 
   for (let bi = 0; bi < orderedBands.length; bi++) {
     const band = orderedBands[bi]
-    const y0 = bi * bandH + 36
-    const y1 = (bi + 1) * bandH - 36
+    const { y0, y1 } = bandRanges[bi]
+    const span = Math.max(0, y1 - y0)
     for (const col of ['peer', 'security', 'device', 'other'] as LayoutColumn[]) {
       const list = buckets.get(`${band}||${col}`) || []
       if (!list.length) continue
       const x = COLUMN_X[col]
-      const step = list.length === 1 ? 0 : (y1 - y0) / (list.length - 1)
+      const step = list.length === 1 || span === 0 ? 0 : span / (list.length - 1)
       list.forEach((n, i) => {
         if (pos.has(n.id)) return
         const y = list.length === 1 ? (y0 + y1) / 2 : y0 + step * i

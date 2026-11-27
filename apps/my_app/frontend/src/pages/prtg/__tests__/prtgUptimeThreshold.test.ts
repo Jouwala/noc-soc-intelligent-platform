@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   PRTG_SLA_TARGET_PCT, UPTIME_LOW_THRESHOLD, isUptimeBelowTarget, pickAttentionItems,
+  shouldShowCompletenessCounts,
   type PrtgLink,
 } from '../prtgModels'
 
@@ -62,5 +63,17 @@ describe('pickAttentionItems 对 uptime 偏低', () => {
     ], 8)
     expect(items.map(i => i.link.sensor_id)).toEqual([1])
     expect(items[0].kind).toBe('low_uptime')
+  })
+})
+
+describe('shouldShowCompletenessCounts（#319 N5）', () => {
+  it('有 overview 但 links 为空 → 不显示 0/0', () => {
+    expect(shouldShowCompletenessCounts(true, 0)).toBe(false)
+  })
+  it('无 overview → 不显示', () => {
+    expect(shouldShowCompletenessCounts(false, 0)).toBe(false)
+  })
+  it('有 overview 且有链路 → 显示', () => {
+    expect(shouldShowCompletenessCounts(true, 25)).toBe(true)
   })
 })

@@ -1,11 +1,12 @@
 /* ============================================================================
  * 链路健康主表：7 列 + 按设备分组（可折叠）+ 可展开次要字段。
  * 桌面宽度下无横向滚动；行点击打开详情（展开按钮 stopPropagation）。
+ * 列排序：受控、只在组内排（#319 B1），组顺序与组头统计不变。
  * ========================================================================== */
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Empty, Table, Tag, Typography } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+import type { ColumnsType, TableProps } from 'antd/es/table'
 import { DownOutlined, RightOutlined } from '@ant-design/icons'
 
 import { getNetworkTopologyTraffic } from '../../api'
@@ -15,7 +16,7 @@ import { CardBase } from '../../components/cards'
 import { ExplainIcon, ExplainPopover } from '../../components/MetricExplain'
 import { fmtDuration } from './prtgLogModels'
 import {
-  NA, PrtgLink, cleanSensorName, compareLinksDefault, explainCapacity,
+  NA, PrtgLink, cleanSensorName, explainCapacity,
   explainDiscards, explainErrors, explainIn, explainLastDown, explainOut,
   explainSite, explainTotal, explainUnicast, explainUptime, explainUtilization,
   fmtInt, fmtNum, fmtTime, matchLabelKey, shortDeviceName, statusColor,
@@ -25,37 +26,27 @@ import { explainStatusReason } from './prtgLogModels'
 import {
   TopoLink, TopoNode, buildPeerLabelBySensorId,
 } from './prtgTopologyModels'
+import {
+  DeviceGroup, FlatGroupRow, LinksSortKey, LinksSortState,
+  buildGroupedDataSource,
+} from './prtgGroupSort'
 
 const { Text } = Typography
 
-type GroupRow = {
-  rowType: 'group'
-  key: string
-  deviceRaw: string
-  deviceShort: string
-  up: number
-  unusual: number
-  down: number
-  unknown: number
-  linkCount: number
-}
+type TableRow = FlatGroupRow
 
-type LinkRow = {
-  rowType: 'link'
-  key: string
-  link: PrtgLink
-  deviceKey: string
-}
-
-type TableRow = GroupRow | LinkRow
-
-function isGroup(r: TableRow): r is GroupRow {
+function isGroup(r: TableRow): r is Extract<TableRow, { rowType: 'group' }> {
   return r.rowType === 'group'
 }
 
 function deviceKeyOf(link: PrtgLink): string {
   const raw = (link.device_name || '').trim()
   return raw || `__sensor_${link.sensor_id}`
+}
+
+function isSortKey(k: unknown): k is LinksSortKey {
+  return k === 'status' || k === 'inOut' || k === 'errDisc'
+    || k === 'uptime' || k === 'stability' || k === 'lastDown'
 }
 
 export interface PrtgLinksTableProps {
@@ -70,6 +61,14 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   /** 拓扑对端名（拿不到则空 Map，小字退回只显示设备短名） */
   const [peerBySensor, setPeerBySensor] = useState<Map<number, string>>(() => new Map())
+  /** 受控排序：只排组内链路，不交给 antd 扁平排序（#319 B1） */
+  const [sort, setSort] = useState<LinksSortState>({ key: null, order: null })
+
+  // 传感器集合变化时重取对端（#319 N3）；对端与时间窗无关，但新增传感器需刷新
+  const sensorKey = useMemo(
+    () => links.map(l => l.sensor_id).slice().sort((a, b) => a - b).join(','),
+    [links],
+  )
 
   useEffect(() => {
     let alive = true
@@ -84,65 +83,49 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
         if (alive) setPeerBySensor(new Map())
       })
     return () => { alive = false }
-  }, [])
+  }, [sensorKey])
 
-  const groups = useMemo(() => {
-    const map = new Map<string, { raw: string; links: PrtgLink[] }>()
+  const groups = useMemo<DeviceGroup[]>(() => {
+    const map = new Map<string, DeviceGroup>()
     for (const link of links) {
       const key = deviceKeyOf(link)
       const raw = (link.device_name || '').trim() || t('prtg.group.unknownDevice')
       let g = map.get(key)
       if (!g) {
-        g = { raw, links: [] }
+        g = { key, raw, links: [] }
         map.set(key, g)
       }
       g.links.push(link)
     }
-    for (const g of map.values()) g.links.sort(compareLinksDefault)
-    return [...map.entries()].sort((a, b) => {
-      const worstA = Math.min(...a[1].links.map(l => statusSortRank(l.status)))
-      const worstB = Math.min(...b[1].links.map(l => statusSortRank(l.status)))
+    return [...map.values()].sort((a, b) => {
+      const worstA = Math.min(...a.links.map(l => statusSortRank(l.status)))
+      const worstB = Math.min(...b.links.map(l => statusSortRank(l.status)))
       if (worstA !== worstB) return worstA - worstB
-      return shortDeviceName(a[1].raw).localeCompare(shortDeviceName(b[1].raw))
+      return shortDeviceName(a.raw).localeCompare(shortDeviceName(b.raw))
     })
   }, [links, t])
 
-  const dataSource = useMemo<TableRow[]>(() => {
-    const rows: TableRow[] = []
-    for (const [key, g] of groups) {
-      let up = 0, unusual = 0, down = 0, unknown = 0
-      for (const l of g.links) {
-        const st = (l.status || '').trim().toLowerCase()
-        if (st === 'up') up += 1
-        else if (st === 'unusual') unusual += 1
-        else if (st === 'down') down += 1
-        else unknown += 1
-      }
-      rows.push({
-        rowType: 'group',
-        key: `g:${key}`,
-        deviceRaw: g.raw,
-        deviceShort: shortDeviceName(g.raw),
-        up, unusual, down, unknown,
-        linkCount: g.links.length,
-      })
-      if (!collapsed[key]) {
-        for (const link of g.links) {
-          rows.push({
-            rowType: 'link',
-            key: `l:${link.sensor_id}`,
-            link,
-            deviceKey: key,
-          })
-        }
-      }
-    }
-    return rows
-  }, [groups, collapsed])
+  const dataSource = useMemo(
+    () => buildGroupedDataSource(groups, collapsed, sort, shortDeviceName),
+    [groups, collapsed, sort],
+  )
 
   const toggleGroup = useCallback((deviceKey: string) => {
     setCollapsed(prev => ({ ...prev, [deviceKey]: !prev[deviceKey] }))
   }, [])
+
+  const onTableChange = useCallback<NonNullable<TableProps<TableRow>['onChange']>>((_p, _f, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter
+    const key = s?.columnKey
+    const order = s?.order
+    if (isSortKey(key) && (order === 'ascend' || order === 'descend')) {
+      setSort({ key, order })
+    } else {
+      setSort({ key: null, order: null })
+    }
+  }, [])
+
+  const sortOrderOf = (key: LinksSortKey) => (sort.key === key ? sort.order : null)
 
   const numCell = useCallback((
     v: number | null | undefined, explain: string, digits = 2, suffix = '',
@@ -167,19 +150,17 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
       title: <>{t('prtg.col.status')} <ExplainIcon text={t('prtg.colExplain.status')} /></>,
       key: 'status',
       width: 110,
-      sorter: (a, b) => {
-        if (isGroup(a) || isGroup(b)) return 0
-        return statusSortRank(a.link.status) - statusSortRank(b.link.status)
-      },
+      sorter: true,
+      sortOrder: sortOrderOf('status'),
       render: (_: unknown, row: TableRow) => {
         if (isGroup(row)) {
-          const open = !collapsed[row.key.slice(2)]
+          const open = !collapsed[row.deviceKey]
           return (
             <button
               type="button"
               onClick={e => {
                 e.stopPropagation()
-                toggleGroup(row.key.slice(2))
+                toggleGroup(row.deviceKey)
               }}
               style={{
                 border: 'none', background: 'transparent', cursor: 'pointer',
@@ -241,10 +222,8 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
       key: 'inOut',
       width: 140,
       align: 'right',
-      sorter: (a, b) => {
-        if (isGroup(a) || isGroup(b)) return 0
-        return (a.link.in_mbps ?? -1) - (b.link.in_mbps ?? -1)
-      },
+      sorter: true,
+      sortOrder: sortOrderOf('inOut'),
       render: (_: unknown, row: TableRow) => {
         if (isGroup(row)) return null
         const link = row.link
@@ -265,12 +244,8 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
       key: 'errDisc',
       width: 130,
       align: 'right',
-      sorter: (a, b) => {
-        if (isGroup(a) || isGroup(b)) return 0
-        const ea = (a.link.errors_in ?? 0) + (a.link.errors_out ?? 0)
-        const eb = (b.link.errors_in ?? 0) + (b.link.errors_out ?? 0)
-        return ea - eb
-      },
+      sorter: true,
+      sortOrder: sortOrderOf('errDisc'),
       render: (_: unknown, row: TableRow) => {
         if (isGroup(row)) return null
         const link = row.link
@@ -298,10 +273,8 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
       key: 'uptime',
       width: 100,
       align: 'right',
-      sorter: (a, b) => {
-        if (isGroup(a) || isGroup(b)) return 0
-        return (a.link.uptime_pct ?? 101) - (b.link.uptime_pct ?? 101)
-      },
+      sorter: true,
+      sortOrder: sortOrderOf('uptime'),
       render: (_: unknown, row: TableRow) => {
         if (isGroup(row)) return null
         return numCell(row.link.uptime_pct, explainUptime(row.link, t), 3, '%')
@@ -312,10 +285,8 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
       key: 'stability',
       width: 130,
       align: 'right',
-      sorter: (a, b) => {
-        if (isGroup(a) || isGroup(b)) return 0
-        return (a.link.down_count_24h ?? -1) - (b.link.down_count_24h ?? -1)
-      },
+      sorter: true,
+      sortOrder: sortOrderOf('stability'),
       render: (_: unknown, row: TableRow) => {
         if (isGroup(row)) return null
         const link = row.link
@@ -342,10 +313,8 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
       title: <>{t('prtg.col.lastDown')} <ExplainIcon text={t('prtg.colExplain.lastDown')} /></>,
       key: 'lastDown',
       width: 160,
-      sorter: (a, b) => {
-        if (isGroup(a) || isGroup(b)) return 0
-        return (a.link.last_down || '').localeCompare(b.link.last_down || '')
-      },
+      sorter: true,
+      sortOrder: sortOrderOf('lastDown'),
       render: (_: unknown, row: TableRow) => {
         if (isGroup(row)) return null
         return (
@@ -355,7 +324,7 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
         )
       },
     },
-  ], [t, numCell, collapsed, toggleGroup, peerBySensor])
+  ], [t, numCell, collapsed, toggleGroup, peerBySensor, sort])
 
   const expandedRowRender = useCallback((row: TableRow) => {
     if (isGroup(row)) return null
@@ -426,6 +395,7 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
         loading={loading}
         pagination={false}
         size="small"
+        onChange={onTableChange}
         expandable={{
           expandedRowRender,
           rowExpandable: row => !isGroup(row),
@@ -434,7 +404,7 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
         onRow={row => {
           if (isGroup(row)) {
             return {
-              onClick: () => toggleGroup(row.key.slice(2)),
+              onClick: () => toggleGroup(row.deviceKey),
               style: {
                 cursor: 'pointer',
                 background: 'color-mix(in srgb, var(--wh-teal) 6%, transparent)',

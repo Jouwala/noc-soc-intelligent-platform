@@ -316,7 +316,11 @@ export default function PrtgLinkHealth() {
         open={detailOpen}
         title={modalTitle}
         anchor={anchor}
-        onClose={() => setDetailOpen(false)}
+        onClose={() => {
+          setDetailOpen(false)
+          // 关闭详情后清掉拓扑高亮，避免边一直亮着（#319 N2）
+          setHighlightSensorId(null)
+        }}
         width="92%"
         maxWidth="75rem"
       >

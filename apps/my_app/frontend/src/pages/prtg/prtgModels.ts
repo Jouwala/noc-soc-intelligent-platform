@@ -225,13 +225,14 @@ export function matchLabelKey(match?: string | null): string {
  * 只做展示清洗，原始值仍放 title / 悬停提示。
  * -------------------------------------------------------------------- */
 
-/** 去掉开头 `(数字)`、去掉 `=` 连串、合并空白；取不到返回「—」 */
+/** 去掉开头 `(数字)`、去掉长度≥2 的 `=` 连串、合并空白；取不到返回「—」 */
 export function cleanSensorName(raw?: string | null): string {
   if (raw == null) return NA
   let s = String(raw).trim()
   if (!s) return NA
   s = s.replace(/^\(\d+\)\s*/, '')
-  s = s.replace(/=+/g, ' ')
+  // 只剥 `==` 及以上连串；单个 `=`（如 A=B）保留（#319 N6）
+  s = s.replace(/={2,}/g, ' ')
   s = s.replace(/\s+/g, ' ').trim()
   return s || NA
 }
@@ -350,6 +351,11 @@ export function pickAttentionItems(links: PrtgLink[], limit = 8): AttentionItem[
     return compareLinksDefault(a.link, b.link)
   })
   return items.slice(0, limit)
+}
+
+/** 完整度 KPI：无 overview 或 links 为空时显示「—」，避免「0/0」（#319 N5） */
+export function shouldShowCompletenessCounts(hasOverview: boolean, totalLinks: number): boolean {
+  return hasOverview && totalLinks > 0
 }
 
 /** links 中 uptime_pct 最小值及其链路（并列取第一条；全 null 则 null） */

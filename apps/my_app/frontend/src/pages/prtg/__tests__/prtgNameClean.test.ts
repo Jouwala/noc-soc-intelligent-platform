@@ -17,6 +17,11 @@ describe('cleanSensorName', () => {
     expect(cleanSensorName('WAN-2 Port 39')).toBe('WAN-2 Port 39')
   })
 
+  it('单个 = 保留；只剥长度≥2 的连串（#319 N6）', () => {
+    expect(cleanSensorName('A=B')).toBe('A=B')
+    expect(cleanSensorName('foo==bar===baz')).toBe('foo bar baz')
+  })
+
   it('空 / null → —', () => {
     expect(cleanSensorName(null)).toBe(NA)
     expect(cleanSensorName('')).toBe(NA)

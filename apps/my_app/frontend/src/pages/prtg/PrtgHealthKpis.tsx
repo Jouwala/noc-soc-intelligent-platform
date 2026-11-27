@@ -12,6 +12,7 @@ import { ExplainIcon, ExplainPopover } from '../../components/MetricExplain'
 import {
   NA, PrtgKpi, PrtgLink, UPTIME_LOW_THRESHOLD, cleanSensorName, findWorstUptime,
   fmtInt, fmtNum, isCapacityKnown, isSiteMatched, shortDeviceName,
+  shouldShowCompletenessCounts,
 } from './prtgModels'
 
 export interface PrtgHealthKpisProps {
@@ -136,12 +137,12 @@ export default function PrtgHealthKpis({ kpi, links, hasOverview }: PrtgHealthKp
   const worstName = worst ? cleanSensorName(worst.link.sensor_name) : NA
 
   const anomalyValue = hasOverview ? fmtInt(kpi?.anomaly_links) : NA
-  const completenessValue = (!hasOverview && totalLinks === 0)
+  const completenessValue = !shouldShowCompletenessCounts(hasOverview, totalLinks)
     ? NA
     : t('prtg.kpi.completenessValue', {
       cap: capacityKnown,
       site: siteMatched,
-      total: totalLinks || 0,
+      total: totalLinks,
     })
 
   const worstExplain = worst
