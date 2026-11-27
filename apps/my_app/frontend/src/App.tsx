@@ -2264,75 +2264,44 @@ function AppContent() {
                 用户反馈「白色三角小方块」没有意义，已整体删除（连同 --wh-decor 令牌）。
                 目录的展开/收起只保留左侧汉堡按钮这一处入口。 */}
 
-            {/* 居中标题：site_kpi_rt 使用「上开口、开口外翻」的凹槽标题，其余页面保持原样。
-                凹槽由 index.css 的 .wh-header-title-notch（本体）+ 它的 ::before/::after
-                （左右两条外翻四分弧）绘制，只画描边、不填底色，内部就是顶栏本身。
-                标题槽仍保持 flex:1，右侧自动刷新 / 主题 / 语言按钮的布局不受影响。 */}
+            {/* 居中标题：全站统一「上开口、开口外翻」的凹槽标题。
+                凹槽是包住标题文字的 .wh-header-title-notch（宽度跟着标题走），
+                本体由它自己的描边画，左右两条外翻四分弧由 ::before/::after 补；
+                只画描边、不填底色，内部就是顶栏本身。
+                标题槽保持 flex:1；上下留白让给「外翻弧 + 槽底间隙」，标题在槽体里居中。
+                窄屏（<768px）由 index.css 退回普通标题。 */}
             <div
-              className={currentPage === 'site_kpi_rt' ? 'wh-header-title-slot--notch' : undefined}
+              className="wh-header-title-slot--notch"
               style={{
                 flex: 1,
                 minWidth: 0,
                 textAlign: 'center',
                 position: 'relative',
                 zIndex: 1,
-                // 凹槽页：槽占满顶栏高度，并把上下留白让给「外翻弧 + 槽底间隙」，
-                // 这样标题是在凹槽「槽体」里垂直居中，而不是在整个顶栏里居中
-                // （顶栏减到 2/3 后两者会差出 ~5px，标题会顶到开口里）。
-                ...(currentPage === 'site_kpi_rt'
-                  ? {
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingTop: '0.7rem',
-                      paddingBottom: '3px',
-                    }
-                  : {}),
               }}
             >
-              {currentPage === 'site_kpi_rt' && (
-                /* 凹槽本体：上沿开口，左右两道外翻弧由伪元素补上（纯装饰） */
-                <span className="wh-header-title-notch" aria-hidden="true" />
-              )}
-              <h1
-                className={currentPage === 'site_kpi_rt' ? 'wh-header-title-notch-text' : undefined}
-                style={{
-                  margin: 0,
-                  fontSize: currentPage === 'site_kpi_rt'
-                    ? (isMobile ? '0.9375rem' : '0.9rem')
-                    : (isMobile ? '1.125rem' : '1.375rem'),
-                  fontWeight: 700,
-                  color: WH.teal,
-                  textShadow: 'var(--wh-title-shadow)',
-                  letterSpacing: currentPage === 'site_kpi_rt' ? '0.06em' : '0.125rem',
-                  lineHeight: 1.2,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  padding: '0 var(--wh-space-sm)',
-                }}
-              >
-                {currentPage === 'site_kpi_rt' ? (
-                  /* 2026-11-27：凹槽里只留标题文字，页面时钟图标按用户要求去掉 */
+              {/* 凹槽本体：宽度由标题文字撑开，上沿开口，左右两道外翻弧由伪元素补 */}
+              <div className="wh-header-title-notch">
+                <h1
+                  className="wh-header-title-notch-text"
+                  style={{
+                    margin: 0,
+                    fontSize: isMobile ? '0.9375rem' : '0.9rem',
+                    fontWeight: 700,
+                    color: WH.teal,
+                    textShadow: 'var(--wh-title-shadow)',
+                    letterSpacing: '0.06em',
+                    lineHeight: 1.2,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
                   <span className="wh-header-title-notch-label">
                     {flatMenuItems.find(m => m.key === currentPage)?.label || t('nav.overview')}
                   </span>
-                ) : (
-                  flatMenuItems.find(m => m.key === currentPage)?.label || t('nav.overview')
-                )}
-              </h1>
-              {/* 底部发光装饰线：凹槽页已由凹槽自身收边，不再叠加发光线 */}
-              {currentPage !== 'site_kpi_rt' && (
-                <div style={{
-                  width: '7.5rem',
-                  height: 2,
-                  margin: 'var(--wh-space-xs) auto 0',
-                  background: WH.accentGrad,
-                  boxShadow: 'var(--wh-title-rule-glow)',
-                  borderRadius: 1,
-                }} />
-              )}
+                </h1>
+              </div>
             </div>
 
             {/* 右上角操作区：2026-11-27 起收成一个「账号与设置」头像菜单。
