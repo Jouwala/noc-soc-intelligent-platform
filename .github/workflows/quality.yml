@@ -16,6 +16,7 @@ on:
   # pull_request 运行已覆盖它）；main 的 push 仍跑，供合并后兜底。
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 permissions:
