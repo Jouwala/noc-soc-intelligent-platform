@@ -266,7 +266,8 @@ function Invoke-ChildScript {
             WorkingDirectory = $WorkDir; PassThru = $true; WindowStyle = 'Hidden' }
     } else {
         $wrapper = "$wrapperBase.sh"
-        [System.IO.File]::WriteAllText($wrapper, "#!/bin/sh`n$inner`n", (New-Object System.Text.UTF8Encoding($false)))
+        # exec：让 sh 被 powershell 进程替换，超时 Stop-Process 杀掉的就是脚本本身（无孤儿）
+        [System.IO.File]::WriteAllText($wrapper, "#!/bin/sh`nexec $inner`n", (New-Object System.Text.UTF8Encoding($false)))
         $splat = @{ FilePath = '/bin/sh'; ArgumentList = @($wrapper); WorkingDirectory = $WorkDir; PassThru = $true }
     }
     try { $proc = Start-Process @splat }
@@ -275,6 +276,12 @@ function Invoke-ChildScript {
     $exited = $false
     try { $exited = $proc.WaitForExit($TimeoutSec * 1000) } catch { $exited = $proc.HasExited }
     if (-not $exited) {
+        # ⚠️ 超时必须按进程树杀：Windows 的 wrapper 是 cmd.exe，真正跑脚本的是它的子进程；
+        # 只 Stop-Process wrapper 会留下孤儿继续跑（实测 wrapper 杀掉后子进程存活，#313 同批）。
+        # taskkill /T 连子树一起杀；Linux 侧 wrapper 用 exec，$proc.Id 就是脚本进程。
+        if (Get-OnWindows) {
+            & taskkill.exe /PID $proc.Id /T /F 2>$null | Out-Null
+        }
         try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
         try { $proc.WaitForExit() } catch { }
         Remove-Item -LiteralPath $wrapper -Force -ErrorAction SilentlyContinue
@@ -491,11 +498,21 @@ function Invoke-SelfTest {
         Assert-Test 'results 修剪到 100 条' ((@(Get-ChildItem -LiteralPath $dirs.Results -File)).Count -eq 100)
 
         # 6) 超时：watcher 桩睡 90 秒，任务 timeout 60 秒（允许范围下限）→ timeout 进 failed
-        [System.IO.File]::WriteAllText((Join-Path $scriptDir 'smoke-watcher.ps1'), 'param([int]$OnlyPr = 0, [switch]$Once); Start-Sleep -Seconds 90; exit 0', $utf8)
+        #    桩先把自己的 PID 落盘，超时后据此断言「子进程确已退出」（防孤儿回归）
+        $timeoutPidFile = Join-Path $testRoot 'timeout-child.pid'
+        [System.IO.File]::WriteAllText((Join-Path $scriptDir 'smoke-watcher.ps1'), "param([int]`$OnlyPr = 0, [switch]`$Once); Set-Content -LiteralPath '$timeoutPidFile' -Value `$PID; Start-Sleep -Seconds 90; exit 0", $utf8)
         & $writeTask 't12.json' '{"id":"20261127-test-timeout-1","type":"smoke-rerun","payload":{"pr":287},"created_by":"muse-1","created_at":"2026-11-27T08:00:00Z","timeout_seconds":60}'
         & $run
         Assert-Test '超时任务进 failed' (Test-Path -LiteralPath (Join-Path $dirs.Failed 't12.json'))
         Assert-Test '超时结果 status=timeout' ((Get-ResultStatus -Dirs $dirs -Id '20261127-test-timeout-1') -eq 'timeout')
+        # 超时后子进程必须已退出：wrapper 杀掉但脚本还在跑 = 孤儿
+        $childPid = 0
+        for ($i = 0; $i -lt 20 -and $childPid -le 0; $i++) {
+            try { $childPid = [int](Get-Content -LiteralPath $timeoutPidFile -ErrorAction Stop) } catch { $childPid = 0 }
+            if ($childPid -le 0) { Start-Sleep -Milliseconds 250 }
+        }
+        $aliveChild = if ($childPid -gt 0) { Get-Process -Id $childPid -ErrorAction SilentlyContinue } else { $null }
+        Assert-Test '超时后子进程确已退出（无孤儿）' (($childPid -gt 0) -and ($null -eq $aliveChild))
         [System.IO.File]::WriteAllText((Join-Path $scriptDir 'smoke-watcher.ps1'), $watcherStub, $utf8)
 
         # 7) 单实例锁：锁住活进程 pid → 本轮不认领；释放后正常执行
