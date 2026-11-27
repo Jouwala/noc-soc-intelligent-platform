@@ -150,9 +150,13 @@ const PortalLogin = lazy(() => import('./pages/PortalLogin'))
 const EflowQa = lazy(() => import('./pages/EflowQa'))
 const EflowFlow = lazy(() => import('./pages/EflowFlow'))
 // VMAX 用户信息查询（CCA 投诉系统按号码查 IMSI/终端，2026-10-24）
-const VmaxUserQuery = lazy(() => import('./pages/VmaxUserQuery'))
+// 旧页 VmaxUserQuery（?page=vmax_user_query）已于 2026-11-26 收编进 VmaxUserCca：
+// 菜单下线，旧链接经下方别名跳到新页（CCA_NS.seedFrom='msisdn' 会带上号码）。
+// pages/VmaxUserQuery.tsx 暂留源码便于回滚，不再被引用。
 // VMAX 智能诊断工作台（Intelligent Diagnosis Workspace，2026-11-07）：投诉驱动单页叙事，与旧查询页并存
 const VmaxUserCca = lazy(() => import('./pages/VmaxUserCca'))
+// XDR 查询自检（自检页，挂在网络菜单 VMAX 智能诊断之后，?page=vmax_selftest）
+const VmaxSelfTest = lazy(() => import('./pages/VmaxSelfTest'))
 const IptPowerQuery = lazy(() => import('./pages/IptPowerQuery'))
 const SiteAvailability = lazy(() => import('./pages/SiteAvailability'))
 // 可用率多维矩阵：区域/制式/站点类型 × 日/周/月（读本机派生库 avail_recon.sqlite3）
@@ -234,9 +238,9 @@ const FINEBI_PAGE_TO_SLUG: Record<string, string> = Object.fromEntries(
   FINEBI_BOARDS.map((b) => [`finebi_${b.slug}`, b.slug]),
 )
 
-type PageKey = 'overview' | 'tables' | 'upload' | 'dashboard' | 'alarm' | 'ttwo' | 'v1_ttwo' | 'tt' | 'wo' | 'tt_state' | 'gis' | 'location' | 'realtime_alarm' | 'packet_loss' | 'archive' | 'sync' | 'warehouse' | 'sp_material' | 'sp_details' | 'sp_report' | 'com_report' | 'warehouse_summary' | 'ms_wo_sla' | 'ms_contract_kpi' | 'battery' | 'person' | 'settings' | 'ip_trace' | 'incident_overview' | 'nur' | 'ms_sla' | 'ms_nur_only' | 'ms_sla_only' | 'alarmManagement' | 'cxoDashboard' | 'vmaxCxoDashboard' | 'vmaxCxoDashboard_Daily' | 'vmaxCxoDashboard_90Days' | 'socTrendDashboard' | 'imonitor' | 'email_reports' | 'mwUmeTopology' | 'ipranTopo' | 'olibTopo' | 'olibTopo_v2' | 'nocTopology' | 'mwRealTime' | 'portalLogin' | 'eflow_qa' | 'eflow_flow' | 'site_avail' | 'avail_ms' | 'avail_flm' | 'avail_county' | 'fme_ranking' | 'noc_analyst' | 'repeat_site_down' | 'cr_analysis' | 'pm_analysis' | 'ran_cells_kpi' | 'ran_inventory' | 'bm_speedtest' | 'bm_meta' | 'bp_report' | 'cn_kpi' | 'cn_kpi_5mins' | 'cn_hourly_kpi' | 'cs_cn_kpi' | 'ps_cn_kpi' | 'cs_cn_kpi_15mins' | 'ps_cn_kpi_15mins' | 'ran_kpi_15mins' | 'ume_in_kpi' | 'vmax_user_query' | 'vmax_user_cca' | 'ipt_power' | 'feedback' | 'ap_center' | 'site_sync_ops' | 'prtg_links' | 'site_kpi_rt' | 'help' | `finebi_${string}`
+type PageKey = 'overview' | 'tables' | 'upload' | 'dashboard' | 'alarm' | 'ttwo' | 'v1_ttwo' | 'tt' | 'wo' | 'tt_state' | 'gis' | 'location' | 'realtime_alarm' | 'packet_loss' | 'archive' | 'sync' | 'warehouse' | 'sp_material' | 'sp_details' | 'sp_report' | 'com_report' | 'warehouse_summary' | 'ms_wo_sla' | 'ms_contract_kpi' | 'battery' | 'person' | 'settings' | 'ip_trace' | 'incident_overview' | 'nur' | 'ms_sla' | 'ms_nur_only' | 'ms_sla_only' | 'alarmManagement' | 'cxoDashboard' | 'vmaxCxoDashboard' | 'vmaxCxoDashboard_Daily' | 'vmaxCxoDashboard_90Days' | 'socTrendDashboard' | 'imonitor' | 'email_reports' | 'mwUmeTopology' | 'ipranTopo' | 'olibTopo' | 'olibTopo_v2' | 'nocTopology' | 'mwRealTime' | 'portalLogin' | 'eflow_qa' | 'eflow_flow' | 'site_avail' | 'avail_ms' | 'avail_flm' | 'avail_county' | 'fme_ranking' | 'noc_analyst' | 'repeat_site_down' | 'cr_analysis' | 'pm_analysis' | 'ran_cells_kpi' | 'ran_inventory' | 'bm_speedtest' | 'bm_meta' | 'bp_report' | 'cn_kpi' | 'cn_kpi_5mins' | 'cn_hourly_kpi' | 'cs_cn_kpi' | 'ps_cn_kpi' | 'cs_cn_kpi_15mins' | 'ps_cn_kpi_15mins' | 'ran_kpi_15mins' | 'ume_in_kpi' | 'vmax_user_cca' | 'vmax_selftest' | 'ipt_power' | 'feedback' | 'ap_center' | 'site_sync_ops' | 'prtg_links' | 'site_kpi_rt' | 'help' | `finebi_${string}`
 
-const VALID_PAGES: PageKey[] = ['overview', 'tables', 'upload', 'dashboard', 'alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'tt_state', 'gis', 'location', 'realtime_alarm', 'packet_loss', 'archive', 'sync', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary', 'ms_wo_sla', 'ms_contract_kpi', 'battery', 'person', 'settings', 'ip_trace', 'incident_overview', 'nur', 'ms_sla','ms_nur_only', 'ms_sla_only', 'alarmManagement', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'email_reports', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'portalLogin', 'eflow_qa', 'eflow_flow', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'ran_inventory', 'bm_speedtest', 'bm_meta', 'bp_report', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'cs_cn_kpi_15mins', 'ps_cn_kpi_15mins', 'ran_kpi_15mins', 'ume_in_kpi', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'feedback', 'ap_center', 'site_sync_ops', 'prtg_links', 'site_kpi_rt', 'help', ...FINEBI_BOARDS.map((b) => `finebi_${b.slug}` as PageKey)]
+const VALID_PAGES: PageKey[] = ['overview', 'tables', 'upload', 'dashboard', 'alarm', 'ttwo', 'v1_ttwo', 'tt', 'wo', 'tt_state', 'gis', 'location', 'realtime_alarm', 'packet_loss', 'archive', 'sync', 'warehouse', 'sp_material', 'sp_details', 'sp_report', 'com_report', 'warehouse_summary', 'ms_wo_sla', 'ms_contract_kpi', 'battery', 'person', 'settings', 'ip_trace', 'incident_overview', 'nur', 'ms_sla','ms_nur_only', 'ms_sla_only', 'alarmManagement', 'cxoDashboard', 'vmaxCxoDashboard', 'vmaxCxoDashboard_Daily', 'vmaxCxoDashboard_90Days', 'socTrendDashboard', 'imonitor', 'email_reports', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'nocTopology', 'mwRealTime', 'portalLogin', 'eflow_qa', 'eflow_flow', 'site_avail', 'avail_ms', 'avail_flm', 'avail_county', 'fme_ranking', 'noc_analyst', 'repeat_site_down', 'cr_analysis', 'pm_analysis', 'ran_cells_kpi', 'ran_inventory', 'bm_speedtest', 'bm_meta', 'bp_report', 'cn_kpi', 'cn_kpi_5mins', 'cn_hourly_kpi', 'cs_cn_kpi', 'ps_cn_kpi', 'cs_cn_kpi_15mins', 'ps_cn_kpi_15mins', 'ran_kpi_15mins', 'ume_in_kpi', 'vmax_user_cca', 'vmax_selftest', 'ipt_power', 'feedback', 'ap_center', 'site_sync_ops', 'prtg_links', 'site_kpi_rt', 'help', ...FINEBI_BOARDS.map((b) => `finebi_${b.slug}` as PageKey)]
 
 /* ==================== 自动刷新（大屏 / NOC 值班场景） ====================
  * 背景：各页面此前只在挂载时拉取一次数据（legacy iframe 页面同样只在 onload
@@ -343,7 +347,7 @@ const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {
   sync: 1800, eflow_qa: 1800, eflow_flow: 1800,
   // 数据同步操作台：一次性人工动作页，不靠顶栏定时刷新（内部有按需读取），取最松一档
   site_sync_ops: 1800,
-  vmax_user_query: 1800, vmax_user_cca: 1800, ipt_power: 1800, ip_trace: 1800,
+  vmax_user_cca: 1800, vmax_selftest: 1800, ipt_power: 1800, ip_trace: 1800,
   tables: 1800, upload: 1800, archive: 1800,
   settings: 1800, portalLogin: 1800, feedback: 1800, ap_center: 1800, help: 1800,
   // OLIB 光纤拓扑是纯静态参考图（PDF 提取 + 源级数据文件），不取接口、不写库；
@@ -592,8 +596,9 @@ const PAGE_META: Record<PageKey, { icon: ReactNode; labelKey: string }> = {
   cn_kpi_5mins: { icon: <FieldTimeOutlined />, labelKey: 'nav.cnKpi5mins' },
   cn_hourly_kpi: { icon: <FieldTimeOutlined />, labelKey: 'nav.cnHourlyKpi' },
   ume_in_kpi: { icon: <DotChartOutlined />, labelKey: 'nav.umeInKpi' },
-  vmax_user_query: { icon: <MobileOutlined />, labelKey: 'nav.vmaxUserQuery' },
   vmax_user_cca: { icon: <MobileOutlined />, labelKey: 'nav.vmaxUserCca' },
+  // 自检页，挂在网络菜单 VMAX 智能诊断之后
+  vmax_selftest: { icon: <MobileOutlined />, labelKey: 'nav.vmaxSelfTest' },
   ipt_power: { icon: <ThunderboltOutlined />, labelKey: 'nav.iptPower' },
   cxoDashboard: { icon: <PieChartOutlined />, labelKey: 'nav.cxoDashboard' },
   vmaxCxoDashboard: { icon: <DashboardOutlined />, labelKey: 'nav.vmaxCxoDashboard' },
@@ -660,7 +665,7 @@ const DEFAULT_GROUPS: { key: string; labelKey: string; items: PageKey[] }[] = [
   {
     key: 'grp_network',
     labelKey: 'nav.grp.network',
-    items: ['nocTopology', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'gis', 'location', 'realtime_alarm', 'person', 'packet_loss', 'prtg_links', 'site_kpi_rt', 'battery', 'ip_trace', 'vmax_user_query', 'vmax_user_cca', 'ipt_power', 'bm_speedtest', 'bm_meta', 'ran_inventory'],
+    items: ['nocTopology', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'gis', 'location', 'realtime_alarm', 'person', 'packet_loss', 'prtg_links', 'site_kpi_rt', 'battery', 'ip_trace', 'vmax_user_cca', 'vmax_selftest', 'ipt_power', 'bm_speedtest', 'bm_meta', 'ran_inventory'],
   },
   {
     key: 'grp_analysis',
@@ -842,10 +847,11 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState<PageKey>(() => {
     const p = new URLSearchParams(window.location.search).get('page')
     // 历史别名：?page=tt_q → eflow_qa（eFlow 知识库）
-    //           ?page=vmax_xdr_query → vmax_user_query（信令详单已于 2026-10-26
+    //           ?page=vmax_user_query / vmax_xdr_query → vmax_user_cca
+    //           （2026-11-26 旧查询页收编进智能诊断工作台；信令详单此前已于 2026-10-26
     //           并入该页的「信令详单」页签，旧链接与书签继续可用）
     const key = p === 'tt_q' ? 'eflow_qa'
-      : p === 'vmax_xdr_query' ? 'vmax_user_query'
+      : (p === 'vmax_xdr_query' || p === 'vmax_user_query') ? 'vmax_user_cca'
       : p
     return key && (VALID_PAGES as string[]).includes(key) ? (key as PageKey) : 'sync'
   })
@@ -1534,7 +1540,11 @@ function AppContent() {
     const onPopState = () => {
       // 布局模式同样以 URL 为真相源：后退/前进跨越 embed 与外壳两种状态时同步切换
       setEmbedMode(readEmbedMode())
-      const page = new URLSearchParams(window.location.search).get('page')
+      const p = new URLSearchParams(window.location.search).get('page')
+      // 与 useState 初值同一套历史别名，保证旧书签 / 前进后退落到新页
+      const page = p === 'tt_q' ? 'eflow_qa'
+        : (p === 'vmax_xdr_query' || p === 'vmax_user_query') ? 'vmax_user_cca'
+        : p
       if (page && (VALID_PAGES as string[]).includes(page)) setCurrentPage(page as PageKey)
     }
     window.addEventListener('popstate', onPopState)
@@ -1688,10 +1698,10 @@ function AppContent() {
         return <EflowQa />
       case 'eflow_flow':
         return <EflowFlow />
-      case 'vmax_user_query':
-        return <VmaxUserQuery />
       case 'vmax_user_cca':
         return <VmaxUserCca />
+      case 'vmax_selftest':
+        return <VmaxSelfTest />
       case 'ipt_power':
         return <IptPowerQuery />
       case 'nur':

@@ -2,18 +2,13 @@
 """VMAX 用户查询页的视图保活 + 条件恢复守卫（纯离线，只看源码文本）。
 
 为什么要有这个文件：
-    「概览 / 信令详单 / XDR 记录」三个视图最初用 `{view === 'xdr' && <Panel/>}`
-    条件渲染，切回概览时面板被 React 卸载，面板里的查询结果、已选表、时间窗、
-    分页（全在组件自己的 state 里）一并销毁 —— 用户实测「查完 XDR 回概览看一眼，
-    再回来数据就没了」。
+    视图最初用 `{view === 'xdr' && <Panel/>}` 条件渲染，切走时面板被 React 卸载，
+    查询结果一并销毁。修法是**四个视图默认全部挂载**、切走只 `display:none`
+    （并行取数也要求它们同时在跑，不再用 mounted 懒挂载开关）。
+    谁把条件渲染写回来，这里立刻失败。
 
-    修法是访问过即挂载、切走只 `display:none`。这类「看起来能省一次渲染」的
-    改法很容易被人手改回条件渲染，且改回去之后单测/构建都不会红，只能等用户
-    再报一次。所以把约束固化成文本断言：谁把条件渲染写回来，这里立刻失败。
-
-    第二部分守的是「URL 恢复」：组件 state 只活到卸载为止，刷新、浏览器前进
-    后退、把链接发给同事都会重新挂载，号码/窗口/视角因此必须落在 URL 里
-    （`src/urlState.ts`）。用 pushState 会污染后退栈，所以只允许 replaceState。
+    第二部分守的是「URL 恢复」：号码/视角落在 URL（`src/urlState.ts`），
+    只允许 replaceState。
 
 运行：
     cd D:/01_RPA/Task/my_app
@@ -47,39 +42,37 @@ def check(name, cond, detail=""):
 def main():
     src = PAGE.read_text(encoding="utf-8")
 
-    # 1) 重面板都由 mounted 门控（首次点开才挂载，避免概览首屏多打请求）
-    for key in ("flow", "xdr", "records"):
-        check("mounted.%s 门控存在" % key, ("{mounted.%s && (" % key) in src,
-              "缺少 `{mounted.%s && (`，面板可能又变回条件渲染" % key)
-
-    # 2) 切走用 display 隐藏，而不是不渲染
+    # 1) 四视图默认全部挂载（无 mounted 懒挂载）；切走用 display 隐藏
+    check("明确声明四视图默认全部挂载",
+          "四个视图**默认全部挂载**" in src or "四个视图默认全部挂载" in src,
+          "缺保活注释/约定，可能又变回按需挂载")
+    check("diagnosis 视图 display 切换",
+          re.search(r"display:\s*view === 'diagnosis' \? 'flex' : 'none'", src) is not None)
     check("flow 视图 display 切换",
           re.search(r"display:\s*view === 'flow' \? 'flex' : 'none'", src) is not None)
-    check("xdr 视图 display 切换",
-          re.search(r"display:\s*view === 'xdr' \? 'block' : 'none'", src) is not None)
-    check("records 视图 display 切换",
-          re.search(r"display:\s*view === 'records' \? 'block' : 'none'", src) is not None)
-    check("概览视图 display 切换",
-          re.search(r"display:\s*view === 'overview' \? 'flex' : 'none'", src) is not None)
+    check("connect 视图 display 切换",
+          re.search(r"display:\s*view === 'connect' \? 'block' : 'none'", src) is not None)
+    check("radio 视图 display 切换",
+          re.search(r"display:\s*view === 'radio' \? 'flex' : 'none'", src) is not None)
 
-    # 3) 反例：不再有直接按 view 短路渲染面板的写法
-    for key, comp in (("xdr", "VmaxXdrPanel"), ("records", "VmaxXdrRecordsPanel")):
+    # 2) 反例：不再有直接按 view 短路渲染面板的写法
+    for key, comp in (("connect", "VmaxXdrPanel"), ("radio", "VmaxXdrRecordsPanel"),
+                      ("xdr", "VmaxXdrPanel"), ("records", "VmaxXdrRecordsPanel")):
         bad = re.search(
             r"\{view === '%s' &&\s*\(?\s*(//[^\n]*\n\s*)*<%s" % (key, comp), src)
-        check("%s 未被条件渲染直接卸载" % comp, bad is None,
+        check("%s 未被 view=%s 条件渲染直接卸载" % (comp, key), bad is None,
               "出现 `{view === '%s' && < %s ...>`，切页签会丢数据" % (key, comp))
 
-    # 4) 视图切换必须走 switchView（它负责置 mounted 标记）
+    # 3) 分类流量独立；Segmented 切视图（四视图已常挂载，用 setView 即可）
     check("分类流量页签已独立（顶层 flow 视图）",
           "'flow'" in src and "VmaxFlowCategoryTabs" in src,
           "VmaxUserQuery 里没有 flow 视图，分类页签可能又被塞回概览")
     check("概览不再嵌流量卡（VmaxCcaCards 不收 flow）",
           "flow={result.flow}" not in src,
           "概览还在拼 flow={result.flow}，分类流量没真正独立")
-    # 4) 视图切换必须走 switchView（它负责置 mounted 标记）
-    check("Segmented 走 switchView", "onChange={(v) => switchView(" in src,
-          "切回 setView 会导致面板不挂载 / 挂载后不再保活")
-
+    check("Segmented 切视图",
+          "onChange={(v) => setView(" in src or "onChange={setView}" in src,
+          "页签切换必须更新 view，否则 display 保活失效")
     # ---- URL 恢复 ----
     check("urlState.ts 存在", URLSTATE.exists())
     if URLSTATE.exists():

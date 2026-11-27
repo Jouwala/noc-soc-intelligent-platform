@@ -99,9 +99,12 @@ export default function VmaxWorkspaceAnalysis({
           小区」的定位判据应先于原始明细。规则见 lib/vmaxCellCrossCheck.ts。 */}
       <VmaxCrossCheck radio={radio} cca={cca} onOpenEvidence={onOpenEvidence} />
 
-      <CardBase title={t('vmaxq.flowCard')}>
-        <VmaxFlowCategoryTabs flow={flowXdr} />
-      </CardBase>
+      {/* 锚点：证据入口里的「流量明细」直接滚到这里，不再另开抽屉放同一份数据 */}
+      <div id="vmax-ws-flow">
+        <CardBase title={t('vmaxq.flowCard')}>
+          <VmaxFlowCategoryTabs flow={flowXdr} />
+        </CardBase>
+      </div>
 
       <VmaxEvidenceTimeline rows={timeline} loading={loading} />
 

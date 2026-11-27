@@ -43,6 +43,10 @@ def check(name, cond, detail=""):
 
 
 def section(title):
+    # 列头 / IMSI 有进程内缓存（生产里用来省上游请求）。离线测试各段用的列头不同，
+    # 不清缓存会互相串台：前面段缓存的 1300 列头会污染后面段的断言。
+    vxc._header_cache.clear()
+    vxc._imsi_cache.clear()
     print("\n=== %s ===" % title)
 
 
@@ -220,6 +224,60 @@ def test_business_error():
         check("errMsg 透出（便于区分参数/权限问题）", "3100100303" in str(exc), str(exc))
 
 
+# ------------------------------------------- 4b. 合并表 3100100202 = 0 条（2026-11-26）
+def test_merge_no_data():
+    section("4b. 合并表无数据不再报错")
+    nodata = FakeResp(200, json.dumps({
+        "status": 1, "data": None,
+        "errMsg": "Query no data! operation code:3100100202, please contact the administrator!"}))
+    cca = FakeCca([nodata, _header_ok(["start_time"], ["Time"])])
+    try:
+        r = vxc.VmaxXdrClient(cca=cca).query("231773777115", "1300", *WINDOW)
+        check("3100100202 不抛异常", True)
+        check("records = 0", r["records"] == 0, str(r))
+        check("rows 为空", r["rows"] == [], str(r))
+        check("empty_reason = no_data", r.get("empty_reason") == "no_data", str(r))
+    except Exception as exc:                                        # noqa: BLE001
+        check("3100100202 不抛异常", False, str(exc))
+
+
+# ------------------------------------------- 4c. MSISDN -> IMSI 解析（2026-11-26）
+def test_resolve_imsi():
+    section("4c. RAN 手动查询的 IMSI 解析")
+    vxc._imsi_cache.clear()
+    c = vxc.VmaxXdrClient(cca=FakeCca([]))
+    calls = []
+
+    def fake_query_table(msisdn, sid, table, s, e, page=1, page_size=20, columns=None, imsi=None):
+        calls.append((sid, table))
+        if sid == "1300":
+            return {"rows": [{"imsi": ""}, {"imsi": "-"}]}
+        return {"rows": [{"imsi": "618070012345678"}]}
+
+    c.query_table = fake_query_table
+    v = c.resolve_imsi("231773777115", *WINDOW)
+    check("1300 无有效 IMSI 时回退到 1100", v == "618070012345678", v)
+    check("先查 1300 再查 1100", calls[:2] == [("1300", "fact_5gsa_psup_flow"),
+                                             ("1100", "fact_pscp_s1mme")], str(calls))
+    n = len(calls)
+    check("命中结果走缓存", c.resolve_imsi("231773777115", *WINDOW) == v and len(calls) == n)
+
+    vxc._imsi_cache.clear()
+    c.query_table = lambda *a, **k: {"rows": []}
+    check("都查不到返回空串（由调用方提示无 IMSI 映射）",
+          c.resolve_imsi("231770000000", *WINDOW) == "")
+
+
+# ------------------------------------------- 4d. 类型命名与表内容一致（2026-11-26）
+def test_service_names():
+    section("4d. 类型命名")
+    by_id = {s["id"]: s for s in vxc.XDR_SERVICES}
+    check("1100 是控制面（下挂 fact_pscp_* 表）", "控制面" in by_id["1100"]["name_zh"])
+    check("1300 是用户面（下挂 fact_5gsa_psup_* 表）", "用户面" in by_id["1300"]["name_zh"])
+    check("不再有名为「信令面」的类型",
+          all(s["name_zh"] != "信令面" for s in vxc.XDR_SERVICES))
+
+
 # ---------------------------------------------------------------- 5. 列头双层信封
 def test_header_envelope():
     section("5. 列头双层信封")
@@ -233,6 +291,8 @@ def test_header_envelope():
     check("result 内层 JSON 已解析出 header", r["header"] == ["Time", "MSISDN"])
 
     # 顶层直接是 dict（防御性：上游换形态时不崩）
+    # 同段内前面已取过 1300 列头，会命中进程内缓存，必须先清掉才能走到这个分支
+    vxc._header_cache.clear()
     alt = FakeCca([_merge_ok([]), FakeResp(200, json.dumps(
         {"field": ["x"], "header": ["X"]}))])
     r2 = vxc.VmaxXdrClient(cca=alt).query("231773777115", "1300", *WINDOW)
@@ -263,6 +323,9 @@ if __name__ == "__main__":
     test_ran_domain()
     test_row_binding()
     test_business_error()
+    test_merge_no_data()
+    test_resolve_imsi()
+    test_service_names()
     test_header_envelope()
     test_paging_bounds()
     print("\n总计: PASS=%d FAIL=%d" % (PASS, FAIL))

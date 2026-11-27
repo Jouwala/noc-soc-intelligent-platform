@@ -72,8 +72,8 @@
 | 42c | 站点 KPI 实时查询 | `site_kpi_rt` | React |
 | 43 | 电池看板 | `battery` | React |
 | 44 | IP 链路探测 | `ip_trace` | **iframe** |
-| 45 | VMAX 用户查询 | `vmax_user_query` | React |
-| 45b | CCA | `vmax_user_cca` | React |
+| 45 | VMAX 智能诊断 | `vmax_user_cca` | React |
+| 45b | XDR 查询自检 | `vmax_selftest` | React |
 | 52 | IPT 站点电源查询 | `ipt_power` | React |
 | 46 | Speedtest 基准报告 | `bm_speedtest` | React |
 | 47 | Meta 基准报告 | `bm_meta` | React |
@@ -5667,6 +5667,8 @@ eFlow 里 FE 处理完后大量 WO 停在 `WaitConfirm`（待 NOC 确认关闭�
 
 
 ## 35. VMAX 用户查询（`?page=vmax_user_query`，2026-10-24 新增；同日扩展时间窗 + 流量/小区）
+
+2026-11-26 起已下线，旧链接自动跳转到 ?page=vmax_user_cca（VMAX 智能诊断）。
 
 输入用户号码与时间窗，从 VMAX CCA 投诉系统查询用户、终端、流量与驻留小区信息。
 
