@@ -23,6 +23,17 @@
     smoke_result_<PR>_<sha7>.md      检查项 + 分阶段耗时 + 末行(RESULT: PASS / FAIL)
     smoke_pytest_<PR>_<sha7>.out     pytest 完整输出（若 -Pytest）
     smoke_<PR>_<sha7>_*.out/.err     start_all / stop_all / nginx -t / fe-build 日志
+    <项目>\TMP\smoke-logs\pr-<PR>-<sha7>\<stamp>\  start_all 与 portable-* 日志归档（#303）
+                                     每次冒烟一个时间戳目录，下一次运行不再覆盖上一次的失败现场
+
+  失败分类（#303，2026-11-26）：
+    报告在 RESULT 之前多一行 FAILURE_CLASS=<none|alembic-diverged|startup-timeout|start-all-timeout|start-all-error>
+    （smoke-local.ps1 按 ^FAILURE_CLASS= 读，与 TOTAL/RESULT 的先后无影响）。
+    alembic-diverged = 共享 pgdata 已到新版本、当前分支缺对应迁移文件，需 rebase；
+    startup-timeout  = 后端/PG/门户启动探测超时，属资源争用，已放宽窗口并空载重试一次。
+    判读集中在 ops\smoke\startup-failure.ps1（可用 -SelfTest 单测）。
+    该文件缺失时（例如基于旧 main 切出的在途分支）不拒绝运行，只是不做分类，
+    按旧行为一次判失败（#303 评审提醒：不能让在途 PR 因为缺文件就永远 exit 2）。
 
   退出码: 0 = 全部通过（含「仅已知 NUR 失败被忽略」）; 1 = 有失败项;
           2 = 预检拒绝（缺 02 标志，或 02 端口已被占用=可能别人正在冒烟），
@@ -74,6 +85,16 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $Root        = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $Tmp         = Join-Path $Root 'TMP'
 $Here        = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# 失败分类器（#303）：start_all 失败必须能区分「迁移链发散」与「启动探测超时」。
+# 该文件是 #303 新加的，基于旧 main 切出的在途分支里没有它 —— 那种分支不能因此
+# 被挡住（否则每个在途 PR 都要先 rebase 才能冒烟），所以缺失时只降级为「不分类」，
+# 按旧行为一次判失败，并在备注里写明原因。
+$FailureClassifier = Join-Path $Here 'startup-failure.ps1'
+$script:HaveClassifier = Test-Path -LiteralPath $FailureClassifier
+if ($script:HaveClassifier) {
+    . $FailureClassifier
+}
 
 # ⛔ 只允许在项目内冒烟副本里跑。缺这个标记说明当前树不是 provision 生成的
 # 副本（例如直接在生产 02 根、或旧的 D:\02_olbr_portal_smoke 上）——那会重建
@@ -391,6 +412,10 @@ $stages  = New-Object System.Collections.ArrayList
 $notes   = New-Object System.Collections.ArrayList
 $swTotal = [System.Diagnostics.Stopwatch]::StartNew()
 $startedAt = Get-Date
+# start_all 失败分类（#303）：'' = 未失败/已重试通过；其余值写进报告 FAILURE_CLASS。
+$script:StartAllClass = ''
+$script:StartAllDetail = ''
+$script:StartAllHint = ''
 
 function Add-R {
     param([string]$Name, [bool]$Ok, [string]$Detail)
@@ -848,6 +873,44 @@ $PytestOut  = Join-Path $Tmp ("smoke_pytest_{0}.out" -f $tag)
 $LogBase    = Join-Path $Tmp ("smoke_{0}" -f $tag)
 $pytestSummary = ''
 
+# ------------------------------------------------ 日志归档（#303）
+# 每次冒烟一个 pr-<PR>-<sha7>/<时间戳>/ 目录，把 start_all 与 portable-* 日志复制到
+# 项目根 TMP（副本 TMP 会被下一次冒烟覆盖，也会被 maintain-smoke-runner -Apply 清掉）。
+# 归档失败只提示，不改冒烟结论。
+$script:ArchiveDir = ''
+function Archive-SmokeArtifacts {
+    param([string]$Reason = 'run')
+    try {
+        if (-not $script:ArchiveDir) {
+            $base = Join-Path $ProjectRoot 'TMP\smoke-logs'
+            if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot 'TMP'))) {
+                $base = Join-Path $Tmp 'smoke-logs'
+            }
+            $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+            $script:ArchiveDir = Join-Path $base ("pr-{0}-{1}\{2}" -f $PR, $sha7, $stamp)
+        }
+        New-Item -ItemType Directory -Path $script:ArchiveDir -Force | Out-Null
+        # 每次归档一个子目录（attempt-1 / before-stop / final），重试前的失败现场不被覆盖。
+        $dest = Join-Path $script:ArchiveDir $Reason
+        New-Item -ItemType Directory -Path $dest -Force | Out-Null
+        $sources = @(
+            (Join-Path $Tmp 'portable-*'),
+            (Join-Path $Tmp ("smoke_{0}*" -f $tag)),
+            $ResultFile
+        )
+        $copied = 0
+        foreach ($pattern in $sources) {
+            foreach ($f in @(Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue)) {
+                Copy-Item -LiteralPath $f.FullName -Destination $dest -Force -ErrorAction Stop
+                $copied++
+            }
+        }
+        Write-Host ("[ARCHIVE] {0} -> {1}（{2} 个文件）" -f $Reason, $dest, $copied) -ForegroundColor DarkGray
+    } catch {
+        Write-Host "[ARCHIVE] 归档失败（不影响冒烟结论）：$($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
+}
+
 function Save-Result {
     param([string]$Verdict)
     $sb = New-Object System.Text.StringBuilder
@@ -856,6 +919,11 @@ function Save-Result {
     [void]$sb.AppendLine("- 根目录: $Root")
     [void]$sb.AppendLine("- HEAD(开始): $headFull")
     [void]$sb.AppendLine("- HEAD(结束): $(Get-Head)")
+    if ($script:StartAllClass) {
+        [void]$sb.AppendLine("- start_all 失败分类: $($script:StartAllClass)（$($script:StartAllDetail)）")
+        if ($script:StartAllHint) { [void]$sb.AppendLine("  - 处理建议: $($script:StartAllHint)") }
+    }
+    if ($script:ArchiveDir) { [void]$sb.AppendLine("- 日志归档: $($script:ArchiveDir)") }
     [void]$sb.AppendLine("- 开始: $($startedAt.ToString('yyyy-MM-dd HH:mm:ss'))  结束: $((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))")
     [void]$sb.AppendLine("- pytest: $(if ($Pytest) { "MY_APP_DB_MODE=sqlite -m 'not live' -n $PytestWorkers --dist $PytestDist" } else { '未跑（未传 -Pytest）' })")
     [void]$sb.AppendLine('')
@@ -878,9 +946,11 @@ function Save-Result {
     }
     $fail = @($results | Where-Object { $_.Result -eq 'FAIL' }).Count
     [void]$sb.AppendLine('')
+    [void]$sb.AppendLine("FAILURE_CLASS=$(if ($script:StartAllClass) { $script:StartAllClass } else { 'none' })")
     [void]$sb.AppendLine("TOTAL=$($results.Count) FAIL=$fail")
     [void]$sb.AppendLine("RESULT: $Verdict")
     [System.IO.File]::WriteAllText($ResultFile, $sb.ToString(), $Utf8NoBom)
+    Archive-SmokeArtifacts -Reason 'final'
 }
 
 # ============================================================ 0. 预检（不启动、不停止任何进程）
@@ -969,9 +1039,43 @@ try {
     # ======================================================== 2. start_all
     Start-Stage '2. start_all'
     $started = $true
-    $sr = Invoke-DeployScript -ScriptPath (Join-Path $Root 'ops\deploy\start_all.ps1') -OutFile "$LogBase`_start_all.out" -ErrFile "$LogBase`_start_all.err" -TimeoutSec 300
-    $startOk = ($sr.Code -eq 0) -and (-not $sr.TimedOut)
-    Add-R 'start_all.ps1 退出码为 0' $startOk ("exit=$($sr.Code) timedOut=$($sr.TimedOut) log=$LogBase`_start_all.out")
+    # 失败分类与重试（#303）：迁移链发散重跑无用；启动探测超时按验收允许空载重试一次。
+    # 总超时 600s 覆盖放宽后的探测窗口（PG 60 + 后端 150 + 前端 60 + 门户 60 + 迁移/nginx）。
+    $startAttempts = 0
+    $startOk = $false
+    $sr = $null
+    while ($startAttempts -lt 2) {
+        $startAttempts++
+        $sr = Invoke-DeployScript -ScriptPath (Join-Path $Root 'ops\deploy\start_all.ps1') -OutFile "$LogBase`_start_all.out" -ErrFile "$LogBase`_start_all.err" -TimeoutSec 600
+        $startOk = ($sr.Code -eq 0) -and (-not $sr.TimedOut)
+        if ($startOk) { break }
+        if (-not $script:HaveClassifier) {
+            # 旧分支没有 startup-failure.ps1：不分类、不重试，按旧行为一次判失败。
+            Archive-SmokeArtifacts -Reason ("start_all-attempt-{0}" -f $startAttempts)
+            Add-Note "本分支没有 ops\smoke\startup-failure.ps1（#303 新增），本次不做失败分类、也不空载重试；rebase 到含 #303 的 main 后才有分类与重试。"
+            break
+        }
+        $fc = Get-StartAllFailureClass -TmpDir $Tmp -LogBase $LogBase -TimedOut ([bool]$sr.TimedOut)
+        $script:StartAllClass = $fc.Class
+        $script:StartAllDetail = $fc.Detail
+        $script:StartAllHint = $fc.Hint
+        Archive-SmokeArtifacts -Reason ("start_all-attempt-{0}" -f $startAttempts)
+        # 只对超时类重试；缺 revision 与普通错误重跑结果一样，重试只会多等一轮。
+        if ($fc.Class -eq 'alembic-diverged' -or $fc.Class -eq 'start-all-error') { break }
+        if ($startAttempts -lt 2) {
+            Add-Note ("start_all 第 1 次失败（{0}）：{1}。先 stop_all 再空载重试一次" -f $fc.Class, $fc.Detail)
+            Invoke-DeployScript -ScriptPath (Join-Path $Root 'ops\deploy\stop_all.ps1') -OutFile "$LogBase`_start_all-retry-stop.out" -ErrFile "$LogBase`_start_all-retry-stop.err" -TimeoutSec 180 | Out-Null
+            Start-Sleep -Seconds 10
+        }
+    }
+    if ($startOk -and $startAttempts -gt 1) {
+        Add-Note ("start_all 第 1 次失败（{0}），空载重试第 {1} 次通过" -f $script:StartAllClass, $startAttempts)
+        $script:StartAllClass = ''; $script:StartAllDetail = ''; $script:StartAllHint = ''
+    }
+    if ($script:StartAllClass) {
+        Add-Note ("start_all 失败分类={0}：{1}。{2}" -f $script:StartAllClass, $script:StartAllDetail, $script:StartAllHint)
+    }
+    Add-R 'start_all.ps1 退出码为 0' $startOk ("exit=$($sr.Code) timedOut=$($sr.TimedOut) attempts=$startAttempts class=$(if ($script:StartAllClass) { $script:StartAllClass } else { 'none' }) log=$LogBase`_start_all.out")
 
     # ======================================================== 3. §8.2 数据（PG 已由 start_all 拉起；不单独 pg_ctl）
     Start-Stage '3. §8.2 数据'
