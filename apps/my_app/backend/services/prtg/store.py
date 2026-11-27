@@ -123,7 +123,10 @@ def upsert_sensors(sensors: Iterable[dict[str, Any]], now: datetime) -> int:
             "updated_at": now,
         }
         if "message" in s or "message_raw" in s:
-            row["last_message"] = strip_html(s.get("message_raw") or s.get("message")) or None
+            # 与 logs.prefer_message_text 一致：正文在 message，message_raw 常是 #M/#N 错误代码
+            row["last_message"] = (
+                strip_html(s.get("message")) or strip_html(s.get("message_raw")) or None
+            )
             row["last_message_at"] = now
             with_msg.append(row)
         else:

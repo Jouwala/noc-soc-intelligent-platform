@@ -38,6 +38,9 @@ def serial(dt: datetime) -> float:
     ("1,180 kbit/s", logs.REASON_VALUE),
     ("OK", logs.REASON_OTHER),
     ("", logs.REASON_OTHER),
+    ("#M11010", logs.REASON_ICMP_TIMEOUT),   # 代码图兜底（旧 bug 入库形态）
+    ("#N-2003", logs.REASON_SNMP_NO_RESPONSE),
+    ("#M11013", logs.REASON_ICMP_TIMEOUT),
 ])
 def test_classify_message(message, reason):
     assert logs.classify_message(message) == reason
@@ -77,6 +80,46 @@ def test_normalize_row_time_and_dedup():
     assert a["message"] == "No response (SNMP error # -2003)"
     assert a["dedup_key"] == b["dedup_key"]  # 采集时间不同也是同一行
     assert logs.normalize_row({"objid": 1, "datetime_raw": ""}, datetime(2026, 11, 26)) is None
+
+
+def test_normalize_prefers_message_over_code_and_keeps_legacy_dedup():
+    """PRTG 14 双字段：message=HTML 正文，message_raw=# 代码；分类用正文，去重用旧顺序。"""
+    import hashlib
+
+    dt = datetime(2026, 11, 2, 10, 30, 0)
+    ser = serial(dt)
+    icmp = {
+        "objid": 2724, "datetime_raw": ser, "parent": "AML TOKADEH1", "type": "Ping",
+        "name": "PING", "status": "Down", "status_raw": 5,
+        "message": '<div class="logmessage">Request timed out (ICMP error # 11010)'
+                   '<div class="moreicon"></div></div>',
+        "message_raw": "#M11010",
+    }
+    snmp = {
+        "objid": 2574, "datetime_raw": ser, "parent": "NEXUS", "type": "SNMP Traffic 64bit",
+        "name": "PEER", "status": "Down", "status_raw": 5,
+        "message": '<div class="logmessage">No response (check: firewalls) (SNMP error # -2003)'
+                   '<div class="moreicon"></div></div>',
+        "message_raw": "#N-2003",
+    }
+    value = {
+        "objid": 2724, "datetime_raw": ser + 0.001, "parent": "AML TOKADEH1", "type": "Ping",
+        "name": "PING", "status": "Up", "status_raw": 3,
+        "message": '<div class="logmessage">6 msec<div class="moreicon"></div></div>',
+        "message_raw": "6 msec",
+    }
+    ni = logs.normalize_row(icmp, datetime(2026, 11, 27))
+    ns = logs.normalize_row(snmp, datetime(2026, 11, 27))
+    nv = logs.normalize_row(value, datetime(2026, 11, 27))
+    assert ni["reason"] == logs.REASON_ICMP_TIMEOUT
+    assert ni["message"] == "Request timed out (ICMP error # 11010)"
+    assert ns["reason"] == logs.REASON_SNMP_NO_RESPONSE
+    assert "No response" in ns["message"]
+    assert nv["reason"] == logs.REASON_VALUE and nv["value_num"] == 6.0
+    # dedup_key 必须与旧公式字节一致：legacy = message_raw or message → "#M11010"
+    legacy = f"{2724}|{ser:.8f}|{5}|#M11010"
+    assert ni["dedup_key"] == hashlib.sha1(legacy.encode("utf-8")).hexdigest()
+    assert ni["dedup_key"] == logs.make_dedup_key(2724, ser, 5, "#M11010")
 
 
 # ---------------- 采集（内存 SQLite） ----------------
@@ -259,3 +302,104 @@ def test_links_fields_null_before_sync_then_counted(dash_session, monkeypatch):
     assert row["mttr_minutes_7d"] == 60.0
     noisy = dashboard.overview("24h")["top_noisy_device"]
     assert noisy["device_name"] == "AML TOKADEH1" and noisy["share_pct"] == 100.0
+
+
+def test_reingest_updates_legacy_code_row_in_place(db_session):
+    """旧 bug 入库 message='#M11010'；重采同 dedup 就地改正文/reason，不造重复行。"""
+    now = datetime(2026, 11, 27, 12, 0, 0)
+    dt = now - timedelta(hours=1)
+    ser = serial(dt)
+    # 模拟昨日错误入库
+    with db_session() as session:
+        session.add(PrtgLogMessage(
+            sensor_objid=2724, device_name="AML TOKADEH1", sensor_name="PING",
+            sensor_type="Ping", happened_at=dt, datetime_raw=ser,
+            status="Down", status_raw=5, message="#M11010", reason=logs.REASON_OTHER,
+            dedup_key=logs.make_dedup_key(2724, ser, 5, "#M11010"),
+            collected_at=now - timedelta(days=1),
+        ))
+        session.commit()
+    assert _count(db_session) == 1
+
+    prtg_row = {
+        "objid": 2724, "datetime_raw": ser, "parent": "AML TOKADEH1", "type": "Ping",
+        "name": "PING", "status": "Down", "status_raw": 5,
+        "message": '<div class="logmessage">Request timed out (ICMP error # 11010)'
+                   '<div class="moreicon"></div></div>',
+        "message_raw": "#M11010",
+    }
+    summary = logs.sync_messages(FakeMessagesClient([prtg_row]), now, page_size=10)
+    assert summary["inserted"] == 0
+    assert summary["updated"] == 1
+    assert _count(db_session) == 1
+    with db_session() as session:
+        row = session.execute(select(PrtgLogMessage)).scalar_one()
+        assert row.message == "Request timed out (ICMP error # 11010)"
+        assert row.reason == logs.REASON_ICMP_TIMEOUT
+
+
+def test_full_resync_ignores_cursor(db_session):
+    base = datetime(2026, 11, 26, 8, 0, 0)
+    rows = [_msg(i, base - timedelta(minutes=30 * i)) for i in range(9)]
+    logs.sync_messages(FakeMessagesClient(rows), base, page_size=3)
+    assert _count(db_session) == 9
+
+    # 增量：首页最老已早于游标 → 立刻 cursor 停；全量必须翻完所有页
+    incr = FakeMessagesClient(rows)
+    assert logs.sync_messages(incr, base + timedelta(minutes=6), page_size=3)["stop"] == "cursor"
+    assert incr.calls == [0]
+
+    client = FakeMessagesClient(rows)
+    summary = logs.sync_messages(client, base + timedelta(minutes=6), page_size=3, full=True)
+    assert summary["full"] == 1
+    assert summary["stop"] == "empty"  # 9 行刚好 3 整页，下一页空
+    assert summary["inserted"] == 0
+    assert summary["updated"] == 9
+    assert client.calls == [0, 3, 6, 9]  # 比增量多翻，忽略游标
+    assert _count(db_session) == 9
+
+
+def test_reclassify_legacy_codes_fixes_stored_codes(db_session):
+    now = datetime(2026, 11, 27)
+    with db_session() as session:
+        session.add(PrtgLogMessage(
+            sensor_objid=1, device_name="D", sensor_name="P", sensor_type="Ping",
+            happened_at=now, message="#M11010", reason=logs.REASON_OTHER,
+            dedup_key="a", collected_at=now,
+        ))
+        session.add(PrtgLogMessage(
+            sensor_objid=2, device_name="D", sensor_name="S", sensor_type="SNMP",
+            happened_at=now, message="#N-2003", reason=logs.REASON_OTHER,
+            dedup_key="b", collected_at=now,
+        ))
+        session.add(PrtgLogMessage(
+            sensor_objid=3, device_name="D", sensor_name="X", sensor_type="Ping",
+            happened_at=now, message="OK", reason=logs.REASON_OTHER,
+            dedup_key="c", collected_at=now,
+        ))
+        session.commit()
+    summary = logs.reclassify_legacy_codes(now)
+    assert summary["updated"] == 2
+    assert summary["by_code"]["#M11010"] == 1
+    assert summary["by_code"]["#N-2003"] == 1
+    with db_session() as session:
+        by_msg = {r.message: r.reason for r in session.execute(select(PrtgLogMessage)).scalars()}
+    assert by_msg["#M11010"] == logs.REASON_ICMP_TIMEOUT
+    assert by_msg["#N-2003"] == logs.REASON_SNMP_NO_RESPONSE
+    assert by_msg["OK"] == logs.REASON_OTHER  # 未改
+
+
+def test_upsert_sensors_prefers_message_over_message_raw(db_session):
+    now = datetime(2026, 11, 27, 10, 0, 0)
+    store.upsert_sensors([{
+        "objid": 2724, "group": "G", "device": "D", "sensor": "PING",
+        "type": "Ping", "status": "Down", "status_raw": 5,
+        "message": '<div class="logmessage">Request timed out (ICMP error # 11010)'
+                   '<div class="moreicon"></div></div>',
+        "message_raw": "#M11010",
+    }], now)
+    from backend.models.prtg_collector import PrtgSensor
+    with db_session() as session:
+        ping = session.execute(select(PrtgSensor).where(PrtgSensor.objid == 2724)).scalar_one()
+        assert ping.last_message == "Request timed out (ICMP error # 11010)"
+        assert "#M11010" not in (ping.last_message or "")

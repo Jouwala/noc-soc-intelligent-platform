@@ -198,7 +198,8 @@ class PrtgCollector:
             if changed and sensor_id in previous:
                 # 事件说明带上 PRTG 原因（P0-2），例：
                 # "PRTG 状态 Up → Unusual：1 day interval average of … is unusually low for this weekday"
-                reason = strip_html(sensor.get("message_raw") or sensor.get("message"))
+                # 与 logs.prefer_message_text 一致：优先 HTML 正文，勿把 #M11010 等代码当原因
+                reason = strip_html(sensor.get("message")) or strip_html(sensor.get("message_raw"))
                 text = f"PRTG 状态 {previous.get(sensor_id)} → {status}"
                 if reason and reason.upper() != "OK":
                     text = f"{text}：{reason}"

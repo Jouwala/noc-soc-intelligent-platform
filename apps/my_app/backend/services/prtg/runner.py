@@ -43,6 +43,7 @@ def run_forever(collector: PrtgCollector, stop_event: threading.Event | None = N
     # PRTG_MESSAGES_SYNC_ENABLED 来自 backend/.env（进程启动加载）；这里只读一次，
     # 改环境变量后必须重启 backend 才生效，不做热切换。
     messages_on = logs.sync_enabled()
+    messages_first_full = True  # 进程首跑全量翻页 + 代码图回填，修复旧 message_raw 误入库
     logger.info("PRTG 采集循环启动：每 %s 秒轮询", collector.settings.poll_seconds)
     while not stop.is_set():
         tick = time.monotonic()
@@ -71,8 +72,18 @@ def run_forever(collector: PrtgCollector, stop_event: threading.Event | None = N
                 next_sla = tick + SLA_INTERVAL_SECONDS
             if messages_on and tick >= next_messages:
                 # 两步各自记状态：日志拉取失败时不合并（避免用残缺日志覆盖事件），合并失败不影响日志
-                _safe(collector, "messages",
-                      lambda: logs.sync_messages(collector._get_client(), collector.now()))
+                # 首跑 full=True：忽略游标、就地更新正文/reason；随后 reclassify 修滚动窗外的 # 代码行
+                do_full = messages_first_full
+                _safe(
+                    collector, "messages",
+                    lambda full=do_full: logs.sync_messages(
+                        collector._get_client(), collector.now(), full=full,
+                    ),
+                )
+                if do_full and (store.get_state("messages") or {}).get("status") == "ok":
+                    _safe(collector, "messages",
+                          lambda: logs.reclassify_legacy_codes(collector.now()))
+                    messages_first_full = False
                 if (store.get_state("messages") or {}).get("status") == "ok":
                     _safe(collector, "incidents", lambda: incidents.correlate(collector.now()))
                 next_messages = tick + logs.MESSAGES_INTERVAL_SECONDS
