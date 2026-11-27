@@ -122,6 +122,11 @@ powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-wa
   副本并提示后重跑；worktree 里拒绝注册）。`provision-smoke-runner.ps1 -Apply -InstallTask`
   也会一并注册。
   日志 `TMP\smoke-maintenance.log`。
+- `muse-job-runner.ps1`：MSNOC1 文件任务队列的执行器（2026-11-27 新增，见 `docs/workspace/muse-job-queue.md`）。
+  每 60 秒由计划任务触发一次，认领 `D:\02_olbr_portal\TMP\muse-jobs\inbox\` 里的任务文件并执行；
+  v1 只接两类任务：`smoke-rerun`（重跑指定 PR 的冒烟）和 `restart-smoke-services`（只重启冒烟副本的服务，
+  生产重启不在 v1 范围内）。认领靠改名原子操作，超时默认 1800 秒；结果与审计写回 `results/` 与
+  `audit.log`，各保留最近 100 条。注册计划任务的命令见 `docs/workspace/muse-job-queue.md`。
 - `smoke-reload-watcher.ps1`：改 `smoke-watcher.ps1` 后停旧进程并
   `install-smoke-watcher.ps1 -Start`（避免计划任务 IgnoreNew 仍跑旧代码）。
 
