@@ -234,8 +234,13 @@ def test_xdr_query_listed_user_reaches_upstream(client_env, guard_env, monkeypat
     guard_env["user"] = {"username": "admin", "role": "user"}
 
     class _FakeClient:
-        def query(self, msisdn, service_type, start, end, page=1, page_size=20):
+        # 桩要跟真实客户端同签名：#304 起 query 多了 imsi（RAN 域按 IMSI 查，
+        # 见 backend/routers/vmax_xdr_query.py 与 vmax_xdr_client.query）。
+        def query(self, msisdn, service_type, start, end, page=1, page_size=20, imsi=None):
             return {"field": [], "rows": [], "records": 0}
+
+        def resolve_imsi(self, msisdn, start, end):
+            return ""
 
     monkeypatch.setattr(xdr_router, "get_xdr_client", lambda: _FakeClient())
     resp = client_env.get("/api/vmax-xdr-query", params={"msisdn": "231777123456"})
@@ -248,8 +253,11 @@ def test_xdr_records_listed_user_reaches_upstream(client_env, guard_env, monkeyp
 
     class _FakeClient:
         def query_table(self, msisdn, service_type, table, start, end,
-                        page=1, page_size=20):
+                        page=1, page_size=20, imsi=None):
             return {"table": table, "rows": [], "records": 0}
+
+        def resolve_imsi(self, msisdn, start, end):
+            return ""
 
     monkeypatch.setattr(records_router, "get_xdr_client", lambda: _FakeClient())
     # 审计写库与守卫无关（本用例只验证守卫放行），桩掉避免碰真实连接
