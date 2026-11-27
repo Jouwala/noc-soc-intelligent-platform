@@ -718,6 +718,7 @@ export default function EflowFlow() {
       {/* ① 查询条：按单查询 / 多条件模拟 */}
       <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
         <Segmented
+          className="wh-seg"
           value={mode}
           onChange={(v) => setMode(v as 'query' | 'simulate')}
           options={[
@@ -1096,6 +1097,7 @@ export default function EflowFlow() {
               <Space size={8} wrap>
                 {matchAvailable && (
                   <Segmented
+                    className="wh-seg"
                     size="small"
                     value={effectiveScope}
                     onChange={(v) => setRuleScope(v as 'related' | 'all')}

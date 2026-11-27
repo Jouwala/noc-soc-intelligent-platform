@@ -477,6 +477,51 @@ def test_component_counts_in_component_api():
     )
 
 
+def test_page_view_switches_use_unified_style():
+    """页面级分段开关（4G/5G、Day/Week 这类页签）必须挂 `.wh-seg`。
+
+    2026-11-27 用户反馈 `site_kpi_rt` 的「4G 小区级 / 5G 小区级」与
+    `vmaxCxoDashboard_90Days` 的 Day/Week 页签观感不一致。根因不是有人故意另写一套，
+    而是「页面级分段开关统一加 className="wh-seg"」这条约定只写在
+    `frontend/src/index.css` 的 `.wh-seg` 注释里 —— 写页面的人看不到，
+    于是 37 个 `<Segmented>` 里有 11 个漏了。这里把它变成守卫：
+      - 扫描 `pages/**/*.tsx` 与 `components/**/*.tsx`；
+      - 每个 `<Segmented>` 元素（标签行起 8 行内）必须出现 `wh-seg`；
+      - 表单里的微型二选一（不是页签）允许在元素前一行写
+        `{/* wh-seg-exempt: <原因> */}` 显式豁免，必须带原因，不接受裸豁免。
+    """
+    def offenders(rel: str) -> list[str]:
+        path = ROOT / rel
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        out = []
+        for i, line in enumerate(lines):
+            if "<Segmented" not in line:
+                continue
+            window = "\n".join(lines[i:i + 8])
+            if "wh-seg" in window:
+                continue
+            prev = lines[i - 1] if i else ""
+            if "wh-seg-exempt" in prev:
+                continue
+            out.append(f"{rel}:{i + 1}")
+        return out
+
+    bad: list[str] = []
+    for rel_dir, pattern in (
+        ("frontend/src/pages", "**/*.tsx"),
+        ("frontend/src/components", "**/*.tsx"),
+    ):
+        for p in sorted((ROOT / rel_dir).glob(pattern)):
+            rel = str(p.relative_to(ROOT)).replace("\\", "/")
+            bad.extend(offenders(rel))
+
+    assert not bad, (
+        "这些分段开关没挂 .wh-seg（页面级页签的统一观感），也没写 wh-seg-exempt 豁免：\n  "
+        + "\n  ".join(bad)
+        + "\n约定见 index.css 的 .wh-seg 注释与 docs/manual/16-new-page-guide.md 3.4e。"
+    )
+
+
 def test_credential_group_count_in_security_doc():
     """05-security-and-credentials.md 写的凭据分组数必须等于 credential_store 的实际条数。
 
@@ -645,6 +690,7 @@ CHECKS = [
     test_help_content_retention_days_matches_code,
     test_credential_group_count_in_security_doc,
     test_component_counts_in_component_api,
+    test_page_view_switches_use_unified_style,
     test_file_sizes_in_agents_md_are_approximately_right,
     test_every_page_has_refresh_setting,
     test_pg_freshness_covers_pushdown_tables,

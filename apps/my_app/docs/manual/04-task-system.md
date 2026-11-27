@@ -143,7 +143,7 @@ APScheduler 到点 (backend 进程内)
 > `ctypes.wintypes` 直接失败，且要求整套后端运行环境（apscheduler / sqlalchemy），
 > 那样就进不了 CI 了。
 >
-> **17 个用例**：
+> **18 个用例**：
 > 1. 文档里的「N 个定时任务」= `TASK_SPECS` 条数（5 个文件逐个核对）；
 > 2. `04-task-system.md` 的全量任务清单表 = `TASK_SPECS` 的每个 `task_id`；
 > 3. 分组表里的每组任务数 = `GROUP_TASK_MAP` 的实际条数；
@@ -161,6 +161,7 @@ APScheduler 到点 (backend 进程内)
 > 15. `AGENTS.md` 里标的关键文件体积与磁盘实际值相符（容差 ±25%）；
 > 16. **每个页面都有按页刷新设置**（2026-11-04 新增的项目硬要求）：`PAGE_META` 里每个自研页面都必须在 `App.tsx` 的 `AR_PAGE_DEFAULTS` 登记建议间隔、间隔必须是 `AR_OPTIONS` 档位，且不得再出现按页禁用刷新控件的白名单（细则见 `AGENTS.md` 三.3d 与 `16-new-page-guide.md` 3.4d）。
 > 17. **看板下推的每张表都要有本机 PG 巡检，且回看天数与看板默认窗口同档**（2026-11-05 新增）：`dashboard_service.PUSH_DOWN_TABLES` ⊆ `pg_schema_freshness.PG_SCHEMA_CHECKS[].tables`、`lookback_days` == `PUSH_DOWN_DAYS`，并且 `dashboard_service` 仍在输出 `meta.coverage`、`NativeBoard` 仍常驻渲染缺档告警。背景：IP RAN 看板 11-04 改读本机 PG，而镜像只追头部水位，「近 31 天只有 10 天有数」这种洞当时**任何巡检都查不到**（远端一直绿、判据只问最新时间），见 `backend/services/db/pg_schema_freshness.md`。
+18. **页面级分段开关统一走 `.wh-seg`**（2026-11-27 新增）：`pages/**/*.tsx` 与 `components/**/*.tsx` 里每个 `<Segmented>` 都必须带 `className="wh-seg"`，表单里的微型二选一允许用 `{/* wh-seg-exempt: <原因> */}` 显式豁免。背景：用户反馈 `site_kpi_rt` 的「4G/5G 小区级」与 `vmaxCxoDashboard_90Days` 的 Day/Week 页签观感不一致 —— 约定只写在 `index.css` 的 `.wh-seg` 注释里，37 个 `<Segmented>` 漏了 11 个。细则见 `16-new-page-guide.md` 3.4e。
 >
 > **三道防线，同一份代码，不规则分叉**：
 >

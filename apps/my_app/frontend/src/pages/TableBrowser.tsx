@@ -1252,6 +1252,7 @@ function ColumnFilterHeader({ col, table, active, onApply, onClear, onHide }: {
         {t('table.colFilterPanelTitle', { col })}
       </div>
       <Segmented
+        className="wh-seg"
         size="small"
         block
         value={mode}

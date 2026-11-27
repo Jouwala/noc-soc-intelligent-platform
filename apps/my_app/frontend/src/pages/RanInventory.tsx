@@ -210,6 +210,7 @@ export default function RanInventory() {
             <Text style={{ fontSize: 12 }}>{t('ranInv.oldOnly')} ({c?.old_ne ?? 0})</Text>
           </Space>
           <Segmented
+            className="wh-seg"
             value={view}
             onChange={v => setView(v as View)}
             options={[
@@ -219,6 +220,7 @@ export default function RanInventory() {
           />
           {view === 'models' && (
             <Segmented
+              className="wh-seg"
               value={cat}
               onChange={v => setCat(v as 'ALL' | ModelCat)}
               options={[

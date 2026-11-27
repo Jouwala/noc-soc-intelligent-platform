@@ -2411,6 +2411,71 @@ body .leaflet-container,
   padding: 0 14px;
 }
 
+/* ---------- 内容页签（antd Tabs）统一成 .wh-seg 的胶囊观感 ----------
+ * 背景（2026-11-27）：用户要求「所有页面的页签统一」。项目里页签原本有两条路径：
+ *   ① 视图切换 —— <Segmented className="wh-seg">（上一节，实心胶囊）；
+ *   ② 内容分区 —— <Tabs>（默认下划线，只靠 ConfigProvider token 换颜色）。
+ * 两条路径观感一直不同（下划线 vs 实心胶囊），用户翻 settings / ttwo 等 14 个
+ * 页面时直接判定「页签没改」。这里把 Tabs 的下划线导航改造成与 .wh-seg 同款的
+ * 胶囊轨道，**只改观感、不改行为**（懒加载 / 键盘 / 滚动按钮全部保留）。
+ *   - 轨道：玻璃底 + --wh-glass-border-strong 描边 + 3px 内边距，与 .wh-seg 一致；
+ *   - 未选中：正文色 + 600 字重，hover 品牌青 + 淡青底；
+ *   - 选中：实心品牌青 + --wh-on-accent 字色 + 700 字重，隐藏 ink bar；
+ *   - size="small" 收一档内边距，size="large" 放一档，与 antd 的尺寸语义一致。
+ * 颜色全部走 --wh-* 令牌，深浅主题自动跟随。 */
+.ant-tabs > .ant-tabs-nav::before {
+  display: none;
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-nav-list {
+  gap: 3px;
+  padding: 3px;
+  background: var(--wh-glass-control);
+  border: 1px solid var(--wh-glass-border-strong);
+  border-radius: var(--wh-radius-md);
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-tab {
+  margin: 0 !important;
+  padding: 0 12px !important;
+  border-radius: 6px;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-tab .ant-tabs-tab-btn {
+  color: var(--wh-text);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  line-height: 22px;
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-tab:not(.ant-tabs-tab-active):not(.ant-tabs-tab-disabled):hover {
+  background: var(--wh-teal-27);
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-tab:not(.ant-tabs-tab-active):not(.ant-tabs-tab-disabled):hover .ant-tabs-tab-btn {
+  color: var(--wh-teal);
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active {
+  background: var(--wh-teal);
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--wh-on-accent) !important;
+  font-weight: 700;
+}
+.ant-tabs > .ant-tabs-nav .ant-tabs-ink-bar {
+  display: none;
+}
+.ant-tabs-small > .ant-tabs-nav .ant-tabs-tab {
+  padding: 0 10px !important;
+}
+.ant-tabs-small > .ant-tabs-nav .ant-tabs-tab .ant-tabs-tab-btn {
+  font-size: 0.75rem;
+  line-height: 18px;
+}
+.ant-tabs-large > .ant-tabs-nav .ant-tabs-tab {
+  padding: 0 14px !important;
+}
+.ant-tabs-large > .ant-tabs-nav .ant-tabs-tab .ant-tabs-tab-btn {
+  font-size: 0.875rem;
+  line-height: 24px;
+}
+
 /* ---------- 移动端侧栏抽屉遮罩：点击任意处收起 ---------- *
  * 遮罩压在 Header 之下（inset 从 --wh-header-height 起），顶栏汉堡按钮仍可点，
  * 因此关闭抽屉有「点遮罩 / 点 X / 按 Esc」三条路径。 */

@@ -224,6 +224,40 @@ const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {
 `AR_BOARD_PAGES` 或 `disabled={!arIsBoard` 这类按页禁用。`finebi_*` 原生看板由 `FINEBI_BOARDS`
 动态注入，统一落全局建议 `AR_PAGE_DEFAULT_SEC`，不在逐页登记要求内。
 
+### 3.4e 页签 / 分段开关：一律 `className="wh-seg"`（有守卫）
+
+页面里的「视图切换」——`4G 小区级 / 5G 小区级`、`Day / Week / Month`、`汇总 / 明细` 这类
+用一个控件在几种视图间切换的页签 —— **统一用 antd `<Segmented>` 并加 `className="wh-seg"`**：
+
+```tsx
+// ✅ 页面级视图切换：统一观感（选中态 = 实心品牌青，未选中 = 正文色 + 600 字重）
+<Segmented className="wh-seg" value={view} onChange={setView} options={...} />
+
+// ✅ 区块主控（三档语义固定、作用于一整页的粒度开关）：再叠一档更宽的字距
+<Segmented className="wh-seg wh-gran-switch" value={tech} onChange={setTech} options={...} />
+
+// ✅ 表单里的微型二选一（不是页签）：显式写豁免 + 原因，守卫才放行
+{/* wh-seg-exempt: 列筛选面板里的操作符是表单控件，不是页签 */}
+<Segmented size="small" value={op} onChange={setOp} options={...} />
+```
+
+- **观感来源**：`frontend/src/index.css` 的 `.wh-seg` 段（2026-10-18 定的「全站同类分段开关统一处理」：
+  未选中项正文色 + 600 字重、hover 品牌青 + 淡青底、选中项实心品牌青 + `--wh-on-accent` 字色）。
+  `size="small"` 有单独的收窄档，筛选条里与 small 按钮并排时用它。
+- **为什么要写在这一节**：这条约定 2026-10-18 只写进了 `index.css` 的注释，写页面的人看不到 ——
+  2026-11-27 用户反馈 `site_kpi_rt` 的「4G/5G 小区级」与 `vmaxCxoDashboard_90Days` 的 Day/Week
+  页签观感不一致，一查 37 个 `<Segmented>` 里漏了 11 个。
+- **现在有机器守卫**：`tests/test_doc_consistency.py::test_page_view_switches_use_unified_style`
+  扫描 `pages/**/*.tsx` 与 `components/**/*.tsx`，每个 `<Segmented>` 不带 `wh-seg` 又没写
+  `wh-seg-exempt` 豁免就失败（本地钩子 + CI 都会拦）。
+- **内容页签 `<Tabs>` 不用逐页改**：2026-11-27 起 `index.css` 把 antd Tabs 的下划线
+  导航全局改造成与 `.wh-seg` 同款的胶囊（轨道玻璃底 + 品牌青描边、选中实心青 + on-accent 字色、
+  隐藏 ink bar），行为不变（懒加载 / 键盘 / 滚动按钮都保留）。所以「内容分区」直接用 `<Tabs>`，
+  「视图切换」用 `<Segmented className="wh-seg">`，两者观感一致、各司其职。
+- **legacy 静态页**（`public/*.html`，iframe 页）用共享基线的 `.wht`：页签条容器加 `class="wht"`，
+  直接子元素自动成为页签项，选中态沿用 `.active` / `.on` / `[aria-selected="true"]`。
+  见 `public/legacy-glass-baseline.css` 顶部说明，别在页面里另写一套。
+
 ### 3.5 其他
 
 | 项 | 约定 |

@@ -319,6 +319,7 @@ export default function NetworkTopologyV2() {
           >
             <div className="olibv2-toolbar">
               <Segmented
+                className="wh-seg"
                 size="small"
                 value={mode}
                 onChange={(v) => setMode(v as GeoViewMode)}

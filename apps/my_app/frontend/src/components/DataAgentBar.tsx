@@ -200,6 +200,7 @@ export default function DataAgentBar() {
         {/* 模式切换：手动模式不碰 AI，故 provider/key/模型整组在手动模式下隐藏 ——
             留着会让人以为「不填 key 也能跑 AI」，也会让手动模式看起来仍然依赖 AI。 */}
         <Segmented
+          className="wh-seg"
           value={mode}
           onChange={(v) => {
             setMode(v as Mode)

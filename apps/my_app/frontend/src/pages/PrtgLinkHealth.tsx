@@ -365,6 +365,7 @@ export default function PrtgLinkHealth() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)' }}>
         <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
           <Segmented
+            className="wh-seg"
             value={view}
             onChange={v => setView(v as 'health' | 'sla')}
             options={[
@@ -383,6 +384,7 @@ export default function PrtgLinkHealth() {
 
       <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
         <Segmented
+          className="wh-seg"
           value={view}
           onChange={v => setView(v as 'health' | 'sla')}
           options={[
@@ -397,6 +399,7 @@ export default function PrtgLinkHealth() {
         <Space wrap>
           <Text type="secondary">{t('prtg.window.label')}</Text>
           <Segmented
+            className="wh-seg"
             value={windowKey}
             onChange={v => setWindowKey(v as PrtgWindow)}
             options={PRTG_WINDOWS.map(w => ({ value: w, label: t(windowLabelKey(w)) }))}
