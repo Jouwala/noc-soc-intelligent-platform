@@ -2226,14 +2226,8 @@ function AppContent() {
             height: 'var(--wh-header-height)',
             flexShrink: 0,
           }}>
-            {/* 背景网格纹理：颜色由 --wh-grid-line 提供，深浅主题各取一个强度 */}
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundImage: 'linear-gradient(var(--wh-grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--wh-grid-line) 1px, transparent 1px)',
-              backgroundSize: '1.5rem 1.5rem',
-              pointerEvents: 'none',
-            }} />
+            {/* 2026-11-27：原来这里铺了一层 1.5rem 的方格纹理（--wh-grid-line），
+                用户要求去掉，已整体删除；顶栏背景现在就是纯玻璃底。 */}
 
             {/* 汉堡按钮：侧边栏默认隐藏，点击展开/收起。
                 siderLocked（iframe 内嵌 / 非 admin）时**不渲染** —— 用户要求
@@ -2254,8 +2248,8 @@ function AppContent() {
                 top: '50%',
                 transform: 'translateY(-50%)',
                 zIndex: 10,
-                width: isMobile ? '2.75rem' : '2.25rem',
-                height: isMobile ? '2.75rem' : '2.25rem',
+                width: isMobile ? '2rem' : '2.25rem',
+                height: isMobile ? '2rem' : '2.25rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -2282,10 +2276,18 @@ function AppContent() {
                 textAlign: 'center',
                 position: 'relative',
                 zIndex: 1,
-                // 凹槽页：槽占满顶栏高度，让标题在凹槽里垂直居中；
-                // 其余页面维持原来的「标题 + 发光线」自然高度，不动既有观感。
+                // 凹槽页：槽占满顶栏高度，并把上下留白让给「外翻弧 + 槽底间隙」，
+                // 这样标题是在凹槽「槽体」里垂直居中，而不是在整个顶栏里居中
+                // （顶栏减到 2/3 后两者会差出 ~5px，标题会顶到开口里）。
                 ...(currentPage === 'site_kpi_rt'
-                  ? { height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+                  ? {
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingTop: '0.7rem',
+                      paddingBottom: '3px',
+                    }
                   : {}),
               }}
             >
@@ -2298,7 +2300,7 @@ function AppContent() {
                 style={{
                   margin: 0,
                   fontSize: currentPage === 'site_kpi_rt'
-                    ? (isMobile ? '0.9375rem' : '1.125rem')
+                    ? (isMobile ? '0.9375rem' : '0.9rem')
                     : (isMobile ? '1.125rem' : '1.375rem'),
                   fontWeight: 700,
                   color: WH.teal,
@@ -2312,15 +2314,10 @@ function AppContent() {
                 }}
               >
                 {currentPage === 'site_kpi_rt' ? (
-                  <>
-                    {/* 页面图标与标题一起放进凹槽 */}
-                    <span className="wh-header-title-notch-icon" aria-hidden="true">
-                      {PAGE_META[currentPage].icon}
-                    </span>
-                    <span className="wh-header-title-notch-label">
-                      {flatMenuItems.find(m => m.key === currentPage)?.label || t('nav.overview')}
-                    </span>
-                  </>
+                  /* 2026-11-27：凹槽里只留标题文字，页面时钟图标按用户要求去掉 */
+                  <span className="wh-header-title-notch-label">
+                    {flatMenuItems.find(m => m.key === currentPage)?.label || t('nav.overview')}
+                  </span>
                 ) : (
                   flatMenuItems.find(m => m.key === currentPage)?.label || t('nav.overview')
                 )}
