@@ -13,7 +13,7 @@
 #   - review_gate.py（取 main 检出的可信脚本）判定通过（passed 或低风险 waived）；
 #   - mergeable 不为 false；
 #   - head 上 quality 的全部运行都完成且 success（至少一次）；
-#   - head 上除 review-gate 自身外的全部检查都完成且结论为 success / skipped / neutral。
+#   - head 上除 review-gate 与 evaluate 自身外的全部检查都完成且结论为 success / skipped / neutral。
 #
 # 先算出结论再发检查（不把本 workflow 自己的检查算进判定——发检查前
 # 判定已完成；且 check_run 事件里名字是 review-gate / evaluate 的一律跳过，

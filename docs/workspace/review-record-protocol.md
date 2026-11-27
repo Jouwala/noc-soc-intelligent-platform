@@ -209,7 +209,7 @@ success = 可合入，failure = 阻断。
 do-not-merge；smoke-passed 标签 + smoke-result 标记 SHA 等于 head；
 `review_gate.py` 判定通过（passed 或低风险 waived）；mergeable 不为
 false；head 上 quality 全部运行完成且 success；head 上除 review-gate
-自身外的全部检查完成且结论为 success / skipped / neutral。
+与 evaluate 自身外的全部检查完成且结论为 success / skipped / neutral。
 
 触发：PR 事件（打开/新提交/重开/转正式/打标签/摘标签）、PR 评论新建/
 编辑、quality 跑完、任一检查跑完（按 head SHA 找对应 PR）、手动
