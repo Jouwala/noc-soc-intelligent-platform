@@ -217,6 +217,139 @@ export function matchLabelKey(match?: string | null): string {
   }
 }
 
+/* --------------------------- 名称清洗（纯函数） ---------------------------
+ * 传感器名常见形态：
+ *   "(436232192) ======== OLIB-NX-3172-WAN-2-FG1500-LAN-2-P-39 =========="
+ * 设备名常见形态：
+ *   "OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]"
+ * 只做展示清洗，原始值仍放 title / 悬停提示。
+ * -------------------------------------------------------------------- */
+
+/** 去掉开头 `(数字)`、去掉 `=` 连串、合并空白；取不到返回「—」 */
+export function cleanSensorName(raw?: string | null): string {
+  if (raw == null) return NA
+  let s = String(raw).trim()
+  if (!s) return NA
+  s = s.replace(/^\(\d+\)\s*/, '')
+  s = s.replace(/=+/g, ' ')
+  s = s.replace(/\s+/g, ' ').trim()
+  return s || NA
+}
+
+/**
+ * 设备短名：去掉括号/方括号说明，FQDN 只留主机名第一段。
+ * 例：`OLIB-NX-3172-WAN-2.orangeliberia (NEXUS 3172) [Cisco Device]` → `OLIB-NX-3172-WAN-2`
+ */
+export function shortDeviceName(raw?: string | null): string {
+  if (raw == null) return NA
+  let s = String(raw).trim()
+  if (!s) return NA
+  s = s.replace(/\s*\([^)]*\)/g, '')
+  s = s.replace(/\s*\[[^\]]*\]/g, '')
+  s = s.trim()
+  const dot = s.indexOf('.')
+  if (dot > 0) s = s.slice(0, dot)
+  s = s.replace(/\s+/g, ' ').trim()
+  return s || NA
+}
+
+/** 站点是否已匹配：site_id 非空且不是 Unknown */
+export function isSiteMatched(link: PrtgLink): boolean {
+  const site = (link.site_id || '').trim()
+  return !!site && site.toLowerCase() !== 'unknown'
+}
+
+/** 容量是否已登记：优先 data_quality.capacity_known，否则看 capacity_mbps */
+export function isCapacityKnown(link: PrtgLink): boolean {
+  if (link.data_quality?.capacity_known === true) return true
+  if (link.data_quality?.capacity_known === false) return false
+  return link.capacity_mbps != null && Number.isFinite(link.capacity_mbps)
+}
+
+/** 组内默认排序：Down > Unusual > Unknown > Up，再 uptime 升序、errors 降序 */
+export function statusSortRank(status?: string | null): number {
+  switch ((status || '').trim().toLowerCase()) {
+    case 'down': return 0
+    case 'unusual': return 1
+    case 'up': return 3
+    default: return 2 // unknown / 其他
+  }
+}
+
+export function compareLinksDefault(a: PrtgLink, b: PrtgLink): number {
+  const sr = statusSortRank(a.status) - statusSortRank(b.status)
+  if (sr !== 0) return sr
+  const ua = a.uptime_pct
+  const ub = b.uptime_pct
+  if (ua == null && ub != null) return 1
+  if (ua != null && ub == null) return -1
+  if (ua != null && ub != null && ua !== ub) return ua - ub
+  const ea = (a.errors_in ?? 0) + (a.errors_out ?? 0)
+  const eb = (b.errors_in ?? 0) + (b.errors_out ?? 0)
+  return eb - ea
+}
+
+/** 「需要关注」条目类型（严重度从高到低） */
+export type AttentionKind = 'down' | 'unusual' | 'low_uptime' | 'down_24h' | 'errors'
+
+export interface AttentionItem {
+  kind: AttentionKind
+  link: PrtgLink
+}
+
+/** 可用率低于此值视为「偏低」（只做筛选，不重算数值） */
+export const UPTIME_LOW_THRESHOLD = 99
+
+function hasPositiveRate(a?: number | null, b?: number | null): boolean {
+  return (a != null && a > 0) || (b != null && b > 0)
+}
+
+function attentionKindOf(link: PrtgLink): AttentionKind | null {
+  const st = (link.status || '').trim().toLowerCase()
+  if (st === 'down') return 'down'
+  if (st === 'unusual') return 'unusual'
+  if (link.uptime_pct != null && link.uptime_pct < UPTIME_LOW_THRESHOLD) return 'low_uptime'
+  if ((link.down_count_24h ?? 0) > 0) return 'down_24h'
+  if (hasPositiveRate(link.errors_in, link.errors_out) || hasPositiveRate(link.discards_in, link.discards_out)) {
+    return 'errors'
+  }
+  return null
+}
+
+const ATTENTION_KIND_RANK: Record<AttentionKind, number> = {
+  down: 0,
+  unusual: 1,
+  low_uptime: 2,
+  down_24h: 3,
+  errors: 4,
+}
+
+/** 按严重度选出最多 limit 条需要关注的链路（只选取，不重算字段） */
+export function pickAttentionItems(links: PrtgLink[], limit = 8): AttentionItem[] {
+  const items: AttentionItem[] = []
+  for (const link of links) {
+    const kind = attentionKindOf(link)
+    if (kind) items.push({ kind, link })
+  }
+  items.sort((a, b) => {
+    const kr = ATTENTION_KIND_RANK[a.kind] - ATTENTION_KIND_RANK[b.kind]
+    if (kr !== 0) return kr
+    return compareLinksDefault(a.link, b.link)
+  })
+  return items.slice(0, limit)
+}
+
+/** links 中 uptime_pct 最小值及其链路（并列取第一条；全 null 则 null） */
+export function findWorstUptime(links: PrtgLink[]): { link: PrtgLink; uptime_pct: number } | null {
+  let best: { link: PrtgLink; uptime_pct: number } | null = null
+  for (const link of links) {
+    const u = link.uptime_pct
+    if (u == null || !Number.isFinite(u)) continue
+    if (!best || u < best.uptime_pct) best = { link, uptime_pct: u }
+  }
+  return best
+}
+
 export function eventLabelKey(eventType?: string | null): string {
   switch ((eventType || '').trim().toLowerCase()) {
     case 'status_change': return 'prtg.event.statusChange'
