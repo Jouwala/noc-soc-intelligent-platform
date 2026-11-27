@@ -73,7 +73,7 @@ import { CardBase, StatCard } from '../components/cards'
 | `PageErrorBoundary.tsx` | **页面级错误边界（2026-11-16 新增）**：包住 `App.tsx` 里 `renderPage()` 的输出，把「一次渲染异常 → 整棵树卸载 → 纯白屏」换成「标题 + 说明 + 原始报错 + 刷新按钮」，并对构建产物更新导致的 chunk 加载失败自动刷新一次（20 秒窗口去重）。新增页面无需接入，外壳统一包好 |
 | `PageLoading.tsx` | **切页首帧骨架 + 延后一帧挂载（2026-11-20 新增）**：导出 `PageLoading`（顶部进度条 + 卡片骨架）与 `DeferredMount`（先画一帧骨架，再用 `rAF + setTimeout` 挂载真正的页面）。目的是让重页面在办公机上的 4–6 秒主线程阻塞变成「看得见的加载中」而不是「点了没反应」；外壳已统一包好，**新增页面无需接入**。它只负责反馈，不减少渲染量 —— 重列表要自己分批（见 `DataSync.tsx` 的 `StaggerCard`） |
 | `LegacyToolFrame.tsx` | 遗留工具页容器框架（iframe 包装旧工具） |
-| `HeaderMoreMenu.tsx` | **顶栏右上角「更多设置」面板（2026-11-27）**：把原来平铺的「开启刷新 + 间隔 + 主题 + 语言 + 账号芯片」5 个控件收成一个 ⋯ 按钮，1600 宽下右侧占用从 476px 降到 24px。面板里的账号段复用 `PortalUserMenu` 的 `inline` 形态（改密 / 用户管理 / 鉴权开关 / 退出及其权限判定、三个弹窗仍只在 `PortalUserMenu` 维护一份）。触发按钮上的 teal 圆点 = 本页正在自动刷新（收起后唯一的常驻状态提示） |
+| `HeaderMoreMenu.tsx` | **顶栏右上角「账号与设置」头像菜单（2026-11-27）**：把原来平铺的「开启刷新 + 间隔 + 主题 + 语言 + 账号芯片」5 个控件收成一个圆形头像按钮（teal 小人，样式在 `index.css` 的 `.wh-header-user-trigger`），1600 宽下右侧占用从 476px 降到 24px；本页自动刷新时头像右下角点一个 teal 圆点。面板里的账号段复用 `PortalUserMenu` 的 `inline` 形态（改密 / 用户管理 / 鉴权开关 / 退出及其权限判定、三个弹窗仍只在 `PortalUserMenu` 维护一份）。触发按钮上的 teal 圆点 = 本页正在自动刷新（收起后唯一的常驻状态提示） |
 | `MapWheelZoomOnClick.tsx` | 「点击后才启用地图滚轮缩放」的行为包装 —— 解决地图嵌在长页面里时滚轮被地图吃掉的问题 |
 | `MetricExplain.tsx` | 指标口径解释（悬浮 ⓘ 气泡，带复制按钮）。四个导出：`ExplainPopover`（**底层**，把任意节点包成悬浮气泡，数字本身要用它）、`ExplainIcon`（ⓘ 图标，自带 `stopPropagation`，挂在可下钻的卡片标题上不会顺带开弹窗）、`ExplainCorner`（卡片右上角绝对定位）、`ExplainLabel`（文字 + 内联 ⓘ）。一句话级别的本指标说明用它；多段全局口径仍走 `CalcChainNote`（AGENTS.md 三.3b） |
 | `VmaxCallDropReport.tsx` | **电路域来电打断数据通话（2026-11-26）**。`analyzeCallDrop` 的结果卡：离开 4G 的时刻、小区、回来时刻、离开秒数、被叫/主叫、回来时的承载原因。用户查询页与 CCA 页共用。语音卡上的「回落时长」是信令过程毫秒数，不是离开 4G 的秒数 |

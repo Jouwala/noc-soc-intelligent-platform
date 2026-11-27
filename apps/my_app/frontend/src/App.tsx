@@ -2368,10 +2368,10 @@ function AppContent() {
               )}
             </div>
 
-            {/* 右上角操作区：2026-11-27 起收成一个「更多设置」面板。
+            {/* 右上角操作区：2026-11-27 起收成一个「账号与设置」头像菜单。
                 原来这里平铺 5 个控件（开启刷新 / 间隔 / 主题 / 语言 / 账号芯片），
                 1600 宽实测占 476px ≈ 顶栏宽度 30%，把标题区一路挤窄。
-                现在只剩一个 ⋯ 按钮，面板内容见 components/HeaderMoreMenu.tsx；
+                现在只剩一个圆形头像按钮，面板内容见 components/HeaderMoreMenu.tsx；
                 本页正在自动刷新时按钮上带 teal 圆点。 */}
             <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center' }}>
               <HeaderMoreMenu

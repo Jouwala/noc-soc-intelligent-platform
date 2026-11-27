@@ -46,7 +46,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | Sidebar navigation | The sidebar is collapsed by default — click the ☰ button (top-left) to expand/collapse; on mobile it slides out as a drawer under the header. |
 | Open in a new tab | Right-click any menu item → "Open in new tab", handy for wall screens / multi-monitor duty. |
 | Direct links | Every page can be opened with ?page=<key>, e.g. /myapp/?page=battery — bookmarkable and shareable. |
-| Auto refresh | Off by default, and every page has its own setting: the "Auto Refresh" switch in the header "More settings (⋯)" panel plus the interval dropdown work on any page. Starting it lands on that page's suggested interval (1 min for real-time alarm pages, 5 min for boards, 15 min for reports whose upstream syncs daily, 30 min for configuration and operation pages); the dropdown offers 0/30s~30min and the choice is remembered per page in localStorage, so pages never affect each other. Turning the switch off stops it at any time. While you are typing, a dialog is open, or the tab is in the background, the round is skipped to avoid interrupting you. |
+| Auto refresh | Off by default, and every page has its own setting: the "Auto Refresh" switch in the header avatar menu plus the interval dropdown work on any page. Starting it lands on that page's suggested interval (1 min for real-time alarm pages, 5 min for boards, 15 min for reports whose upstream syncs daily, 30 min for configuration and operation pages); the dropdown offers 0/30s~30min and the choice is remembered per page in localStorage, so pages never affect each other. Turning the switch off stops it at any time. While you are typing, a dialog is open, or the tab is in the background, the round is skipped to avoid interrupting you. |
 | Theme & language | Switch dark/light theme and Chinese/English in the top-right; preferences are remembered locally (localStorage). |
 | Data freshness | Some pages show a "last synced" time in the header. Boards are fed by scheduled tasks with different frequencies (alarms every minute, microwave topology daily 05:15, packet loss daily 06:30...). See "Task Manager Deep Dive" for the full catalog. |
 
@@ -2941,7 +2941,7 @@ Three config layers, highest first: environment variables (backend/.env, 203 key
 
 **The board data is not updating?**
 
-① Check the task's latest result and the failure summary in "Task Manager"; ② check whether the header "Auto refresh" is enabled (it is off by default — the page will not reload on its own; refresh manually, or turn on "Auto Refresh" in the header "More settings (⋯)" panel); ③ remember some data is inherently low-frequency: alarms every minute, microwave topology daily 05:15, packet loss daily 06:30, incident overview at minute 20 each hour. The "DB Data Freshness Check" task history also logs the call chain and direction when stale (including the on-disk age of file-based sources).
+① Check the task's latest result and the failure summary in "Task Manager"; ② check whether the header "Auto refresh" is enabled (it is off by default — the page will not reload on its own; refresh manually, or turn on "Auto Refresh" in the header avatar menu); ③ remember some data is inherently low-frequency: alarms every minute, microwave topology daily 05:15, packet loss daily 06:30, incident overview at minute 20 each hour. The "DB Data Freshness Check" task history also logs the call chain and direction when stale (including the on-disk age of file-based sources).
 
 **Numbers do not match the expected criteria?**
 
