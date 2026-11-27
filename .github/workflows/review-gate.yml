@@ -1,0 +1,204 @@
+# 分支保护必填检查：把与 auto-merge 完全相同的合并门禁写成 head SHA 上
+# 的 check run `review-gate`，结论即判定（success = 可合入，failure = 阻断）。
+#
+# 为什么需要独立 workflow：auto-merge 自身的检查结论恒为 success（只表示
+# “评估跑过”），在 #317 的 head 上也是绿的——它拦不住手动合入。分支保护
+# 要求一个结论即判定的检查，auto-merge 给不了，只能另起一个 workflow
+# 在同一 head 上发一个名叫 review-gate 的检查。
+#
+# 判定（与 auto-merge.yml 逐项一致，任一失败即 failure）：
+#   - PR open、非草稿、base 为 main；
+#   - 无 do-not-merge 标签；
+#   - smoke-passed 标签 + 最后一条 smoke-result passed 标记的 SHA 等于 head；
+#   - review_gate.py（取 main 检出的可信脚本）判定通过（passed 或低风险 waived）；
+#   - mergeable 不为 false；
+#   - head 上 quality 的全部运行都完成且 success（至少一次）；
+#   - head 上除 review-gate 自身外的全部检查都完成且结论为 success / skipped / neutral。
+#
+# 先算出结论再发检查（不把本 workflow 自己的检查算进判定——发检查前
+# 判定已完成；且 check_run 事件里名字是 review-gate 的一律跳过，防自触发循环）。
+#
+# 触发：
+#   - PR 打开 / 新提交 / 重新打开 / 转正式 / 打标签 / 摘标签；
+#   - PR 评论新建 / 编辑（review-result / smoke-result 标记落点）；
+#   - quality 跑完、任一检查跑完（按 head SHA 找到对应 PR 再评估）；
+#   - 手动 dispatch（可填 pr_number 只评一个 PR，不填评全部 open PR）。
+#
+# 紧急通道：仓库所有者在 Settings → Branches 里临时关闭 main 的分支保护；
+# 用完即恢复。不要改本文件绕过。
+
+name: review-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  issue_comment:
+    types: [created, edited]
+  workflow_run:
+    workflows: ["quality"]
+    types: [completed]
+  check_run:
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "只评估这一个 PR（留空则评估全部 open PR）"
+        type: number
+        required: false
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: read
+  issues: read
+
+jobs:
+  review-gate:
+    # issue_comment 只关心 PR 下的评论；check_run 只关心自己以外
+    # 的检查（自己发的检查不触发新一轮评估，防自触发循环）。
+    if: >
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
+      && (github.event_name != 'check_run' || github.event.check_run.name != 'review-gate')
+    runs-on: ubuntu-latest
+    steps:
+      # 检出 main 上的门禁脚本（可信代码）：review_gate.py 必须取 main 的
+      # 版本，不取 PR 分支的——否则 PR 作者可以自己改门禁脚本放行自己。
+      - name: 检出 main 上的可信门禁脚本
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: |
+            apps/control-plane/backend/dispatch/review_gate.py
+          sparse-checkout-cone-mode: false
+      - name: 评估并发布 review-gate 检查
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          INPUT_PR: ${{ inputs.pr_number }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CHECK_HEAD_SHA: ${{ github.event.check_run.head_sha }}
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/$REPO"
+          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')
+
+          # 在 head SHA 上发一个名叫 review-gate 的检查，结论即判定。
+          # 同一 head 上多次评估会留下多条检查记录，分支保护只看最新一条。
+          post_check() {
+            local sha="$1" verdict="$2" summary="$3" title http_code
+            if [ "$verdict" = "success" ]; then
+              title="可合入：CI、冒烟、审核三门禁均已通过"
+            else
+              title="阻断合入：有门禁未通过"
+            fi
+            http_code="$(curl -sS -o /tmp/check.json -w '%{http_code}' -X POST "${AUTH[@]}" "$API/check-runs" \
+              -H 'Content-Type: application/json' \
+              --data-binary "$(jq -n --arg sha "$sha" --arg verdict "$verdict" --arg title "$title" --arg summary "$summary" \
+                '{name:"review-gate", head_sha:$sha, status:"completed", conclusion:$verdict, output:{title:$title, summary:$summary}}')")"
+            case "$http_code" in
+              201) echo "review-gate 检查已发布（$verdict，head $sha）" ;;
+              *) echo "发布检查未成功（HTTP $http_code）："; cat /tmp/check.json; echo ;;
+            esac
+          }
+
+          # 收集待评估的 PR 编号：pull_request / issue_comment 事件只看本 PR；
+          # workflow_run / check_run 事件按 head SHA 找到对应的 open PR；
+          # 手动 dispatch 可填 pr_number 只评一个，不填评全部 open PR。
+          if [ "$EVENT" = "pull_request" ]; then
+            PRS="$PR_NUMBER"
+          elif [ "$EVENT" = "issue_comment" ]; then
+            PRS="$ISSUE_NUMBER"
+          elif [ "$EVENT" = "workflow_dispatch" ] && [ -n "$INPUT_PR" ]; then
+            PRS="$INPUT_PR"
+          elif [ "$EVENT" = "workflow_run" ] || [ "$EVENT" = "check_run" ]; then
+            if [ "$EVENT" = "workflow_run" ]; then TARGET_SHA="$RUN_HEAD_SHA"; else TARGET_SHA="$CHECK_HEAD_SHA"; fi
+            PRS="$(curl -sS "${AUTH[@]}" "$API/pulls?state=open&base=main&per_page=100" | jq -r --arg sha "$TARGET_SHA" '.[] | select(.head.sha == $sha) | .number')"
+            if [ -z "$PRS" ]; then echo "head $TARGET_SHA 没有对应的 open PR，跳过"; exit 0; fi
+          else
+            PRS="$(curl -sS "${AUTH[@]}" "$API/pulls?state=open&base=main&per_page=100" | jq -r '.[].number')"
+          fi
+
+          for PR in $PRS; do
+            echo "=== PR #$PR ==="
+            PR_JSON="$(curl -sS "${AUTH[@]}" "$API/pulls/$PR")"
+            STATE="$(echo "$PR_JSON" | jq -r '.state')"
+            DRAFT="$(echo "$PR_JSON" | jq -r '.draft')"
+            BASE="$(echo "$PR_JSON" | jq -r '.base.ref')"
+            HEAD_SHA="$(echo "$PR_JSON" | jq -r '.head.sha')"
+            MERGEABLE="$(echo "$PR_JSON" | jq -r '.mergeable')"
+            LABELS="$(echo "$PR_JSON" | jq -r '.labels[].name')"
+
+            has_label() { echo "$LABELS" | grep -qx "$1"; }
+
+            # 不是合入候选的 PR 不发检查（草稿、已关闭、目标分支不是 main），
+            # 只记日志——分支保护只在合入时看检查，草稿本就合不进去。
+            if [ "$STATE" != "open" ]; then echo "已关闭，跳过"; continue; fi
+            if [ "$DRAFT" = "true" ]; then echo "草稿，跳过"; continue; fi
+            if [ "$BASE" != "main" ]; then echo "目标分支不是 main，跳过"; continue; fi
+
+            FAILS=""
+
+            if has_label 'do-not-merge'; then FAILS="${FAILS}- 有 do-not-merge 标签"$'\n'; fi
+
+            # smoke-passed 的 SHA 绑定校验（与 auto-merge.yml 同一 jq）：
+            # 取最后一条 result=passed 标记的 SHA 与当前 head 比对。
+            if ! has_label 'smoke-passed'; then
+              FAILS="${FAILS}- 没有 smoke-passed 标签"$'\n'
+            else
+              SMOKE_SHA="$(curl -sS "${AUTH[@]}" "$API/issues/$PR/comments?per_page=100" | jq -r '[.[] | (.body // "") | capture("smoke-result: pr-[0-9]+ sha-(?<sha>[0-9a-f]{40}) result=passed"; "g") | .sha] | last // ""')"
+              if [ -z "$SMOKE_SHA" ]; then
+                FAILS="${FAILS}- smoke-passed 没有 SHA 绑定标记"$'\n'
+              elif [ "$SMOKE_SHA" != "$HEAD_SHA" ]; then
+                FAILS="${FAILS}- smoke-passed 绑定的是旧 head $SMOKE_SHA，当前 head $HEAD_SHA，结果已过期"$'\n'
+              else
+                echo "smoke-passed 已绑定当前 head（$SMOKE_SHA）"
+              fi
+            fi
+
+            # 独立审核门禁（与 auto-merge.yml 同一脚本、同一口径）：
+            # passed 或低风险 waived 都算通过；无记录、改判、旧 head 一律不通过。
+            if ! GATE_OUT="$(python3 apps/control-plane/backend/dispatch/review_gate.py --repo "$REPO" --pr "$PR" --head-sha "$HEAD_SHA")"; then
+              echo "$GATE_OUT"
+              FAILS="${FAILS}- 独立审核门禁未通过"$'\n'
+            else
+              echo "$GATE_OUT"
+              TIER="$(echo "$GATE_OUT" | grep -o 'REVIEW_TIER=[a-z]*' | head -1 || true)"
+            fi
+
+            if [ "$MERGEABLE" = "false" ]; then FAILS="${FAILS}- 有冲突（mergeable=false）"$'\n'; fi
+
+            # quality 的全部运行（push + pull_request）都必须完成且成功。
+            QRUNS="$(curl -sS "${AUTH[@]}" "$API/actions/workflows/quality.yml/runs?head_sha=$HEAD_SHA&per_page=10")"
+            Q_TOTAL="$(echo "$QRUNS" | jq -r '.total_count')"
+            Q_BAD="$(echo "$QRUNS" | jq -r '[.workflow_runs[] | select(.status != "completed" or .conclusion != "success")] | length')"
+            if [ "$Q_TOTAL" = "0" ]; then
+              FAILS="${FAILS}- quality 还没有运行记录"$'\n'
+            elif [ "$Q_BAD" != "0" ]; then
+              FAILS="${FAILS}- quality 未全绿"$'\n'
+            fi
+
+            # head 提交上的全部检查都必须完成，且结论为 success / skipped / neutral。
+            # 排除本 workflow 自身的检查运行（name 为 review-gate）：判定在发检查
+            # 之前已完成，上一轮留下的 review-gate 检查不参与本轮判定——否则
+            # “上一轮 failure”会让本轮永远 failure（auto-merge 排除自身同理）。
+            CHECKS="$(curl -sS "${AUTH[@]}" "$API/commits/$HEAD_SHA/check-runs?per_page=100")"
+            C_TOTAL="$(echo "$CHECKS" | jq -r '.total_count')"
+            C_BAD="$(echo "$CHECKS" | jq -r '[.check_runs[] | select(.name != "review-gate") | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')"
+            if [ "$C_TOTAL" = "0" ]; then
+              FAILS="${FAILS}- 没有任何检查记录"$'\n'
+            elif [ "$C_BAD" != "0" ]; then
+              FAILS="${FAILS}- 有检查未通过或未完成"$'\n'
+            fi
+
+            if [ -z "$FAILS" ]; then
+              SUMMARY="三门禁均已通过（head $HEAD_SHA）：CI 全绿、smoke-passed 已绑定当前 head、审核通过（${TIER:-REVIEW_TIER=reviewed}）。"
+              post_check "$HEAD_SHA" "success" "$SUMMARY"
+            else
+              SUMMARY="以下门禁未通过（head $HEAD_SHA），阻断合入："$'\n'"$FAILS"
+              post_check "$HEAD_SHA" "failure" "$SUMMARY"
+            fi
+          done
+          echo "评估完成。"
