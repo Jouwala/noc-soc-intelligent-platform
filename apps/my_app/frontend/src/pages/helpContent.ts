@@ -728,9 +728,9 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       ],
     },
     vmax_selftest: {
-      desc: 'XDR 查询自检（隐藏页，不在菜单里，地址 ?page=vmax_selftest）：输入号码后串行检查 RAN 分表清单、合并表 1100/1300/1301/32、分表 32 UEMR / 1300 FLOW / 1100 S1MME 共 8 项，时间窗为最近 3 小时；每项显示通过、无数据、无 IMSI 映射或失败，并附耗时和原始错误。只读查询，会写查询审计。',
+      desc: 'XDR 查询自检（入口：网络 → XDR 查询自检（地址 ?page=vmax_selftest））：输入号码后串行检查 RAN 分表清单、合并表 1100/1300/1301/32、分表 32 UEMR / 1300 FLOW / 1100 S1MME 共 8 项，时间窗为最近 3 小时；每项显示通过、无数据、无 IMSI 映射或失败，并附耗时和原始错误。只读查询，会写查询审计。',
       usage: [
-        '隐藏页：侧边栏无入口，直接打开 ?page=vmax_selftest',
+        '入口：网络 → XDR 查询自检（也可直接打开 ?page=vmax_selftest）',
         '输入号码后串行跑 8 项检查（RAN 分表清单 → 合并表 1100/1300/1301/32 → 分表 32 UEMR / 1300 FLOW / 1100 S1MME）',
         '时间窗固定为最近 3 小时',
         '每项结果：通过 / 无数据 / 无 IMSI 映射 / 失败，附耗时与原始错误原文',
@@ -1589,9 +1589,9 @@ export const PAGE_DOCS: Record<Locale, Record<string, PageDoc>> = {
       ],
     },
     vmax_selftest: {
-      desc: 'XDR Query Self-test (hidden page, not in the menu; open ?page=vmax_selftest): enter a number and serially check the RAN per-table list, merged tables 1100/1300/1301/32, and per-table 32 UEMR / 1300 FLOW / 1100 S1MME — 8 checks in a recent 3-hour window. Each item shows pass, no data, no IMSI mapping, or failure, with elapsed time and the raw error. Read-only queries; writes a query audit entry.',
+      desc: 'XDR Query Self-test (entry: Network → XDR Query Self-test; open ?page=vmax_selftest): enter a number and serially check the RAN per-table list, merged tables 1100/1300/1301/32, and per-table 32 UEMR / 1300 FLOW / 1100 S1MME — 8 checks in a recent 3-hour window. Each item shows pass, no data, no IMSI mapping, or failure, with elapsed time and the raw error. Read-only queries; writes a query audit entry.',
       usage: [
-        'Hidden page: no sidebar entry; open ?page=vmax_selftest directly',
+        'Entry: Network → XDR Query Self-test (or open ?page=vmax_selftest directly)',
         'Enter a number to run 8 checks serially (RAN per-table list → merged 1100/1300/1301/32 → per-table 32 UEMR / 1300 FLOW / 1100 S1MME)',
         'Time window is fixed to the last 3 hours',
         'Per-item result: pass / no data / no IMSI mapping / failure, with elapsed time and raw error text',

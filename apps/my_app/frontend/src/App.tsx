@@ -155,7 +155,7 @@ const EflowFlow = lazy(() => import('./pages/EflowFlow'))
 // pages/VmaxUserQuery.tsx 暂留源码便于回滚，不再被引用。
 // VMAX 智能诊断工作台（Intelligent Diagnosis Workspace，2026-11-07）：投诉驱动单页叙事，与旧查询页并存
 const VmaxUserCca = lazy(() => import('./pages/VmaxUserCca'))
-// XDR 查询自检（隐藏页，不进菜单，?page=vmax_selftest）
+// XDR 查询自检（自检页，挂在网络菜单 VMAX 智能诊断之后，?page=vmax_selftest）
 const VmaxSelfTest = lazy(() => import('./pages/VmaxSelfTest'))
 const IptPowerQuery = lazy(() => import('./pages/IptPowerQuery'))
 const SiteAvailability = lazy(() => import('./pages/SiteAvailability'))
@@ -597,7 +597,7 @@ const PAGE_META: Record<PageKey, { icon: ReactNode; labelKey: string }> = {
   cn_hourly_kpi: { icon: <FieldTimeOutlined />, labelKey: 'nav.cnHourlyKpi' },
   ume_in_kpi: { icon: <DotChartOutlined />, labelKey: 'nav.umeInKpi' },
   vmax_user_cca: { icon: <MobileOutlined />, labelKey: 'nav.vmaxUserCca' },
-  // 隐藏页（不进菜单），标签仅用于标题兜底
+  // 自检页，挂在网络菜单 VMAX 智能诊断之后
   vmax_selftest: { icon: <MobileOutlined />, labelKey: 'nav.vmaxSelfTest' },
   ipt_power: { icon: <ThunderboltOutlined />, labelKey: 'nav.iptPower' },
   cxoDashboard: { icon: <PieChartOutlined />, labelKey: 'nav.cxoDashboard' },
@@ -665,7 +665,7 @@ const DEFAULT_GROUPS: { key: string; labelKey: string; items: PageKey[] }[] = [
   {
     key: 'grp_network',
     labelKey: 'nav.grp.network',
-    items: ['nocTopology', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'gis', 'location', 'realtime_alarm', 'person', 'packet_loss', 'prtg_links', 'site_kpi_rt', 'battery', 'ip_trace', 'vmax_user_cca', 'ipt_power', 'bm_speedtest', 'bm_meta', 'ran_inventory'],
+    items: ['nocTopology', 'mwUmeTopology', 'ipranTopo', 'olibTopo', 'olibTopo_v2', 'mwRealTime', 'gis', 'location', 'realtime_alarm', 'person', 'packet_loss', 'prtg_links', 'site_kpi_rt', 'battery', 'ip_trace', 'vmax_user_cca', 'vmax_selftest', 'ipt_power', 'bm_speedtest', 'bm_meta', 'ran_inventory'],
   },
   {
     key: 'grp_analysis',

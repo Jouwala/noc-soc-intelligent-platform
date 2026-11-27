@@ -1,5 +1,5 @@
 /* ============================================================================
- * VmaxSelfTest —— XDR 查询自检页（隐藏页，?page=vmax_selftest，不进菜单）
+ * VmaxSelfTest —— XDR 查询自检页（网络 → XDR 查询自检，?page=vmax_selftest）
  * ============================================================================
  * 2026-11-26：用于验证 VMAX 智能诊断的改动是否生效，免去在终端来回贴输出。
  *
@@ -186,7 +186,7 @@ export default function VmaxSelfTest() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)', maxWidth: 1100 }}>
-      <CardBase title="XDR 查询自检（隐藏页）">
+      <CardBase title="XDR 查询自检">
         <Space wrap>
           <Input
             allowClear

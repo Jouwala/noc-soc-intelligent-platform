@@ -73,6 +73,7 @@
 | 43 | 电池看板 | `battery` | React |
 | 44 | IP 链路探测 | `ip_trace` | **iframe** |
 | 45 | VMAX 智能诊断 | `vmax_user_cca` | React |
+| 45b | XDR 查询自检 | `vmax_selftest` | React |
 | 52 | IPT 站点电源查询 | `ipt_power` | React |
 | 46 | Speedtest 基准报告 | `bm_speedtest` | React |
 | 47 | Meta 基准报告 | `bm_meta` | React |
