@@ -758,9 +758,16 @@ function UserManagementModal({
 export default function PortalUserMenu({
   identity,
   onLogout,
+  inline = false,
+  onNavigate,
 }: {
   identity: AuthIdentity | null
   onLogout: () => void
+  /** 内嵌到顶栏「更多设置」面板里时置 true：不渲染自己的触发按钮与下拉壳，
+   *  只出面板块 + 三个弹窗，账号逻辑与权限判定仍只此一份 */
+  inline?: boolean
+  /** 面板内点击菜单项后回调，供内嵌方关闭外层面板 */
+  onNavigate?: () => void
 }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -786,28 +793,34 @@ export default function PortalUserMenu({
     fn()
   }
 
-  return (
-    <div ref={ref}>
-      {/* 用 antd Dropdown（portal 渲染到 body）而不是自写 absolute 面板：
-          Header 有 overflow:hidden 且高仅 56px，absolute 子面板会被裁掉 —— 这是
-          下拉"点了不出现"的根因。Dropdown 挂在 body 上，天然不受祖先裁剪影响，
-          且自带键盘可达性与外部点击关闭（项目内 TableBrowser.tsx:502 已有同用法）。 */}
-      <Dropdown
-        open={open}
-        onOpenChange={setOpen}
-        trigger={['click']}
-        placement="bottomRight"
-        dropdownRender={() => (
-          <div
-            style={{
-              minWidth: '12rem',
-              padding: '0.35rem',
-              background: 'var(--wh-glass-panel-solid, var(--wh-glass-panel))',
-              border: '1px solid var(--wh-glass-border)',
-              borderRadius: 'var(--wh-radius-md)',
-              boxShadow: 'var(--wh-shadow-3)',
-            }}
-          >
+  const modals = (
+    <>
+      <ChangePasswordModal open={showPwd} onClose={() => setShowPwd(false)} t={t} />
+      <UserManagementModal
+        open={showUsers}
+        onClose={() => setShowUsers(false)}
+        currentUser={identity}
+        t={t}
+      />
+      <AuthSwitchModal open={showSwitch} onClose={() => setShowSwitch(false)} t={t} />
+    </>
+  )
+
+  /* 面板本体：独立下拉（默认）与「更多设置」内嵌（inline）共用同一份内容，
+     账号逻辑、权限判定、三个弹窗都只写一遍。 */
+  const panelNode = (
+    <div
+      style={inline
+        ? { minWidth: 0, padding: 0, background: 'transparent', border: 'none', boxShadow: 'none' }
+        : {
+            minWidth: '12rem',
+            padding: '0.35rem',
+            background: 'var(--wh-glass-panel-solid, var(--wh-glass-panel))',
+            border: '1px solid var(--wh-glass-border)',
+            borderRadius: 'var(--wh-radius-md)',
+            boxShadow: 'var(--wh-shadow-3)',
+          }}
+    >
             {/* 面板头：当前账号（本机身份额外标注） */}
             <div style={{
               padding: '0.35rem 0.6rem',
@@ -825,6 +838,7 @@ export default function PortalUserMenu({
               </div>
             )}
             <Menu
+              className="wh-header-account-menu"
               selectable={false}
               items={[
                 { key: 'pwd', icon: <KeyOutlined />, label: t('user.changePassword') },
@@ -834,6 +848,7 @@ export default function PortalUserMenu({
                 { key: 'logout', icon: <LogoutOutlined />, label: t('user.logout'), danger: true },
               ]}
               onClick={({ key }) => {
+                onNavigate?.()
                 if (key === 'logout') { setOpen(false); onLogout(); return }
                 run(() => {
                   if (key === 'pwd') setShowPwd(true)
@@ -847,8 +862,30 @@ export default function PortalUserMenu({
                 fontSize: '0.8rem',
               }}
             />
-          </div>
-        )}
+    </div>
+  )
+
+  if (inline) {
+    return (
+      <div>
+        {panelNode}
+        {modals}
+      </div>
+    )
+  }
+
+  return (
+    <div ref={ref}>
+      {/* 用 antd Dropdown（portal 渲染到 body）而不是自写 absolute 面板：
+          Header 有 overflow:hidden 且高仅 56px，absolute 子面板会被裁掉 —— 这是
+          下拉"点了不出现"的根因。Dropdown 挂在 body 上，天然不受祖先裁剪影响，
+          且自带键盘可达性与外部点击关闭（项目内 TableBrowser.tsx:502 已有同用法）。 */}
+      <Dropdown
+        open={open}
+        onOpenChange={setOpen}
+        trigger={['click']}
+        placement="bottomRight"
+        dropdownRender={() => panelNode}
       >
         <Tooltip title={t('user.userTip')}>
           <button
@@ -891,15 +928,7 @@ export default function PortalUserMenu({
           </button>
         </Tooltip>
       </Dropdown>
-
-      <ChangePasswordModal open={showPwd} onClose={() => setShowPwd(false)} t={t} />
-      <UserManagementModal
-        open={showUsers}
-        onClose={() => setShowUsers(false)}
-        currentUser={identity}
-        t={t}
-      />
-      <AuthSwitchModal open={showSwitch} onClose={() => setShowSwitch(false)} t={t} />
+      {modals}
     </div>
   )
 }

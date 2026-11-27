@@ -12,10 +12,7 @@ import {
   TableOutlined,
   BarChartOutlined,
   TeamOutlined,
-  TranslationOutlined,
   SyncOutlined,
-  PauseOutlined,
-  CaretRightOutlined,
   AlertOutlined,
   DisconnectOutlined,
   ThunderboltOutlined,
@@ -32,8 +29,6 @@ import {
   SafetyOutlined,
   PieChartOutlined,
   LoginOutlined,
-  SunOutlined,
-  MoonOutlined,
   ExportOutlined,
   SelectOutlined,
   MenuUnfoldOutlined,
@@ -82,7 +77,7 @@ import {
   apiLogout,
   type MenuLayoutPayload,
 } from './api'
-import PortalUserMenu from './components/PortalUserMenu'
+import HeaderMoreMenu from './components/HeaderMoreMenu'
 import PageErrorBoundary from './components/PageErrorBoundary'
 import { DeferredMount } from './components/PageLoading'
 import { isEmbedMode } from './embedMode'
@@ -2373,61 +2368,24 @@ function AppContent() {
               )}
             </div>
 
-            {/* 右上角操作区：自动刷新 + 主题切换 + 语言切换 */}
-            <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 'var(--wh-space-sm)' }}>
-              {/* 自动刷新（默认关闭，每个页面各自设置并记忆）：
-                  「停止/开启」按钮 + 间隔下拉，对**所有页面**可用（2026-11-04 起
-                  取消看板白名单，配置/操作/工具页同样能按页开启）。
-                  移动端隐藏（大屏均为桌面端）。 */}
-              <Tooltip title={arEffective > 0 ? t('ar.stop') : t('ar.start')}>
-                <Button
-                  className="wh-hide-mobile"
-                  size="small"
-                  aria-label={arEffective > 0 ? t('ar.stop') : t('ar.start')}
-                  onClick={toggleAutoRefresh}
-                  icon={arEffective > 0 ? <PauseOutlined /> : <CaretRightOutlined />}
-                  style={{ color: arEffective > 0 ? WH.teal : undefined }}
-                >
-                  {arEffective > 0 ? t('ar.stop') : t('ar.start')}
-                </Button>
-              </Tooltip>
-              <Tooltip title={arEffective > 0 ? t('ar.every', { v: arLabel(arEffective) }) : t('ar.tip')}>
-                <Select
-                  // 开启自动刷新时用强化描边做状态提示（玻璃底由 CSS 统一给）
-                  className={arEffective > 0 ? 'wh-hide-mobile wh-select-active' : 'wh-hide-mobile'}
-                  size="small"
-                  aria-label={t('ar.label')}
-                  value={arEffective}
-                  onChange={(v: number) => setArPageSec(currentPage, v)}
-                  popupMatchSelectWidth={false}
-                  suffixIcon={<SyncOutlined spin={arSpin} style={{ color: WH.teal }} />}
-                  options={AR_OPTIONS.map(v => ({ value: v, label: arLabel(v) }))}
-                  style={{ width: '7.25rem' }}
-                />
-              </Tooltip>
-              <Tooltip title={isDark ? t('theme.toLight') : t('theme.toDark')}>
-                <Button
-                  size="small"
-                  icon={isDark ? <SunOutlined /> : <MoonOutlined />}
-                  onClick={toggle}
-                  aria-label={isDark ? t('theme.toLight') : t('theme.toDark')}
-                  style={{ color: WH.teal }}
-                />
-              </Tooltip>
-              <Button
-                size="small"
-                icon={<TranslationOutlined />}
-                onClick={toggleLocale}
-                aria-label={t('lang.switch')}
-                style={{ color: WH.teal }}
-              >
-                <span className="wh-hide-mobile">{t('lang.switch')}</span>
-              </Button>
-              {/* 当前登录身份 + 改密 / 用户管理 / 鉴权开关 / 退出（与门户 Navbar 对齐）。
-                  无身份（未登录）时不渲染；登录成功后引导关闭、identity 落地即出现。 */}
-              {identity && (
-                <PortalUserMenu identity={identity} onLogout={handleLogout} />
-              )}
+            {/* 右上角操作区：2026-11-27 起收成一个「更多设置」面板。
+                原来这里平铺 5 个控件（开启刷新 / 间隔 / 主题 / 语言 / 账号芯片），
+                1600 宽实测占 476px ≈ 顶栏宽度 30%，把标题区一路挤窄。
+                现在只剩一个 ⋯ 按钮，面板内容见 components/HeaderMoreMenu.tsx；
+                本页正在自动刷新时按钮上带 teal 圆点。 */}
+            <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center' }}>
+              <HeaderMoreMenu
+                identity={identity}
+                onLogout={handleLogout}
+                isDark={isDark}
+                onToggleTheme={toggle}
+                onToggleLocale={toggleLocale}
+                arEffective={arEffective}
+                arOptions={AR_OPTIONS.map(v => ({ value: v, label: arLabel(v) }))}
+                onToggleAutoRefresh={toggleAutoRefresh}
+                onSelectInterval={(sec) => setArPageSec(currentPage, sec)}
+                arSpin={arSpin}
+              />
             </div>
           </Header>
           )}

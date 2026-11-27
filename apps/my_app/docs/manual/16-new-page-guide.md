@@ -182,12 +182,12 @@ title={<>{t('xxx.col.avail')} <ExplainIcon text={t('xxx.explain.col', { metric: 
 
 ### 3.4d 按页刷新设置：每个页面都要能自己决定刷不刷（硬要求）
 
-顶栏的「停止刷新 / 开启刷新」+ 间隔下拉是**外壳级**能力（`App.tsx` 的 `performAutoRefresh`），
+顶栏右上角「更多设置（⋯）」面板里的「自动刷新」开关 + 间隔下拉是**外壳级**能力（`App.tsx` 的 `performAutoRefresh`），
 对每一个页面都可用、选择按页记忆在 `localStorage['myapp_auto_refresh_pages']`、**默认关闭**。
 新页面**天然继承**，不需要写任何刷新代码 —— 但**必须登记两件事**，否则守卫直接拦下提交
 （`AGENTS.md` 三.3d，规则 2026-11-04 由用户定：「参考 noc_analyst 里的刷新配置，给每个页面做设置」）。
 
-**① 在 `App.tsx` 的 `AR_PAGE_DEFAULTS` 登记本页的建议间隔**（用户点「开启刷新」时落到的值）：
+**① 在 `App.tsx` 的 `AR_PAGE_DEFAULTS` 登记本页的建议间隔**（用户打开「自动刷新」时落到的值）：
 
 ```tsx
 const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {

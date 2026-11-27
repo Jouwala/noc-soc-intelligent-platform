@@ -1,6 +1,6 @@
 # my_app User Help & Guide
 
-> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-26.
+> User-facing platform features & operations guide. Generated from the same source as the in-app Help page (frontend/src/helpMarkdown.ts), compiled from docs/manual/ and backend/task_registry.py. Generated on 2026-11-27.
 
 > In-app entry: the "Help" sidebar item, or `http://<host>/myapp/?page=help` directly.
 
@@ -46,7 +46,7 @@ Built for the NOC scenario "boards every day, reports must go out": 41+ schedule
 | Sidebar navigation | The sidebar is collapsed by default — click the ☰ button (top-left) to expand/collapse; on mobile it slides out as a drawer under the header. |
 | Open in a new tab | Right-click any menu item → "Open in new tab", handy for wall screens / multi-monitor duty. |
 | Direct links | Every page can be opened with ?page=<key>, e.g. /myapp/?page=battery — bookmarkable and shareable. |
-| Auto refresh | Off by default, and every page has its own setting: the header "Start Refresh" button plus the interval dropdown work on any page. Starting it lands on that page's suggested interval (1 min for real-time alarm pages, 5 min for boards, 15 min for reports whose upstream syncs daily, 30 min for configuration and operation pages); the dropdown offers 0/30s~30min and the choice is remembered per page in localStorage, so pages never affect each other. "Stop Refresh" turns it off at any time. While you are typing, a dialog is open, or the tab is in the background, the round is skipped to avoid interrupting you. |
+| Auto refresh | Off by default, and every page has its own setting: the "Auto Refresh" switch in the header "More settings (⋯)" panel plus the interval dropdown work on any page. Starting it lands on that page's suggested interval (1 min for real-time alarm pages, 5 min for boards, 15 min for reports whose upstream syncs daily, 30 min for configuration and operation pages); the dropdown offers 0/30s~30min and the choice is remembered per page in localStorage, so pages never affect each other. Turning the switch off stops it at any time. While you are typing, a dialog is open, or the tab is in the background, the round is skipped to avoid interrupting you. |
 | Theme & language | Switch dark/light theme and Chinese/English in the top-right; preferences are remembered locally (localStorage). |
 | Data freshness | Some pages show a "last synced" time in the header. Boards are fed by scheduled tasks with different frequencies (alarms every minute, microwave topology daily 05:15, packet loss daily 06:30...). See "Task Manager Deep Dive" for the full catalog. |
 
@@ -2781,38 +2781,6 @@ IP trace: probe link connectivity and path nodes from the server side to a targe
 - Enter a target and start; the result table/map refreshes live
 - Tracing is a stoppable long task — stop it manually if it hangs
 
-#### vmax_user_query（`vmax_user_query`）
-
-VMAX complaint diagnosis: enter a subscriber number and time window to answer "why is this user complaining?". The page pulls four Talon XDR sources in one shot (user plane 1300 / signaling 1100 / video 1301 / RAN 32), scores the network on four dimensions, names a conclusion, and drills down to the minute-level evidence chain. Built for voice, OTT voice/video, video stall, gaming and slow-data complaints.
-
-- Use the full number with the 231 prefix (e.g. 231777777322), digits only; the local 9-digit format is not matched upstream (verified 2026-10-24)
-- **Complaint-type tabs** (not a dropdown) come first: All / Voice / OTT voice & video / Video / Game / Slow data. Switching them **does not re-query** — it only changes the weighting and which chain gets judged, so switching is instant
-- The three-line layout is deliberate: query bar → complaint-type tabs (what the user is complaining about) → view tabs (diagnosis / traffic / connection / radio). The hint under the complaint tabs always states which chain is being judged right now
-- The "Voice" tab judges **CSFB and VoLTE**. The 1100 SGs interface records are the evidence source: SGs location update count, CS Fallback Triggered, Extended Service Request, paging, timeout/failure and QCI=1 bearers are all counted, plus the fallback chain (S1-MME / SGs interleaved by time) and the fallback duration
-- The diagnosis view also has a "Data call dropped by a circuit-switched call" card. It pairs each CS Fallback Triggered release with the next TAU and lists the cell left, the cell returned to, the seconds away, mobile-terminated or not, and the bearer cause on return. The fallback duration on the voice card is the signaling procedure itself (usually a few milliseconds), not how long the phone was off 4G. The card is shown for All / Voice / OTT, and for other complaint types only when a fallback actually happened
-- CSFB fallback time over 2 s is flagged; when the window has CSFB activity but **zero SGs records**, the card raises an explicit warning instead of quietly reporting success — that usually means the SGs interface is not reporting
-- The "Game" tab is kept on purpose: XDR bills really do carry app names such as egame / E-GAME. Game detection is keyword-based (so new titles can be added without code changes), and **app stores are blacklisted** (palmplaystore / googleplay / app store / huawei_appgallery) — otherwise "opened the store" would be counted as "played a game"
-- **Capability boundary — OTT voice/video (WeChat, WhatsApp) cannot be judged at the application layer**: this platform has no SIP/RTP signaling. The OTT card therefore answers only "was there a call" and "how good was the network during the call" (duration, downlink RTT, RTT jitter, retransmission) and **cannot answer "the other side rejected me / my call failed to connect"**. That banner is rendered above the conclusion on purpose — please do not read the OTT card as a call-failure verdict
-- Four-dimension scoring: Availability / Latency / Transport quality / Radio quality. Each is 0–100 with a colour band (≥80 green, 50–79 amber, <50 red); the dimension matching the complaint type carries an orange dot. A dimension with no data shows "—", **never 0** (0 would look like a real failure)
-- Click any scoring card to open that dimension's full evidence (every raw metric with its threshold); click any cell in the minute-level evidence timeline to open the underlying XDR rows
-- The evidence timeline aligns the four sources into minute buckets, so a stall shows up as one row where traffic is normal but latency, radio and the conclusion all go bad — that is what you paste into the ticket
-- **Manual override is allowed and encouraged**: click "Override conclusion", pick the severity, enter the reason (at least 10 characters, required) and submit. The override renders **above** the system verdict with a blue left border, so the human judgement is what the reader sees first; the system verdict stays visible for comparison
-- Overrides are scoped to one operator + one masked number + one time window, so the same window can only hold one active override (re-submitting updates the same row). Every change is kept in the override history for audit
-- "Export Excel" produces four sheets (verdict / scoring + evidence / voice chain / timeline) and "Export PDF" prints the page for pasting straight into a complaint ticket
-- The page-level time window is minute-precise (5-minute step) and defaults to the last 3 hours; **max 24 hours per query** — the RAN radio source only retains 24 hours upstream, and a longer window would make the radio dimension silently empty
-- All four sources are fetched **serially** on purpose: they reuse one VMAX portal session, and hitting upstream in parallel makes the account hit "The maximum number of connections for the user is reached" and all sources fail at once. One slow source is much better than four dead ones
-- A single failed source never blanks the page: it is reported in the "data source hit" line with its own error, and the other dimensions still score. If the portal session is exhausted, wait about 30 minutes or stop clicking for a while
-- RAN (32) is queried by **IMSI, not by number** — the upstream subscriber-number column in the RAN table is empty for every row. The IMSI is taken from the 1300/1100 results first; when neither has one, the radio dimension says "no IMSI mapping" out loud instead of silently returning zero rows
-- The **"Radio quality" tab aggregates the radio data already fetched for this window — you do not need to query again**. It consumes the same RAN(32) rows behind the radio score, so the tab can never contradict the scorecard (no "score 62 but the tab says coverage is fine"). Top to bottom: verdict bar (one line + reasons), five KPI cards, level/quality trend chart, per-cell breakdown table, and a raw-record drill-down collapsed at the bottom
-- Read the **edge value (P10, worst 10% of samples), not the average**: a good average does not mean calls work — the edge level drives complaint experience. That is why the cards, the chart and the table all put P10 next to the average. The per-cell table is sorted by edge RSRP ascending, so **the worst cell is first**
-- The trend chart is dual-axis: RSRP average (solid) and RSRP P10 (red dashed) share the left axis, SINR uses the right axis. Read both together to tell weak coverage from interference — looking at only one line invites a wrong call
-- When there is no radio data the page **distinguishes three cases**: the query failed (with the backend error text), there are simply no measurement reports in this window, and there are radio rows but RSRP/SINR are all empty (the upstream table shape or permissions changed). The last case is never reported as "coverage is fine"
-- This page is **fully bilingual**: switch the language in the top-right corner. Every name coming from the backend (data sources, KPIs, app categories) carries both a translation key and a Chinese fallback, and units (万 / K) plus punctuation (：/ (n)) follow the active language
-- RAN (32) is queried by **IMSI, not MSISDN** — the RAN table's user-number column is entirely empty strings upstream. The IMSI is resolved from the 1300/1100 results first; if neither returns one, the radio dimension says "no IMSI mapping" instead of silently reporting 0 records
-- Results are read-only passthrough and nothing is persisted, but the number and current view are written into the URL — refreshing or sharing the link re-runs the same number
-- The link carries the number; check that the recipient is allowed to see that number before forwarding
-- **The four dimension scores and every figure on the voice / OTT / game / radio cards explain themselves on hover** (2026-11-05): these statistics are **computed in the frontend from the rules file** (the API sends neither scores nor counters); their input is exactly the row sets listed under "Source coverage", each source is paged with a cap (1300=1200 rows, 1100=800, 32=600, 1301=200) and a trailing `*` means the API flagged truncated, i.e. **rows were left unfetched** so every number is a sample; the voice "timeout/failure" counter used to add a PAGING row twice (PAGING branch plus the generic one) — fixed on 2026-11-05, so older screenshots show a larger value; the number in the game card header is named sessions in the code but is actually the **sum of xDR rows**, not a session count
-
 #### vmax_user_cca（`vmax_user_cca`）
 
 VMAX Intelligent Diagnosis Workspace: complaint-driven single-page narrative — conclusion first, then follow the evidence. Zone 1 diagnosis card (verdict + four scores with hover caliber notes + source row counts with truncation marks + Excel/PDF export + manual override), Zone 2 fault analysis (terminal→RAN→transport→core→OTT chain + explainable metrics: observation inline, rationale behind the ⓘ icon, each row links to the evidence drawer), Zone 3 root cause & recommendations (CCA corroboration + template suggestions + evidence library; a failed CCA query shows a persistent red banner, never mistaken for "no causes").
@@ -2829,6 +2797,16 @@ VMAX Intelligent Diagnosis Workspace: complaint-driven single-page narrative —
 - Zone 2 also has a **terminal profile card** (IMEI/model/RAT/APN/main QCI — identity only, it cannot prove carrier aggregation/MIMO capability) and a **rate-ceiling inference card** (the observed ceiling of 1300 `throughput_max`; when samples are insufficient it says so explicitly — Gx/Gy authorised bandwidth is not collected in this deployment, so no direct value is readable)
 - The number is stored under ccaMsisdn and does not interfere with the legacy page
 - Fully bilingual
+
+#### vmax_selftest（`vmax_selftest`）
+
+XDR Query Self-test (entry: Network → XDR Query Self-test; open ?page=vmax_selftest): enter a number and serially check the RAN per-table list, merged tables 1100/1300/1301/32, and per-table 32 UEMR / 1300 FLOW / 1100 S1MME — 8 checks in a recent 3-hour window. Each item shows pass, no data, no IMSI mapping, or failure, with elapsed time and the raw error. Read-only queries; writes a query audit entry.
+
+- Entry: Network → XDR Query Self-test (or open ?page=vmax_selftest directly)
+- Enter a number to run 8 checks serially (RAN per-table list → merged 1100/1300/1301/32 → per-table 32 UEMR / 1300 FLOW / 1100 S1MME)
+- Time window is fixed to the last 3 hours
+- Per-item result: pass / no data / no IMSI mapping / failure, with elapsed time and raw error text
+- Read-only; does not change upstream data; each query is written to the audit log
 
 #### ipt_power（`ipt_power`）
 
@@ -2963,7 +2941,7 @@ Three config layers, highest first: environment variables (backend/.env, 203 key
 
 **The board data is not updating?**
 
-① Check the task's latest result and the failure summary in "Task Manager"; ② check whether the header "Auto refresh" is enabled (it is off by default — the page will not reload on its own; refresh manually or click "Start Refresh"); ③ remember some data is inherently low-frequency: alarms every minute, microwave topology daily 05:15, packet loss daily 06:30, incident overview at minute 20 each hour. The "DB Data Freshness Check" task history also logs the call chain and direction when stale (including the on-disk age of file-based sources).
+① Check the task's latest result and the failure summary in "Task Manager"; ② check whether the header "Auto refresh" is enabled (it is off by default — the page will not reload on its own; refresh manually, or turn on "Auto Refresh" in the header "More settings (⋯)" panel); ③ remember some data is inherently low-frequency: alarms every minute, microwave topology daily 05:15, packet loss daily 06:30, incident overview at minute 20 each hour. The "DB Data Freshness Check" task history also logs the call chain and direction when stale (including the on-disk age of file-based sources).
 
 **Numbers do not match the expected criteria?**
 
