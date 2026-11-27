@@ -3,11 +3,12 @@
  * 桌面宽度下无横向滚动；行点击打开详情（展开按钮 stopPropagation）。
  * ========================================================================== */
 
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Empty, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { DownOutlined, RightOutlined } from '@ant-design/icons'
 
+import { getNetworkTopologyTraffic } from '../../api'
 import { useI18n } from '../../i18n'
 import { WH } from '../../theme'
 import { CardBase } from '../../components/cards'
@@ -21,6 +22,9 @@ import {
   statusLabelKey, statusSortRank,
 } from './prtgModels'
 import { explainStatusReason } from './prtgLogModels'
+import {
+  TopoLink, TopoNode, buildPeerLabelBySensorId,
+} from './prtgTopologyModels'
 
 const { Text } = Typography
 
@@ -64,6 +68,23 @@ export interface PrtgLinksTableProps {
 export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: PrtgLinksTableProps) {
   const { t } = useI18n()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  /** 拓扑对端名（拿不到则空 Map，小字退回只显示设备短名） */
+  const [peerBySensor, setPeerBySensor] = useState<Map<number, string>>(() => new Map())
+
+  useEffect(() => {
+    let alive = true
+    getNetworkTopologyTraffic({ period: 'live' })
+      .then(res => {
+        if (!alive) return
+        const nodes = (res.data?.nodes || []) as TopoNode[]
+        const topoLinks = (res.data?.links || []) as TopoLink[]
+        setPeerBySensor(buildPeerLabelBySensorId(nodes, topoLinks))
+      })
+      .catch(() => {
+        if (alive) setPeerBySensor(new Map())
+      })
+    return () => { alive = false }
+  }, [])
 
   const groups = useMemo(() => {
     const map = new Map<string, { raw: string; links: PrtgLink[] }>()
@@ -202,14 +223,15 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
         const link = row.link
         const cleaned = cleanSensorName(link.sensor_name)
         const device = shortDeviceName(link.device_name)
-        const peer = isSiteMatchedPeer(link)
+        const topoPeer = peerBySensor.get(link.sensor_id)
+        const sitePeer = isSiteMatchedPeer(link)
+        const subtitle = topoPeer
+          ? `${device} → ${topoPeer}`
+          : (sitePeer ? `${device} · ${sitePeer}` : device)
         return (
           <div title={link.sensor_name || undefined}>
             <div style={{ color: WH.text }}>{cleaned}</div>
-            <div style={{ fontSize: 12, color: WH.textMuted }}>
-              {device}
-              {peer ? ` · ${peer}` : ''}
-            </div>
+            <div style={{ fontSize: 12, color: WH.textMuted }}>{subtitle}</div>
           </div>
         )
       },
@@ -333,7 +355,7 @@ export default function PrtgLinksTable({ links, loading, error, onOpenDetail }: 
         )
       },
     },
-  ], [t, numCell, collapsed, toggleGroup])
+  ], [t, numCell, collapsed, toggleGroup, peerBySensor])
 
   const expandedRowRender = useCallback((row: TableRow) => {
     if (isGroup(row)) return null

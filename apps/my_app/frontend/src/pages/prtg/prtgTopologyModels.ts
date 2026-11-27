@@ -7,7 +7,7 @@
  * ========================================================================== */
 
 import type { PrtgLink, PrtgWindow } from './prtgModels'
-import { shortDeviceName, statusSortRank } from './prtgModels'
+import { NA, cleanSensorName, shortDeviceName, statusSortRank } from './prtgModels'
 
 export type TopoPeriod = 'live' | '1h' | '24h' | '7d'
 
@@ -334,4 +334,32 @@ export function paintEdge(link: TopoLink, isDark: boolean): {
 export function findPageLink(links: PrtgLink[], sensorId: number | null): PrtgLink | undefined {
   if (sensorId == null) return undefined
   return links.find(l => l.sensor_id === sensorId)
+}
+
+/**
+ * sensor_id → 对端展示名（拓扑边的非核心设备端；两端皆 device 时取 target）。
+ * 只消费接口 nodes/links，不猜测。
+ */
+export function buildPeerLabelBySensorId(
+  nodes: TopoNode[],
+  links: TopoLink[],
+): Map<number, string> {
+  const byId = new Map(nodes.map(n => [n.id, n]))
+  const out = new Map<number, string>()
+  for (const link of links) {
+    const sid = sensorIdOf(link)
+    if (sid == null) continue
+    const src = byId.get(link.source_node)
+    const dst = byId.get(link.target_node)
+    if (!src || !dst) continue
+    const srcDev = (src.type || '').toLowerCase() === 'device'
+    const dstDev = (dst.type || '').toLowerCase() === 'device'
+    const peer = srcDev && !dstDev ? dst : (!srcDev && dstDev ? src : dst)
+    const t = (peer.type || '').toLowerCase()
+    const label = t === 'device' || t === 'peer' || t === 'customer'
+      ? shortDeviceName(peer.name)
+      : cleanSensorName(peer.name)
+    if (label && label !== NA) out.set(sid, label)
+  }
+  return out
 }

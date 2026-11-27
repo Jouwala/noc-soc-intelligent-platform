@@ -21,13 +21,14 @@ import { CardBase, StatCard } from '../../components/cards'
 import CalcChainNote from '../../components/CalcChainNote'
 import { ExplainIcon } from '../../components/MetricExplain'
 import {
-  fmtInt, fmtNum, fmtTime, NA,
+  fmtInt, fmtNum, fmtTime, NA, PRTG_SLA_TARGET_PCT,
   PrtgCapacityRow, PrtgSlaLink, PrtgSlaReport,
 } from './prtgModels'
 
 const { Text } = Typography
 
-const TARGET = 99.5
+/** 与 backend/services/prtg/sla.py::DEFAULT_TARGET 同源（PRTG_SLA_TARGET_PCT） */
+const TARGET = PRTG_SLA_TARGET_PCT
 
 export default function PrtgSlaView() {
   const { t } = useI18n()

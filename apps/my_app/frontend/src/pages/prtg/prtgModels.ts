@@ -297,8 +297,21 @@ export interface AttentionItem {
   link: PrtgLink
 }
 
+/**
+ * SLA 默认可用率目标（%）。
+ * 出处：backend/services/prtg/sla.py::DEFAULT_TARGET = 99.5
+ * 与 pages/prtg/PrtgSlaView.tsx 的请求参数 target 同源。
+ * 「需要关注」里 uptime_pct 偏低阈值与此一致（严格小于）。
+ */
+export const PRTG_SLA_TARGET_PCT = 99.5
+
 /** 可用率低于此值视为「偏低」（只做筛选，不重算数值） */
-export const UPTIME_LOW_THRESHOLD = 99
+export const UPTIME_LOW_THRESHOLD = PRTG_SLA_TARGET_PCT
+
+/** uptime_pct 是否低于 SLA 目标（null 不判偏低） */
+export function isUptimeBelowTarget(uptimePct: number | null | undefined): boolean {
+  return uptimePct != null && Number.isFinite(uptimePct) && uptimePct < UPTIME_LOW_THRESHOLD
+}
 
 function hasPositiveRate(a?: number | null, b?: number | null): boolean {
   return (a != null && a > 0) || (b != null && b > 0)
@@ -308,7 +321,7 @@ function attentionKindOf(link: PrtgLink): AttentionKind | null {
   const st = (link.status || '').trim().toLowerCase()
   if (st === 'down') return 'down'
   if (st === 'unusual') return 'unusual'
-  if (link.uptime_pct != null && link.uptime_pct < UPTIME_LOW_THRESHOLD) return 'low_uptime'
+  if (isUptimeBelowTarget(link.uptime_pct)) return 'low_uptime'
   if ((link.down_count_24h ?? 0) > 0) return 'down_24h'
   if (hasPositiveRate(link.errors_in, link.errors_out) || hasPositiveRate(link.discards_in, link.discards_out)) {
     return 'errors'

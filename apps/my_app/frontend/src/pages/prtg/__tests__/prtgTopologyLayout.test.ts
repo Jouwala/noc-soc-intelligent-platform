@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  deviceClusterKey, isSecurityName, layoutColumnOf, layoutTopoNodes,
-  mapWindowToTopoPeriod, mergeParallelEdges, trafficWidth,
+  buildPeerLabelBySensorId, deviceClusterKey, isSecurityName, layoutColumnOf,
+  layoutTopoNodes, mapWindowToTopoPeriod, mergeParallelEdges, trafficWidth,
   type TopoLink, type TopoNode,
 } from '../prtgTopologyModels'
 
@@ -102,5 +102,26 @@ describe('trafficWidth', () => {
     expect(trafficWidth(40, 20)).toBe(3)
     expect(trafficWidth(150, 100)).toBe(4)
     expect(trafficWidth(400, 200)).toBe(5)
+  })
+})
+
+describe('buildPeerLabelBySensorId', () => {
+  it('device→peer 取对端短名；device→unknown 取清洗后接口名', () => {
+    const nodes: TopoNode[] = [
+      node({ id: 1, name: 'OLIB-NX-3172-WAN-2.orangeliberia (NEXUS)', type: 'device' }),
+      node({ id: 2, name: 'CSQUARED.peer.net', type: 'peer' }),
+      node({
+        id: 3,
+        name: '(436232192) ======== OLIB-NX-3172-WAN-2-FG1500-LAN-2-P-39 ==========',
+        type: 'unknown',
+      }),
+    ]
+    const links: TopoLink[] = [
+      link({ id: 1, source_node: 1, target_node: 2, sensor_id: 100 }),
+      link({ id: 2, source_node: 1, target_node: 3, sensor_id: 101 }),
+    ]
+    const map = buildPeerLabelBySensorId(nodes, links)
+    expect(map.get(100)).toBe('CSQUARED')
+    expect(map.get(101)).toBe('OLIB-NX-3172-WAN-2-FG1500-LAN-2-P-39')
   })
 })

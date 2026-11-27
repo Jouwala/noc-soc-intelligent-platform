@@ -10,8 +10,8 @@ import { WH } from '../../theme'
 import { CardBase, StatCard } from '../../components/cards'
 import { ExplainIcon, ExplainPopover } from '../../components/MetricExplain'
 import {
-  NA, PrtgKpi, PrtgLink, cleanSensorName, findWorstUptime, fmtInt, fmtNum,
-  isCapacityKnown, isSiteMatched, shortDeviceName,
+  NA, PrtgKpi, PrtgLink, UPTIME_LOW_THRESHOLD, cleanSensorName, findWorstUptime,
+  fmtInt, fmtNum, isCapacityKnown, isSiteMatched, shortDeviceName,
 } from './prtgModels'
 
 export interface PrtgHealthKpisProps {
@@ -181,7 +181,7 @@ export default function PrtgHealthKpis({ kpi, links, hasOverview }: PrtgHealthKp
           value={worstValue}
           suffix={worstSuffix}
           explainText={worstExplain}
-          accentColor={worst && worst.uptime_pct < 99 ? WH.warn : WH.teal}
+          accentColor={worst && worst.uptime_pct < UPTIME_LOW_THRESHOLD ? WH.warn : WH.teal}
           subText={(
             <>
               <div title={worst?.link.sensor_name || undefined}>{worstName}</div>
