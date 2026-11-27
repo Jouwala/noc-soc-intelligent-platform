@@ -27,10 +27,13 @@
                                      每次冒烟一个时间戳目录，下一次运行不再覆盖上一次的失败现场
 
   失败分类（#303，2026-11-26）：
-    报告末行除 RESULT 外还有 FAILURE_CLASS=<none|alembic-diverged|startup-timeout|start-all-timeout|start-all-error>。
+    报告在 RESULT 之前多一行 FAILURE_CLASS=<none|alembic-diverged|startup-timeout|start-all-timeout|start-all-error>
+    （smoke-local.ps1 按 ^FAILURE_CLASS= 读，与 TOTAL/RESULT 的先后无影响）。
     alembic-diverged = 共享 pgdata 已到新版本、当前分支缺对应迁移文件，需 rebase；
     startup-timeout  = 后端/PG/门户启动探测超时，属资源争用，已放宽窗口并空载重试一次。
     判读集中在 ops\smoke\startup-failure.ps1（可用 -SelfTest 单测）。
+    该文件缺失时（例如基于旧 main 切出的在途分支）不拒绝运行，只是不做分类，
+    按旧行为一次判失败（#303 评审提醒：不能让在途 PR 因为缺文件就永远 exit 2）。
 
   退出码: 0 = 全部通过（含「仅已知 NUR 失败被忽略」）; 1 = 有失败项;
           2 = 预检拒绝（缺 02 标志，或 02 端口已被占用=可能别人正在冒烟），
@@ -84,13 +87,14 @@ $Tmp         = Join-Path $Root 'TMP'
 $Here        = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # 失败分类器（#303）：start_all 失败必须能区分「迁移链发散」与「启动探测超时」。
-# 缺这个文件时拒绝运行，不回退到含糊的 exit=1 判读。
+# 该文件是 #303 新加的，基于旧 main 切出的在途分支里没有它 —— 那种分支不能因此
+# 被挡住（否则每个在途 PR 都要先 rebase 才能冒烟），所以缺失时只降级为「不分类」，
+# 按旧行为一次判失败，并在备注里写明原因。
 $FailureClassifier = Join-Path $Here 'startup-failure.ps1'
-if (-not (Test-Path -LiteralPath $FailureClassifier)) {
-    Write-Host "拒绝执行：缺少 $FailureClassifier（#303 起要求 start_all 失败可分类）。" -ForegroundColor Red
-    exit 2
+$script:HaveClassifier = Test-Path -LiteralPath $FailureClassifier
+if ($script:HaveClassifier) {
+    . $FailureClassifier
 }
-. $FailureClassifier
 
 # ⛔ 只允许在项目内冒烟副本里跑。缺这个标记说明当前树不是 provision 生成的
 # 副本（例如直接在生产 02 根、或旧的 D:\02_olbr_portal_smoke 上）——那会重建
@@ -1045,6 +1049,12 @@ try {
         $sr = Invoke-DeployScript -ScriptPath (Join-Path $Root 'ops\deploy\start_all.ps1') -OutFile "$LogBase`_start_all.out" -ErrFile "$LogBase`_start_all.err" -TimeoutSec 600
         $startOk = ($sr.Code -eq 0) -and (-not $sr.TimedOut)
         if ($startOk) { break }
+        if (-not $script:HaveClassifier) {
+            # 旧分支没有 startup-failure.ps1：不分类、不重试，按旧行为一次判失败。
+            Archive-SmokeArtifacts -Reason ("start_all-attempt-{0}" -f $startAttempts)
+            Add-Note "本分支没有 ops\smoke\startup-failure.ps1（#303 新增），本次不做失败分类、也不空载重试；rebase 到含 #303 的 main 后才有分类与重试。"
+            break
+        }
         $fc = Get-StartAllFailureClass -TmpDir $Tmp -LogBase $LogBase -TimedOut ([bool]$sr.TimedOut)
         $script:StartAllClass = $fc.Class
         $script:StartAllDetail = $fc.Detail

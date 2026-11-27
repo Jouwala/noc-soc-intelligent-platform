@@ -92,6 +92,13 @@ if (-not $DryRun -and -not (Test-Path -LiteralPath $TmpDir)) {
     New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null
 }
 
+# #303 评审 blocking 项：portable-alembic.class 是跨轮次保留的标记（.smoke 的 TMP 不清，
+# maintain-smoke-runner 的清理模式也不含 *.class）。必须在**本轮任何启动动作之前**删掉，
+# 否则上一轮残留的 DIVERGED 会被误当成本轮的迁移链发散，掩盖真正的 PG/后端启动超时。
+if (-not $DryRun) {
+    Remove-Item -LiteralPath (Join-Path $TmpDir 'portable-alembic.class') -Force -ErrorAction SilentlyContinue
+}
+
 # ---------------------------------------------------------------- .env 载入
 # 隔离原则：副本根 .env 是唯一配置真相源，**优先于**继承的进程/系统环境变量。
 # 否则在生产机本机试跑时，父进程里的生产端口/路径会污染副本，抢生产服务。

@@ -94,7 +94,8 @@ powershell -NoProfile -File D:\02_olbr_portal\.smoke\ops\deploy\install-smoke-wa
   **失败分类（#303，2026-11-26）**：`start_all` 失败不再只给歧义的 exit=1，
   `startup-failure.ps1` 判成 `alembic-diverged`（分支缺共享 pgdata 已在的迁移文件，
   rebase 可解）、`startup-timeout`（后端/PG/门户探测超时，已放宽窗口并空载重试一次）
-  等，报告末行写 `FAILURE_CLASS=`；`portable-*.out/.err` 与 start_all 日志按
+  等，报告在 `RESULT` 之前多一行 `FAILURE_CLASS=`（`smoke-local.ps1` 按行首匹配，位置不影响判读）；
+  `portable-*.out/.err` 与 start_all 日志按
   `pr-<PR>-<sha7>/<时间戳>` 归档到项目根 `TMP/smoke-logs`，下次冒烟不覆盖上次现场。
 - `smoke-watcher.ps1`：每 60 秒轮询 GitHub，CI 变绿且无 `smoke-passed` 的
   open PR 就地冒烟、贴评论、通过才打标签；贴前重读 PR，head 变了就作废。
@@ -320,6 +321,9 @@ theirs = 生产工作区，逐文件用 `git merge-file --diff3` 合。
 - **失败现场归档在项目根 `TMP/smoke-logs/pr-<PR>-<sha7>/<时间戳>/`**，含
   `portable-backend.out/.err`、`portable-pg.log`、`portable-alembic.*` 与 start_all 日志，
   下一次冒烟不会覆盖。
+- **`portable-alembic.class` 是跨轮次文件**：`start_all.ps1` 在本轮任何启动动作之前先删它，
+  分类器也只在「本轮日志没有超时证据」时才退回该标记。两者缺一都会把上一轮的发散标记
+  当成这一轮的根因、跳过超时重试（2026-11-26 评审 blocking 项，已修）。
 
 完整的执行记录（2026-11-16 那次，含冲突判定表与踩坑清单）见
 `.agent-work/tasks/active/task-sync-01-to-02-20261116.md`。

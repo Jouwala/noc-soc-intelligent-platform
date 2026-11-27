@@ -9,6 +9,12 @@
   两者都记成同一个 exit-1 时，人只能翻日志猜。本文件把判读集中到一处，
   只读日志、不启动/停止任何进程。
 
+  ⚠ 判读顺序（2026-11-26 评审 blocking 项修正）：**只信本轮 start_all 的日志**。
+  `TMP\portable-alembic.class` 是跨轮次保留的文件，若先于本轮日志被信任，
+  上一轮残留的 DIVERGED 标记会把本轮的 PG 超时误判成迁移链发散（评审复现）。
+  因此：本轮日志里的发散证据 > 本轮日志里的超时证据 > 无日志时才退回 class 文件。
+  start_all.ps1 另在脚本最开头（PG 启动之前）删除该标记，双保险。
+
   用法（被 ops\smoke\smoke.ps1 点源引入）：
     . "$PSScriptRoot\startup-failure.ps1"
     $fc = Get-StartAllFailureClass -TmpDir $Tmp -LogBase $LogBase -TimedOut $sr.TimedOut
@@ -60,42 +66,23 @@ function Get-StartAllFailureClass {
         Hint      = ''
     }
 
-    # ---- 1) alembic 迁移链发散 -------------------------------------------
-    # start_all 自己写的分类文件优先（稳定标记，不受日志尾部截断影响）。
-    if ($TmpDir) {
-        $classFile = Join-Path $TmpDir 'portable-alembic.class'
-        $classText = (Read-LogText $classFile).Trim()
-        if ($classText -match '^DIVERGED\s+(\S+)') {
-            $result.Class = 'alembic-diverged'
-            $result.Revision = $Matches[1]
-            $result.Detail = "alembic 缺少 revision $($result.Revision)：pgdata 已到该版本，当前代码树没有这份迁移文件"
-            $result.Hint = "把分支 rebase 到最新 platform/main 后重跑（缺 $($result.Revision)）。不要 alembic stamp：共享 pgdata 被 stamp 成旧分支的 head 会让后续迁移错位。"
-            return $result
-        }
-    }
-
-    # ---- 2) 启动探测超时 -------------------------------------------------
+    # ---- 0) 只读本轮 start_all 的日志 ------------------------------------
     $startText = ''
     if ($LogBase) {
         $startText = (Read-LogText "$LogBase`_start_all.err") + "`n" + (Read-LogText "$LogBase`_start_all.out")
     }
-    if (-not $startText.Trim() -and $TmpDir) {
+    $hasStartLog = $startText.Trim().Length -gt 0
+    if (-not $hasStartLog -and $TmpDir) {
+        # 兜底：没有 start_all 包装日志时（手工调用）才看后端自己的输出。
         $startText = (Read-LogText (Join-Path $TmpDir 'portable-backend.err')) + "`n" +
                      (Read-LogText (Join-Path $TmpDir 'portable-backend.out'))
+        $hasStartLog = $startText.Trim().Length -gt 0
     }
 
-    # 当前这次 start_all 的报错优先：新版本写 ALEMBIC_DIVERGED，旧版本把 alembic stderr
-    # 尾部带进 throw。不能先读 portable-alembic.err —— 那是上一次运行的残留，本轮若在
-    # 迁移前就超时，会把 PG 超时误判成 alembic 发散。
+    # ---- 1) 本轮日志里的迁移链发散证据（最强，先判）----------------------
     $rev = ''
     if ($startText -match 'ALEMBIC_DIVERGED\s+revision=(\S+)') { $rev = $Matches[1] }
     elseif ($startText -match "Can't locate revision identified by '([^']+)'") { $rev = $Matches[1] }
-    if (-not $rev -and -not $startText.Trim() -and $TmpDir) {
-        # 没有任何 start_all 日志时，才退回复用 alembic 自己的输出（例如手工调用 start_all）。
-        $alembicText = (Read-LogText (Join-Path $TmpDir 'portable-alembic.err')) + "`n" +
-                       (Read-LogText (Join-Path $TmpDir 'portable-alembic.out'))
-        if ($alembicText -match "Can't locate revision identified by '([^']+)'") { $rev = $Matches[1] }
-    }
     if ($rev) {
         $result.Class = 'alembic-diverged'
         $result.Revision = $rev
@@ -104,6 +91,7 @@ function Get-StartAllFailureClass {
         return $result
     }
 
+    # ---- 2) 本轮日志里的启动探测超时证据（必须先于 class 文件）------------
     if ($startText -match '未在\s*(\d+)\s*s?\s*内监听\s*(\d+)') {
         $wait = [int]$Matches[1]
         $port = [int]$Matches[2]
@@ -127,7 +115,30 @@ function Get-StartAllFailureClass {
         return $result
     }
 
-    # ---- 3) 未匹配到已知分类 ---------------------------------------------
+    # ---- 3) 无本轮日志时，才退回跨轮次的 class 文件（手工/截断场景）-------
+    if ($TmpDir) {
+        $classText = (Read-LogText (Join-Path $TmpDir 'portable-alembic.class')).Trim()
+        if ($classText -match '^DIVERGED\s+(\S+)') {
+            $result.Class = 'alembic-diverged'
+            $result.Revision = $Matches[1]
+            $result.Detail = "alembic 缺少 revision $($result.Revision)（依据 portable-alembic.class：本轮无 start_all 日志可佐证）"
+            $result.Hint = "把分支 rebase 到最新 platform/main 后重跑（缺 $($result.Revision)）。不要 alembic stamp。若本轮实际是启动超时，请确认该标记不是上一轮残留。"
+            return $result
+        }
+        if (-not $hasStartLog) {
+            $alembicText = (Read-LogText (Join-Path $TmpDir 'portable-alembic.err')) + "`n" +
+                           (Read-LogText (Join-Path $TmpDir 'portable-alembic.out'))
+            if ($alembicText -match "Can't locate revision identified by '([^']+)'") {
+                $result.Class = 'alembic-diverged'
+                $result.Revision = $Matches[1]
+                $result.Detail = "alembic 缺少 revision $($result.Revision)（依据 portable-alembic.err：本轮无 start_all 日志可佐证）"
+                $result.Hint = "把分支 rebase 到最新 platform/main 后重跑（缺 $($result.Revision)）。不要 alembic stamp。"
+                return $result
+            }
+        }
+    }
+
+    # ---- 4) 未匹配到已知分类 ---------------------------------------------
     $tail = ($startText -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 6) -join ' | '
     if ($tail) { $tail = '；日志尾部：' + $tail }
     $result.Class = 'start-all-error'
@@ -139,7 +150,7 @@ function Get-StartAllFailureClass {
 function Invoke-StartupFailureSelfTest {
     $root = Join-Path $env:TEMP ('smoke-failure-selftest-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $root -Force | Out-Null
-    $failed = 0
+    $script:failed = 0
     try {
         function Assert-Class {
             param([string]$Name, $Expected, $Actual, [string]$Extra = '')
@@ -149,35 +160,47 @@ function Invoke-StartupFailureSelfTest {
             else { Write-Host "[FAIL] $Name 期望 $Expected，实际 $($Actual.Class)（$($Actual.Detail)）" -ForegroundColor Red; $script:failed++ }
         }
 
-        # 1) alembic 发散：只认 alembic stderr 的原文
-        Set-Content -LiteralPath (Join-Path $root 'portable-alembic.err') -Encoding UTF8 -Value @(
-            'INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.',
-            "alembic.util.exc.CommandError: Can't locate revision identified by '0013_network_topology'"
-        )
-        $r = Get-StartAllFailureClass -TmpDir $root
-        Assert-Class 'alembic-diverged（stderr）' 'alembic-diverged' $r 'Revision'
-
-        # 2) start_all 自己写的分类文件优先（日志可能被截断）
-        Remove-Item -LiteralPath (Join-Path $root 'portable-alembic.err') -Force
-        Set-Content -LiteralPath (Join-Path $root 'portable-alembic.class') -Encoding UTF8 -Value 'DIVERGED 0013_network_topology'
-        $r = Get-StartAllFailureClass -TmpDir $root
-        Assert-Class 'alembic-diverged（class 文件）' 'alembic-diverged' $r 'Revision'
-
-        # 3) 后端探测超时：从 start_all.err 读端口
-        Remove-Item -LiteralPath (Join-Path $root 'portable-alembic.class') -Force
         $logBase = Join-Path $root 'smoke_999_abcdef0'
+
+        # 1) 本轮日志里就有 alembic 发散原文（旧版 start_all 的 throw 会带上）
+        Set-Content -LiteralPath "$logBase`_start_all.err" -Encoding UTF8 -Value @(
+            'my_app 后端 已监听 7039',
+            "alembic upgrade head 失败：alembic.util.exc.CommandError: Can't locate revision identified by '0013_network_topology'"
+        )
+        $r = Get-StartAllFailureClass -TmpDir $root -LogBase $logBase
+        Assert-Class 'alembic-diverged（本轮日志原文）' 'alembic-diverged' $r 'Revision'
+
+        # 2) 新版 start_all 写的稳定标记（ALEMBIC_DIVERGED）同样识别
+        Set-Content -LiteralPath "$logBase`_start_all.err" -Encoding UTF8 -Value 'alembic 迁移链发散（ALEMBIC_DIVERGED revision=0014_prtg_logs_incidents）：pgdata 已到该版本'
+        $r = Get-StartAllFailureClass -TmpDir $root -LogBase $logBase
+        Assert-Class 'alembic-diverged（ALEMBIC_DIVERGED）' 'alembic-diverged' $r 'Revision'
+
+        # 3) 评审 blocking 项：上一轮残留的 class 标记 + 本轮真实 PG 超时
+        #    必须判超时（而不是发散），否则冒烟会跳过重试。
+        Remove-Item -LiteralPath "$logBase`_start_all.err" -Force -ErrorAction SilentlyContinue
+        Set-Content -LiteralPath (Join-Path $root 'portable-alembic.class') -Encoding UTF8 -Value 'DIVERGED 0013_network_topology'
+        Set-Content -LiteralPath "$logBase`_start_all.err" -Encoding UTF8 -Value '便携 PG 未在 60s 内监听 55432，见 portable-pg.log'
+        $r = Get-StartAllFailureClass -TmpDir $root -LogBase $logBase
+        Assert-Class '陈旧 class + 本轮超时 -> 超时' 'startup-timeout' $r 'Component'
+        if ($r.Component -ne '便携 PostgreSQL') { Write-Host "[FAIL] 组件映射错误：$($r.Component)" -ForegroundColor Red; $script:failed++ }
+
+        # 4) 后端探测超时：从 start_all.err 读端口
         Set-Content -LiteralPath "$logBase`_start_all.err" -Encoding UTF8 -Value 'my_app 后端 未在 150s 内监听 7039，日志：portable-backend.out / .err'
         $r = Get-StartAllFailureClass -TmpDir $root -LogBase $logBase
         Assert-Class 'startup-timeout（后端）' 'startup-timeout' $r 'Component'
         if ($r.Component -ne 'my_app 后端') { Write-Host "[FAIL] 组件映射错误：$($r.Component)" -ForegroundColor Red; $script:failed++ }
 
-        # 4) 外部总超时（没有能匹配的启动日志时才落到这一类）
+        # 5) 无本轮日志时才退回 class 文件（手工调用 start_all 的场景）
         Remove-Item -LiteralPath "$logBase`_start_all.err" -Force -ErrorAction SilentlyContinue
+        $r = Get-StartAllFailureClass -TmpDir $root -LogBase $logBase
+        Assert-Class '无日志 + class 文件 -> 发散（标注依据）' 'alembic-diverged' $r 'Revision'
+
+        # 6) 外部总超时（没有能匹配的启动日志时才落到这一类）
+        Remove-Item -LiteralPath (Join-Path $root 'portable-alembic.class') -Force -ErrorAction SilentlyContinue
         $r = Get-StartAllFailureClass -TmpDir $root -LogBase $logBase -TimedOut $true
         Assert-Class 'start-all-timeout' 'start-all-timeout' $r 'Detail'
 
-        # 5) 兜底分类
-        Remove-Item -LiteralPath "$logBase`_start_all.err" -Force -ErrorAction SilentlyContinue
+        # 7) 兜底分类
         Set-Content -LiteralPath "$logBase`_start_all.err" -Encoding UTF8 -Value 'FATAL: something unexpected'
         $r = Get-StartAllFailureClass -TmpDir $root -LogBase $logBase
         Assert-Class 'start-all-error（兜底）' 'start-all-error' $r 'Detail'
