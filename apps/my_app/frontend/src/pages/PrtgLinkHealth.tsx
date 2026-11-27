@@ -4,7 +4,7 @@
  * 数据源：GET /api/prtg/overview、/api/prtg/links、/api/prtg/links/{sensor_id}
  * 后端实现：backend/routers/prtg.py → backend/services/prtg/dashboard.py（只读）
  *
- * 改版 P1（前端）：顶栏合并工具条 · 4 KPI · 趋势/关注并排（左侧可替换槽）·
+ * 改版 P1/P2（前端）：顶栏合并工具条 · 4 KPI · 拓扑/趋势可切换槽 + 关注面板 ·
  * 7 列分组表 · 名称清洗 · Incidents/CalcChainNote 下沉。
  *
  * 三条全站硬约束（AGENTS.md 三.3b / 3c）：
@@ -31,6 +31,7 @@ import PrtgIncidents from './prtg/PrtgIncidents'
 import PrtgAttentionPanel from './prtg/PrtgAttentionPanel'
 import PrtgHealthKpis from './prtg/PrtgHealthKpis'
 import PrtgLinksTable from './prtg/PrtgLinksTable'
+import PrtgTopologyView, { PrtgVisualModeSwitch } from './prtg/PrtgTopologyView'
 import {
   NA, PRTG_WINDOWS, PrtgLink, PrtgLinkDetailData, PrtgOverview, PrtgWindow,
   cleanSensorName, fmtTime, shortDeviceName, windowLabelKey,
@@ -42,19 +43,12 @@ const { Text } = Typography
 const STALE_SECONDS = 300
 
 /**
- * 左侧主视觉槽位：当前放全网趋势；第 2 步可换成拓扑图，不必改右侧关注面板。
- * 传入 `slot` 即可整段替换趋势图。
+ * 左侧主视觉槽位：默认拓扑；可切回全网趋势。右侧关注面板独立。
  */
-function OverviewVisualSlot({
-  slot,
-  fallback,
-}: {
-  slot?: ReactNode
-  fallback: ReactNode
-}) {
+function OverviewVisualSlot({ children }: { children: ReactNode }) {
   return (
     <div data-prtg-slot="overview-visual" style={{ flex: '1 1 60%', minWidth: 0 }}>
-      {slot ?? fallback}
+      {children}
     </div>
   )
 }
@@ -78,6 +72,10 @@ export default function PrtgLinkHealth() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
+
+  /* 槽位：拓扑（默认）/ 趋势；关注面板悬停高亮拓扑边 */
+  const [visualMode, setVisualMode] = useState<'topo' | 'trend'>('topo')
+  const [highlightSensorId, setHighlightSensorId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -118,6 +116,7 @@ export default function PrtgLinkHealth() {
 
   const openDetail = useCallback((link: PrtgLink, at?: { x: number; y: number }) => {
     setDetailId(link.sensor_id)
+    setHighlightSensorId(link.sensor_id)
     setAnchor(at || null)
     setDetailLoading(true)
     setDetailError('')
@@ -174,7 +173,7 @@ export default function PrtgLinkHealth() {
     )
   }
 
-  const trendFallback = (
+  const trendCard = (
     <CardBase
       title={<>{t('prtg.trend.title')} <ExplainIcon text={t('prtg.trend.explain')} /></>}
       extra={<Text type="secondary" style={{ fontSize: 12 }}>{t(windowLabelKey(windowKey))}</Text>}
@@ -183,6 +182,24 @@ export default function PrtgLinkHealth() {
         ? <PrtgTrendChart points={overview.trend || []} windowKey={windowKey} isDark={isDark} />
         : <Empty description={t('prtg.trend.empty')} />}
     </CardBase>
+  )
+
+  const visualSlot = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <PrtgVisualModeSwitch mode={visualMode} onChange={setVisualMode} />
+      </div>
+      {visualMode === 'topo' ? (
+        <PrtgTopologyView
+          windowKey={windowKey}
+          pageLinks={links}
+          isDark={isDark}
+          highlightSensorId={highlightSensorId}
+          onOpenDetail={openDetail}
+          onSwitchToTrend={() => setVisualMode('trend')}
+        />
+      ) : trendCard}
+    </div>
   )
 
   return (
@@ -262,9 +279,13 @@ export default function PrtgLinkHealth() {
           alignItems: 'stretch',
         }}
       >
-        <OverviewVisualSlot fallback={trendFallback} />
+        <OverviewVisualSlot>{visualSlot}</OverviewVisualSlot>
         <div style={{ flex: '1 1 36%', minWidth: 260 }}>
-          <PrtgAttentionPanel links={links} onSelect={openDetail} />
+          <PrtgAttentionPanel
+            links={links}
+            onSelect={openDetail}
+            onHighlight={setHighlightSensorId}
+          />
         </div>
       </div>
 

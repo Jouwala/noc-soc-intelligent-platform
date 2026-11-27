@@ -53,9 +53,11 @@ function reasonText(item: AttentionItem, t: (k: string, p?: Record<string, strin
 export interface PrtgAttentionPanelProps {
   links: PrtgLink[]
   onSelect: (link: PrtgLink, at?: { x: number; y: number }) => void
+  /** 悬停联动拓扑高亮（sensor_id）；离开时传 null */
+  onHighlight?: (sensorId: number | null) => void
 }
 
-export default function PrtgAttentionPanel({ links, onSelect }: PrtgAttentionPanelProps) {
+export default function PrtgAttentionPanel({ links, onSelect, onHighlight }: PrtgAttentionPanelProps) {
   const { t } = useI18n()
   const items = pickAttentionItems(links, 8)
 
@@ -80,6 +82,10 @@ export default function PrtgAttentionPanel({ links, onSelect }: PrtgAttentionPan
                 <button
                   type="button"
                   onClick={e => onSelect(item.link, { x: e.clientX, y: e.clientY })}
+                  onMouseEnter={() => onHighlight?.(item.link.sensor_id)}
+                  onMouseLeave={() => onHighlight?.(null)}
+                  onFocus={() => onHighlight?.(item.link.sensor_id)}
+                  onBlur={() => onHighlight?.(null)}
                   title={item.link.sensor_name || undefined}
                   style={{
                     display: 'flex',
