@@ -2305,9 +2305,9 @@ function AppContent() {
             </div>
             )}
 
-            {/* 居中标题：site_kpi_rt 使用「顶部凹槽」标题，其余页面保持原样。
-                凹槽本体由 index.css 的 .wh-header-title-slot--notch::before 绘制，
-                只复用现有玻璃令牌（背景 / 描边 / 模糊 / 高光），不改主题配色与网格纹理。
+            {/* 居中标题：site_kpi_rt 使用「上开口、开口外翻」的凹槽标题，其余页面保持原样。
+                凹槽由 index.css 的 .wh-header-title-notch（本体）+ 它的 ::before/::after
+                （左右两条外翻四分弧）绘制，只画描边、不填底色，内部就是顶栏本身。
                 标题槽仍保持 flex:1，右侧自动刷新 / 主题 / 语言按钮的布局不受影响。 */}
             <div
               className={currentPage === 'site_kpi_rt' ? 'wh-header-title-slot--notch' : undefined}
@@ -2324,6 +2324,10 @@ function AppContent() {
                   : {}),
               }}
             >
+              {currentPage === 'site_kpi_rt' && (
+                /* 凹槽本体：上沿开口，左右两道外翻弧由伪元素补上（纯装饰） */
+                <span className="wh-header-title-notch" aria-hidden="true" />
+              )}
               <h1
                 className={currentPage === 'site_kpi_rt' ? 'wh-header-title-notch-text' : undefined}
                 style={{

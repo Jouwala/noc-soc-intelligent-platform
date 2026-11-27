@@ -404,26 +404,31 @@ body {
 /* =====================================================
    顶栏「凹槽式标题」：仅 ?page=site_kpi_rt（Site KPI Real-Time）
    -----------------------------------------------------
-   只有该页的标题槽挂 .wh-header-title-slot--notch，其余页面完全不受影响；
-   背景、配色、网格纹理、侧栏都沿用现状。凹槽内部刻意保持透明（不另上底色、
-   不做 backdrop-filter），所以凹槽里看到的就是顶栏本身的玻璃 + 网格 + 高光，
-   深浅主题自动一致；凹槽只靠描边（--wh-glass-border）与内外阴影造型。
+   形状：上沿开口、开口外翻的凹槽 —— 两道侧壁在接近顶栏上沿时向外弯开、
+   以水平切线收进上沿；槽底仍是圆角。凹槽只画 1px 描边、不填底色
+   （也不做 backdrop-filter），所以槽里看到的就是顶栏自己的玻璃底 +
+   网格纹理 + 折射高光，深浅主题天然一致。
 
-   为什么把凹槽定位在「标题槽」而不是 .spatial-navbar：
-   标题槽是 flex:1 的普通元素，若让伪元素相对顶栏定位，凹槽中心会落在
-   顶栏几何中心；而标题文字居中于「顶栏宽度 − 右侧操作区宽度」的区域，
-   两者会差出约半个操作区的宽度 —— 表现就是标题在自己的凹槽里歪掉。
-   所以这里让标题槽保持 position: relative 并在凹槽页撑满顶栏高度，
-   凹槽与标题都相对标题槽居中，标题始终在凹槽正中，且与其他页面标题同一水平位置。
+   怎么画：本体是「左右下三边 + 圆角槽底」的框（.wh-header-title-notch），
+   上沿两个外翻弧由它的 ::before / ::after 补 —— 各是一个四分圆弧，弧心落在
+   本体的左上 / 右上角，与侧壁相切、与顶栏上沿相切，接缝处没有折角。
+   位置要点：伪元素的 left/right 用 -0.85rem 而不是 0 —— 绝对定位的包含块是
+   本体的 padding box（已被 1px 描边内缩），要让弧线的 1px 描边正好压在侧壁
+   那 1px 上，得多让出一个半径。
 
-   宽度取 min(22rem, 100% − 5rem)：22rem 是给「图标 + 6~8 个汉字」的常规长度；
-   当标题槽被右侧操作区挤窄时退到「槽宽 − 5rem」，左右各留 2.5rem，
-   凹槽左沿因此不会伸到左侧目录按钮底下（按钮右沿约 3rem）。
+   为什么把凹槽放在「标题槽」里而不是相对 .spatial-navbar：
+   标题槽是 flex:1 的普通元素，若让凹槽相对顶栏定位，凹槽中心会落在顶栏
+   几何中心；而标题居中于「顶栏宽度 − 右侧操作区宽度」的区域，两者差出约
+   半个操作区的宽度 —— 表现就是标题在自己的凹槽里歪掉。现在凹槽与标题都
+   相对标题槽居中，标题始终在槽正中，也与其他页面标题同一水平位置。
+
+   宽度取 min(22rem, 100% − 5rem)：标题槽被右侧操作区挤窄时退到「槽宽 − 5rem」，
+   左右各留 2.5rem，凹槽左沿不会伸到左侧目录按钮底下。
    ===================================================== */
-.spatial-navbar .wh-header-title-slot--notch::before {
-  content: '';
+.spatial-navbar .wh-header-title-notch {
   position: absolute;
-  top: 0;
+  /* 上沿让出外翻弧的高度（0.85rem），槽体从这里往下 */
+  top: 0.85rem;
   bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
@@ -431,27 +436,50 @@ body {
   width: min(22rem, calc(100% - 5rem));
   box-sizing: border-box;
 
-  /* 内部完全透明：凹槽里看到的就是顶栏自己的玻璃底 + 网格纹理 + 折射高光。
-     上一版在这里又叠了一层 --wh-glass-panel（0.70 的 alpha 叠第二遍 ≈ 0.91），
-     结果是凹槽比顶栏更白/更实、网格也被盖掉 —— 这正是「凹槽背景和 header
-     不是一个颜色」的原因。凹槽只用描边和内阴影造型，不自己上色。 */
   background: transparent;
-
   border: 1px solid var(--wh-glass-border);
   border-top: 0;
-  /* 线条再压一档透明度：深色主题的 --wh-glass-border 是实色 #153db0，
-     直接用它画 1px 会在深色顶栏上显得发硬，混 65% 后接近「一道痕迹」而不是「一条框」。
-     不支持 color-mix 的浏览器会丢弃这一行，回落到上面那条 --wh-glass-border。 */
+  /* 深色主题的 --wh-glass-border 是实色 #153db0，1px 直接画会发硬，混 65% 更接近
+     「一道痕迹」；两行写法：不支持 color-mix 的浏览器丢弃第二行、回落到实色描边。 */
+  border-color: var(--wh-glass-border);
   border-color: color-mix(in srgb, var(--wh-glass-border) 65%, transparent);
-  /* 四个角都带弧度：上沿两个角把侧边线顺着顶栏上沿收进去（开口的凹槽），
-     下沿两个角托住标题。上角给 0.9rem，够软又不会把侧边收成胶囊形。 */
-  border-radius: 0.9rem 0.9rem 1.4rem 1.4rem;
-  /* 只留内阴影：顶部一道很浅的凹陷。不加外投影 —— 外投影会在凹槽四周压出一圈
-     灰边，让凹槽内部看起来比顶栏更亮，正是「背景和 header 不一致」的来源。 */
-  box-shadow: inset 0 3px 9px rgba(0, 0, 0, 0.10);
+  /* 上沿是开口、没有角，只给槽底做圆角 */
+  border-radius: 0 0 1.2rem 1.2rem;
 
   pointer-events: none;
   z-index: 1;
+}
+
+/* 左右两道外翻弧：四分圆，弧心分别落在本体左上 / 右上角 */
+.spatial-navbar .wh-header-title-notch::before,
+.spatial-navbar .wh-header-title-notch::after {
+  content: '';
+  position: absolute;
+  top: -0.85rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  box-sizing: border-box;
+  border-style: solid;
+  border-width: 0;
+  border-color: var(--wh-glass-border);
+  border-color: color-mix(in srgb, var(--wh-glass-border) 65%, transparent);
+  pointer-events: none;
+}
+
+/* 左外翻：上 + 右两条边构成四分弧，末端以垂直切线接进本体左侧壁 */
+.spatial-navbar .wh-header-title-notch::before {
+  left: -0.85rem;
+  border-top-width: 1px;
+  border-right-width: 1px;
+  border-radius: 0 100% 0 0;
+}
+
+/* 右外翻：上 + 左两条边构成四分弧，末端以垂直切线接进本体右侧壁 */
+.spatial-navbar .wh-header-title-notch::after {
+  right: -0.85rem;
+  border-top-width: 1px;
+  border-left-width: 1px;
+  border-radius: 100% 0 0 0;
 }
 
 /* 凹槽里的标题：与凹槽同宽同轴，图标 + 文字水平居中，文字超长时省略 */
@@ -490,7 +518,7 @@ body {
      200px 以内：凹槽放不下，居中后必然压在目录按钮上（实测 390px 宽时凹槽左沿
      落在 12px、目录按钮占到 52px）。这里退回普通标题 —— 不画凹槽、不留图标，
      标题仍走省略号，不会撑破顶栏。 */
-  .spatial-navbar .wh-header-title-slot--notch::before {
+  .spatial-navbar .wh-header-title-notch {
     display: none;
   }
 
