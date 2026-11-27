@@ -65,6 +65,25 @@ describe('mergeParallelEdges', () => {
 })
 
 describe('layoutTopoNodes', () => {
+  it('簇很多时各带仍有正高度，同列节点不挤到同一 y（#319 N4）', () => {
+    const nodes: TopoNode[] = []
+    const links: TopoLink[] = []
+    for (let i = 0; i < 8; i++) {
+      const id = i + 1
+      nodes.push(node({ id, name: `DEV-CLUSTER-${i}`, type: 'device' }))
+      nodes.push(node({ id: 100 + i, name: `peer-${i}`, type: 'peer' }))
+      links.push(link({ id, source_node: id, target_node: 100 + i }))
+    }
+    const laid = layoutTopoNodes(nodes, links)
+    const peers = laid.filter(n => (n.type || '') === 'peer')
+    const ys = peers.map(n => Math.round(n.ly))
+    expect(new Set(ys).size).toBeGreaterThan(4)
+    for (const p of peers) {
+      expect(p.ly).toBeGreaterThanOrEqual(40)
+      expect(p.ly).toBeLessThanOrEqual(620 - 40)
+    }
+  })
+
   it('pinned 保留接口坐标；未 pinned 按列左右分层且同列不压叠', () => {
     const nodes: TopoNode[] = [
       node({ id: 1, name: 'OLIB-NX-3172-WAN-2.orangeliberia', type: 'device' }),

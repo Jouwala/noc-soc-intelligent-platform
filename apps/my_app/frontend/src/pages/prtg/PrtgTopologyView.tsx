@@ -57,9 +57,10 @@ export default function PrtgTopologyView({
         const payload = (res.data || null) as TopoTrafficPayload | null
         const nodes = Array.isArray(payload?.nodes) ? payload!.nodes! : []
         const links = Array.isArray(payload?.links) ? payload!.links! : []
+        // 空拓扑是良性空态，走 Empty；不要写成 loadFailed（#319 N1）
         if (!nodes.length || !links.length) {
           setData(null)
-          setError(t('prtg.topo.empty'))
+          setError('')
           return
         }
         setData({ ...payload, nodes, links })
@@ -79,6 +80,14 @@ export default function PrtgTopologyView({
   const laidById = useMemo(() => new Map(laid.map(n => [n.id, n])), [laid])
   const merged = useMemo(() => mergeParallelEdges(links), [links])
 
+  // 数据刷新后旧的并行展开 key 可能已不存在（#319 N8）
+  useEffect(() => {
+    setExpandedKey(prev => {
+      if (prev == null) return prev
+      return merged.some(m => m.key === prev) ? prev : null
+    })
+  }, [merged])
+
   const activeHighlight = highlightSensorId ?? hoverSensorId
 
   const openBySensor = (topoLink: TopoLink, at?: { x: number; y: number }) => {
@@ -89,10 +98,11 @@ export default function PrtgTopologyView({
       return
     }
     // 拓扑有边但页面 links 暂未对齐时，用最小 PrtgLink 壳打开详情（仍走现有弹窗）
+    // sensor_name 不用节点名冒充；取数失败时标题只显示可信值（#319 N7）
     if (sid != null) {
       onOpenDetail({
         sensor_id: sid,
-        sensor_name: topoLink.target || topoLink.key || String(sid),
+        sensor_name: String(sid),
         device_name: topoLink.source || null,
         status: topoLink.status,
         in_mbps: topoLink.in_mbps,
