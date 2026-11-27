@@ -16,7 +16,14 @@
 #   - head 上除 review-gate 自身外的全部检查都完成且结论为 success / skipped / neutral。
 #
 # 先算出结论再发检查（不把本 workflow 自己的检查算进判定——发检查前
-# 判定已完成；且 check_run 事件里名字是 review-gate 的一律跳过，防自触发循环）。
+# 判定已完成；且 check_run 事件里名字是 review-gate / evaluate 的一律跳过，
+# 防自触发循环）。
+#
+# ⚠️ 作业名不得叫 review-gate：作业自身的检查与发布的检查同名时，
+# 分支保护只看最新一条——作业跑完的 success 会盖掉发布的 failure，
+# 门禁等于没设（2026-11-27 PR #324 实测）。作业名固定叫 evaluate，
+# 发布的检查才独占 review-gate 这个名字；判定里的“全部检查”同样要把
+# evaluate 排除，否则评估进行中自己的检查永远 in_progress、 verdict 永远 failure。
 #
 # 触发：
 #   - PR 打开 / 新提交 / 重新打开 / 转正式 / 打标签 / 摘标签；
@@ -53,12 +60,13 @@ permissions:
   issues: read
 
 jobs:
-  review-gate:
+  evaluate:
     # issue_comment 只关心 PR 下的评论；check_run 只关心自己以外
-    # 的检查（自己发的检查不触发新一轮评估，防自触发循环）。
+    # 的检查（自己发的检查、自己作业的检查都不触发新一轮评估，
+    # 否则每跑一次就再触发一次，死循环）。
     if: >
       (github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
-      && (github.event_name != 'check_run' || github.event.check_run.name != 'review-gate')
+      && (github.event_name != 'check_run' || (github.event.check_run.name != 'review-gate' && github.event.check_run.name != 'evaluate'))
     runs-on: ubuntu-latest
     steps:
       # 检出 main 上的门禁脚本（可信代码）：review_gate.py 必须取 main 的
@@ -181,12 +189,13 @@ jobs:
             fi
 
             # head 提交上的全部检查都必须完成，且结论为 success / skipped / neutral。
-            # 排除本 workflow 自身的检查运行（name 为 review-gate）：判定在发检查
-            # 之前已完成，上一轮留下的 review-gate 检查不参与本轮判定——否则
-            # “上一轮 failure”会让本轮永远 failure（auto-merge 排除自身同理）。
+            # 排除本 workflow 自身的两个检查：发布的 review-gate 检查（判定在发检查
+            # 之前已完成，上一轮留下的不参与本轮判定——否则“上一轮 failure”会让本轮
+            # 永远 failure，auto-merge 排除自身同理），以及本作业自己的 evaluate 检查
+            # （评估进行中它正处于 in_progress，算进去 verdict 永远 failure）。
             CHECKS="$(curl -sS "${AUTH[@]}" "$API/commits/$HEAD_SHA/check-runs?per_page=100")"
             C_TOTAL="$(echo "$CHECKS" | jq -r '.total_count')"
-            C_BAD="$(echo "$CHECKS" | jq -r '[.check_runs[] | select(.name != "review-gate") | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')"
+            C_BAD="$(echo "$CHECKS" | jq -r '[.check_runs[] | select(.name != "review-gate" and .name != "evaluate") | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')"
             if [ "$C_TOTAL" = "0" ]; then
               FAILS="${FAILS}- 没有任何检查记录"$'\n'
             elif [ "$C_BAD" != "0" ]; then

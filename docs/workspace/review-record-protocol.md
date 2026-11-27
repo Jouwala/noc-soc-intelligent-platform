@@ -213,7 +213,10 @@ false；head 上 quality 全部运行完成且 success；head 上除 review-gate
 
 触发：PR 事件（打开/新提交/重开/转正式/打标签/摘标签）、PR 评论新建/
 编辑、quality 跑完、任一检查跑完（按 head SHA 找对应 PR）、手动
-dispatch。先算出结论再发检查；自己发的检查不触发新一轮评估。
+dispatch。先算出结论再发检查；自己发的检查与自己作业的检查都不触发
+新一轮评估（作业名固定叫 evaluate，不叫 review-gate，否则作业自身的
+success 检查会与发布的检查同名、盖掉发布的 failure 结论——2026-11-27
+PR #324 实测）。
 
 分支保护设置（main）：必填检查 `review-gate`，`enforce_admins=true`
 （所有者手动合入同样被拦），`strict=false`（不要求分支最新）。
