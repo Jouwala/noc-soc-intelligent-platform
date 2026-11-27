@@ -401,6 +401,141 @@ body {
   opacity: 0.55;
 }
 
+/* =====================================================
+   顶栏「凹槽式标题」：仅 ?page=site_kpi_rt（Site KPI Real-Time）
+   -----------------------------------------------------
+   形状：上沿开口、开口外翻的凹槽 —— 两道侧壁在接近顶栏上沿时向外弯开、
+   以水平切线收进上沿；槽底仍是圆角。凹槽只画 1px 描边、不填底色
+   （也不做 backdrop-filter），所以槽里看到的就是顶栏自己的玻璃底 +
+   网格纹理 + 折射高光，深浅主题天然一致。
+
+   怎么画：本体是「左右下三边 + 圆角槽底」的框（.wh-header-title-notch），
+   上沿两个外翻弧由它的 ::before / ::after 补 —— 各是一个四分圆弧，弧心落在
+   本体的左上 / 右上角，与侧壁相切、与顶栏上沿相切，接缝处没有折角。
+   位置要点：伪元素的 left/right 用 -0.85rem 而不是 0 —— 绝对定位的包含块是
+   本体的 padding box（已被 1px 描边内缩），要让弧线的 1px 描边正好压在侧壁
+   那 1px 上，得多让出一个半径。
+
+   为什么把凹槽放在「标题槽」里而不是相对 .spatial-navbar：
+   标题槽是 flex:1 的普通元素，若让凹槽相对顶栏定位，凹槽中心会落在顶栏
+   几何中心；而标题居中于「顶栏宽度 − 右侧操作区宽度」的区域，两者差出约
+   半个操作区的宽度 —— 表现就是标题在自己的凹槽里歪掉。现在凹槽与标题都
+   相对标题槽居中，标题始终在槽正中，也与其他页面标题同一水平位置。
+
+   宽度取 min(22rem, 100% − 5rem)：标题槽被右侧操作区挤窄时退到「槽宽 − 5rem」，
+   左右各留 2.5rem，凹槽左沿不会伸到左侧目录按钮底下。
+   ===================================================== */
+.spatial-navbar .wh-header-title-notch {
+  position: absolute;
+  /* 上沿让出外翻弧的高度（0.85rem），槽体从这里往下 */
+  top: 0.85rem;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  width: min(22rem, calc(100% - 5rem));
+  box-sizing: border-box;
+
+  background: transparent;
+  border: 1px solid var(--wh-glass-border);
+  border-top: 0;
+  /* 深色主题的 --wh-glass-border 是实色 #153db0，1px 直接画会发硬，混 65% 更接近
+     「一道痕迹」；两行写法：不支持 color-mix 的浏览器丢弃第二行、回落到实色描边。 */
+  border-color: var(--wh-glass-border);
+  border-color: color-mix(in srgb, var(--wh-glass-border) 65%, transparent);
+  /* 上沿是开口、没有角，只给槽底做圆角 */
+  border-radius: 0 0 1.2rem 1.2rem;
+
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 左右两道外翻弧：四分圆，弧心分别落在本体左上 / 右上角 */
+.spatial-navbar .wh-header-title-notch::before,
+.spatial-navbar .wh-header-title-notch::after {
+  content: '';
+  position: absolute;
+  top: -0.85rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  box-sizing: border-box;
+  border-style: solid;
+  border-width: 0;
+  border-color: var(--wh-glass-border);
+  border-color: color-mix(in srgb, var(--wh-glass-border) 65%, transparent);
+  pointer-events: none;
+}
+
+/* 左外翻：上 + 右两条边构成四分弧，末端以垂直切线接进本体左侧壁 */
+.spatial-navbar .wh-header-title-notch::before {
+  left: -0.85rem;
+  border-top-width: 1px;
+  border-right-width: 1px;
+  border-radius: 0 100% 0 0;
+}
+
+/* 右外翻：上 + 左两条边构成四分弧，末端以垂直切线接进本体右侧壁 */
+.spatial-navbar .wh-header-title-notch::after {
+  right: -0.85rem;
+  border-top-width: 1px;
+  border-left-width: 1px;
+  border-radius: 100% 0 0 0;
+}
+
+/* 凹槽里的标题：与凹槽同宽同轴，图标 + 文字水平居中，文字超长时省略 */
+.spatial-navbar .wh-header-title-notch-text {
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+
+  width: min(22rem, calc(100% - 5rem));
+  box-sizing: border-box;
+}
+
+.spatial-navbar .wh-header-title-notch-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+.spatial-navbar .wh-header-title-notch-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+  /* 手机上顶栏只有 50px 高，左侧目录按钮 + 右侧主题/语言/身份控件把标题区挤到
+     200px 以内：凹槽放不下，居中后必然压在目录按钮上（实测 390px 宽时凹槽左沿
+     落在 12px、目录按钮占到 52px）。这里退回普通标题 —— 不画凹槽、不留图标，
+     标题仍走省略号，不会撑破顶栏。 */
+  .spatial-navbar .wh-header-title-notch {
+    display: none;
+  }
+
+  .spatial-navbar .wh-header-title-notch-text {
+    position: static;
+    width: auto;
+    max-width: 100%;
+    gap: 0.375rem;
+  }
+
+  /* 图标也一起收掉：手机上标题槽左沿只到目录按钮的右半边，图标会与汉堡按钮叠在一起。
+     去掉图标后这一页顶栏与其他页面完全一致。 */
+  .spatial-navbar .wh-header-title-notch-icon {
+    display: none;
+  }
+}
+
 /* 卡片层：背景 / 描边 / 阴影 / 模糊全部取令牌，不再按主题各写一份。
  *
  * 2026-09-24 卡片风格统一：阴影改用「总成」令牌 --wh-card-shadow，
