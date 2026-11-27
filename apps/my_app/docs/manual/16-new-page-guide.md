@@ -250,6 +250,10 @@ const AR_PAGE_DEFAULTS: Partial<Record<PageKey, number>> = {
 - **现在有机器守卫**：`tests/test_doc_consistency.py::test_page_view_switches_use_unified_style`
   扫描 `pages/**/*.tsx` 与 `components/**/*.tsx`，每个 `<Segmented>` 不带 `wh-seg` 又没写
   `wh-seg-exempt` 豁免就失败（本地钩子 + CI 都会拦）。
+- **内容页签 `<Tabs>` 不用逐页改**：2026-11-27 起 `index.css` 把 antd Tabs 的下划线
+  导航全局改造成与 `.wh-seg` 同款的胶囊（轨道玻璃底 + 品牌青描边、选中实心青 + on-accent 字色、
+  隐藏 ink bar），行为不变（懒加载 / 键盘 / 滚动按钮都保留）。所以「内容分区」直接用 `<Tabs>`，
+  「视图切换」用 `<Segmented className="wh-seg">`，两者观感一致、各司其职。
 - **legacy 静态页**（`public/*.html`，iframe 页）用共享基线的 `.wht`：页签条容器加 `class="wht"`，
   直接子元素自动成为页签项，选中态沿用 `.active` / `.on` / `[aria-selected="true"]`。
   见 `public/legacy-glass-baseline.css` 顶部说明，别在页面里另写一套。

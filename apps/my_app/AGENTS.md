@@ -72,7 +72,7 @@
    | 卡片（含带图标卡） | `import { CardBase, StatCard } from '../components/cards'` | `import { Card } from 'antd'`、页面里写 `style={cardStyle}` |
    | 导出 Excel | `import { exportAoaReport, exportReport } from '../utils/excelReport'` | 裸 `xlsx`（`XLSX.utils.*` / `XLSX.writeFile`） |
    | 下钻弹窗 | `components/DraggableClickModal` | 各页自写弹窗骨架 |
-   | **页面级页签 / 分段开关**（4G/5G、Day/Week 这类视图切换） | `<Segmented className="wh-seg">`；区块主控再加 `wh-gran-switch`（细则 `16-new-page-guide.md` 3.4e） | 裸 `<Segmented>`（漏 `wh-seg`）—— 有守卫 `test_page_view_switches_use_unified_style` 拦下 |
+   | **页面级页签 / 分段开关**（4G/5G、Day/Week 这类视图切换） | `<Segmented className="wh-seg">`；区块主控再加 `wh-gran-switch`。内容分区用 `<Tabs>`（2026-11-27 起全局胶囊化，无需加类）。细则 `16-new-page-guide.md` 3.4e | 裸 `<Segmented>`（漏 `wh-seg`）—— 有守卫 `test_page_view_switches_use_unified_style` 拦下 |
    | **口径说明 / 数据口径备注（多段）** | **`components/CalcChainNote`（默认收起，点标题展开）** | 常驻展开的 `Alert` 说明条；把口径塞进页头正文 |
    | 单个指标的小注解（一句话） | `components/MetricExplain`（悬停 ⓘ） | 用气泡装多段说明（放不下、不可复制） |
    | 主题取色 | DOM 用 `WH`（`var(--wh-*)`）；ECharts 用 `useTheme()` + `DARK/LIGHT` **实值** | 在 ECharts 里写 `WH.xxx`（canvas 解析不了 CSS 变量）；写死十六进制 |
