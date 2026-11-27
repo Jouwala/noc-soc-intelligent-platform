@@ -445,7 +445,7 @@ schemas/   预留，实际为空
 <li><code>gis</code> 与 <code>realtime_alarm</code> 复用同一组件：<code>&lt;GISMap/&gt;</code> 与 <code>&lt;GISMap mode=&quot;realtime&quot;/&gt;</code>（<code>App.tsx:286-289</code>）。</li>
 <li>共享组件只有 4 个：<code>DraggableClickModal</code>（下钻弹窗）、<code>LegacyToolFrame</code>（iframe 壳）、<code>MetricExplain</code>（指标口径说明）、<code>SearchableExportTable</code>（可搜索导出表）。</li>
 </ul>
-<p><strong>自动刷新</strong>（<code>App.tsx</code> 顶部「自动刷新（大屏 / NOC 值班场景）」注释块与 <code>performAutoRefresh</code>）：⭐ <strong>默认关闭 + 每个页面各自设置</strong>（2026-11-03 用户定「默认是关闭刷新的」；2026-11-04 用户定「参考 noc_analyst 里的刷新配置，给每个页面做设置，并作为项目要求」）—— 顶栏「更多设置（⋯）」面板里的「自动刷新」开关 + 间隔下拉对<strong>所有页面</strong>都可用；选择持久化在 <code>localStorage['myapp_auto_refresh_pages']</code>（一张 <code>{page: 秒}</code> 表，0=关闭、未登记=关闭）。打开开关落到<strong>本页建议间隔</strong>（<code>AR_PAGE_DEFAULTS</code> &gt; 全局建议 <code>AR_PAGE_DEFAULT_SEC</code>=300 秒），可用下拉调整为 <code>[0,30,60,300,600,900,1800]</code> 秒。<code>AR_PAGE_DEFAULTS</code> 现为<strong>逐页必填</strong>：<code>PAGE_META</code> 里每个自研页面都要登记一个档位，取值按该页数据更新频率分四档 —— 60 秒（实时告警 <code>realtime_alarm</code>/<code>alarm</code>/<code>alarmManagement</code>，2026-10-29 用户策略）、300 秒（看板主力，上游多为 15 分钟级同步）、900 秒（上游日更或低频报表：微波拓扑 / 丢包 / 竞对 / 物资报表 / 90 天经营看板）、1800 秒（配置、操作、工具类页面）；<code>mwRealTime</code> 虽名「实时」仍取 900 —— 它的数据 15 分钟才同步一次，提到 60s 只会多打 15 倍查询而画面不变。漏登记由 <code>tests/test_doc_consistency.py::test_every_page_has_refresh_setting</code> 拦下（本地钩子 + CI）。旧版全局单值键 <code>myapp_auto_refresh_sec</code> 与逐页键 <code>_ar_page_*</code> 已废弃，外壳挂载时清除（防直开 legacy 页缓存旧协议脚本读到残留值继续自刷）。</p>
+<p><strong>自动刷新</strong>（<code>App.tsx</code> 顶部「自动刷新（大屏 / NOC 值班场景）」注释块与 <code>performAutoRefresh</code>）：⭐ <strong>默认关闭 + 每个页面各自设置</strong>（2026-11-03 用户定「默认是关闭刷新的」；2026-11-04 用户定「参考 noc_analyst 里的刷新配置，给每个页面做设置，并作为项目要求」）—— 顶栏右上角头像菜单里的「自动刷新」开关 + 间隔下拉对<strong>所有页面</strong>都可用；选择持久化在 <code>localStorage['myapp_auto_refresh_pages']</code>（一张 <code>{page: 秒}</code> 表，0=关闭、未登记=关闭）。打开开关落到<strong>本页建议间隔</strong>（<code>AR_PAGE_DEFAULTS</code> &gt; 全局建议 <code>AR_PAGE_DEFAULT_SEC</code>=300 秒），可用下拉调整为 <code>[0,30,60,300,600,900,1800]</code> 秒。<code>AR_PAGE_DEFAULTS</code> 现为<strong>逐页必填</strong>：<code>PAGE_META</code> 里每个自研页面都要登记一个档位，取值按该页数据更新频率分四档 —— 60 秒（实时告警 <code>realtime_alarm</code>/<code>alarm</code>/<code>alarmManagement</code>，2026-10-29 用户策略）、300 秒（看板主力，上游多为 15 分钟级同步）、900 秒（上游日更或低频报表：微波拓扑 / 丢包 / 竞对 / 物资报表 / 90 天经营看板）、1800 秒（配置、操作、工具类页面）；<code>mwRealTime</code> 虽名「实时」仍取 900 —— 它的数据 15 分钟才同步一次，提到 60s 只会多打 15 倍查询而画面不变。漏登记由 <code>tests/test_doc_consistency.py::test_every_page_has_refresh_setting</code> 拦下（本地钩子 + CI）。旧版全局单值键 <code>myapp_auto_refresh_sec</code> 与逐页键 <code>_ar_page_*</code> 已废弃，外壳挂载时清除（防直开 legacy 页缓存旧协议脚本读到残留值继续自刷）。</p>
 <ul>
 <li><strong>所有页面一视同仁</strong>（2026-11-04 改造）：<del>白名单制</del> 已删除（原 <code>AR_BOARD_PAGES</code>）。此前配置 / 操作 / 工具类页面（<code>settings</code> / <code>upload</code> / <code>tables</code> / <code>ip_trace</code> / <code>eflow_*</code> 等）的生效间隔恒为 0 且顶栏控件禁用，用户想刷也刷不了，与「由用户决定是否刷新」自相矛盾；现在这些页同样能按页开启，建议间隔给最松的 1800 秒。副作用防护不靠禁用，靠 <code>arInteractionInProgress()</code>（正在输入 / 弹层打开 / 标签页后台时跳过硬重挂载那一轮）。</li>
 <li><strong>三条刷新路径</strong>（2026-10-29 由两条拆成三条）：
@@ -5063,7 +5063,7 @@ stop.bat all    # 连 PostgreSQL 一起停
 <p><strong>先记住两件事</strong></p>
 <ul>
 <li>有 <strong>12 个页面是 iframe 壳</strong>（下表标注「iframe」），真正界面在 <code>frontend/public/*.html</code> 里，React 只负责加载与注入语言。这类页面样式/交互和 React 页不一致，改了 React 代码不会影响它们。</li>
-<li>只有「任务管理」有常驻轮询（60s 刷列表 + 30s 时基，<code>pages/DataSync.tsx:165,173</code>）。所有页面的&quot;自动刷新&quot;都来自<strong>顶栏</strong>（⭐ <strong>默认关闭、每个页面各自设置并记忆</strong>：顶栏「更多设置（⋯）」里的「自动刷新」开关 + 间隔下拉对<strong>每一个页面</strong>都可用，开启时落到本页建议间隔，间隔可调 0/30/60/300/600/900/1800，选择存在 <code>localStorage['myapp_auto_refresh_pages']</code>；建议间隔逐页登记在 <code>App.tsx</code> 的 <code>AR_PAGE_DEFAULTS</code>，按数据更新频率取 60（实时告警）/ 300（看板主力）/ 900（上游日更报表）/ 1800（配置与操作页）四档，详见 <code>02-architecture.md</code> 的「自动刷新」与 <code>16-new-page-guide.md</code> 3.4d）。<strong>2026-11-04 起不再有「只有看板页参与刷新」的白名单</strong> —— 配置 / 操作 / 工具类页面（系统设置、上传、表浏览、IP 探测、eFlow 等）同样能按页开启，只是建议间隔给得最松。看板数据看起来不动，先看顶栏是否已开启自动刷新 —— 未开启（含全屏挂机）不会自动刷新，需要时到顶栏「更多设置（⋯）」里打开自动刷新，或手动刷新（详见 <code>myapp-refresh-protocol.js</code>）。</li>
+<li>只有「任务管理」有常驻轮询（60s 刷列表 + 30s 时基，<code>pages/DataSync.tsx:165,173</code>）。所有页面的&quot;自动刷新&quot;都来自<strong>顶栏</strong>（⭐ <strong>默认关闭、每个页面各自设置并记忆</strong>：顶栏右上角头像菜单里的「自动刷新」开关 + 间隔下拉对<strong>每一个页面</strong>都可用，开启时落到本页建议间隔，间隔可调 0/30/60/300/600/900/1800，选择存在 <code>localStorage['myapp_auto_refresh_pages']</code>；建议间隔逐页登记在 <code>App.tsx</code> 的 <code>AR_PAGE_DEFAULTS</code>，按数据更新频率取 60（实时告警）/ 300（看板主力）/ 900（上游日更报表）/ 1800（配置与操作页）四档，详见 <code>02-architecture.md</code> 的「自动刷新」与 <code>16-new-page-guide.md</code> 3.4d）。<strong>2026-11-04 起不再有「只有看板页参与刷新」的白名单</strong> —— 配置 / 操作 / 工具类页面（系统设置、上传、表浏览、IP 探测、eFlow 等）同样能按页开启，只是建议间隔给得最松。看板数据看起来不动，先看顶栏是否已开启自动刷新 —— 未开启（含全屏挂机）不会自动刷新，需要时到顶栏右上角头像菜单里打开自动刷新，或手动刷新（详见 <code>myapp-refresh-protocol.js</code>）。</li>
 </ul>
 <blockquote>
 <p><strong>本表由 <code>tests/test_doc_consistency.py</code> 校验</strong>：行数、key 集合与形态列必须与
@@ -18946,7 +18946,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 </tr>
 <tr>
 <td>自动刷新</td>
-<td>默认关闭，且每个页面各自设置：顶栏右上角「更多设置（⋯）」面板里的「自动刷新」开关 + 间隔下拉对任何页面都可用，打开时落到该页建议间隔（实时告警页 1 分钟、看板页 5 分钟、上游日更的报表 15 分钟、配置与操作页 30 分钟），可再用下拉调整为 0/30 秒~30 分钟；选择按页记忆在本机（localStorage），换页面互不影响。关掉开关即停止。正在输入、弹窗打开或标签页在后台时本轮自动跳过，不打断操作。</td>
+<td>默认关闭，且每个页面各自设置：顶栏右上角头像菜单里的「自动刷新」开关 + 间隔下拉对任何页面都可用，打开时落到该页建议间隔（实时告警页 1 分钟、看板页 5 分钟、上游日更的报表 15 分钟、配置与操作页 30 分钟），可再用下拉调整为 0/30 秒~30 分钟；选择按页记忆在本机（localStorage），换页面互不影响。关掉开关即停止。正在输入、弹窗打开或标签页在后台时本轮自动跳过，不打断操作。</td>
 </tr>
 <tr>
 <td>主题与语言</td>
@@ -21719,7 +21719,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <li>链路详情里 MW 有历史趋势（日粒度全部日期 / 实时最近 96 个 15 分钟槽）；IPRAN 的 <code>topo_traffic.py</code> 只读最新 KPI 快照，<strong>没有历史接口，不画曲线</strong>（不拼伪历史）</li>
 <li>来源健康面板逐源显示 Connected / Partial / Stale / Unavailable / Static。取数是三个独立请求（<code>Promise.allSettled</code> 语义），一个来源失败只标红那一行，另外两个照常显示；总览卡与风险榜跟随来源筛选，不跟随搜索词</li>
 <li>画布交互：滚轮缩放、拖动平移、双击回全景；点设备聚焦一跳邻居并开详情，点链路看两端、带宽、端口明细与历史；搜索框回车定位（只在主动搜索时移动视口）</li>
-<li>自动刷新按来源节流：IPRAN 300 秒、MW 900 秒（15 分钟采集）、OLIB 1800 秒（静态资产）。顶栏「更多设置（⋯）」里「自动刷新」建议 300 秒，本页已登记为<strong>原地刷新</strong>（收到 <code>myapp-refresh</code> 只静默重取，不重建地图与画布）</li>
+<li>自动刷新按来源节流：IPRAN 300 秒、MW 900 秒（15 分钟采集）、OLIB 1800 秒（静态资产）。顶栏右上角头像菜单里「自动刷新」建议 300 秒，本页已登记为<strong>原地刷新</strong>（收到 <code>myapp-refresh</code> 只静默重取，不重建地图与画布）</li>
 <li>1.0 明确不做：跨系统设备/链路的自动关联、自动故障传播推理、给 OLIB 编造实时利用率、给 IPRAN 编造历史曲线</li>
 </ul>
 <p><a id="ch-15-s128"></a></p>
@@ -22524,7 +22524,7 @@ shared <code>auth_cache</code> 里 admin 的 token 明明还有 14.6 小时有�
 <p><a id="ch-15-s190"></a></p>
 <h3>6. 常见问题</h3>
 <p><strong>看板数据没有更新？</strong></p>
-<p>① 先到「任务管理」查看对应任务的最近执行结果与失败聚合；② 检查顶栏「自动刷新」是否已开启（默认关闭，未开启时页面不会自动重载，需要时到顶栏「更多设置（⋯）」里打开自动刷新，或直接手动刷新）；③ 注意部分数据本身低频同步：实时告警每分钟、微波拓扑每天 05:15、丢包每天 06:30、事件总览每小时第 20 分钟。仍不对可看「数据库数据新鲜度巡检」的执行日志，它会输出调用链与排查方向（含文件型数据源的落盘年龄）。</p>
+<p>① 先到「任务管理」查看对应任务的最近执行结果与失败聚合；② 检查顶栏「自动刷新」是否已开启（默认关闭，未开启时页面不会自动重载，需要时到顶栏右上角头像菜单里打开自动刷新，或直接手动刷新）；③ 注意部分数据本身低频同步：实时告警每分钟、微波拓扑每天 05:15、丢包每天 06:30、事件总览每小时第 20 分钟。仍不对可看「数据库数据新鲜度巡检」的执行日志，它会输出调用链与排查方向（含文件型数据源的落盘年龄）。</p>
 <p><strong>页面数字与预期口径不一致？</strong></p>
 <p>注意各页口径：电池看板默认只统计 24 小时内新鲜读数；MS SLA 看板以实时计算为准（可能与快照文件不一致）；丢包看板只展示最近 7 个完整自然日；CXO 看板内嵌快照，重跑同步任务才更新。</p>
 <p><strong>任务长期停在 pending 不执行？</strong></p>

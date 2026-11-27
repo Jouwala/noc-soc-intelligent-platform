@@ -3635,7 +3635,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'ar.every': '每 {v} 自动刷新当前页面',
     'ar.interval': '刷新间隔',
     // 顶栏右上角「更多设置」菜单（自动刷新 / 主题 / 语言 / 账号 全收进来）
-    'header.more': '更多设置',
+    'header.more': '账号与设置',
 
     // Task Report Files 页面（Latest Email / FINEBI report 两个页签）
     'emailReports.title': '任务报告文件',
@@ -11652,7 +11652,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'ar.every': 'Auto-refresh this page every {v}',
     'ar.interval': 'Interval',
     // Header "More settings" menu (auto refresh / theme / language / account all live here)
-    'header.more': 'More',
+    'header.more': 'Account & settings',
 
     // Task Report Files page (Latest Email / FINEBI report tabs)
     'emailReports.title': 'Task Report Files',
