@@ -1400,6 +1400,11 @@ export function getPrtgCapacity() {
   return api.get('/prtg/capacity')
 }
 
+/** 门户/链路健康共用的流量拓扑（Issue #230）：节点 + 边 + KPI；period=live|1h|24h|7d */
+export function getNetworkTopologyTraffic(params?: { period?: 'live' | '1h' | '24h' | '7d' }) {
+  return api.get('/network-topology/traffic', { params })
+}
+
 // ========== 站点 KPI 实时查询（?page=site_kpi_rt，投诉排查）==========
 // 直查 RAN UME 小区级 15 分钟明细，后端按站点过滤，结果只放内存不落库。
 // 因单次取数常超过 axios 的 120s 超时，query 只起任务，前端轮询 jobs。

@@ -4,13 +4,8 @@
  * 数据源：GET /api/prtg/overview、/api/prtg/links、/api/prtg/links/{sensor_id}
  * 后端实现：backend/routers/prtg.py → backend/services/prtg/dashboard.py（只读）
  *
- * 口径（页面「数据口径说明」逐条对应，全部来自后端 docstring 与
- * docs/workspace/prtg-channel-dictionary.md）：
- *   - Traffic In / Out / Total 是速率，后端把原始 byte/s 换算成 Mbps 后下发；
- *   - Errors / Discards / Unicast 是 PRTG 给的**区间速率**（#/s），不差分；
- *   - 利用率 = max(In / Cin, Out / Cout)，没有容量时不算（显示「—」）；
- *   - 容量 PRTG 不提供，缺失显示「待补全」，不得按 0 参与计算；
- *   - 所有时间戳 UTC；数据新鲜度超过 5 分钟必须常驻提示（这是异常，不是口径解释）。
+ * 改版 P1/P2（前端）：顶栏合并工具条 · 4 KPI · 拓扑/趋势可切换槽 + 关注面板 ·
+ * 7 列分组表 · 名称清洗 · Incidents/CalcChainNote 下沉。
  *
  * 三条全站硬约束（AGENTS.md 三.3b / 3c）：
  *   ① 口径说明用 CalcChainNote，默认收起；
@@ -18,56 +13,59 @@
  *   ③ 取不到数据一律「—」，不补 0。
  * ========================================================================== */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Col, Empty, Row, Segmented, Space, Spin, Table, Tag, Typography } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Alert, Button, Empty, Segmented, Space, Spin, Typography } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 
 import { getPrtgLinkDetail, getPrtgLinks, getPrtgOverview } from '../api'
 import { useI18n } from '../i18n'
 import { useTheme, WH } from '../theme'
-import { CardBase, StatCard } from '../components/cards'
+import { CardBase } from '../components/cards'
 import CalcChainNote from '../components/CalcChainNote'
-import { ExplainIcon, ExplainPopover } from '../components/MetricExplain'
+import { ExplainIcon } from '../components/MetricExplain'
 import DraggableClickModal from '../components/DraggableClickModal'
 import { PrtgTrendChart } from './prtg/PrtgCharts'
 import PrtgLinkDetail from './prtg/PrtgLinkDetail'
 import PrtgSlaView from './prtg/PrtgSlaView'
 import PrtgIncidents from './prtg/PrtgIncidents'
-import { explainStatusReason, fmtDuration } from './prtg/prtgLogModels'
+import PrtgAttentionPanel from './prtg/PrtgAttentionPanel'
+import PrtgHealthKpis from './prtg/PrtgHealthKpis'
+import PrtgLinksTable from './prtg/PrtgLinksTable'
+import PrtgTopologyView, { PrtgVisualModeSwitch } from './prtg/PrtgTopologyView'
 import {
-  explainCapacity, explainDiscards, explainErrors, explainIn, explainLastDown,
-  explainOut, explainSite, explainTotal, explainUnicast,
-  explainUptime, explainUtilization,
-  fmtInt, fmtNum, fmtTime, matchLabelKey, NA, PRTG_WINDOWS,
-  PrtgLink, PrtgLinkDetailData, PrtgOverview, PrtgWindow,
-  statusColor, statusLabelKey, windowLabelKey,
+  NA, PRTG_WINDOWS, PrtgLink, PrtgLinkDetailData, PrtgOverview, PrtgWindow,
+  cleanSensorName, fmtTime, shortDeviceName, windowLabelKey,
 } from './prtg/prtgModels'
 
 const { Text } = Typography
 
-/** 数据新鲜度阈值：超过 5 分钟按「已过期」常驻告警（与需求一致） */
+/** 数据新鲜度阈值：超过 5 分钟按「已过期」常驻告警 */
 const STALE_SECONDS = 300
+
+/**
+ * 左侧主视觉槽位：默认拓扑；可切回全网趋势。右侧关注面板独立。
+ */
+function OverviewVisualSlot({ children }: { children: ReactNode }) {
+  return (
+    <div data-prtg-slot="overview-visual" style={{ flex: '1 1 60%', minWidth: 0 }}>
+      {children}
+    </div>
+  )
+}
 
 export default function PrtgLinkHealth() {
   const { t } = useI18n()
   const { isDark } = useTheme()
 
-  /* ---- 视图切换：链路健康 / SLA 与容量（#231） ---- */
   const [view, setView] = useState<'health' | 'sla'>('health')
-
-  /* ---- 时间范围 ---- */
   const [windowKey, setWindowKey] = useState<PrtgWindow>('24h')
 
-  /* ---- 数据与状态 ---- */
   const [overview, setOverview] = useState<PrtgOverview | null>(null)
   const [links, setLinks] = useState<PrtgLink[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  /* 设备事件卡片跟随页面刷新（P0） */
   const [refreshToken, setRefreshToken] = useState(0)
 
-  /* ---- 详情抽屉 ---- */
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailId, setDetailId] = useState<number | null>(null)
   const [detail, setDetail] = useState<PrtgLinkDetailData | null>(null)
@@ -75,7 +73,10 @@ export default function PrtgLinkHealth() {
   const [detailError, setDetailError] = useState('')
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
 
-  /* ---- 取数：overview 与 links 一起拉；任一失败都落到 error（不静默） ---- */
+  /* 槽位：拓扑（默认）/ 趋势；关注面板悬停高亮拓扑边 */
+  const [visualMode, setVisualMode] = useState<'topo' | 'trend'>('topo')
+  const [highlightSensorId, setHighlightSensorId] = useState<number | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -98,7 +99,6 @@ export default function PrtgLinkHealth() {
 
   useEffect(() => { void load() }, [load])
 
-  /* ---- 详情：点行后按当前时间窗取；窗口变化时重新取一次 ---- */
   useEffect(() => {
     if (!detailOpen || detailId == null) return
     let cancelled = false
@@ -116,13 +116,13 @@ export default function PrtgLinkHealth() {
 
   const openDetail = useCallback((link: PrtgLink, at?: { x: number; y: number }) => {
     setDetailId(link.sensor_id)
+    setHighlightSensorId(link.sensor_id)
     setAnchor(at || null)
     setDetailLoading(true)
     setDetailError('')
     setDetailOpen(true)
   }, [])
 
-  /* ---- KPI 数字：没有 overview 时一律「—」，不显示 0 ---- */
   const kpi = overview?.kpi
   const age = overview?.data_age_seconds
   const stale = age != null && age > STALE_SECONDS
@@ -130,291 +130,120 @@ export default function PrtgLinkHealth() {
     ? NA
     : age == null ? t('prtg.freshness.missing') : t('prtg.freshness.seconds', { n: age })
 
-  const kpiCards = useMemo<Array<{
-    key: string; title: string; value: string; suffix?: string; explain: string; color: string
-  }>>(() => {
-    const has = overview != null
-    return [
-      {
-        key: 'total',
-        title: t('prtg.kpi.total'),
-        value: has ? fmtInt(kpi?.total) : NA,
-        explain: t('prtg.explain.total'),
-        color: WH.teal,
-      },
-      {
-        key: 'up',
-        title: t('prtg.kpi.up'),
-        value: has ? fmtInt(kpi?.up) : NA,
-        explain: t('prtg.explain.up'),
-        color: WH.ok,
-      },
-      {
-        key: 'unusual',
-        title: t('prtg.kpi.unusual'),
-        value: has ? fmtInt(kpi?.unusual) : NA,
-        explain: t('prtg.explain.unusual'),
-        color: WH.warn,
-      },
-      {
-        key: 'down',
-        title: t('prtg.kpi.down'),
-        value: has ? fmtInt(kpi?.down) : NA,
-        explain: t('prtg.explain.down'),
-        color: WH.danger,
-      },
-      {
-        key: 'avgUptime',
-        title: t('prtg.kpi.avgUptime'),
-        value: has ? fmtNum(kpi?.avg_uptime_pct ?? null, 3) : NA,
-        suffix: has && kpi?.avg_uptime_pct != null ? '%' : '',
-        explain: t('prtg.explain.avgUptime', { n: kpi?.uptime_samples ?? NA }),
-        color: WH.teal,
-      },
-      {
-        key: 'anomaly',
-        title: t('prtg.kpi.anomaly'),
-        value: has ? fmtInt(kpi?.anomaly_links) : NA,
-        explain: t('prtg.explain.anomaly'),
-        color: (kpi?.anomaly_links ?? 0) > 0 ? WH.warn : WH.ok,
-      },
-    ]
-  }, [overview, kpi, t])
-
-  /* ---- 单元格渲染：所有数字都包 ExplainPopover，气泡内容来自接口字段 ---- */
-  const numCell = useCallback((
-    v: number | null | undefined, explain: string, digits = 2, suffix = '',
-  ) => (
-    <ExplainPopover text={explain} placement="left">
-      <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-        {v == null ? NA : `${fmtNum(v, digits)}${suffix}`}
-      </span>
-    </ExplainPopover>
-  ), [])
-
-  const pairCell = useCallback((
-    a: number | null | undefined, b: number | null | undefined, explain: string,
-  ) => (
-    <ExplainPopover text={explain} placement="left">
-      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtNum(a)} / {fmtNum(b)}</span>
-    </ExplainPopover>
-  ), [])
-
-  /* ---- 主表列：列头 ⓘ 讲这一列，数字本身悬浮讲这一格 ---- */
-  const columns = useMemo<ColumnsType<PrtgLink>>(() => [
-    {
-      title: <>{t('prtg.col.status')} <ExplainIcon text={t('prtg.colExplain.status')} /></>,
-      dataIndex: 'status',
-      width: 100,
-      render: (_: unknown, link: PrtgLink) => (
-        // P0-2：悬停直接给 PRTG 自己的原因（Unusual 时是基线判定原文 + 结构化解析）
-        <ExplainPopover text={explainStatusReason(link.status, link.status_raw, link.last_message, link.unusual_reason, t)}>
-          <Tag color={statusColor(link.status)}>
-            {t(statusLabelKey(link.status))}
-            {link.unusual_reason ? (link.unusual_reason.direction === 'high' ? ' ↑' : ' ↓') : ''}
-          </Tag>
-        </ExplainPopover>
-      ),
-    },
-    {
-      title: <>{t('prtg.col.link')} <ExplainIcon text={t('prtg.colExplain.link')} /></>,
-      key: 'link',
-      width: 250,
-      render: (_: unknown, link: PrtgLink) => (
-        <div>
-          <div style={{ color: WH.text }}>{link.device_name || NA}</div>
-          <div style={{ fontSize: 12, color: WH.textMuted }}>{link.sensor_name}</div>
-        </div>
-      ),
-    },
-    {
-      title: <>{t('prtg.col.site')} <ExplainIcon text={t('prtg.colExplain.site')} /></>,
-      key: 'site',
-      width: 190,
-      render: (_: unknown, link: PrtgLink) => (
-        <ExplainPopover text={explainSite(link, t)}>
-          <div>
-            <div>{link.site_id && link.site_id !== 'Unknown' ? link.site_id : NA}</div>
-            <div style={{ fontSize: 12, color: WH.textMuted }}>
-              {link.region || NA} · {t(matchLabelKey(link.match_status))}
-            </div>
-          </div>
-        </ExplainPopover>
-      ),
-    },
-    {
-      title: <>{t('prtg.col.in')} <ExplainIcon text={t('prtg.colExplain.in')} /></>,
-      key: 'in',
-      width: 110,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => numCell(link.in_mbps, explainIn(link, t)),
-    },
-    {
-      title: <>{t('prtg.col.out')} <ExplainIcon text={t('prtg.colExplain.out')} /></>,
-      key: 'out',
-      width: 110,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => numCell(link.out_mbps, explainOut(link, t)),
-    },
-    {
-      title: <>{t('prtg.col.total')} <ExplainIcon text={t('prtg.colExplain.total')} /></>,
-      key: 'total',
-      width: 120,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => numCell(link.total_mbps, explainTotal(link, t)),
-    },
-    {
-      title: <>{t('prtg.col.unicast')} <ExplainIcon text={t('prtg.colExplain.unicast')} /></>,
-      key: 'unicast',
-      width: 130,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => pairCell(link.unicast_in, link.unicast_out, explainUnicast(link, t)),
-    },
-    {
-      title: <>{t('prtg.col.errors')} <ExplainIcon text={t('prtg.colExplain.errors')} /></>,
-      key: 'errors',
-      width: 120,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => pairCell(link.errors_in, link.errors_out, explainErrors(link, t)),
-    },
-    {
-      title: <>{t('prtg.col.discards')} <ExplainIcon text={t('prtg.colExplain.discards')} /></>,
-      key: 'discards',
-      width: 120,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => pairCell(link.discards_in, link.discards_out, explainDiscards(link, t)),
-    },
-    {
-      title: <>{t('prtg.col.uptime')} <ExplainIcon text={t('prtg.colExplain.uptime')} /></>,
-      key: 'uptime',
-      width: 110,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => numCell(link.uptime_pct, explainUptime(link, t), 3, '%'),
-    },
-    {
-      // P0-1：PRTG 日志派生。24h Down 次数 / ICMP 超时次数（Ping 单通道时的丢包替代信号）/ 7 天 MTTR
-      title: <>{t('prtg.col.stability')} <ExplainIcon text={t('prtg.colExplain.stability')} /></>,
-      key: 'stability',
-      width: 150,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => (
-        <ExplainPopover
-          placement="left"
-          text={t('prtg.cellExplain.stability', {
-            down: fmtInt(link.down_count_24h),
-            icmp: fmtInt(link.icmp_timeouts_24h),
-            mttr: link.mttr_minutes_7d == null ? NA : fmtDuration(link.mttr_minutes_7d * 60),
-          })}
-        >
-          <span style={{
-            fontVariantNumeric: 'tabular-nums',
-            color: (link.down_count_24h ?? 0) > 0 ? WH.danger : undefined,
-          }}>
-            {fmtInt(link.down_count_24h)} / {fmtInt(link.icmp_timeouts_24h)}
-            <span style={{ color: WH.textMuted }}> · {link.mttr_minutes_7d == null ? NA : fmtDuration(link.mttr_minutes_7d * 60)}</span>
-          </span>
-        </ExplainPopover>
-      ),
-    },
-    {
-      title: <>{t('prtg.col.lastDown')} <ExplainIcon text={t('prtg.colExplain.lastDown')} /></>,
-      dataIndex: 'last_down',
-      width: 170,
-      render: (_: unknown, link: PrtgLink) => (
-        <ExplainPopover text={explainLastDown(link, t)} placement="left">
-          <span>{fmtTime(link.last_down)}</span>
-        </ExplainPopover>
-      ),
-    },
-    {
-      title: <>{t('prtg.col.capacity')} <ExplainIcon text={t('prtg.colExplain.capacity')} /></>,
-      key: 'capacity',
-      width: 120,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => (
-        <ExplainPopover text={explainCapacity(link, t)} placement="left">
-          <span style={{ color: link.capacity_mbps == null ? WH.warn : undefined }}>
-            {link.capacity_mbps == null
-              ? t('prtg.capacityMissing')
-              : `${fmtNum(link.capacity_mbps)} ${t('prtg.trend.unit')}`}
-          </span>
-        </ExplainPopover>
-      ),
-    },
-    {
-      title: <>{t('prtg.col.utilization')} <ExplainIcon text={t('prtg.colExplain.utilization')} /></>,
-      key: 'utilization',
-      width: 110,
-      align: 'right',
-      render: (_: unknown, link: PrtgLink) => numCell(link.utilization_pct, explainUtilization(link, t), 2, '%'),
-    },
-  ], [t, numCell, pairCell])
+  const freshnessDot = overview == null
+    ? WH.textMuted
+    : stale || age == null
+      ? WH.danger
+      : WH.ok
 
   const selectedLink = useMemo(
     () => links.find(l => l.sensor_id === detailId),
     [links, detailId],
   )
-  const modalTitle = detail
-    ? `${detail.device_name || NA} · ${detail.sensor_name}`
-    : selectedLink
-      ? `${selectedLink.device_name || NA} · ${selectedLink.sensor_name}`
-      : t('prtg.detail.title')
+
+  const modalTitle = useMemo(() => {
+    const device = detail?.device_name ?? selectedLink?.device_name
+    const sensor = detail?.sensor_name ?? selectedLink?.sensor_name
+    if (device || sensor) {
+      return `${shortDeviceName(device)} · ${cleanSensorName(sensor)}`
+    }
+    return t('prtg.detail.title')
+  }, [detail, selectedLink, t])
+
+  const viewSwitcher = (
+    <Segmented
+      className="wh-seg"
+      value={view}
+      onChange={v => setView(v as 'health' | 'sla')}
+      options={[
+        { value: 'health', label: t('prtg.tab.health') },
+        { value: 'sla', label: t('prtg.tab.sla') },
+      ]}
+    />
+  )
 
   if (view === 'sla') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)' }}>
         <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
-          <Segmented
-            className="wh-seg"
-            value={view}
-            onChange={v => setView(v as 'health' | 'sla')}
-            options={[
-              { value: 'health', label: t('prtg.tab.health') },
-              { value: 'sla', label: t('prtg.tab.sla') },
-            ]}
-          />
+          {viewSwitcher}
         </CardBase>
         <PrtgSlaView />
       </div>
     )
   }
 
+  const trendCard = (
+    <CardBase
+      title={<>{t('prtg.trend.title')} <ExplainIcon text={t('prtg.trend.explain')} /></>}
+      extra={<Text type="secondary" style={{ fontSize: 12 }}>{t(windowLabelKey(windowKey))}</Text>}
+    >
+      {overview
+        ? <PrtgTrendChart points={overview.trend || []} windowKey={windowKey} isDark={isDark} />
+        : <Empty description={t('prtg.trend.empty')} />}
+    </CardBase>
+  )
+
+  const visualSlot = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <PrtgVisualModeSwitch mode={visualMode} onChange={setVisualMode} />
+      </div>
+      {visualMode === 'topo' ? (
+        <PrtgTopologyView
+          windowKey={windowKey}
+          pageLinks={links}
+          isDark={isDark}
+          highlightSensorId={highlightSensorId}
+          onOpenDetail={openDetail}
+          onSwitchToTrend={() => setVisualMode('trend')}
+        />
+      ) : trendCard}
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--wh-space-md)' }}>
 
+      {/* ① 合并工具栏：视图 + 时间窗 + 刷新 + 新鲜度 + 生成时间 */}
       <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
-        <Segmented
-          className="wh-seg"
-          value={view}
-          onChange={v => setView(v as 'health' | 'sla')}
-          options={[
-            { value: 'health', label: t('prtg.tab.health') },
-            { value: 'sla', label: t('prtg.tab.sla') },
-          ]}
-        />
-      </CardBase>
-
-      {/* ① 筛选条：时间范围 + 刷新 + 生成时间 */}
-      <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
-        <Space wrap>
-          <Text type="secondary">{t('prtg.window.label')}</Text>
-          <Segmented
-            className="wh-seg"
-            value={windowKey}
-            onChange={v => setWindowKey(v as PrtgWindow)}
-            options={PRTG_WINDOWS.map(w => ({ value: w, label: t(windowLabelKey(w)) }))}
-          />
-          <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
-            {t('common.refresh')}
-          </Button>
-          <Tag>{t('prtg.freshness.label')}: {ageText}</Tag>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {t('prtg.generatedAt', { time: fmtTime(overview?.generated_at) })}
-          </Text>
+        <Space wrap size="middle" style={{ width: '100%', justifyContent: 'space-between' }}>
+          <Space wrap>
+            {viewSwitcher}
+            <Text type="secondary">{t('prtg.window.label')}</Text>
+            <Segmented
+              className="wh-seg"
+              value={windowKey}
+              onChange={v => setWindowKey(v as PrtgWindow)}
+              options={PRTG_WINDOWS.map(w => ({ value: w, label: t(windowLabelKey(w)) }))}
+            />
+            <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
+              {t('common.refresh')}
+            </Button>
+          </Space>
+          <Space wrap size="middle">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <span
+                aria-hidden
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: freshnessDot,
+                  boxShadow: stale ? `0 0 0 3px color-mix(in srgb, ${WH.danger} 25%, transparent)` : undefined,
+                }}
+              />
+              <Text type="secondary">{t('prtg.freshness.label')}:</Text>
+              <Text style={{ color: stale ? WH.danger : WH.text }}>{ageText}</Text>
+            </span>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {t('prtg.generatedAt', { time: fmtTime(overview?.generated_at) })}
+            </Text>
+          </Space>
         </Space>
       </CardBase>
 
-      {/* ② 错误 / 过期 / 采集器异常：状态反馈必须常驻（不是「解释」） */}
+      {/* ② 错误 / 过期 / 采集器异常：状态反馈必须常驻 */}
       {error && (
         <Alert type="error" showIcon message={t('prtg.warn.loadFailed')} description={error} />
       )}
@@ -438,7 +267,38 @@ export default function PrtgLinkHealth() {
         />
       )}
 
-      {/* ③ 口径说明：默认收起（AGENTS.md 三.3b） */}
+      {/* ③ 4 张 KPI */}
+      <PrtgHealthKpis kpi={kpi} links={links} hasOverview={overview != null} />
+
+      {/* ④ 趋势（可替换槽）≈60% + 需要关注 ≈40%；窄屏堆叠 */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 'var(--wh-space-md)',
+          alignItems: 'stretch',
+        }}
+      >
+        <OverviewVisualSlot>{visualSlot}</OverviewVisualSlot>
+        <div style={{ flex: '1 1 36%', minWidth: 260 }}>
+          <PrtgAttentionPanel
+            links={links}
+            onSelect={openDetail}
+            onHighlight={setHighlightSensorId}
+          />
+        </div>
+      </div>
+
+      {/* ⑤ 7 列分组表 */}
+      <PrtgLinksTable
+        links={links}
+        loading={loading}
+        error={error}
+        onOpenDetail={openDetail}
+      />
+
+      {/* ⑥ 次要内容下沉：设备事件 + 口径说明（默认收起） */}
+      <PrtgIncidents refreshToken={refreshToken} />
       <CalcChainNote
         title={t('prtg.note.title')}
         sections={[
@@ -451,70 +311,7 @@ export default function PrtgLinkHealth() {
         ]}
       />
 
-      {/* ④ KPI 数字卡：标题 ⓘ + 数字悬浮都由 StatCard 统一承载 */}
-      <Row gutter={[12, 12]}>
-        {kpiCards.map(card => (
-          <Col xs={12} sm={8} lg={4} key={card.key}>
-            <StatCard
-              title={(
-                <span>
-                  {card.title}
-                  <span style={{ marginLeft: 4 }}>
-                    <ExplainIcon text={card.explain} />
-                  </span>
-                </span>
-              )}
-              value={card.value}
-              suffix={card.suffix}
-              explainText={card.explain}
-              accentColor={card.color}
-            />
-          </Col>
-        ))}
-      </Row>
-
-      {/* ⑤ 全网速率趋势：自绘 SVG，不嵌 chart.png */}
-      <CardBase
-        title={<>{t('prtg.trend.title')} <ExplainIcon text={t('prtg.trend.explain')} /></>}
-        extra={<Text type="secondary" style={{ fontSize: 12 }}>{t(windowLabelKey(windowKey))}</Text>}
-      >
-        {overview
-          ? <PrtgTrendChart points={overview.trend || []} windowKey={windowKey} isDark={isDark} />
-          : <Empty description={t('prtg.trend.empty')} />}
-      </CardBase>
-
-      {/* ⑥ 25 条链路表：点任意行开详情 */}
-      <CardBase
-        title={<>{t('prtg.table.title')} <ExplainIcon text={t('prtg.table.hint')} /></>}
-        extra={<Text type="secondary" style={{ fontSize: 12 }}>{overview == null ? NA : `${links.length} / 25`}</Text>}
-      >
-        <Table<PrtgLink>
-          rowKey="sensor_id"
-          columns={columns}
-          dataSource={links}
-          loading={loading}
-          pagination={false}
-          size="small"
-          scroll={{ x: 1900 }}
-          onRow={link => ({
-            onClick: e => openDetail(link, { x: e.clientX, y: e.clientY }),
-            style: { cursor: 'pointer' },
-          })}
-          locale={{
-            emptyText: (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={error ? t('prtg.warn.loadFailed') : t('prtg.empty')}
-              />
-            ),
-          }}
-        />
-      </CardBase>
-
-      {/* ⑥b 设备事件（P0-3）：同设备 120 秒内相继 Down 合并为一条 */}
-      <PrtgIncidents refreshToken={refreshToken} />
-
-      {/* ⑦ 详情弹窗：传感器信息 + 映射 + 事件 + In/Out/Total 时序 */}
+      {/* ⑦ 详情弹窗：内容不改，仅标题用清洗名 */}
       <DraggableClickModal
         open={detailOpen}
         title={modalTitle}
