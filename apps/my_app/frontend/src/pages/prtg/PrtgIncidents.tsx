@@ -134,6 +134,7 @@ export default function PrtgIncidents({ refreshToken }: Props) {
             {t('prtg.incidents.count', { n: items.length, open: openCount })}
           </Text>
           <Segmented
+            className="wh-seg"
             size="small"
             value={win}
             onChange={v => setWin(v as IncidentWindow)}

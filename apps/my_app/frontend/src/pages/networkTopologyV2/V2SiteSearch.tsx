@@ -73,6 +73,7 @@ export default function V2SiteSearch({
           ]}
         />
         <Segmented
+          className="wh-seg"
           size="small"
           value={filter}
           onChange={(v) => onFilter(v as SiteFilter)}

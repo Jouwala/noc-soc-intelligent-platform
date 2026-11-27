@@ -305,6 +305,7 @@ export default function PortalLogin() {
             {t('portal.mode')}:
           </span>
           <Segmented
+            className="wh-seg"
             value={mode}
             onChange={(v) => changeMode(v as 'client' | 'server')}
             options={[

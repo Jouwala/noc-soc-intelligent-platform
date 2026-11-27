@@ -118,7 +118,7 @@ node ops\deploy\agent-done-check.mjs --update-baseline   # 记录当前 pytest �
 而且 `--no-verify` 能绕过本地钩子（CI 兜底，但反馈晚一轮）。
 
 ```powershell
-# ① my_app（17 个用例：任务数 / 页面数 / iframe 页数 / worker 组数 / 队列保留期
+# ① my_app（18 个用例：任务数 / 页面数 / iframe 页数 / worker 组数 / 队列保留期
 #    / 路由数 / 凭据分组数 / 组件数 / 文件体积 / 页面表与菜单一致 / 帮助条目齐全
 #    / 每个页面都有按页刷新设置 / 看板下推的每张表都有本机 PG 巡检）
 cd D:\02_olbr_portal\apps\my_app

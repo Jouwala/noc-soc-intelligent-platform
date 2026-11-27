@@ -1536,7 +1536,7 @@ python tests/test_doc_consistency.py
 早前版本直接 <code>from backend.task_registry import TASK_SPECS</code>，在 Linux 上会因
 <code>ctypes.wintypes</code> 直接失败，且要求整套后端运行环境（apscheduler / sqlalchemy），
 那样就进不了 CI 了。</p>
-<p><strong>17 个用例</strong>：</p>
+<p><strong>18 个用例</strong>：</p>
 <ol>
 <li>文档里的「N 个定时任务」= <code>TASK_SPECS</code> 条数（5 个文件逐个核对）；</li>
 <li><code>04-task-system.md</code> 的全量任务清单表 = <code>TASK_SPECS</code> 的每个 <code>task_id</code>；</li>
@@ -1556,6 +1556,11 @@ python tests/test_doc_consistency.py
 <li><strong>每个页面都有按页刷新设置</strong>（2026-11-04 新增的项目硬要求）：<code>PAGE_META</code> 里每个自研页面都必须在 <code>App.tsx</code> 的 <code>AR_PAGE_DEFAULTS</code> 登记建议间隔、间隔必须是 <code>AR_OPTIONS</code> 档位，且不得再出现按页禁用刷新控件的白名单（细则见 <code>AGENTS.md</code> 三.3d 与 <code>16-new-page-guide.md</code> 3.4d）。</li>
 <li><strong>看板下推的每张表都要有本机 PG 巡检，且回看天数与看板默认窗口同档</strong>（2026-11-05 新增）：<code>dashboard_service.PUSH_DOWN_TABLES</code> ⊆ <code>pg_schema_freshness.PG_SCHEMA_CHECKS[].tables</code>、<code>lookback_days</code> == <code>PUSH_DOWN_DAYS</code>，并且 <code>dashboard_service</code> 仍在输出 <code>meta.coverage</code>、<code>NativeBoard</code> 仍常驻渲染缺档告警。背景：IP RAN 看板 11-04 改读本机 PG，而镜像只追头部水位，「近 31 天只有 10 天有数」这种洞当时<strong>任何巡检都查不到</strong>（远端一直绿、判据只问最新时间），见 <code>backend/services/db/pg_schema_freshness.md</code>。</li>
 </ol>
+</blockquote>
+<ol start="18">
+<li><strong>页面级分段开关统一走 <code>.wh-seg</code></strong>（2026-11-27 新增）：<code>pages/**/*.tsx</code> 与 <code>components/**/*.tsx</code> 里每个 <code>&lt;Segmented&gt;</code> 都必须带 <code>className=&quot;wh-seg&quot;</code>，表单里的微型二选一允许用 <code>{/* wh-seg-exempt: &lt;原因&gt; */}</code> 显式豁免。背景：用户反馈 <code>site_kpi_rt</code> 的「4G/5G 小区级」与 <code>vmaxCxoDashboard_90Days</code> 的 Day/Week 页签观感不一致 —— 约定只写在 <code>index.css</code> 的 <code>.wh-seg</code> 注释里，37 个 <code>&lt;Segmented&gt;</code> 漏了 11 个。细则见 <code>16-new-page-guide.md</code> 3.4e。</li>
+</ol>
+<blockquote>
 <p><strong>三道防线，同一份代码，不规则分叉</strong>：</p>
 <table>
 <thead>

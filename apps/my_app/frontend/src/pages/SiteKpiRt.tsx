@@ -265,6 +265,7 @@ export default function SiteKpiRt() {
       <CardBase bodyStyle={{ padding: 'var(--wh-space-sm) var(--wh-space-md)' }}>
         <Space wrap>
           <Segmented
+            className="wh-seg wh-gran-switch"
             value={tech}
             onChange={v => {
               setTech(v as '4G' | '5G')
