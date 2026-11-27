@@ -260,18 +260,46 @@ def _sustained_threshold(
     return True
 
 
-def _load_evidence(row: NetworkAnomalyEvent) -> dict[str, Any]:
+def _streak_key(sensor_id: int, rule_code: str) -> str:
+    return f"{sensor_id}:{rule_code}"
+
+
+def _parse_evidence(row: NetworkAnomalyEvent) -> Any:
+    """原样解析 evidence（list 或 dict），不改形状。"""
     try:
-        data = json.loads(row.evidence_json or "{}")
-        return data if isinstance(data, dict) else {"_list": data}
+        return json.loads(row.evidence_json or "null")
     except json.JSONDecodeError:
-        return {}
+        return None
+
+
+def _bump_miss_and_maybe_close(
+    row: NetworkAnomalyEvent,
+    now: datetime,
+    miss_streaks: dict[str, int],
+) -> bool:
+    """迟滞关闭：miss_streak 存在 anomaly 同步状态，不改写原 evidence 结构。"""
+    key = _streak_key(row.sensor_objid, row.rule_code)
+    miss = int(miss_streaks.get(key) or 0) + 1
+    miss_streaks[key] = miss
+    if miss < HYSTERESIS_CLOSE_BUCKETS:
+        return False
+    row.ended_at = now
+    # dict 证据可附 closed_hysteresis；list 证据保持原样（N1）
+    data = _parse_evidence(row)
+    if isinstance(data, dict):
+        data = dict(data)
+        data["closed_hysteresis"] = HYSTERESIS_CLOSE_BUCKETS
+        row.evidence_json = json.dumps(data, ensure_ascii=False)
+    miss_streaks.pop(key, None)
+    return True
 
 
 def _upsert_rule_events(session, sensor_id: int, hits: list[Hit], now: datetime,
                         *, allow_close: bool = True,
-                        allow_open: bool = True) -> tuple[int, int]:
+                        allow_open: bool = True,
+                        miss_streaks: dict[str, int] | None = None) -> tuple[int, int]:
     """按 (sensor, rule) 维护未结束事件；返回 (opened, closed)。"""
+    streaks = miss_streaks if miss_streaks is not None else {}
     open_rows = {
         row.rule_code: row
         for row in session.execute(
@@ -285,7 +313,7 @@ def _upsert_rule_events(session, sensor_id: int, hits: list[Hit], now: datetime,
     for hit in hits:
         row = open_rows.get(hit.rule_code)
         evid = dict(hit.evidence)
-        evid["miss_streak"] = 0
+        streaks[_streak_key(sensor_id, hit.rule_code)] = 0
         if row is None:
             if not allow_open:
                 continue
@@ -307,16 +335,8 @@ def _upsert_rule_events(session, sensor_id: int, hits: list[Hit], now: datetime,
             continue
         if code.startswith(RULE_BATCH_PREFIX):
             continue
-        evid = _load_evidence(row)
-        miss = int(evid.get("miss_streak") or 0) + 1
-        evid["miss_streak"] = miss
-        if miss < HYSTERESIS_CLOSE_BUCKETS:
-            row.evidence_json = json.dumps(evid, ensure_ascii=False)
-            continue
-        row.ended_at = now
-        evid["closed_hysteresis"] = HYSTERESIS_CLOSE_BUCKETS
-        row.evidence_json = json.dumps(evid, ensure_ascii=False)
-        closed += 1
+        if _bump_miss_and_maybe_close(row, now, streaks):
+            closed += 1
 
     # 综合事件：把同一传感器的多条证据合成一条，交给事件适配层/收件箱
     composite = open_rows.get(RULE_COMPOSITE)
@@ -327,6 +347,7 @@ def _upsert_rule_events(session, sensor_id: int, hits: list[Hit], now: datetime,
             for h in hits
         ]
         evidence = json.dumps(payload, ensure_ascii=False)
+        streaks[_streak_key(sensor_id, RULE_COMPOSITE)] = 0
         if composite is None:
             if allow_open:
                 session.add(NetworkAnomalyEvent(
@@ -342,15 +363,8 @@ def _upsert_rule_events(session, sensor_id: int, hits: list[Hit], now: datetime,
             composite.evidence_json = evidence
             composite.severity = _worst_severity(hits)
     elif composite is not None and allow_close:
-        evid = _load_evidence(composite)
-        miss = int(evid.get("miss_streak") or 0) + 1
-        evid["miss_streak"] = miss
-        if miss >= HYSTERESIS_CLOSE_BUCKETS:
-            composite.ended_at = now
-            composite.evidence_json = json.dumps(evid, ensure_ascii=False)
+        if _bump_miss_and_maybe_close(composite, now, streaks):
             closed += 1
-        else:
-            composite.evidence_json = json.dumps(evid, ensure_ascii=False)
     return opened, closed
 
 
@@ -458,29 +472,45 @@ def _import_protect_active(now: datetime) -> bool:
     return (now - ts).total_seconds() < IMPORT_PROTECT_SECONDS
 
 
-def _merge_batches(session, now: datetime) -> int:
-    """同轮同规则、成员 ≥ BATCH_MIN_MEMBERS → 一条 batch_* 事件（保留成员行）。"""
-    opened = session.execute(
+def _merge_batches(session, now: datetime,
+                   miss_streaks: dict[str, int] | None = None) -> int:
+    """同轮同规则、成员 ≥ BATCH_MIN_MEMBERS → 一条 batch_* 事件（保留成员行）。
+
+    B1：本轮成员 <5 且已有 open batch 时，按 HYSTERESIS_CLOSE_BUCKETS 迟滞关闭；
+    期间若成员数回到 ≥5，清零 miss 并保持 open。
+    """
+    streaks = miss_streaks if miss_streaks is not None else {}
+    # 本轮成员 = 仍 open 且 miss_streak==0（本轮刚命中/持续命中）的非 batch/composite 行
+    open_members = session.execute(
         select(NetworkAnomalyEvent)
-        .where(NetworkAnomalyEvent.started_at == now)
         .where(NetworkAnomalyEvent.ended_at.is_(None))
         .where(~NetworkAnomalyEvent.rule_code.startswith(RULE_BATCH_PREFIX))
         .where(NetworkAnomalyEvent.rule_code != RULE_COMPOSITE)
+        .where(NetworkAnomalyEvent.sensor_objid != BATCH_SENSOR_OBJID)
     ).scalars().all()
     by_rule: dict[str, list[NetworkAnomalyEvent]] = {}
-    for ev in opened:
+    for ev in open_members:
+        if int(streaks.get(_streak_key(ev.sensor_objid, ev.rule_code)) or 0) != 0:
+            continue
         by_rule.setdefault(ev.rule_code, []).append(ev)
     created = 0
+    open_batches = session.execute(
+        select(NetworkAnomalyEvent)
+        .where(NetworkAnomalyEvent.sensor_objid == BATCH_SENSOR_OBJID)
+        .where(NetworkAnomalyEvent.rule_code.startswith(RULE_BATCH_PREFIX))
+        .where(NetworkAnomalyEvent.ended_at.is_(None))
+    ).scalars().all()
+    open_by_code = {b.rule_code: b for b in open_batches}
+    active_batch_codes: set[str] = set()
+
     for rule, members in by_rule.items():
+        batch_code = f"{RULE_BATCH_PREFIX}{rule}"
+        key = _streak_key(BATCH_SENSOR_OBJID, batch_code)
+        existing = open_by_code.get(batch_code)
         if len(members) < BATCH_MIN_MEMBERS:
             continue
-        batch_code = f"{RULE_BATCH_PREFIX}{rule}"
-        existing = session.execute(
-            select(NetworkAnomalyEvent)
-            .where(NetworkAnomalyEvent.sensor_objid == BATCH_SENSOR_OBJID)
-            .where(NetworkAnomalyEvent.rule_code == batch_code)
-            .where(NetworkAnomalyEvent.ended_at.is_(None))
-        ).scalar_one_or_none()
+        active_batch_codes.add(batch_code)
+        streaks[key] = 0
         payload = {
             "members": [
                 {"sensor_objid": m.sensor_objid, "event_id": m.id,
@@ -503,6 +533,12 @@ def _merge_batches(session, now: datetime) -> int:
         else:
             existing.message = msg
             existing.evidence_json = json.dumps(payload, ensure_ascii=False)
+
+    # 本轮活跃成员 <5（含 0）：对已有 open batch 走关闭迟滞
+    for batch_code, existing in open_by_code.items():
+        if batch_code in active_batch_codes:
+            continue
+        _bump_miss_and_maybe_close(existing, now, streaks)
     return created
 
 
@@ -523,6 +559,9 @@ def evaluate_all(now: datetime | None = None,
     except json.JSONDecodeError:
         prev_detail = {}
     prev_states = prev_detail.get("baseline_by_sensor") or {}
+    miss_streaks: dict[str, int] = {
+        str(k): int(v) for k, v in (prev_detail.get("close_miss_streak") or {}).items()
+    }
 
     stats = {"sensors": 0, "traffic_sensors": 0, "rule_hits": 0,
              "events_opened": 0, "events_closed": 0, "ping_transitions": 0,
@@ -578,6 +617,7 @@ def evaluate_all(now: datetime | None = None,
                     session, sensor.objid, hits, now,
                     allow_close=baseline_state.startswith(("ok", "idle")),
                     allow_open=allow_open,
+                    miss_streaks=miss_streaks,
                 )
                 stats["events_opened"] += opened
                 stats["events_closed"] += closed
@@ -589,10 +629,11 @@ def evaluate_all(now: datetime | None = None,
                     select(PrtgPingState).where(PrtgPingState.sensor_objid == sensor.objid)
                 ).scalar_one_or_none()
                 _sync_ping_composite(session, sensor.objid, ping_row, now)
-        stats["batches_opened"] = _merge_batches(session, now)
+        stats["batches_opened"] = _merge_batches(session, now, miss_streaks=miss_streaks)
         session.commit()
 
     stats["baseline_by_sensor"] = baseline_by_sensor
+    stats["close_miss_streak"] = miss_streaks
     store.set_state("anomaly", status="ok", last_run_at=now, last_success_at=now,
                     error="", detail=json.dumps(stats, ensure_ascii=False))
     return stats

@@ -88,9 +88,15 @@ def import_history(
     from backend.services.prtg.anomaly import IMPORT_PROTECT_SECONDS
 
     protect_until = (now + timedelta(seconds=IMPORT_PROTECT_SECONDS)).isoformat()
+    # detail：JSON（含 protect_until）+ summary 文本兼容旧「days=… avg=…」可读格式
+    summary = (
+        f"days={days} avg={avg}s sensors={len(sensors)} rows={total_rows} "
+        f"protect_until={protect_until}"
+    )
     store.set_state(
         "history_import", status="ok", last_run_at=now, last_success_at=now, error="",
         detail=json.dumps({
+            "summary": summary,
             "days": days, "avg": avg, "sensors": len(sensors), "rows": total_rows,
             "protect_until": protect_until,
             "protect_seconds": IMPORT_PROTECT_SECONDS,

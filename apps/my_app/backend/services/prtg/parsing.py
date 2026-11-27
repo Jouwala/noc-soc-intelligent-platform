@@ -252,8 +252,9 @@ def rate_bps_from_prtg_display_and_raw(
     display_bps, unit = display_rate_to_bps(display)
     raw_bps = float(raw) if raw is not None else None
     name_l = (channel_name or "").lower()
+    # 以通道名为准：Ping 的 channel_id=0 与 Traffic In 同号，不能靠 id 白名单
+    # （channel_id 仍保留在签名里，供调用方传入与将来扩展）
     traffic_by_name = "traffic" in name_l
-    traffic_id = channel_id in TRAFFIC_RATE_CHANNEL_IDS if channel_id is not None else False
 
     if display_bps is not None:
         warning = None
@@ -271,7 +272,6 @@ def rate_bps_from_prtg_display_and_raw(
         }
 
     # 无 bit 系 display：仅「Traffic*」名通道拒用 raw；Ping/计数等回退 raw
-    _ = traffic_id  # 保留参数供调用方传入；名优先，避免 Ping 的 channel 0 误伤
     if traffic_by_name:
         if raw_bps is not None and raw_bps == 0:
             return {
