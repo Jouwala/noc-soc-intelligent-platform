@@ -139,8 +139,9 @@ def test_poll_once_stores_samples_and_status_event(collector, db_session):
         rows = session.execute(select(PrtgChannelSample)).scalars().all()
         assert len(rows) == 3
         total = [r for r in rows if r.channel_objid == -1][0]
-        assert total.value_num == pytest.approx(8822610.4898)
-        assert total.volume_num == pytest.approx(529445120.0)
+        # live 用 display 换算 byte/s（7058 kbit/s），不用偏高的 lastvalue_raw
+        assert total.value_num == pytest.approx(7058 * 1000 / 8)
+        assert total.volume_num == pytest.approx(total.value_num * 60, rel=0.02)
 
     # 第二轮状态改为 Down：必须记录一条 down 事件
     collector._client.status = "Down"
@@ -321,7 +322,8 @@ def test_parse_channels_xml_keeps_rate_and_volume():
     assert [r["channel_objid"] for r in rows] == [0, -1]  # Downtime 无值被跳过
     total = rows[-1]
     assert total["value_display"] == "7,058 kbit/s"
-    assert total["value_num"] == pytest.approx(8822610.4898)
+    assert total["value_num"] == pytest.approx(7058 * 1000 / 8)
+    assert total["rate_source"] == "display"
     assert total["volume_display"] == "51,704 KByte"
 
 
