@@ -77,13 +77,24 @@ def test_below_baseline_and_low_30min_and_zero():
 def test_above_baseline_and_errors_growth():
     now = datetime(2026, 11, 24, 10, 0)
     history = _week_samples(now, 100_000.0)
-    high = [(now, 300_000.0)]
+    # E：需连续 2 桶超基线
+    high = [(now - timedelta(minutes=5), 300_000.0), (now, 300_000.0)]
     hits, _ = anomaly.evaluate_traffic_sensor(
         sensor_id=1, status="Up", total_series=history + high,
         error_series=[(now - timedelta(minutes=10), 1.0), (now - timedelta(minutes=5), 2.0), (now, 3.0)],
     )
     codes = {h.rule_code for h in hits}
     assert anomaly.RULE_ABOVE in codes and anomaly.RULE_ERRORS in codes
+
+
+def test_above_single_bucket_spike_no_hit():
+    now = datetime(2026, 11, 24, 10, 0)
+    history = _week_samples(now, 100_000.0)
+    hits, _ = anomaly.evaluate_traffic_sensor(
+        sensor_id=1, status="Up",
+        total_series=history + [(now, 300_000.0)], error_series=[],
+    )
+    assert anomaly.RULE_ABOVE not in {h.rule_code for h in hits}
 
 
 def test_ping_state_machine_sequence():
@@ -103,7 +114,9 @@ def test_ping_state_machine_sequence():
     assert state == "OK"
 
 
-def test_evaluate_all_dedupes_and_closes(db):
+def test_evaluate_all_dedupes_and_closes(db, monkeypatch):
+    monkeypatch.setattr(anomaly, "HYSTERESIS_OPEN_BUCKETS", 1)
+    monkeypatch.setattr(anomaly, "HYSTERESIS_CLOSE_BUCKETS", 1)
     now = datetime(2026, 11, 24, 10, 0)
     with db() as session:
         session.add(PrtgSensor(objid=2721, sensor_name="t", sensortype="SNMP Traffic 64bit",
@@ -225,3 +238,50 @@ def test_errors_rule_sums_four_channels_per_bucket(db):
         ).scalars().all()
     assert len(rows) == 1
     assert rows[0].evidence_json
+
+
+def test_import_protect_suppresses_new_opens(db, monkeypatch):
+    monkeypatch.setattr(anomaly, "HYSTERESIS_OPEN_BUCKETS", 1)
+    monkeypatch.setattr(anomaly, "_import_protect_active", lambda now: True)
+    now = datetime(2026, 11, 24, 10, 0)
+    with db() as session:
+        session.add(PrtgSensor(objid=2721, sensor_name="t", sensortype="SNMP Traffic 64bit",
+                               status="Up", active=True))
+        _add_5m(session, 2721, -1, _week_samples(now, 100_000.0) + [
+            (now - timedelta(minutes=5), 300_000.0), (now, 300_000.0),
+        ])
+        session.commit()
+    stats = anomaly.evaluate_all(now=now)
+    assert stats["import_protect"] is True
+    assert stats["events_opened"] == 0
+    assert stats["open_suppressed"] >= 1
+
+
+def test_batch_merge_same_run(db, monkeypatch):
+    monkeypatch.setattr(anomaly, "HYSTERESIS_OPEN_BUCKETS", 1)
+    monkeypatch.setattr(anomaly, "BATCH_MIN_MEMBERS", 5)
+    monkeypatch.setattr(anomaly, "_import_protect_active", lambda now: False)
+    now = datetime(2026, 11, 24, 16, 59, 34)
+    with db() as session:
+        for sid in range(100, 115):
+            session.add(PrtgSensor(objid=sid, sensor_name=f"s{sid}",
+                                   sensortype="SNMP Traffic 64bit", status="Up", active=True))
+            _add_5m(session, sid, -1, _week_samples(now, 100_000.0) + [
+                (now - timedelta(minutes=5), 300_000.0), (now, 300_000.0),
+            ])
+        session.commit()
+    anomaly.evaluate_all(now=now)
+    with db() as session:
+        members = session.execute(
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.rule_code == anomaly.RULE_ABOVE)
+            .where(NetworkAnomalyEvent.ended_at.is_(None))
+        ).scalars().all()
+        batches = session.execute(
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.rule_code == f"{anomaly.RULE_BATCH_PREFIX}{anomaly.RULE_ABOVE}")
+        ).scalars().all()
+    assert len(members) == 15
+    assert len(batches) == 1
+    evidence = json.loads(batches[0].evidence_json)
+    assert evidence["member_count"] == 15

@@ -94,6 +94,16 @@ EVENT_ERRORS = (10, 11, 12, 13)
 # 它们正是 PRTG 里标 Unusual 的那批；#229 明确要求先观察、不直接转高危。
 IDLE_P95_BYTES = 1250.0
 
+# C：history_import 后保护期（秒）；期内只更新证据、不开新告警
+IMPORT_PROTECT_SECONDS = 600
+# E：开/关迟滞（连续 5m 桶数），可配置
+HYSTERESIS_OPEN_BUCKETS = 2
+HYSTERESIS_CLOSE_BUCKETS = 2
+# D：同轮同规则跨传感器批事件
+RULE_BATCH_PREFIX = "batch_"
+BATCH_SENSOR_OBJID = 0  # 批事件锚点（无实体传感器）
+BATCH_MIN_MEMBERS = 5
+
 
 @dataclass
 class Hit:
@@ -167,17 +177,26 @@ def evaluate_traffic_sensor(
         baseline_state = f"insufficient_baseline({baseline_days}d)"
     else:
         baseline_state = f"ok({baseline_days}d)"
-        if latest_value is not None and latest_value < baseline * 0.3:
+        # E：above/below 需连续 HYSTERESIS_OPEN_BUCKETS 个桶都越线才命中
+        if _sustained_threshold(total_series, below=True, factor=0.3,
+                                buckets=HYSTERESIS_OPEN_BUCKETS):
             hits.append(Hit(
                 RULE_BELOW, "warning",
-                f"5 分钟流量 {latest_value:.0f} byte/s，低于 7 天同期基线 {baseline:.0f} 的 30%",
-                {"current": latest_value, "baseline": baseline, "ratio": round(latest_value / baseline, 4)},
+                f"5 分钟流量 {latest_value:.0f} byte/s，低于 7 天同期基线 {baseline:.0f} 的 30%"
+                f"（连续 {HYSTERESIS_OPEN_BUCKETS} 桶）",
+                {"current": latest_value, "baseline": baseline,
+                 "ratio": round(latest_value / baseline, 4),
+                 "hysteresis_open": HYSTERESIS_OPEN_BUCKETS},
             ))
-        if latest_value is not None and latest_value > baseline * 2:
+        if _sustained_threshold(total_series, below=False, factor=2.0,
+                                buckets=HYSTERESIS_OPEN_BUCKETS):
             hits.append(Hit(
                 RULE_ABOVE, "warning",
-                f"5 分钟流量 {latest_value:.0f} byte/s，超过 7 天同期基线 {baseline:.0f} 的 200%",
-                {"current": latest_value, "baseline": baseline, "ratio": round(latest_value / baseline, 4)},
+                f"5 分钟流量 {latest_value:.0f} byte/s，超过 7 天同期基线 {baseline:.0f} 的 200%"
+                f"（连续 {HYSTERESIS_OPEN_BUCKETS} 桶）",
+                {"current": latest_value, "baseline": baseline,
+                 "ratio": round(latest_value / baseline, 4),
+                 "hysteresis_open": HYSTERESIS_OPEN_BUCKETS},
             ))
         if len(total_series) >= LOW_30_BUCKETS:
             recent = [v for _, v in total_series[-LOW_30_BUCKETS:] if v is not None]
@@ -216,8 +235,42 @@ def evaluate_traffic_sensor(
     return hits, baseline_state
 
 
+def _sustained_threshold(
+    total_series: list[tuple[datetime, float]],
+    *,
+    below: bool,
+    factor: float,
+    buckets: int,
+) -> bool:
+    """最近 ``buckets`` 个桶是否都相对各自同期基线越线。"""
+    if buckets <= 0 or len(total_series) < buckets:
+        return False
+    for ts, value in total_series[-buckets:]:
+        if value is None:
+            return False
+        base, _days = baseline_for(total_series, ts)
+        if base is None or base <= 0:
+            return False
+        if below:
+            if not (value < base * factor):
+                return False
+        else:
+            if not (value > base * factor):
+                return False
+    return True
+
+
+def _load_evidence(row: NetworkAnomalyEvent) -> dict[str, Any]:
+    try:
+        data = json.loads(row.evidence_json or "{}")
+        return data if isinstance(data, dict) else {"_list": data}
+    except json.JSONDecodeError:
+        return {}
+
+
 def _upsert_rule_events(session, sensor_id: int, hits: list[Hit], now: datetime,
-                        *, allow_close: bool = True) -> tuple[int, int]:
+                        *, allow_close: bool = True,
+                        allow_open: bool = True) -> tuple[int, int]:
     """按 (sensor, rule) 维护未结束事件；返回 (opened, closed)。"""
     open_rows = {
         row.rule_code: row
@@ -231,51 +284,73 @@ def _upsert_rule_events(session, sensor_id: int, hits: list[Hit], now: datetime,
     opened = closed = 0
     for hit in hits:
         row = open_rows.get(hit.rule_code)
+        evid = dict(hit.evidence)
+        evid["miss_streak"] = 0
         if row is None:
+            if not allow_open:
+                continue
             session.add(NetworkAnomalyEvent(
                 sensor_objid=sensor_id,
                 rule_code=hit.rule_code,
                 severity=hit.severity,
                 message=hit.message,
-                evidence_json=json.dumps(hit.evidence, ensure_ascii=False),
+                evidence_json=json.dumps(evid, ensure_ascii=False),
                 started_at=now,
                 created_at=now,
             ))
             opened += 1
         else:
             row.message = hit.message
-            row.evidence_json = json.dumps(hit.evidence, ensure_ascii=False)
+            row.evidence_json = json.dumps(evid, ensure_ascii=False)
     for code, row in open_rows.items():
         if code in hit_codes or code == RULE_COMPOSITE or not allow_close:
             continue
+        if code.startswith(RULE_BATCH_PREFIX):
+            continue
+        evid = _load_evidence(row)
+        miss = int(evid.get("miss_streak") or 0) + 1
+        evid["miss_streak"] = miss
+        if miss < HYSTERESIS_CLOSE_BUCKETS:
+            row.evidence_json = json.dumps(evid, ensure_ascii=False)
+            continue
         row.ended_at = now
+        evid["closed_hysteresis"] = HYSTERESIS_CLOSE_BUCKETS
+        row.evidence_json = json.dumps(evid, ensure_ascii=False)
         closed += 1
 
     # 综合事件：把同一传感器的多条证据合成一条，交给事件适配层/收件箱
     composite = open_rows.get(RULE_COMPOSITE)
     if hits:
         payload = [
-            {"rule": h.rule_code, "label": RULE_LABELS[h.rule_code],
+            {"rule": h.rule_code, "label": RULE_LABELS.get(h.rule_code, h.rule_code),
              "severity": h.severity, "message": h.message, "evidence": h.evidence}
             for h in hits
         ]
         evidence = json.dumps(payload, ensure_ascii=False)
         if composite is None:
-            session.add(NetworkAnomalyEvent(
-                sensor_objid=sensor_id, rule_code=RULE_COMPOSITE,
-                severity=_worst_severity(hits), message=f"{len(hits)} 条规则命中：" + "、".join(
-                    RULE_LABELS[h.rule_code] for h in hits),
-                evidence_json=evidence, started_at=now, created_at=now,
-            ))
-            opened += 1
+            if allow_open:
+                session.add(NetworkAnomalyEvent(
+                    sensor_objid=sensor_id, rule_code=RULE_COMPOSITE,
+                    severity=_worst_severity(hits), message=f"{len(hits)} 条规则命中：" + "、".join(
+                        RULE_LABELS.get(h.rule_code, h.rule_code) for h in hits),
+                    evidence_json=evidence, started_at=now, created_at=now,
+                ))
+                opened += 1
         else:
             composite.message = f"{len(hits)} 条规则命中：" + "、".join(
-                RULE_LABELS[h.rule_code] for h in hits)
+                RULE_LABELS.get(h.rule_code, h.rule_code) for h in hits)
             composite.evidence_json = evidence
             composite.severity = _worst_severity(hits)
     elif composite is not None and allow_close:
-        composite.ended_at = now
-        closed += 1
+        evid = _load_evidence(composite)
+        miss = int(evid.get("miss_streak") or 0) + 1
+        evid["miss_streak"] = miss
+        if miss >= HYSTERESIS_CLOSE_BUCKETS:
+            composite.ended_at = now
+            composite.evidence_json = json.dumps(evid, ensure_ascii=False)
+            closed += 1
+        else:
+            composite.evidence_json = json.dumps(evid, ensure_ascii=False)
     return opened, closed
 
 
@@ -357,15 +432,103 @@ def _update_ping_state(session, sensor: PrtgSensor, now: datetime) -> dict[str, 
 
 # ---------------- 总入口 ----------------
 
+def _import_protect_active(now: datetime) -> bool:
+    from backend.services.prtg import store
+
+    state = store.get_state("history_import") or {}
+    detail = state.get("detail") or ""
+    protect_until = None
+    if detail.strip().startswith("{"):
+        try:
+            protect_until = json.loads(detail).get("protect_until")
+        except json.JSONDecodeError:
+            protect_until = None
+    if protect_until:
+        try:
+            return now < datetime.fromisoformat(str(protect_until).replace("Z", ""))
+        except ValueError:
+            return False
+    last_ok = state.get("last_success_at")
+    if not last_ok:
+        return False
+    try:
+        ts = datetime.fromisoformat(str(last_ok).replace("Z", ""))
+    except ValueError:
+        return False
+    return (now - ts).total_seconds() < IMPORT_PROTECT_SECONDS
+
+
+def _merge_batches(session, now: datetime) -> int:
+    """同轮同规则、成员 ≥ BATCH_MIN_MEMBERS → 一条 batch_* 事件（保留成员行）。"""
+    opened = session.execute(
+        select(NetworkAnomalyEvent)
+        .where(NetworkAnomalyEvent.started_at == now)
+        .where(NetworkAnomalyEvent.ended_at.is_(None))
+        .where(~NetworkAnomalyEvent.rule_code.startswith(RULE_BATCH_PREFIX))
+        .where(NetworkAnomalyEvent.rule_code != RULE_COMPOSITE)
+    ).scalars().all()
+    by_rule: dict[str, list[NetworkAnomalyEvent]] = {}
+    for ev in opened:
+        by_rule.setdefault(ev.rule_code, []).append(ev)
+    created = 0
+    for rule, members in by_rule.items():
+        if len(members) < BATCH_MIN_MEMBERS:
+            continue
+        batch_code = f"{RULE_BATCH_PREFIX}{rule}"
+        existing = session.execute(
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.sensor_objid == BATCH_SENSOR_OBJID)
+            .where(NetworkAnomalyEvent.rule_code == batch_code)
+            .where(NetworkAnomalyEvent.ended_at.is_(None))
+        ).scalar_one_or_none()
+        payload = {
+            "members": [
+                {"sensor_objid": m.sensor_objid, "event_id": m.id,
+                 "message": m.message, "severity": m.severity}
+                for m in members
+            ],
+            "member_count": len(members),
+            "run_at": now.isoformat(),
+        }
+        msg = f"同轮批量 {rule}：{len(members)} 条链路"
+        if existing is None:
+            session.add(NetworkAnomalyEvent(
+                sensor_objid=BATCH_SENSOR_OBJID, rule_code=batch_code,
+                severity=_worst_severity([Hit(rule, m.severity or "warning", "") for m in members]),
+                message=msg,
+                evidence_json=json.dumps(payload, ensure_ascii=False),
+                started_at=now, created_at=now,
+            ))
+            created += 1
+        else:
+            existing.message = msg
+            existing.evidence_json = json.dumps(payload, ensure_ascii=False)
+    return created
+
+
 def evaluate_all(now: datetime | None = None,
                  session_factory: Callable[[], Any] | None = None) -> dict[str, Any]:
     """跑一轮全部规则（建议 5 分钟一次，与 5m 桶对齐）。"""
     now = now or datetime.utcnow()
     factory = session_factory or SessionLocal
     since = now - timedelta(days=BASELINE_DAYS + 2)
+    from backend.services.prtg import store
+
+    protect = _import_protect_active(now)
+    prev_detail = {}
+    try:
+        prev_raw = (store.get_state("anomaly") or {}).get("detail") or ""
+        if prev_raw.strip().startswith("{"):
+            prev_detail = json.loads(prev_raw)
+    except json.JSONDecodeError:
+        prev_detail = {}
+    prev_states = prev_detail.get("baseline_by_sensor") or {}
+
     stats = {"sensors": 0, "traffic_sensors": 0, "rule_hits": 0,
              "events_opened": 0, "events_closed": 0, "ping_transitions": 0,
-             "insufficient_baseline": 0}
+             "insufficient_baseline": 0, "import_protect": protect,
+             "batches_opened": 0, "open_suppressed": 0}
+    baseline_by_sensor: dict[str, str] = {}
     with factory() as session:
         sensors = list(session.execute(
             select(PrtgSensor).where(PrtgSensor.active.is_(True))
@@ -391,9 +554,6 @@ def evaluate_all(now: datetime | None = None,
             if _is_traffic(sensor.sensortype):
                 stats["traffic_sensors"] += 1
                 total = channels.get(-1, [])
-                # 同一 5 分钟桶内把 Errors in/out + Discards in/out 求和；
-                # 不能把 4 个通道序列首尾相接 —— 那样「最后 3 个值」是同一桶的
-                # 不同通道，规则会永不命中（2026-11-24 审核实测）。
                 bucket_errors: dict[datetime, float] = {}
                 for channel_id in EVENT_ERRORS:
                     for ts, value in channels.get(channel_id, []):
@@ -405,13 +565,19 @@ def evaluate_all(now: datetime | None = None,
                     sensor_id=sensor.objid, status=sensor.status,
                     total_series=total, error_series=errors,
                 )
+                baseline_by_sensor[str(sensor.objid)] = baseline_state
                 if baseline_state.startswith("insufficient"):
                     stats["insufficient_baseline"] += 1
                 stats["rule_hits"] += len(hits)
-                # 即使本轮无命中也要进：条件恢复时要把未结束事件关掉
+                prev = str(prev_states.get(str(sensor.objid)) or "")
+                first_ok = prev.startswith("insufficient") and baseline_state.startswith("ok")
+                allow_open = (not protect) and (not first_ok)
+                if not allow_open and hits:
+                    stats["open_suppressed"] += 1
                 opened, closed = _upsert_rule_events(
                     session, sensor.objid, hits, now,
                     allow_close=baseline_state.startswith(("ok", "idle")),
+                    allow_open=allow_open,
                 )
                 stats["events_opened"] += opened
                 stats["events_closed"] += closed
@@ -419,15 +585,14 @@ def evaluate_all(now: datetime | None = None,
                 transition = _update_ping_state(session, sensor, now)
                 if transition:
                     stats["ping_transitions"] += 1
-                # Ping 的复合事件：SUSPECT/DOWN/RECOVERING 期间保持一条
                 ping_row = session.execute(
                     select(PrtgPingState).where(PrtgPingState.sensor_objid == sensor.objid)
                 ).scalar_one_or_none()
                 _sync_ping_composite(session, sensor.objid, ping_row, now)
+        stats["batches_opened"] = _merge_batches(session, now)
         session.commit()
 
-    from backend.services.prtg import store
-
+    stats["baseline_by_sensor"] = baseline_by_sensor
     store.set_state("anomaly", status="ok", last_run_at=now, last_success_at=now,
                     error="", detail=json.dumps(stats, ensure_ascii=False))
     return stats

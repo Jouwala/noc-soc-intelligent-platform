@@ -253,6 +253,13 @@ def overview(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
             .where(NetworkAnomalyEvent.rule_code == "composite")
             .where(NetworkAnomalyEvent.severity.in_(("warning", "critical")))
         ).scalars().all()
+        pending_review = session.execute(
+            select(NetworkAnomalyEvent)
+            .where(NetworkAnomalyEvent.ended_at.is_(None))
+            .where(NetworkAnomalyEvent.rule_code == "baseline_low_pending_review")
+        ).scalars().all()
+        anomaly_link_ids = {row.sensor_objid for row in open_anomalies}
+        pending_ids = {row.sensor_objid for row in pending_review}
 
     state = _live_state()
     last_success = state["last_success_at"] if state else None
@@ -276,7 +283,9 @@ def overview(window: str = DEFAULT_WINDOW) -> dict[str, Any]:
             "down": counts["down"],
             "unknown": counts["unknown"],
             "avg_uptime_pct": round(sum(uptimes) / len(uptimes), 4) if uptimes else None,
-            "anomaly_links": len({row.sensor_objid for row in open_anomalies}),
+            # warning/critical open composite 按传感器去重；不含 pending_review / batch_*
+            "anomaly_links": len(anomaly_link_ids),
+            "anomaly_pending_review_links": len(pending_ids),
             "uptime_samples": len(uptimes),
         },
         "trend": trend_series(window),
