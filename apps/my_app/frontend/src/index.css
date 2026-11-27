@@ -138,9 +138,8 @@
   --wh-glass-border: #153db0;
   --wh-glass-border-strong: #258cff;
 
-  /* 装饰性元素：顶栏网格纹理、方向箭头、标题辉光（统一由主题驱动） */
+  /* 装饰性元素：顶栏网格纹理、标题辉光（统一由主题驱动；方向箭头 2026-11-27 已删） */
   --wh-grid-line: rgba(0, 217, 255, 0.03);
-  --wh-decor: rgba(0, 217, 255, 0.25);
   --wh-title-shadow: 0 0 20px rgba(0, 217, 255, 0.40), 0 0 40px rgba(0, 217, 255, 0.20);
   /* 标题下方装饰线的外发光：浅色下无辉光，取 none */
   --wh-title-rule-glow: 0 0 8px rgba(0, 217, 255, 0.53);
@@ -249,7 +248,6 @@
   --wh-glass-border-strong: rgba(13, 148, 136, 0.55);
 
   --wh-grid-line: rgba(13, 148, 136, 0.05);
-  --wh-decor: rgba(13, 148, 136, 0.32);
   /* 浅色下没有辉光可用，改用白色浮雕让标题从玻璃底上浮起 */
   --wh-title-shadow: 0 1px 2px rgba(255, 255, 255, 0.85);
   --wh-title-rule-glow: none;
