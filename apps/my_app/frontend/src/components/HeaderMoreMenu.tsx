@@ -7,8 +7,8 @@
  * 区一路挤窄，视觉上也不整齐。改为「一个圆形头像按钮 + 一个面板」，四类设置全部收进来。
  *
  * 取舍与约定：
- *   - 触发按钮是圆形头像（teal 小人 + 玻璃底，样式在 index.css 的 .wh-header-user-trigger）：
- *     它同时代表「账号」和「设置」，所以 aria-label 用「账号与设置」；
+ *   - 触发按钮是圆形头像（用户名首字母 + 低饱和实心 teal 底，样式在 index.css 的
+ *     .wh-header-user-trigger）：它同时代表「账号」和「设置」，所以 aria-label 用「账号与设置」；
  *   - 自动刷新状态不再一眼可见，所以在头像右上角用一个 teal 圆点表示「本页正在自动刷新」；
  *   - 面板内容全部复用既有能力，不新写逻辑：
  *       自动刷新 → 外部传入的 arEffective / onToggleAutoRefresh / onSelectInterval
@@ -65,6 +65,13 @@ export default function HeaderMoreMenu({
 }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
+
+  /* 按钮上的用户名首字母：英文名取首字母并大写，中文名取第一个字（toUpperCase 对汉字是空操作）。
+     用 Array.from 取首字符，避免把 emoji / 生僻字（代理对）拆成半个码元；
+     没有身份（未登录）时退回小人图标。 */
+  const initial = identity
+    ? (Array.from(identity.username.trim())[0] ?? '').toUpperCase()
+    : ''
 
   const rowStyle: CSSProperties = {
     display: 'flex',
@@ -163,9 +170,10 @@ export default function HeaderMoreMenu({
       placement="bottomRight"
       dropdownRender={() => panel}
     >
-      {/* 圆形头像按钮（替代第一版的 ⋯）：尺寸 / 玻璃底 / hover 光环 / 自动刷新圆点
-          全在 index.css 的 .wh-header-user-trigger 里，圆点用 ::after 画在头像右下角
-          （Badge 的角标会顶到 Header 上沿被 overflow:hidden 裁掉） */}
+      {/* 圆形头像按钮（替代第一版的 ⋯）：实心低饱和 teal 底 + 用户名首字母，
+          hover 光环与自动刷新圆点都在 index.css 的 .wh-header-user-trigger 里。
+          圆点用 ::after 画在头像右下角 —— Badge 的角标定位在右上角，会被
+          Header 的 overflow:hidden 裁掉。 */}
       <button
         type="button"
         className={
@@ -179,7 +187,9 @@ export default function HeaderMoreMenu({
           ? t('ar.every', { v: arOptions.find(o => o.value === arEffective)?.label ?? '' })
           : t('header.more')}
       >
-        <UserOutlined />
+        {initial
+          ? <span className="wh-header-user-trigger-initial" aria-hidden="true">{initial}</span>
+          : <UserOutlined aria-hidden="true" />}
       </button>
     </Dropdown>
   )

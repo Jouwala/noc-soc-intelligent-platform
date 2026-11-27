@@ -515,9 +515,9 @@ body {
   }
 }
 
-/* ---------- 顶栏右上角「账号与设置」入口：圆形头像按钮 ----------
- * 替代第一版的「⋯」文字图标：圆形玻璃底 + teal 小人；hover 与展开时描边提亮，
- * 并浮一圈极淡的 teal 光环；自动刷新开着时由 Badge 在右上角点一个 teal 圆点。 */
+/* ---------- 顶栏右上角「账号与设置」入口：用户名首字母头像 ----------
+ * 实心、低饱和的 teal 底（16% teal 混面板实色），上面是用户名首字母；
+ * hover 与展开时描边提亮并浮一圈极淡的 teal 光环；自动刷新开着时右下角点一个 teal 圆点。 */
 .wh-header-user-trigger {
   position: relative;
   display: inline-flex;
@@ -527,19 +527,27 @@ body {
   height: 1.85rem;
   padding: 0;
   border-radius: 50%;
-  /* 玻璃底上再掺一点 teal：浅色主题里 header 本身接近白色，纯玻璃底的圆几乎看不见；
-     掺 12% teal 后深浅两套主题都能一眼认出这是个可点的头像按钮。
-     两行写法：不支持 color-mix 的浏览器丢弃第二行，回落到纯玻璃底。 */
+  /* 两行写法：不支持 color-mix 的浏览器丢弃第二行，回落到纯玻璃底 */
   background: var(--wh-glass-control);
-  background: color-mix(in srgb, var(--wh-teal) 12%, var(--wh-glass-control));
+  background: color-mix(in srgb, var(--wh-teal) 16%, var(--wh-glass-panel-solid));
   border: 1px solid var(--wh-glass-border);
-  border-color: color-mix(in srgb, var(--wh-teal) 30%, var(--wh-glass-border));
+  border-color: color-mix(in srgb, var(--wh-teal) 26%, transparent);
   box-shadow: var(--wh-glass-rim);
   color: var(--wh-teal);
   font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+/* 首字母：略小一号、600 字重，视觉上像一个字母头像而不是按钮文字 */
+.wh-header-user-trigger-initial {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  /* 大写字母的视觉重心偏高，往下压 0.5px 与圆心对齐 */
+  transform: translateY(0.5px);
 }
 
 .wh-header-user-trigger:hover,
