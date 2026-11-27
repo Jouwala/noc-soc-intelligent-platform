@@ -3633,6 +3633,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'ar.sec': '秒',
     'ar.min': '分钟',
     'ar.every': '每 {v} 自动刷新当前页面',
+    'ar.interval': '刷新间隔',
+    // 顶栏右上角「更多设置」菜单（自动刷新 / 主题 / 语言 / 账号 全收进来）
+    'header.more': '更多设置',
 
     // Task Report Files 页面（Latest Email / FINEBI report 两个页签）
     'emailReports.title': '任务报告文件',
@@ -6035,10 +6038,14 @@ const translations: Record<Locale, Record<string, string>> = {
     // Language
     'lang.switch': 'EN',
     'lang.current': '中文',
+    'lang.label': '语言',
 
     // Theme
     'theme.toLight': '切换到浅色主题',
     'theme.toDark': '切换到深色主题',
+    'theme.label': '主题',
+    'theme.dark': '深色',
+    'theme.light': '浅色',
 
     // ===== CN KPI 看板（原 my-finebi「CN KPI」原生重建）=====
     'nav.cnKpi': 'CN KPI',
@@ -11643,6 +11650,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'ar.sec': 's',
     'ar.min': 'min',
     'ar.every': 'Auto-refresh this page every {v}',
+    'ar.interval': 'Interval',
+    // Header "More settings" menu (auto refresh / theme / language / account all live here)
+    'header.more': 'More',
 
     // Task Report Files page (Latest Email / FINEBI report tabs)
     'emailReports.title': 'Task Report Files',
@@ -13984,10 +13994,14 @@ const translations: Record<Locale, Record<string, string>> = {
     // Language
     'lang.switch': '中文',
     'lang.current': 'EN',
+    'lang.label': 'Language',
 
     // Theme
     'theme.toLight': 'Switch to light theme',
     'theme.toDark': 'Switch to dark theme',
+    'theme.label': 'Theme',
+    'theme.dark': 'Dark',
+    'theme.light': 'Light',
 
     // ===== CN KPI dashboard (native rebuild of my-finebi "CN KPI") =====
     'nav.cnKpi': 'CN KPI',

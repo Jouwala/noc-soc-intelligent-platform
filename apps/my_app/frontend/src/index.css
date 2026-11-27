@@ -536,6 +536,17 @@ body {
   }
 }
 
+/* ---------- 顶栏「更多设置」面板里的账号菜单 ----------
+ * 这个 Menu 渲染在 Dropdown 弹层里，antd 会给它一套「独立下拉卡片」的底色 /
+ * 描边 / 投影；而外层（HeaderMoreMenu 的面板）本身就是一张玻璃卡片，菜单再套
+ * 一层就出现双重底色与双重阴影。这里统一抹平，只保留菜单项自己的 hover 态。 */
+.wh-header-account-menu.ant-dropdown-menu,
+.wh-header-account-menu.ant-menu {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
 /* 卡片层：背景 / 描边 / 阴影 / 模糊全部取令牌，不再按主题各写一份。
  *
  * 2026-09-24 卡片风格统一：阴影改用「总成」令牌 --wh-card-shadow，
